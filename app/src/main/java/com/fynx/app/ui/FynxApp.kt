@@ -1,8 +1,6 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -58,18 +56,6 @@ fun FynxApp() {
                 "Stories" -> StoriesPanel()
                 else -> ProfilePanel()
             }
-        }
-    }
-}
-
-@Composable private fun StoriesPanel() {
-    Text("Stories", style = MaterialTheme.typography.headlineSmall)
-    Spacer(Modifier.height(12.dp))
-    Button(onClick = {}) { Text("＋ Add story") }
-    Spacer(Modifier.height(16.dp))
-    LazyColumn {
-        items(listOf("Your story", "Friends' stories", "Story privacy")) {
-            Text(it, Modifier.fillMaxWidth().padding(14.dp))
         }
     }
 }
