@@ -14,12 +14,12 @@ fun FynxApp() {
     var selected by remember { mutableStateOf("Home") }
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
     var showNotifications by remember { mutableStateOf(false) }
+    var authSession by remember { mutableStateOf(AuthSession(state = AuthState.SIGNED_IN, username = "username")) }
 
     if (openChat != null) {
         ConversationPanel(chat = openChat!!, onBack = { openChat = null })
         return
     }
-
     if (showNotifications) {
         NotificationPanel(notifications = emptyList(), onBack = { showNotifications = false })
         return
@@ -35,10 +35,7 @@ fun FynxApp() {
                             Spacer(Modifier.width(6.dp))
                             FynxVerifiedBadge()
                         }
-                        Text(
-                            "Connect • Create • Discover",
-                            style = MaterialTheme.typography.labelSmall
-                        )
+                        Text("Connect • Create • Discover", style = MaterialTheme.typography.labelSmall)
                     }
                 },
                 actions = {
@@ -50,12 +47,7 @@ fun FynxApp() {
         bottomBar = {
             NavigationBar {
                 listOf("Home", "Chats", "Friends", "Stories", "Studio", "Profile").forEach { item ->
-                    NavigationBarItem(
-                        selected = selected == item,
-                        onClick = { selected = item },
-                        icon = { Text(item.take(1)) },
-                        label = { Text(item) }
-                    )
+                    NavigationBarItem(selected = selected == item, onClick = { selected = item }, icon = { Text(item.take(1)) }, label = { Text(item) })
                 }
             }
         }
@@ -67,7 +59,7 @@ fun FynxApp() {
                 "Friends" -> FriendsPanel()
                 "Stories" -> StoriesPanel()
                 "Studio" -> AiStudioPanel()
-                "Profile" -> ProfilePanel()
+                "Profile" -> ProfilePanel(session = authSession, onSignOut = { authSession = AuthSession() })
             }
         }
     }
