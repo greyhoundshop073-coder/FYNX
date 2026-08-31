@@ -3,6 +3,8 @@ package com.fynx.app.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -12,46 +14,99 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun FriendsPanel() {
     var query by remember { mutableStateOf("") }
-    var people by remember { mutableStateOf(samplePeople) }
-
-    val results = people.filter {
+    val results = samplePeople.filter {
         query.isBlank() ||
             it.username.contains(query.trim(), ignoreCase = true) ||
             it.displayName.contains(query.trim(), ignoreCase = true)
     }
+    val requests = results.take(2)
+    val suggestions = results.drop(2)
 
     Column(Modifier.fillMaxSize()) {
-        Text("Friends", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(12.dp))
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
+            leadingIcon = {
+                Icon(Icons.Default.Search, contentDescription = "Search")
+            },
             placeholder = { Text("Search by username") }
         )
-        Spacer(Modifier.height(12.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(results, key = { it.username }) { person ->
-                var requestSent by remember(person.username) { mutableStateOf(person.requestSent) }
+
+        Spacer(Modifier.height(18.dp))
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Friend Requests", style = MaterialTheme.typography.titleMedium)
+            Text("2", color = MaterialTheme.colorScheme.primary)
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        LazyColumn(
+            Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(bottom = 12.dp)
+        ) {
+            items(requests, key = { "request_${it.username}" }) { person ->
+                var accepted by remember(person.username) { mutableStateOf(false) }
                 Card(Modifier.fillMaxWidth()) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        Modifier.fillMaxWidth().padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        FynxAvatar(person.displayName)
+                        FynxAvatar(person.displayName, Modifier.size(48.dp))
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(person.displayName, style = MaterialTheme.typography.titleMedium)
-                            Text(person.username, style = MaterialTheme.typography.bodyMedium)
-                            if (person.bio.isNotBlank()) Text(person.bio)
+                            Text(person.username, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Spacer(Modifier.width(8.dp))
+                        if (accepted) {
+                            Text("Friends", color = MaterialTheme.colorScheme.primary)
+                        } else {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Button(onClick = { accepted = true }) { Text("Confirm") }
+                                OutlinedButton(onClick = {}) { Text("Delete") }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("People You May Know", style = MaterialTheme.typography.titleMedium)
+                    Text("View All", color = MaterialTheme.colorScheme.primary)
+                }
+            }
+
+            items(suggestions, key = { "suggestion_${it.username}" }) { person ->
+                var requestSent by remember(person.username) { mutableStateOf(person.requestSent) }
+                Card(Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FynxAvatar(person.displayName, Modifier.size(48.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(person.displayName, style = MaterialTheme.typography.titleMedium)
+                            Text(person.username, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         Button(
                             onClick = { requestSent = true },
                             enabled = !requestSent && !person.isFriend
                         ) {
-                            Text(if (requestSent) "Request sent" else if (person.isFriend) "Friends" else "Add friend")
+                            Text(if (requestSent) "Sent" else if (person.isFriend) "Friends" else "Add Friend")
                         }
                     }
                 }
