@@ -35,7 +35,17 @@ fun CalendarPanel() {
     var nextId by remember { mutableLongStateOf((events.maxOfOrNull { it.id } ?: 0L) + 1L) }
     var editing by remember { mutableStateOf<FynxCalendarEvent?>(null) }
 
-    if (editing != null) { EventEditor(editing!!, { editing = null }) { updated -> events = events.map { if (it.id == updated.id) updated else it }; saveEvents(context, events); selectedDate = updated.date; editing = null }; return }
+    if (editing != null) {
+        EventEditor(editing!!, { editing = null }) { updated ->
+            CalendarReminderScheduler.cancel(context, updated.id)
+            events = events.map { if (it.id == updated.id) updated else it }
+            saveEvents(context, events)
+            CalendarReminderScheduler.schedule(context, updated)
+            selectedDate = updated.date
+            editing = null
+        }
+        return
+    }
 
     val month = Calendar.getInstance().apply { add(Calendar.MONTH, monthOffset); set(Calendar.DAY_OF_MONTH, 1) }
     val monthTitle = SimpleDateFormat("MMMM yyyy", Locale.US).format(month.time)
@@ -50,9 +60,9 @@ fun CalendarPanel() {
         Column { cells.chunked(7).forEach { week -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) { week.forEach { day -> if (day == null) Spacer(Modifier.size(40.dp)) else { val date = Calendar.getInstance().apply { set(Calendar.YEAR, month.get(Calendar.YEAR)); set(Calendar.MONTH, month.get(Calendar.MONTH)); set(Calendar.DAY_OF_MONTH, day) }; val dateText = calendarFormat.format(date.time); OutlinedButton(onClick = { selectedDate = dateText }, modifier = Modifier.size(40.dp), contentPadding = PaddingValues(0.dp)) { Text(day.toString()) } } } } } }
         Spacer(Modifier.height(12.dp)); Text("Events for $selectedDate", style = MaterialTheme.typography.titleMedium)
         OutlinedTextField(title, { title = it }, label = { Text("Event title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Row(Modifier.fillMaxWidth()) { OutlinedTextField(time, { time = it }, label = { Text("Time") }, placeholder = { Text("e.g. 14:30") }, singleLine = true, modifier = Modifier.weight(1f)); Spacer(Modifier.width(8.dp)); Button(onClick = { val clean = title.trim(); if (clean.isNotEmpty()) { val event = FynxCalendarEvent(nextId++, clean, selectedDate, time.trim(), notes.trim()); events = events + event; saveEvents(context, events); title = ""; time = ""; notes = "" } }) { Text("Add") } }
+        Row(Modifier.fillMaxWidth()) { OutlinedTextField(time, { time = it }, label = { Text("Time") }, placeholder = { Text("e.g. 14:30") }, singleLine = true, modifier = Modifier.weight(1f)); Spacer(Modifier.width(8.dp)); Button(onClick = { val clean = title.trim(); if (clean.isNotEmpty()) { val event = FynxCalendarEvent(nextId++, clean, selectedDate, time.trim(), notes.trim()); events = events + event; saveEvents(context, events); CalendarReminderScheduler.schedule(context, event); title = ""; time = ""; notes = "" } }) { Text("Add") } }
         OutlinedTextField(notes, { notes = it }, label = { Text("Details / notes") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-        Spacer(Modifier.height(8.dp)); LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) { items(events.filter { it.date == selectedDate }, key = { it.id }) { event -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp)) { Text(event.title, style = MaterialTheme.typography.titleMedium); if (event.time.isNotBlank()) Text(event.time, style = MaterialTheme.typography.labelMedium); if (event.notes.isNotBlank()) Text(event.notes, style = MaterialTheme.typography.bodyMedium); Row { TextButton(onClick = { editing = event }) { Text("Edit") }; TextButton(onClick = { events = events.filterNot { it.id == event.id }; saveEvents(context, events) }) { Text("Delete") } } } } } }
+        Spacer(Modifier.height(8.dp)); LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) { items(events.filter { it.date == selectedDate }, key = { it.id }) { event -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp)) { Text(event.title, style = MaterialTheme.typography.titleMedium); if (event.time.isNotBlank()) Text(event.time, style = MaterialTheme.typography.labelMedium); if (event.notes.isNotBlank()) Text(event.notes, style = MaterialTheme.typography.bodyMedium); Row { TextButton(onClick = { editing = event }) { Text("Edit") }; TextButton(onClick = { CalendarReminderScheduler.cancel(context, event.id); events = events.filterNot { it.id == event.id }; saveEvents(context, events) }) { Text("Delete") } } } } } }
     }
 }
 
