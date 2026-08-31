@@ -8,7 +8,8 @@ Build ONE small step at a time. Inspect existing code first. Build Android after
 - AI Home UI: DONE 🟢
 - AI message model: DONE 🟢
 - Local AI conversation UI: DONE 🟢
-- AI image/video generation: DEFERRED until the final phase 🔴
+- AI image generation: REMOVED from FYNX project
+- AI video generation: REMOVED from FYNX project
 - Current next task: connect the AI Assistant to the backend 🤖
 
 ## Build Order
@@ -24,11 +25,9 @@ Build ONE small step at a time. Inspect existing code first. Build Android after
 10. Voice & Calls 🎤📞
 11. Security 🔐
 12. Monetization 💎
-13. AI Image Generation 🖼️
-14. AI Video Generation 🎬
-15. Wallpaper / remaining AI creative tools 🌌
-16. Full Testing 🧪
-17. Launch 🚀
+13. Wallpaper / remaining creative tools 🌌
+14. Full Testing 🧪
+15. Launch 🚀
 
 ## AI Assistant checklist
 - [x] Message model
@@ -42,5 +41,5 @@ Build ONE small step at a time. Inspect existing code first. Build Android after
 - [ ] Copy/share
 - [ ] Final AI Assistant testing
 
-## Do not work on yet
-AI image generation, AI video generation, Wallpaper Studio, monetization, or launch until their position in the build order is reached.
+## Removed permanently
+AI image generation and AI video generation are NOT part of the FYNX project roadmap. Do not add them back.
