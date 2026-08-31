@@ -3,6 +3,7 @@ package com.fynx.app.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -24,15 +25,33 @@ fun FynxApp() {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("FYNX") }, actions = {
-            TextButton(onClick = { showNotifications = true }) { Text("🔔") }
-            TextButton(onClick = {}) { Text("＋") }
-        }) },
-        bottomBar = { NavigationBar {
-            listOf("Home", "Chats", "Friends", "Stories", "Studio", "Profile").forEach { item ->
-                NavigationBarItem(selected = selected == item, onClick = { selected = item }, icon = { Text(item.take(1)) }, label = { Text(item) })
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("FYNX")
+                        Spacer(Modifier.width(6.dp))
+                        FynxVerifiedBadge()
+                    }
+                },
+                actions = {
+                    TextButton(onClick = { showNotifications = true }) { Text("🔔") }
+                    TextButton(onClick = {}) { Text("＋") }
+                }
+            )
+        },
+        bottomBar = {
+            NavigationBar {
+                listOf("Home", "Chats", "Friends", "Stories", "Studio", "Profile").forEach { item ->
+                    NavigationBarItem(
+                        selected = selected == item,
+                        onClick = { selected = item },
+                        icon = { Text(item.take(1)) },
+                        label = { Text(item) }
+                    )
+                }
             }
-        } }
+        }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             when (selected) {
