@@ -5,6 +5,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,10 +29,16 @@ fun FynxApp() {
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("FYNX")
-                        Spacer(Modifier.width(6.dp))
-                        FynxVerifiedBadge()
+                    Column(verticalArrangement = Arrangement.Center) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("FYNX", fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(6.dp))
+                            FynxVerifiedBadge()
+                        }
+                        Text(
+                            "Connect • Create • Discover",
+                            style = MaterialTheme.typography.labelSmall
+                        )
                     }
                 },
                 actions = {
