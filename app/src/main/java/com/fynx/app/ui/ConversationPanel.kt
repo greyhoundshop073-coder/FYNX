@@ -1,5 +1,8 @@
 package com.fynx.app.ui
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,13 +18,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit) {
     var messages by remember { mutableStateOf(listOf(ChatMessage(chat.lastMessage, false, id = "initial", delivered = true, read = true))) }
     var replyToId by remember { mutableStateOf<String?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
-    var reactionTargetId by remember { mutableStateOf<String?>(null) }
+    var attachment by remember { mutableStateOf<Uri?>(null) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { attachment = it }
 
     fun removeMessage(id: String) { messages = messages.filterNot { it.id == id } }
-    fun toggleReaction(id: String) {
-        messages = messages.map { if (it.id == id) it.copy(reaction = if (it.reaction == "❤️") null else "❤️") else it }
-        reactionTargetId = null
-    }
+    fun toggleReaction(id: String) { messages = messages.map { if (it.id == id) it.copy(reaction = if (it.reaction == "❤️") null else "❤️") else it } }
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -62,7 +63,15 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit) {
                 TextButton(onClick = { replyToId = null }) { Text("Cancel") }
             }
         }
+        attachment?.let {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Attachment selected", style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { attachment = null }) { Text("Remove") }
+            }
+        }
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { picker.launch("image/*") }) { Text("📎") }
             OutlinedTextField(text, { text = it }, Modifier.weight(1f), placeholder = { Text(if (editingId == null) "Message…" else "Edit message…") })
             TextButton(onClick = {
                 val value = text.trim()
