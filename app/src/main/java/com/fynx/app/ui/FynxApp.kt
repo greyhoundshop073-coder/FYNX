@@ -7,8 +7,8 @@ import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 fun FynxApp() {
     var selected by remember { mutableStateOf("Home") }
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
+    var toolsExpanded by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var authSession by remember { mutableStateOf(AuthSession(state = AuthState.SIGNED_IN, username = "username")) }
 
@@ -62,16 +63,48 @@ fun FynxApp() {
                             }
                         },
                         actions = {
-                            IconButton(onClick = { showSettings = true }) {
-                                Icon(Icons.Default.Settings, contentDescription = "Settings")
+                            Box {
+                                IconButton(onClick = { toolsExpanded = true }) {
+                                    Icon(Icons.Default.Settings, contentDescription = "Settings")
+                                }
+                                DropdownMenu(
+                                    expanded = toolsExpanded,
+                                    onDismissRequest = { toolsExpanded = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("AI Studio") },
+                                        onClick = {
+                                            selected = "Studio"
+                                            toolsExpanded = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("To-Do") },
+                                        onClick = {
+                                            selected = "To-Do"
+                                            toolsExpanded = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Calendar") },
+                                        onClick = {
+                                            selected = "Calendar"
+                                            toolsExpanded = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Settings") },
+                                        onClick = {
+                                            toolsExpanded = false
+                                            showSettings = true
+                                        }
+                                    )
+                                }
                             }
                         }
                     )
                     "Friends" -> TopAppBar(
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = fynxDarkColors.background,
-                            titleContentColor = fynxDarkColors.primary
-                        ),
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = fynxDarkColors.background),
                         navigationIcon = {
                             IconButton(onClick = { selected = "Home" }) {
                                 Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -85,10 +118,7 @@ fun FynxApp() {
                         actions = { Spacer(Modifier.size(48.dp)) }
                     )
                     "Stories" -> TopAppBar(
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = fynxDarkColors.background,
-                            titleContentColor = fynxDarkColors.primary
-                        ),
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = fynxDarkColors.background),
                         navigationIcon = {
                             IconButton(onClick = { selected = "Home" }) {
                                 Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -103,6 +133,11 @@ fun FynxApp() {
                     )
                     else -> TopAppBar(
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = fynxDarkColors.background),
+                        navigationIcon = {
+                            IconButton(onClick = { selected = "Home" }) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                            }
+                        },
                         title = {
                             Text(selected, color = fynxDarkColors.primary, fontWeight = FontWeight.Bold)
                         }
@@ -110,10 +145,7 @@ fun FynxApp() {
                 }
             },
             bottomBar = {
-                NavigationBar(
-                    containerColor = fynxDarkColors.surface,
-                    tonalElevation = 8.dp
-                ) {
+                NavigationBar(containerColor = fynxDarkColors.surface, tonalElevation = 8.dp) {
                     val items = listOf(
                         Triple("Home", Icons.Default.Home, "Home"),
                         Triple("Chats", Icons.Default.ChatBubbleOutline, "Chats"),
@@ -140,16 +172,16 @@ fun FynxApp() {
             }
         ) { padding ->
             Box(
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 when (selected) {
                     "Home" -> HomePanel()
                     "Chats" -> ChatsPanel(onOpenChat = { openChat = it })
                     "Friends" -> FriendsPanel()
                     "Stories" -> StoriesPanel()
+                    "Studio" -> AiStudioPanel()
+                    "To-Do" -> TodoPanel()
+                    "Calendar" -> CalendarPanel()
                     "Profile" -> ProfilePanel(
                         session = authSession,
                         onSignOut = { authSession = AuthSession() }
