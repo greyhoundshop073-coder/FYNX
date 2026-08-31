@@ -62,16 +62,6 @@ fun FynxApp() {
     }
 }
 
-@Composable private fun FriendsPanel() {
-    Text("Friends", style = MaterialTheme.typography.headlineSmall)
-    Spacer(Modifier.height(12.dp))
-    OutlinedTextField(value = "", onValueChange = {}, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Search by username") })
-    Spacer(Modifier.height(16.dp))
-    listOf("Add friends by username", "Send messages", "Start a group").forEach {
-        Text("•  $it", Modifier.padding(vertical = 8.dp))
-    }
-}
-
 @Composable private fun StoriesPanel() {
     Text("Stories", style = MaterialTheme.typography.headlineSmall)
     Spacer(Modifier.height(12.dp))
