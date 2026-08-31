@@ -9,26 +9,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun ProfilePanel(
-    session: AuthSession = AuthSession(),
-    onSignOut: () -> Unit = {}
-) {
+fun ProfilePanel(session: AuthSession = AuthSession(), onSignOut: () -> Unit = {}) {
     var settingsOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
     var profile by remember { mutableStateOf(FynxProfile()) }
     var settings by remember { mutableStateOf(FynxSettings()) }
 
     if (settingsOpen) {
-        SettingsPanel(settings = settings, onSettingsChange = { settings = it }, onBack = { settingsOpen = false })
+        SettingsPanel(settings, { settings = it }, { settingsOpen = false })
         return
     }
-
     if (editing) {
-        EditProfilePanel(
-            profile = profile,
-            onSave = { profile = it; editing = false },
-            onCancel = { editing = false }
-        )
+        EditProfilePanel(profile, { profile = it; editing = false }, { editing = false })
         return
     }
 
@@ -52,28 +44,23 @@ fun ProfilePanel(
 }
 
 @Composable
-private fun EditProfilePanel(
-    profile: FynxProfile,
-    onSave: (FynxProfile) -> Unit,
-    onCancel: () -> Unit
-) {
+private fun EditProfilePanel(profile: FynxProfile, onSave: (FynxProfile) -> Unit, onCancel: () -> Unit) {
     var displayName by remember(profile) { mutableStateOf(profile.displayName) }
     var username by remember(profile) { mutableStateOf(profile.username) }
     var bio by remember(profile) { mutableStateOf(profile.bio) }
-
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onCancel) { Text("Cancel") }
             Text("Edit profile", style = MaterialTheme.typography.titleLarge)
-            TextButton(onClick = { onSave(profile.copy(displayName = displayName.trim().ifEmpty { profile.displayName }, username = username.trim().ifEmpty { profile.username }, bio = bio.trim())) }) { Text("Save") }
+            TextButton(onClick = { onSave(profile.copy(displayName = displayName.trim().ifEmpty { profile.displayName }, username = username.trim().removePrefix("@").ifEmpty { profile.username.removePrefix("@") }, bio = bio.trim())) }) { Text("Save") }
         }
         HorizontalDivider()
         Spacer(Modifier.height(20.dp))
-        OutlinedTextField(value = displayName, onValueChange = { displayName = it }, label = { Text("Display name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(displayName, { displayName = it }, label = { Text("Display name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))
-        OutlinedTextField(value = username, onValueChange = { username = it.removePrefix("@").replace(" ", "") }, label = { Text("Username") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(username.removePrefix("@"), { username = it.removePrefix("@").replace(" ", "") }, label = { Text("Username") }, prefix = { Text("@") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))
-        OutlinedTextField(value = bio, onValueChange = { bio = it }, label = { Text("Bio") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(bio, { bio = it }, label = { Text("Bio") }, minLines = 3, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -87,6 +74,10 @@ fun SettingsPanel(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Un
         HorizontalDivider()
         LazyColumn {
             item {
+                Text("Account & security", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
+                Text("Authentication session", modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                Text("Account recovery will be connected to the secure backend before launch.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                Spacer(Modifier.height(8.dp))
                 SettingSwitch("Notifications", settings.notifications) { onSettingsChange(settings.copy(notifications = it)) }
                 SettingSwitch("Private profile", settings.privateProfile) { onSettingsChange(settings.copy(privateProfile = it)) }
                 SettingSwitch("Read receipts", settings.readReceipts) { onSettingsChange(settings.copy(readReceipts = it)) }
