@@ -36,11 +36,7 @@ fun StoriesPanel() {
                         FynxAvatar(story.displayName)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(story.displayName, style = MaterialTheme.typography.titleMedium)
-                                Spacer(Modifier.width(6.dp))
-                                FynxVerifiedBadge()
-                            }
+                            Text(story.displayName, style = MaterialTheme.typography.titleMedium)
                             Text(story.username)
                             Text(if (story.isMine && storyAdded) "Your story · just now" else story.timeLabel)
                         }
