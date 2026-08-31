@@ -2,6 +2,7 @@ package com.fynx.app.ui
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -15,9 +16,9 @@ class TodoReminderReceiver : BroadcastReceiver() {
         val channelId = "fynx_todo_reminders"
         manager.createNotificationChannel(NotificationChannel(channelId, "To-Do reminders", NotificationManager.IMPORTANCE_DEFAULT))
         val openIntent = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        val pending = android.app.PendingIntent.getActivity(context, 0, openIntent, android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
+        val pending = PendingIntent.getActivity(context, 0, openIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(com.fynx.app.R.drawable.ic_fynx_logo)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("FYNX reminder")
             .setContentText(title)
             .setContentIntent(pending)
