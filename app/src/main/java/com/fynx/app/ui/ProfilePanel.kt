@@ -9,7 +9,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun ProfilePanel() {
+fun ProfilePanel(
+    session: AuthSession = AuthSession(),
+    onSignOut: () -> Unit = {}
+) {
     var settingsOpen by remember { mutableStateOf(false) }
     var profile by remember { mutableStateOf(FynxProfile()) }
     var settings by remember { mutableStateOf(FynxSettings()) }
@@ -19,22 +22,23 @@ fun ProfilePanel() {
         return
     }
 
+    val username = session.username?.let { "@$it" } ?: profile.username
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(Modifier.height(20.dp))
         FynxAvatar(profile.displayName, Modifier.size(104.dp))
         Spacer(Modifier.height(12.dp))
         Text(profile.displayName, style = MaterialTheme.typography.titleLarge)
-        Text(profile.username, style = MaterialTheme.typography.bodyMedium)
+        Text(username, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(6.dp))
         Text(profile.bio, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(20.dp))
         Button(onClick = {
             profile = profile.copy(bio = if (profile.bio == "Welcome to FYNX") "Making everyday life simpler." else "Welcome to FYNX")
-        }) {
-            Text("Edit profile")
-        }
-        OutlinedButton(onClick = { settingsOpen = true }) {
-            Text("Settings & privacy")
+        }) { Text("Edit profile") }
+        OutlinedButton(onClick = { settingsOpen = true }) { Text("Settings & privacy") }
+        if (session.state == AuthState.SIGNED_IN) {
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = onSignOut) { Text("Sign out") }
         }
     }
 }
@@ -53,18 +57,10 @@ fun SettingsPanel(
         HorizontalDivider()
         LazyColumn {
             item {
-                SettingSwitch("Notifications", settings.notifications) {
-                    onSettingsChange(settings.copy(notifications = it))
-                }
-                SettingSwitch("Private profile", settings.privateProfile) {
-                    onSettingsChange(settings.copy(privateProfile = it))
-                }
-                SettingSwitch("Read receipts", settings.readReceipts) {
-                    onSettingsChange(settings.copy(readReceipts = it))
-                }
-                SettingSwitch("Story replies", settings.storyReplies) {
-                    onSettingsChange(settings.copy(storyReplies = it))
-                }
+                SettingSwitch("Notifications", settings.notifications) { onSettingsChange(settings.copy(notifications = it)) }
+                SettingSwitch("Private profile", settings.privateProfile) { onSettingsChange(settings.copy(privateProfile = it)) }
+                SettingSwitch("Read receipts", settings.readReceipts) { onSettingsChange(settings.copy(readReceipts = it)) }
+                SettingSwitch("Story replies", settings.storyReplies) { onSettingsChange(settings.copy(storyReplies = it)) }
                 Spacer(Modifier.height(12.dp))
                 Text("Account", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
                 Text("Username and account details", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
@@ -77,11 +73,7 @@ fun SettingsPanel(
 
 @Composable
 private fun SettingSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(label)
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
