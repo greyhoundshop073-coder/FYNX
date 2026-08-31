@@ -16,7 +16,7 @@ private const val PREFS="fynx_calendar_events"
 private const val KEY_EVENTS="events"
 data class FynxCalendarEvent(val id:Long,val title:String,val date:String,val time:String="",val notes:String="",val repeat:String="None")
 private fun encode(events:List<FynxCalendarEvent>)=events.joinToString("\n"){listOf(it.id,it.title,it.date,it.time,it.notes,it.repeat).joinToString("|"){v->v.toString().replace("|","/").replace("\n"," ")}}
-private fun decode(raw:String)=raw.replace("\\\\n","\n").lineSequence().mapNotNull{line->val x=line.split("|",limit=6);when{x.size==6->x[0].toLongOrNull()?.let{FynxCalendarEvent(it,x[1],x[2],x[3],x[4],x[5])};x.size==5->x[0].toLongOrNull()?.let{FynxCalendarEvent(it,x[1],x[2],x[3],x[4])};else->null}}.toList()
+private fun decode(raw:String)=raw.replace("\\n","\n").lineSequence().mapNotNull{line->val x=line.split("|",limit=6);when{x.size==6->x[0].toLongOrNull()?.let{FynxCalendarEvent(it,x[1],x[2],x[3],x[4],x[5])};x.size==5->x[0].toLongOrNull()?.let{FynxCalendarEvent(it,x[1],x[2],x[3],x[4])};else->null}}.toList()
 private fun save(c:Context,e:List<FynxCalendarEvent>)=c.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().putString(KEY_EVENTS,encode(e)).apply()
 @Composable fun CalendarPanel(){
  val c=LocalContext.current;var offset by remember{mutableIntStateOf(0)};var selected by remember{mutableStateOf(calendarFormat.format(Calendar.getInstance().time))}
