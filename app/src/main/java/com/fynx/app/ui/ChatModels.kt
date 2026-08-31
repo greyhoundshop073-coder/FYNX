@@ -18,7 +18,11 @@ data class ChatMessage(
     val read: Boolean = false,
     val replyToId: String? = null,
     val reaction: String? = null,
-    val edited: Boolean = false
+    val edited: Boolean = false,
+    val attachmentUri: String? = null,
+    val attachmentType: String? = null,
+    val voiceUri: String? = null,
+    val voiceDurationMs: Long = 0L
 )
 
 val sampleChats = listOf(
