@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -28,13 +29,23 @@ fun StoriesPanel() {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(sampleStories) { story ->
                 Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(story.displayName, style = MaterialTheme.typography.titleMedium)
-                        Text(story.username)
-                        Text(if (story.isMine && storyAdded) "Your story · just now" else story.timeLabel)
+                    Row(
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FynxAvatar(story.displayName)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(story.displayName, style = MaterialTheme.typography.titleMedium)
+                                Spacer(Modifier.width(6.dp))
+                                FynxVerifiedBadge()
+                            }
+                            Text(story.username)
+                            Text(if (story.isMine && storyAdded) "Your story · just now" else story.timeLabel)
+                        }
                         if (!story.isMine) {
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedButton(onClick = {}) { Text("View story") }
+                            OutlinedButton(onClick = {}) { Text("View") }
                         }
                     }
                 }
