@@ -17,5 +17,6 @@
             </intent-filter>
         </activity>
         <receiver android:name=".ui.TodoReminderReceiver" android:exported="false" />
+        <receiver android:name=".ui.CalendarReminderReceiver" android:exported="false" />
     </application>
 </manifest>
