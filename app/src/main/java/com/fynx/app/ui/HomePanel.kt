@@ -12,7 +12,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun HomePanel() {
     var prompt by remember { mutableStateOf("") }
-    var submitted by remember { mutableStateOf(false) }
+    var messages by remember { mutableStateOf(listOf<AiMessage>()) }
 
     val suggestions = listOf(
         "Plan my day",
@@ -20,6 +20,14 @@ fun HomePanel() {
         "Help me understand something",
         "Create an idea"
     )
+
+    fun sendMessage() {
+        val text = prompt.trim()
+        if (text.isNotEmpty()) {
+            messages = messages + AiMessage(text = text, fromUser = true)
+            prompt = ""
+        }
+    }
 
     Column(Modifier.fillMaxSize()) {
         Text("What can I help you with?", style = MaterialTheme.typography.headlineSmall)
@@ -30,54 +38,51 @@ fun HomePanel() {
         )
         Spacer(Modifier.height(16.dp))
 
-        if (submitted && prompt.isNotBlank()) {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("You", style = MaterialTheme.typography.labelLarge)
-                    Text(prompt)
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "FYNX is ready to help. AI connection will be added next.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { }) { Text("Copy") }
-                        TextButton(onClick = { }) { Text("Share") }
-                    }
-                }
-            }
-            Spacer(Modifier.height(12.dp))
+        if (messages.isEmpty()) {
+            Text("Try asking", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
         }
 
-        Text("Try asking", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
         LazyColumn(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(suggestions) { suggestion ->
-                OutlinedButton(
-                    onClick = {
-                        prompt = suggestion
-                        submitted = false
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text(suggestion) }
+            items(messages) { message ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(
+                            if (message.fromUser) "You" else "FYNX",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(message.text)
+                    }
+                }
+            }
+
+            if (messages.isEmpty()) {
+                items(suggestions) { suggestion ->
+                    OutlinedButton(
+                        onClick = { prompt = suggestion },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(suggestion) }
+                }
             }
         }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = prompt,
-                onValueChange = { prompt = it; submitted = false },
+                onValueChange = { prompt = it },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
                 placeholder = { Text("Message FYNX…") },
                 shape = RoundedCornerShape(24.dp)
             )
             Button(
-                onClick = { if (prompt.isNotBlank()) submitted = true },
-                modifier = Modifier.height(56.dp)
+                onClick = { sendMessage() },
+                modifier = Modifier.height(56.dp),
+                enabled = prompt.isNotBlank()
             ) { Text("Send") }
         }
     }
