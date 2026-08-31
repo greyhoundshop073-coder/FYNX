@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -34,11 +35,22 @@ fun FriendsPanel() {
             items(results, key = { it.username }) { person ->
                 var requestSent by remember(person.username) { mutableStateOf(person.requestSent) }
                 Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(person.displayName, style = MaterialTheme.typography.titleMedium)
-                        Text(person.username, style = MaterialTheme.typography.bodyMedium)
-                        if (person.bio.isNotBlank()) Text(person.bio)
-                        Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FynxAvatar(person.displayName)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(person.displayName, style = MaterialTheme.typography.titleMedium)
+                                Spacer(Modifier.width(6.dp))
+                                FynxVerifiedBadge()
+                            }
+                            Text(person.username, style = MaterialTheme.typography.bodyMedium)
+                            if (person.bio.isNotBlank()) Text(person.bio)
+                        }
+                        Spacer(Modifier.width(8.dp))
                         Button(
                             onClick = { requestSent = true },
                             enabled = !requestSent && !person.isFriend
