@@ -17,8 +17,14 @@ fun FynxApp() {
     var showNotifications by remember { mutableStateOf(false) }
     var authSession by remember { mutableStateOf(AuthSession(state = AuthState.SIGNED_IN, username = "username")) }
 
-    if (openChat != null) { ConversationPanel(chat = openChat!!, onBack = { openChat = null }); return }
-    if (showNotifications) { NotificationPanel(notifications = emptyList(), onBack = { showNotifications = false }); return }
+    if (openChat != null) {
+        ConversationPanel(chat = openChat!!, onBack = { openChat = null })
+        return
+    }
+    if (showNotifications) {
+        NotificationPanel(notifications = emptyList(), onBack = { showNotifications = false })
+        return
+    }
 
     val fynxDarkColors = darkColorScheme(
         primary = Color(0xFF2F8CFF),
@@ -42,25 +48,29 @@ fun FynxApp() {
                         containerColor = fynxDarkColors.background,
                         titleContentColor = fynxDarkColors.onBackground
                     ),
+                    navigationIcon = {
+                        FynxAvatar("FYNX", Modifier.size(34.dp))
+                    },
                     title = {
-                        Column(verticalArrangement = Arrangement.Center) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("FYNX", fontWeight = FontWeight.Bold)
-                                Spacer(Modifier.width(6.dp))
-                                FynxVerifiedBadge()
-                            }
-                            Text("Connect • Create • Discover", style = MaterialTheme.typography.labelSmall, color = fynxDarkColors.onSurfaceVariant)
-                        }
+                        Text(
+                            "FYNX",
+                            color = fynxDarkColors.primary,
+                            fontWeight = FontWeight.Bold
+                        )
                     },
                     actions = {
-                        TextButton(onClick = { showNotifications = true }) { Text("🔔") }
-                        TextButton(onClick = {}) { Text("＋") }
+                        IconButton(onClick = { showNotifications = true }) {
+                            Text("⚙", style = MaterialTheme.typography.titleLarge)
+                        }
                     }
                 )
             },
             bottomBar = {
-                NavigationBar(containerColor = fynxDarkColors.surface) {
-                    listOf("Home", "Chats", "Friends", "Stories", "Studio", "To-Do", "Calendar", "Profile").forEach { item ->
+                NavigationBar(
+                    containerColor = fynxDarkColors.surface,
+                    tonalElevation = 8.dp
+                ) {
+                    listOf("Home", "Chats", "Friends", "Stories", "Profile").forEach { item ->
                         NavigationBarItem(
                             selected = selected == item,
                             onClick = { selected = item },
@@ -78,16 +88,21 @@ fun FynxApp() {
                 }
             }
         ) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
                 when (selected) {
                     "Home" -> HomePanel()
                     "Chats" -> ChatsPanel(onOpenChat = { openChat = it })
                     "Friends" -> FriendsPanel()
                     "Stories" -> StoriesPanel()
-                    "Studio" -> AiStudioPanel()
-                    "To-Do" -> TodoPanel()
-                    "Calendar" -> CalendarPanel()
-                    "Profile" -> ProfilePanel(session = authSession, onSignOut = { authSession = AuthSession() })
+                    "Profile" -> ProfilePanel(
+                        session = authSession,
+                        onSignOut = { authSession = AuthSession() }
+                    )
                 }
             }
         }
