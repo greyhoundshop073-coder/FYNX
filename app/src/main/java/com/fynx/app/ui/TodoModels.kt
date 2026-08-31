@@ -7,5 +7,6 @@ data class FynxTodo(
     val title: String,
     val completed: Boolean = false,
     val priority: TodoPriority = TodoPriority.NORMAL,
-    val dueDate: String? = null
+    val dueDate: String? = null,
+    val reminder: String? = null
 )
