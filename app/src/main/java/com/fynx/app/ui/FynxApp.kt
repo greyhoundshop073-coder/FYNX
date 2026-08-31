@@ -1,11 +1,9 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -54,21 +52,8 @@ fun FynxApp() {
                 "Chats" -> ChatsPanel(onOpenChat = { openChat = it })
                 "Friends" -> FriendsPanel()
                 "Stories" -> StoriesPanel()
-                else -> ProfilePanel()
+                "Profile" -> ProfilePanel()
             }
         }
-    }
-}
-
-@Composable private fun ProfilePanel() {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        Surface(Modifier.size(88.dp), CircleShape, tonalElevation = 2.dp) {
-            Box(contentAlignment = Alignment.Center) { Text("👤", style = MaterialTheme.typography.headlineMedium) }
-        }
-        Spacer(Modifier.height(12.dp))
-        Text("Your FYNX profile", style = MaterialTheme.typography.titleLarge)
-        Text("Username • Profile photo • Bio")
-        Spacer(Modifier.height(18.dp))
-        OutlinedButton(onClick = {}) { Text("Settings") }
     }
 }
