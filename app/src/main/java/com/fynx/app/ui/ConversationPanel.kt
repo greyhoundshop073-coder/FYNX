@@ -29,6 +29,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit) {
     var recordingStartedAt by remember { mutableStateOf(0L) }
     var playingVoiceId by remember { mutableStateOf<String?>(null) }
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+    var searchOpen by remember { mutableStateOf(false) }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { attachment = it }
     val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { attachment = it }
 
@@ -39,40 +41,31 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit) {
         val r = recorder ?: return
         try { r.stop() } catch (_: RuntimeException) { recordingFile = null }
         r.release(); recorder = null; isRecording = false
-        recordingFile?.let { file ->
-            messages = messages + ChatMessage("Voice message", true, id = System.currentTimeMillis().toString(), delivered = true, voiceUri = file.absolutePath, voiceDurationMs = System.currentTimeMillis() - recordingStartedAt)
-        }
+        recordingFile?.let { file -> messages = messages + ChatMessage("Voice message", true, id = System.currentTimeMillis().toString(), delivered = true, voiceUri = file.absolutePath, voiceDurationMs = System.currentTimeMillis() - recordingStartedAt) }
         recordingFile = null
     }
+    val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, ignoreCase = true) }
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("‹ Back") }
-            Column(Modifier.padding(start = 4.dp)) { Text(chat.name, style = MaterialTheme.typography.titleMedium); Text(if (chat.online) "Online" else chat.username, style = MaterialTheme.typography.bodySmall) }
+            Column(Modifier.padding(start = 4.dp).weight(1f)) { Text(chat.name, style = MaterialTheme.typography.titleMedium); Text(if (chat.online) "Online" else chat.username, style = MaterialTheme.typography.bodySmall) }
+            TextButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }) { Text(if (searchOpen) "Close" else "Search") }
+        }
+        if (searchOpen) {
+            OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 10.dp), singleLine = true, placeholder = { Text("Search messages…") })
         }
         HorizontalDivider()
         LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(messages) { message ->
+            items(visibleMessages) { message ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) {
                     Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.medium) {
                         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                            if (message.voiceUri != null) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    TextButton(onClick = {
-                                        player?.release()
-                                        player = MediaPlayer().apply { setDataSource(message.voiceUri); prepare(); start(); setOnCompletionListener { playingVoiceId = null } }
-                                        playingVoiceId = message.id
-                                    }) { Text(if (playingVoiceId == message.id) "Playing…" else "▶ Voice") }
-                                }
-                            } else Text(message.text)
+                            if (message.voiceUri != null) TextButton(onClick = { player?.release(); player = MediaPlayer().apply { setDataSource(message.voiceUri); prepare(); start(); setOnCompletionListener { playingVoiceId = null } }; playingVoiceId = message.id }) { Text(if (playingVoiceId == message.id) "Playing…" else "▶ Voice") } else Text(message.text)
                             if (message.edited) Text("Edited", style = MaterialTheme.typography.labelSmall)
                             message.reaction?.let { Text(it) }
                             if (message.fromMe) Text(if (message.read) "Read" else if (message.delivered) "Delivered" else "Sent", style = MaterialTheme.typography.labelSmall)
-                            Row {
-                                TextButton(onClick = { replyToId = message.id }) { Text("Reply") }
-                                TextButton(onClick = { toggleReaction(message.id) }) { Text("❤️") }
-                                if (message.fromMe && message.voiceUri == null) { TextButton(onClick = { editingId = message.id; text = message.text }) { Text("Edit") }; TextButton(onClick = { removeMessage(message.id) }) { Text("Delete") } }
-                            }
+                            Row { TextButton(onClick = { replyToId = message.id }) { Text("Reply") }; TextButton(onClick = { toggleReaction(message.id) }) { Text("❤️") }; if (message.fromMe && message.voiceUri == null) { TextButton(onClick = { editingId = message.id; text = message.text }) { Text("Edit") }; TextButton(onClick = { removeMessage(message.id) }) { Text("Delete") } } }
                         }
                     }
                 }
@@ -82,23 +75,9 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit) {
             TextButton(onClick = { imagePicker.launch("image/*") }) { Text("Photo") }
             TextButton(onClick = { imagePicker.launch("video/*") }) { Text("Video") }
             TextButton(onClick = { documentPicker.launch("*/*") }) { Text("File") }
-            if (isRecording) {
-                TextButton(onClick = { stopRecording() }) { Text("⏹ Stop") }
-            } else {
-                TextButton(onClick = {
-                    val file = File(context.cacheDir, "voice_${System.currentTimeMillis()}.m4a")
-                    val r = MediaRecorder(context).apply { setAudioSource(MediaRecorder.AudioSource.MIC); setOutputFormat(MediaRecorder.OutputFormat.MPEG_4); setAudioEncoder(MediaRecorder.AudioEncoder.AAC); setOutputFile(file.absolutePath); prepare(); start() }
-                    recordingFile = file; recordingStartedAt = System.currentTimeMillis(); recorder = r; isRecording = true
-                }) { Text("🎤 Voice") }
-            }
+            if (isRecording) TextButton(onClick = { stopRecording() }) { Text("⏹ Stop") } else TextButton(onClick = { val file = File(context.cacheDir, "voice_${System.currentTimeMillis()}.m4a"); val r = MediaRecorder(context).apply { setAudioSource(MediaRecorder.AudioSource.MIC); setOutputFormat(MediaRecorder.OutputFormat.MPEG_4); setAudioEncoder(MediaRecorder.AudioEncoder.AAC); setOutputFile(file.absolutePath); prepare(); start() }; recordingFile = file; recordingStartedAt = System.currentTimeMillis(); recorder = r; isRecording = true }) { Text("🎤 Voice") }
             OutlinedTextField(text, { text = it }, Modifier.weight(1f), placeholder = { Text(if (editingId == null) "Message…" else "Edit message…") })
-            TextButton(onClick = {
-                val value = text.trim(); if (value.isNotEmpty()) {
-                    if (editingId != null) messages = messages.map { if (it.id == editingId) it.copy(text = value, edited = true) else it }
-                    else messages = messages + ChatMessage(value, true, id = System.currentTimeMillis().toString(), delivered = true, replyToId = replyToId)
-                    text = ""; editingId = null; replyToId = null
-                }
-            }) { Text(if (editingId == null) "Send" else "Save") }
+            TextButton(onClick = { val value = text.trim(); if (value.isNotEmpty()) { if (editingId != null) messages = messages.map { if (it.id == editingId) it.copy(text = value, edited = true) else it } else messages = messages + ChatMessage(value, true, id = System.currentTimeMillis().toString(), delivered = true, replyToId = replyToId); text = ""; editingId = null; replyToId = null } }) { Text(if (editingId == null) "Send" else "Save") }
         }
     }
 }
