@@ -42,11 +42,7 @@ fun FriendsPanel() {
                         FynxAvatar(person.displayName)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(person.displayName, style = MaterialTheme.typography.titleMedium)
-                                Spacer(Modifier.width(6.dp))
-                                FynxVerifiedBadge()
-                            }
+                            Text(person.displayName, style = MaterialTheme.typography.titleMedium)
                             Text(person.username, style = MaterialTheme.typography.bodyMedium)
                             if (person.bio.isNotBlank()) Text(person.bio)
                         }
