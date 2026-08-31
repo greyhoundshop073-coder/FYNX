@@ -66,6 +66,7 @@ private fun EditProfilePanel(profile: FynxProfile, onSave: (FynxProfile) -> Unit
 
 @Composable
 fun SettingsPanel(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Unit, onBack: () -> Unit) {
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("‹ Back") }
@@ -78,12 +79,24 @@ fun SettingsPanel(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Un
                 Text("Authentication session", modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                 Text("Account recovery will be connected to the secure backend before launch.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                 Spacer(Modifier.height(8.dp))
+                Text("Data & privacy", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
+                Text("Your account data can be reviewed and managed here. Server-side export and deletion will be enabled with the production backend.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                OutlinedButton(onClick = { showDeleteConfirmation = true }, modifier = Modifier.padding(16.dp)) { Text("Delete account") }
                 SettingSwitch("Notifications", settings.notifications) { onSettingsChange(settings.copy(notifications = it)) }
                 SettingSwitch("Private profile", settings.privateProfile) { onSettingsChange(settings.copy(privateProfile = it)) }
                 SettingSwitch("Read receipts", settings.readReceipts) { onSettingsChange(settings.copy(readReceipts = it)) }
                 SettingSwitch("Story replies", settings.storyReplies) { onSettingsChange(settings.copy(storyReplies = it)) }
             }
         }
+    }
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Delete account?") },
+            text = { Text("This is a confirmation foundation only. Actual account deletion will be connected to the secure backend before launch." ) },
+            confirmButton = { TextButton(onClick = { showDeleteConfirmation = false }) { Text("I understand") } },
+            dismissButton = { TextButton(onClick = { showDeleteConfirmation = false }) { Text("Cancel") } }
+        )
     }
 }
 
