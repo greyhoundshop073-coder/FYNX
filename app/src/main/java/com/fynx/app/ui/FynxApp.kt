@@ -1,6 +1,14 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,15 +22,11 @@ import androidx.compose.ui.unit.dp
 fun FynxApp() {
     var selected by remember { mutableStateOf("Home") }
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
-    var showNotifications by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     var authSession by remember { mutableStateOf(AuthSession(state = AuthState.SIGNED_IN, username = "username")) }
 
     if (openChat != null) {
         ConversationPanel(chat = openChat!!, onBack = { openChat = null })
-        return
-    }
-    if (showNotifications) {
-        NotificationPanel(notifications = emptyList(), onBack = { showNotifications = false })
         return
     }
 
@@ -43,39 +47,86 @@ fun FynxApp() {
         Scaffold(
             containerColor = fynxDarkColors.background,
             topBar = {
-                TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = fynxDarkColors.background,
-                        titleContentColor = fynxDarkColors.onBackground
-                    ),
-                    navigationIcon = {
-                        FynxAvatar("FYNX", Modifier.size(34.dp))
-                    },
-                    title = {
-                        Text(
-                            "FYNX",
-                            color = fynxDarkColors.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    },
-                    actions = {
-                        IconButton(onClick = { showNotifications = true }) {
-                            Text("⚙", style = MaterialTheme.typography.titleLarge)
+                when (selected) {
+                    "Home" -> TopAppBar(
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = fynxDarkColors.background,
+                            titleContentColor = fynxDarkColors.primary
+                        ),
+                        navigationIcon = {
+                            FynxAvatar("username", Modifier.size(34.dp))
+                        },
+                        title = {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Text("FYNX", color = fynxDarkColors.primary, fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = { showSettings = true }) {
+                                Icon(Icons.Default.Settings, contentDescription = "Settings")
+                            }
                         }
-                    }
-                )
+                    )
+                    "Friends" -> TopAppBar(
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = fynxDarkColors.background,
+                            titleContentColor = fynxDarkColors.primary
+                        ),
+                        navigationIcon = {
+                            IconButton(onClick = { selected = "Home" }) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                            }
+                        },
+                        title = {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Text("Friends", color = fynxDarkColors.primary, fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        actions = { Spacer(Modifier.size(48.dp)) }
+                    )
+                    "Stories" -> TopAppBar(
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = fynxDarkColors.background,
+                            titleContentColor = fynxDarkColors.primary
+                        ),
+                        navigationIcon = {
+                            IconButton(onClick = { selected = "Home" }) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                            }
+                        },
+                        title = {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Text("Stories", color = fynxDarkColors.primary, fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        actions = { Spacer(Modifier.size(48.dp)) }
+                    )
+                    else -> TopAppBar(
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = fynxDarkColors.background),
+                        title = {
+                            Text(selected, color = fynxDarkColors.primary, fontWeight = FontWeight.Bold)
+                        }
+                    )
+                }
             },
             bottomBar = {
                 NavigationBar(
                     containerColor = fynxDarkColors.surface,
                     tonalElevation = 8.dp
                 ) {
-                    listOf("Home", "Chats", "Friends", "Stories", "Profile").forEach { item ->
+                    val items = listOf(
+                        Triple("Home", Icons.Default.Home, "Home"),
+                        Triple("Chats", Icons.Default.ChatBubbleOutline, "Chats"),
+                        Triple("Friends", Icons.Default.People, "Friends"),
+                        Triple("Stories", Icons.Default.PhotoCamera, "Stories"),
+                        Triple("Profile", Icons.Default.Person, "Profile")
+                    )
+                    items.forEach { (item, icon, label) ->
                         NavigationBarItem(
                             selected = selected == item,
                             onClick = { selected = item },
-                            icon = { Text(item.take(1)) },
-                            label = { Text(item) },
+                            icon = { Icon(icon, contentDescription = label) },
+                            label = { Text(label) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = fynxDarkColors.primary,
                                 selectedTextColor = fynxDarkColors.primary,
@@ -105,6 +156,17 @@ fun FynxApp() {
                     )
                 }
             }
+        }
+
+        if (showSettings) {
+            AlertDialog(
+                onDismissRequest = { showSettings = false },
+                title = { Text("Settings") },
+                text = { Text("FYNX settings") },
+                confirmButton = {
+                    TextButton(onClick = { showSettings = false }) { Text("Done") }
+                }
+            )
         }
     }
 }
