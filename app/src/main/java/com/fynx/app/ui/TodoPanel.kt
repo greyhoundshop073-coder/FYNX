@@ -17,6 +17,7 @@ fun TodoPanel() {
     var title by remember { mutableStateOf("") }
     var highPriority by remember { mutableStateOf(false) }
     var dueDate by remember { mutableStateOf("") }
+    var reminder by remember { mutableStateOf("") }
     var search by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(TodoFilter.ALL) }
     var todos by remember { mutableStateOf(emptyList<FynxTodo>()) }
@@ -56,13 +57,14 @@ fun TodoPanel() {
             Button(onClick = {
                 val clean = title.trim()
                 if (clean.isNotEmpty()) {
-                    todos = todos + FynxTodo(nextId++, clean, priority = if (highPriority) TodoPriority.HIGH else TodoPriority.NORMAL, dueDate = dueDate.trim().ifEmpty { null })
-                    title = ""; dueDate = ""
+                    todos = todos + FynxTodo(nextId++, clean, priority = if (highPriority) TodoPriority.HIGH else TodoPriority.NORMAL, dueDate = dueDate.trim().ifEmpty { null }, reminder = reminder.trim().ifEmpty { null })
+                    title = ""; dueDate = ""; reminder = ""
                 }
             }) { Text("Add") }
         }
         Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(highPriority, { highPriority = it }); Text("High priority") }
         OutlinedTextField(dueDate, { dueDate = it }, label = { Text("Due date (optional)") }, placeholder = { Text("e.g. 2026-09-05") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(reminder, { reminder = it }, label = { Text("Reminder (optional)") }, placeholder = { Text("e.g. 09:00 on 2026-09-05") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(visibleTodos, key = { it.id }) { todo ->
@@ -76,17 +78,20 @@ fun TodoPanel() {
 private fun EditTodoPanel(todo: FynxTodo, onCancel: () -> Unit, onSave: (FynxTodo) -> Unit) {
     var title by remember(todo) { mutableStateOf(todo.title) }
     var dueDate by remember(todo) { mutableStateOf(todo.dueDate.orEmpty()) }
+    var reminder by remember(todo) { mutableStateOf(todo.reminder.orEmpty()) }
     var highPriority by remember(todo) { mutableStateOf(todo.priority == TodoPriority.HIGH) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onCancel) { Text("Cancel") }
             Text("Edit task", style = MaterialTheme.typography.titleLarge)
-            TextButton(onClick = { onSave(todo.copy(title = title.trim().ifEmpty { todo.title }, dueDate = dueDate.trim().ifEmpty { null }, priority = if (highPriority) TodoPriority.HIGH else TodoPriority.NORMAL)) }) { Text("Save") }
+            TextButton(onClick = { onSave(todo.copy(title = title.trim().ifEmpty { todo.title }, dueDate = dueDate.trim().ifEmpty { null }, reminder = reminder.trim().ifEmpty { null }, priority = if (highPriority) TodoPriority.HIGH else TodoPriority.NORMAL)) }) { Text("Save") }
         }
         HorizontalDivider(); Spacer(Modifier.height(20.dp))
         OutlinedTextField(title, { title = it }, label = { Text("Task") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(dueDate, { dueDate = it }, label = { Text("Due date (optional)") }, placeholder = { Text("e.g. 2026-09-05") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(reminder, { reminder = it }, label = { Text("Reminder (optional)") }, placeholder = { Text("e.g. 09:00 on 2026-09-05") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(highPriority, { highPriority = it }); Text("High priority") }
     }
 }
@@ -100,6 +105,7 @@ private fun TodoRow(todo: FynxTodo, onToggle: () -> Unit, onEdit: () -> Unit, on
                 Text(todo.title, style = MaterialTheme.typography.bodyLarge)
                 if (todo.priority == TodoPriority.HIGH) Text("High priority", style = MaterialTheme.typography.labelSmall)
                 if (todo.dueDate != null) Text("Due: ${todo.dueDate}", style = MaterialTheme.typography.labelSmall)
+                if (todo.reminder != null) Text("Reminder: ${todo.reminder}", style = MaterialTheme.typography.labelSmall)
                 if (todo.completed) Text("Completed", style = MaterialTheme.typography.labelSmall)
             }
             TextButton(onClick = onEdit) { Text("Edit") }
