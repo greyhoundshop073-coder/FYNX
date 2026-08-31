@@ -16,37 +16,27 @@ fun FynxApp() {
     var showNotifications by remember { mutableStateOf(false) }
     var authSession by remember { mutableStateOf(AuthSession(state = AuthState.SIGNED_IN, username = "username")) }
 
-    if (openChat != null) {
-        ConversationPanel(chat = openChat!!, onBack = { openChat = null })
-        return
-    }
-    if (showNotifications) {
-        NotificationPanel(notifications = emptyList(), onBack = { showNotifications = false })
-        return
-    }
+    if (openChat != null) { ConversationPanel(chat = openChat!!, onBack = { openChat = null }); return }
+    if (showNotifications) { NotificationPanel(notifications = emptyList(), onBack = { showNotifications = false }); return }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column(verticalArrangement = Arrangement.Center) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("FYNX", fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.width(6.dp))
-                            FynxVerifiedBadge()
-                        }
-                        Text("Connect • Create • Discover", style = MaterialTheme.typography.labelSmall)
+            TopAppBar(title = {
+                Column(verticalArrangement = Arrangement.Center) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("FYNX", fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.width(6.dp)); FynxVerifiedBadge()
                     }
-                },
-                actions = {
-                    TextButton(onClick = { showNotifications = true }) { Text("🔔") }
-                    TextButton(onClick = {}) { Text("＋") }
+                    Text("Connect • Create • Discover", style = MaterialTheme.typography.labelSmall)
                 }
-            )
+            }, actions = {
+                TextButton(onClick = { showNotifications = true }) { Text("🔔") }
+                TextButton(onClick = {}) { Text("＋") }
+            })
         },
         bottomBar = {
             NavigationBar {
-                listOf("Home", "Chats", "Friends", "Stories", "Studio", "Profile").forEach { item ->
+                listOf("Home", "Chats", "Friends", "Stories", "Studio", "To-Do", "Profile").forEach { item ->
                     NavigationBarItem(selected = selected == item, onClick = { selected = item }, icon = { Text(item.take(1)) }, label = { Text(item) })
                 }
             }
@@ -59,6 +49,7 @@ fun FynxApp() {
                 "Friends" -> FriendsPanel()
                 "Stories" -> StoriesPanel()
                 "Studio" -> AiStudioPanel()
+                "To-Do" -> TodoPanel()
                 "Profile" -> ProfilePanel(session = authSession, onSignOut = { authSession = AuthSession() })
             }
         }
