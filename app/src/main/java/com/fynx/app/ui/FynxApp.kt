@@ -21,7 +21,7 @@ fun FynxApp() {
         topBar = { TopAppBar(title = { Text("FYNX") }, actions = { TextButton(onClick = {}) { Text("＋") } }) },
         bottomBar = {
             NavigationBar {
-                listOf("Home", "Chats", "Friends", "Stories", "Profile").forEach { item ->
+                listOf("Home", "Chats", "Friends", "Stories", "Studio", "Profile").forEach { item ->
                     NavigationBarItem(
                         selected = selected == item,
                         onClick = { selected = item },
@@ -38,6 +38,7 @@ fun FynxApp() {
                 "Chats" -> ChatsPanel(onOpenChat = { openChat = it })
                 "Friends" -> FriendsPanel()
                 "Stories" -> StoriesPanel()
+                "Studio" -> AiStudioPanel()
                 "Profile" -> ProfilePanel()
             }
         }
