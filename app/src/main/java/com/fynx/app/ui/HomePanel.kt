@@ -8,11 +8,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun HomePanel() {
     var prompt by remember { mutableStateOf("") }
     var messages by remember { mutableStateOf(listOf<AiMessage>()) }
+    var isLoading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     val suggestions = listOf(
         "Plan my day",
@@ -23,9 +29,23 @@ fun HomePanel() {
 
     fun sendMessage() {
         val text = prompt.trim()
-        if (text.isNotEmpty()) {
-            messages = messages + AiMessage(text = text, fromUser = true)
-            prompt = ""
+        if (text.isEmpty() || isLoading) return
+
+        messages = messages + AiMessage(text = text, fromUser = true)
+        prompt = ""
+        error = null
+        isLoading = true
+
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                AiAssistantClient.sendMessage(text)
+            }
+            result.onSuccess { reply ->
+                messages = messages + AiMessage(text = reply, fromUser = false)
+            }.onFailure { throwable ->
+                error = throwable.message ?: "Unable to reach FYNX right now."
+            }
+            isLoading = false
         }
     }
 
@@ -37,11 +57,6 @@ fun HomePanel() {
             style = MaterialTheme.typography.bodyMedium
         )
         Spacer(Modifier.height(16.dp))
-
-        if (messages.isEmpty()) {
-            Text("Try asking", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-        }
 
         LazyColumn(
             modifier = Modifier.weight(1f),
@@ -61,11 +76,31 @@ fun HomePanel() {
             }
 
             if (messages.isEmpty()) {
+                item { Text("Try asking", style = MaterialTheme.typography.titleMedium) }
                 items(suggestions) { suggestion ->
                     OutlinedButton(
                         onClick = { prompt = suggestion },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text(suggestion) }
+                }
+            }
+
+            if (isLoading) {
+                item { Text("FYNX is thinking…") }
+            }
+
+            error?.let { message ->
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(message, color = MaterialTheme.colorScheme.error)
+                        OutlinedButton(onClick = {
+                            val lastUserMessage = messages.lastOrNull { it.fromUser }?.text
+                            if (lastUserMessage != null) {
+                                prompt = lastUserMessage
+                                sendMessage()
+                            }
+                        }) { Text("Retry") }
+                    }
                 }
             }
         }
@@ -77,12 +112,13 @@ fun HomePanel() {
                 modifier = Modifier.weight(1f),
                 singleLine = true,
                 placeholder = { Text("Message FYNX…") },
-                shape = RoundedCornerShape(24.dp)
+                shape = RoundedCornerShape(24.dp),
+                enabled = !isLoading
             )
             Button(
                 onClick = { sendMessage() },
                 modifier = Modifier.height(56.dp),
-                enabled = prompt.isNotBlank()
+                enabled = prompt.isNotBlank() && !isLoading
             ) { Text("Send") }
         }
     }
