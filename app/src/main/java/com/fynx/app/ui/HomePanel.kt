@@ -1,5 +1,8 @@
 package com.fynx.app.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,7 +25,6 @@ fun HomePanel() {
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-
     val suggestions = listOf("Plan my day", "Write a message", "Help me understand something", "Create an idea")
 
     fun sendMessage(textToSend: String = prompt) {
@@ -45,7 +47,6 @@ fun HomePanel() {
         Spacer(Modifier.height(6.dp))
         Text("Ask FYNX about everyday tasks, ideas, writing, planning and more.", style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(16.dp))
-
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(messages) { message ->
                 Card(Modifier.fillMaxWidth()) {
@@ -55,6 +56,10 @@ fun HomePanel() {
                         Text(message.text)
                         if (!message.fromUser) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("FYNX response", message.text))
+                                }) { Text("Copy") }
                                 TextButton(onClick = {
                                     context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                                         type = "text/plain"
@@ -82,7 +87,6 @@ fun HomePanel() {
                 }
             }
         }
-
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(prompt, { prompt = it }, Modifier.weight(1f), singleLine = true,
                 placeholder = { Text("Message FYNX…") }, shape = RoundedCornerShape(24.dp), enabled = !isLoading)
