@@ -36,7 +36,7 @@ fun FynxApp() {
         },
         bottomBar = {
             NavigationBar {
-                listOf("Home", "Chats", "Friends", "Stories", "Studio", "To-Do", "Profile").forEach { item ->
+                listOf("Home", "Chats", "Friends", "Stories", "Studio", "To-Do", "Calendar", "Profile").forEach { item ->
                     NavigationBarItem(selected = selected == item, onClick = { selected = item }, icon = { Text(item.take(1)) }, label = { Text(item) })
                 }
             }
@@ -50,6 +50,7 @@ fun FynxApp() {
                 "Stories" -> StoriesPanel()
                 "Studio" -> AiStudioPanel()
                 "To-Do" -> TodoPanel()
+                "Calendar" -> CalendarPanel()
                 "Profile" -> ProfilePanel(session = authSession, onSignOut = { authSession = AuthSession() })
             }
         }
