@@ -19,7 +19,14 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit) {
         LazyColumn {
             items(sampleChats) { chat ->
                 ListItem(
-                    headlineContent = { Text(chat.name) },
+                    headlineContent = {
+                        Row {
+                            Text(chat.name)
+                            Spacer(Modifier.width(6.dp))
+                            FynxVerifiedBadge()
+                        }
+                    },
+                    leadingContent = { FynxAvatar(chat.name) },
                     supportingContent = { Text("${chat.username} · ${chat.lastMessage}") },
                     trailingContent = { Text(chat.time) },
                     modifier = Modifier.fillMaxWidth().clickable { onOpenChat(chat) }
