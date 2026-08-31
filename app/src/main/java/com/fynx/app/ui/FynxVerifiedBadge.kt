@@ -35,7 +35,7 @@ fun FynxVerifiedBadge(modifier: Modifier = Modifier) {
 @Composable
 fun FynxAvatar(name: String, modifier: Modifier = Modifier) {
     val initials = name.trim()
-        .split(Regex("\s+"))
+        .split(Regex("\\s+"))
         .filter { it.isNotEmpty() }
         .take(2)
         .joinToString("") { it.first().uppercase() }
