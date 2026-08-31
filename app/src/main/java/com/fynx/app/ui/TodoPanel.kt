@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -7,12 +8,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 enum class TodoFilter { ALL, ACTIVE, COMPLETED, HIGH_PRIORITY }
 
 @Composable
 fun TodoPanel() {
+    val context = LocalContext.current
     var nextId by remember { mutableLongStateOf(1L) }
     var title by remember { mutableStateOf("") }
     var highPriority by remember { mutableStateOf(false) }
@@ -24,7 +27,12 @@ fun TodoPanel() {
     var editingTodo by remember { mutableStateOf<FynxTodo?>(null) }
 
     if (editingTodo != null) {
-        EditTodoPanel(editingTodo!!, { editingTodo = null }, { updated -> todos = todos.map { if (it.id == updated.id) updated else it }; editingTodo = null })
+        EditTodoPanel(editingTodo!!, { editingTodo = null }, { updated ->
+            if (updated.reminder != editingTodo?.reminder) TodoReminderScheduler.cancel(context, updated.id)
+            if (!updated.completed && updated.reminder != null) TodoReminderScheduler.schedule(context, updated)
+            todos = todos.map { if (it.id == updated.id) updated else it }
+            editingTodo = null
+        })
         return
     }
 
@@ -57,7 +65,9 @@ fun TodoPanel() {
             Button(onClick = {
                 val clean = title.trim()
                 if (clean.isNotEmpty()) {
-                    todos = todos + FynxTodo(nextId++, clean, priority = if (highPriority) TodoPriority.HIGH else TodoPriority.NORMAL, dueDate = dueDate.trim().ifEmpty { null }, reminder = reminder.trim().ifEmpty { null })
+                    val todo = FynxTodo(nextId++, clean, priority = if (highPriority) TodoPriority.HIGH else TodoPriority.NORMAL, dueDate = dueDate.trim().ifEmpty { null }, reminder = reminder.trim().ifEmpty { null })
+                    todos = todos + todo
+                    if (!todo.completed && todo.reminder != null) TodoReminderScheduler.schedule(context, todo)
                     title = ""; dueDate = ""; reminder = ""
                 }
             }) { Text("Add") }
@@ -68,7 +78,16 @@ fun TodoPanel() {
         Spacer(Modifier.height(8.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(visibleTodos, key = { it.id }) { todo ->
-                TodoRow(todo, { todos = todos.map { if (it.id == todo.id) it.copy(completed = !it.completed) else it } }, { editingTodo = todo }, { todos = todos.filterNot { it.id == todo.id } })
+                TodoRow(todo,
+                    onToggle = {
+                        val updated = todo.copy(completed = !todo.completed)
+                        if (updated.completed) TodoReminderScheduler.cancel(context, todo.id)
+                        else if (updated.reminder != null) TodoReminderScheduler.schedule(context, updated)
+                        todos = todos.map { if (it.id == todo.id) updated else it }
+                    },
+                    onEdit = { editingTodo = todo },
+                    onDelete = { TodoReminderScheduler.cancel(context, todo.id); todos = todos.filterNot { it.id == todo.id } }
+                )
             }
         }
     }
