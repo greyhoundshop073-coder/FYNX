@@ -19,7 +19,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit) {
     var replyToId by remember { mutableStateOf<String?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var attachment by remember { mutableStateOf<Uri?>(null) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { attachment = it }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { attachment = it }
+    val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { attachment = it }
 
     fun removeMessage(id: String) { messages = messages.filterNot { it.id == id } }
     fun toggleReaction(id: String) { messages = messages.map { if (it.id == id) it.copy(reaction = if (it.reaction == "❤️") null else "❤️") else it } }
@@ -71,7 +72,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit) {
             }
         }
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { picker.launch("image/*") }) { Text("📎") }
+            Row {
+                TextButton(onClick = { imagePicker.launch("image/*") }) { Text("Photo") }
+                TextButton(onClick = { imagePicker.launch("video/*") }) { Text("Video") }
+                TextButton(onClick = { documentPicker.launch("*/*") }) { Text("File") }
+            }
             OutlinedTextField(text, { text = it }, Modifier.weight(1f), placeholder = { Text(if (editingId == null) "Message…" else "Edit message…") })
             TextButton(onClick = {
                 val value = text.trim()
