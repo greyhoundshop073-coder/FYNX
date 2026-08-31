@@ -29,6 +29,7 @@ fun CalendarPanel() {
     if (editing != null) {
         EventEditor(editing!!, { editing = null }) { updated ->
             events = events.map { if (it.id == updated.id) updated else it }
+            selectedDate = updated.date
             editing = null
         }
         return
