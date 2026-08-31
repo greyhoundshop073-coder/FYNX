@@ -8,10 +8,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,57 +50,56 @@ fun HomePanel() {
         }
     }
 
-    Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
-                Text("Welcome to FYNX", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(2.dp))
+                Text("Welcome to FYNX", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
                 Text("Connect, share and get things done.", style = MaterialTheme.typography.bodyMedium)
             }
-            FynxAvatar("FYNX", Modifier.size(48.dp))
+            FynxAvatar("FYNX", Modifier.size(48.dp).clip(CircleShape))
         }
 
-        Spacer(Modifier.height(16.dp))
-        Text("Stories", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
+        Text("Stories", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(end = 8.dp)
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
         ) {
-            item { FynxAvatar("Your Story", Modifier.size(60.dp)) }
+            item {
+                Column(Modifier.width(68.dp)) {
+                    FynxAvatar("Your Story", Modifier.size(62.dp).clip(CircleShape))
+                    Spacer(Modifier.height(5.dp))
+                    Text("Your Story", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                }
+            }
             items(sampleStories.take(5)) { story ->
-                FynxAvatar(story.displayName, Modifier.size(60.dp))
+                Column(Modifier.width(68.dp)) {
+                    FynxAvatar(story.displayName, Modifier.size(62.dp).clip(CircleShape))
+                    Spacer(Modifier.height(5.dp))
+                    Text(story.displayName, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                }
             }
         }
 
-        Spacer(Modifier.height(18.dp))
-        Text("Your Feed", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
+        Text("Your Feed", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         LazyColumn(
             Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(bottom = 12.dp)
         ) {
             items(feedPosts) { post ->
-                Card(
-                    Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp)
-                ) {
-                    Column(Modifier.padding(16.dp)) {
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            FynxAvatar(post.first, Modifier.size(42.dp))
+                            FynxAvatar(post.first, Modifier.size(44.dp).clip(CircleShape))
                             Column(Modifier.weight(1f)) {
-                                Text(post.first, fontWeight = FontWeight.SemiBold)
+                                Text(post.first, fontWeight = FontWeight.Bold)
                                 Text(post.third, style = MaterialTheme.typography.labelSmall)
                             }
                         }
-                        Spacer(Modifier.height(12.dp))
                         Text(post.second, style = MaterialTheme.typography.bodyLarge)
-                        Spacer(Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        HorizontalDivider()
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                             TextButton(onClick = {}) { Text("Like") }
                             TextButton(onClick = {}) { Text("Comment") }
                             TextButton(onClick = {}) { Text("Share") }
@@ -108,16 +109,16 @@ fun HomePanel() {
             }
 
             item {
-                Spacer(Modifier.height(4.dp))
-                Text("FYNX Assistant", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text("Ask FYNX about everyday tasks, ideas, writing, planning and more.", style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(10.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("FYNX Assistant", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Ask FYNX about everyday tasks, ideas, writing, planning and more.", style = MaterialTheme.typography.bodyMedium)
+                }
             }
 
             items(messages) { message ->
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
                     Column(Modifier.padding(16.dp)) {
-                        Text(if (message.fromUser) "You" else "FYNX", style = MaterialTheme.typography.labelLarge)
+                        Text(if (message.fromUser) "You" else "FYNX", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(4.dp))
                         Text(message.text)
                         if (!message.fromUser) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -137,9 +138,9 @@ fun HomePanel() {
             }
 
             if (messages.isEmpty()) {
-                item { Text("Try asking", style = MaterialTheme.typography.titleMedium) }
+                item { Text("Try asking", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
                 items(suggestions) { suggestion ->
-                    OutlinedButton(onClick = { prompt = suggestion }, Modifier.fillMaxWidth()) { Text(suggestion) }
+                    OutlinedButton(onClick = { prompt = suggestion }, Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) { Text(suggestion) }
                 }
             }
             if (isLoading) item { Text("FYNX is thinking…") }
@@ -163,11 +164,7 @@ fun HomePanel() {
                 shape = RoundedCornerShape(24.dp),
                 enabled = !isLoading
             )
-            Button(
-                onClick = { sendMessage() },
-                Modifier.height(56.dp),
-                enabled = prompt.isNotBlank() && !isLoading
-            ) { Text("Send") }
+            Button(onClick = { sendMessage() }, Modifier.height(56.dp), enabled = prompt.isNotBlank() && !isLoading) { Text("Send") }
         }
     }
 }
