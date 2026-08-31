@@ -5,6 +5,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -19,39 +20,75 @@ fun FynxApp() {
     if (openChat != null) { ConversationPanel(chat = openChat!!, onBack = { openChat = null }); return }
     if (showNotifications) { NotificationPanel(notifications = emptyList(), onBack = { showNotifications = false }); return }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(title = {
-                Column(verticalArrangement = Arrangement.Center) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("FYNX", fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.width(6.dp)); FynxVerifiedBadge()
+    val fynxDarkColors = darkColorScheme(
+        primary = Color(0xFF2F8CFF),
+        onPrimary = Color.White,
+        secondary = Color(0xFF22C7F2),
+        background = Color(0xFF071326),
+        onBackground = Color(0xFFF5F8FF),
+        surface = Color(0xFF0D1B2E),
+        onSurface = Color(0xFFF5F8FF),
+        surfaceVariant = Color(0xFF15263D),
+        onSurfaceVariant = Color(0xFFB9C6D8),
+        outline = Color(0xFF31445F)
+    )
+
+    MaterialTheme(colorScheme = fynxDarkColors) {
+        Scaffold(
+            containerColor = fynxDarkColors.background,
+            topBar = {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = fynxDarkColors.background,
+                        titleContentColor = fynxDarkColors.onBackground
+                    ),
+                    title = {
+                        Column(verticalArrangement = Arrangement.Center) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("FYNX", fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.width(6.dp))
+                                FynxVerifiedBadge()
+                            }
+                            Text("Connect • Create • Discover", style = MaterialTheme.typography.labelSmall, color = fynxDarkColors.onSurfaceVariant)
+                        }
+                    },
+                    actions = {
+                        TextButton(onClick = { showNotifications = true }) { Text("🔔") }
+                        TextButton(onClick = {}) { Text("＋") }
                     }
-                    Text("Connect • Create • Discover", style = MaterialTheme.typography.labelSmall)
-                }
-            }, actions = {
-                TextButton(onClick = { showNotifications = true }) { Text("🔔") }
-                TextButton(onClick = {}) { Text("＋") }
-            })
-        },
-        bottomBar = {
-            NavigationBar {
-                listOf("Home", "Chats", "Friends", "Stories", "Studio", "To-Do", "Calendar", "Profile").forEach { item ->
-                    NavigationBarItem(selected = selected == item, onClick = { selected = item }, icon = { Text(item.take(1)) }, label = { Text(item) })
+                )
+            },
+            bottomBar = {
+                NavigationBar(containerColor = fynxDarkColors.surface) {
+                    listOf("Home", "Chats", "Friends", "Stories", "Studio", "To-Do", "Calendar", "Profile").forEach { item ->
+                        NavigationBarItem(
+                            selected = selected == item,
+                            onClick = { selected = item },
+                            icon = { Text(item.take(1)) },
+                            label = { Text(item) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = fynxDarkColors.primary,
+                                selectedTextColor = fynxDarkColors.primary,
+                                indicatorColor = Color(0xFF132B49),
+                                unselectedIconColor = fynxDarkColors.onSurfaceVariant,
+                                unselectedTextColor = fynxDarkColors.onSurfaceVariant
+                            )
+                        )
+                    }
                 }
             }
-        }
-    ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
-            when (selected) {
-                "Home" -> HomePanel()
-                "Chats" -> ChatsPanel(onOpenChat = { openChat = it })
-                "Friends" -> FriendsPanel()
-                "Stories" -> StoriesPanel()
-                "Studio" -> AiStudioPanel()
-                "To-Do" -> TodoPanel()
-                "Calendar" -> CalendarPanel()
-                "Profile" -> ProfilePanel(session = authSession, onSignOut = { authSession = AuthSession() })
+        ) { padding ->
+            Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 12.dp)) {
+                when (selected) {
+                    "Home" -> HomePanel()
+                    "Chats" -> ChatsPanel(onOpenChat = { openChat = it })
+                    "Friends" -> FriendsPanel()
+                    "Stories" -> StoriesPanel()
+                    "Studio" -> AiStudioPanel()
+                    "To-Do" -> TodoPanel()
+                    "Calendar" -> CalendarPanel()
+                    "Profile" -> ProfilePanel(session = authSession, onSignOut = { authSession = AuthSession() })
+                }
             }
         }
     }
