@@ -21,13 +21,13 @@ fun ProfilePanel() {
 
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(Modifier.height(20.dp))
-        Surface(Modifier.size(88.dp), shape = MaterialTheme.shapes.extraLarge, tonalElevation = 2.dp) {
-            Box(contentAlignment = Alignment.Center) {
-                Text("👤", style = MaterialTheme.typography.headlineMedium)
-            }
-        }
+        FynxAvatar(profile.displayName, Modifier.size(104.dp))
         Spacer(Modifier.height(12.dp))
-        Text(profile.displayName, style = MaterialTheme.typography.titleLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(profile.displayName, style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.width(6.dp))
+            FynxVerifiedBadge()
+        }
         Text(profile.username, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(6.dp))
         Text(profile.bio, style = MaterialTheme.typography.bodyMedium)
