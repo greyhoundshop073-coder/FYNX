@@ -23,11 +23,7 @@ fun ProfilePanel() {
         Spacer(Modifier.height(20.dp))
         FynxAvatar(profile.displayName, Modifier.size(104.dp))
         Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(profile.displayName, style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.width(6.dp))
-            FynxVerifiedBadge()
-        }
+        Text(profile.displayName, style = MaterialTheme.typography.titleLarge)
         Text(profile.username, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(6.dp))
         Text(profile.bio, style = MaterialTheme.typography.bodyMedium)
