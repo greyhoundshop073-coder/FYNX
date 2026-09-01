@@ -24,9 +24,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onNewIntent(intent: Intent?) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        pendingDeepLink = FynxDeepLinkParser.parse(intent?.data)
+        pendingDeepLink = FynxDeepLinkParser.parse(intent.data)
         setContent {
             FynxTheme {
                 FynxApp(deepLinkDestination = pendingDeepLink)
