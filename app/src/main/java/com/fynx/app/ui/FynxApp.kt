@@ -189,7 +189,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     "Marketplace" -> FynxMarketplacePanel()
                     "Money Tools" -> MoneyToolsPanel()
                     "Features" -> FynxFeaturesPanel(onSelect = { selected = it })
-                    "Extra Tools" -> FynxExtraToolsPanel()
+                    "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
                     "Notifications" -> NotificationPanel(
                         notifications = notifications,
                         onBack = { selected = "Features" },
