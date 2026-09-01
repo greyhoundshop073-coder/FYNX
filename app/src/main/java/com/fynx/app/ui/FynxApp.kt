@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import android.content.Context
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -27,13 +29,14 @@ fun FynxApp() {
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
     var showSettings by remember { mutableStateOf(false) }
     var authSession by remember { mutableStateOf(AuthSession(state = AuthState.SIGNED_IN, username = "username")) }
+    val context = LocalContext.current
     val colors = darkColorScheme(primary = Color(0xFF2F8CFF), onPrimary = Color.White, secondary = Color(0xFF22C7F2), background = Color(0xFF071326), onBackground = Color(0xFFF5F8FF), surface = Color(0xFF0D1B2E), onSurface = Color(0xFFF5F8FF), surfaceVariant = Color(0xFF15263D), onSurfaceVariant = Color(0xFFB9C6D8), outline = Color(0xFF31445F))
     val mainNav = listOf(FynxNavItem("Home", "Home", Icons.Default.Home), FynxNavItem("Chats", "Chats", Icons.Default.Person), FynxNavItem("Friends", "Friends", Icons.Default.Person), FynxNavItem("Stories", "Stories", Icons.Default.Home), FynxNavItem("Money Tools", "Money", Icons.Default.Person), FynxNavItem("Features", "Features", Icons.Default.Settings))
     if (openChat != null) { ConversationPanel(chat = openChat!!, onBack = { openChat = null }); return }
     MaterialTheme(colorScheme = colors) {
         val mainIndex = mainNav.indexOfFirst { it.key == selected }.coerceAtLeast(0)
         Scaffold(containerColor = colors.background, topBar = { when (selected) {
-            "Home" -> TopAppBar(colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background), navigationIcon = { FynxAvatar("username", Modifier.size(34.dp)) }, title = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Text("FYNX", color = colors.primary, fontWeight = FontWeight.Bold) } }, actions = { IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, contentDescription = "Settings") } })
+            "Home" -> TopAppBar(colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background), navigationIcon = { FynxAvatar("username", Modifier.size(34.dp)) }, title = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Text("FYNX", color = colors.primary, fontWeight = FontWeight.Bold) } }, actions = { TextButton(onClick = { shareFynx(context) }) { Text("Share") }; IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, contentDescription = "Settings") } })
             "Friends", "Stories" -> TopAppBar(colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background), navigationIcon = { IconButton(onClick = { selected = "Home" }) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") } }, title = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Text(selected, color = colors.primary, fontWeight = FontWeight.Bold) } }, actions = { Spacer(Modifier.size(48.dp)) })
             else -> TopAppBar(colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background), navigationIcon = { if (selected != "Money Tools" && selected != "Features") IconButton(onClick = { selected = "Home" }) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") } }, title = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Text(selected, color = colors.primary, fontWeight = FontWeight.Bold) } }, actions = { Spacer(Modifier.size(48.dp)) })
         } }, bottomBar = { NavigationBar(containerColor = colors.surface, tonalElevation = 8.dp) { mainNav.forEach { item -> NavigationBarItem(selected = selected == item.key, onClick = { selected = item.key }, icon = { Icon(item.icon, contentDescription = item.label) }, label = { Text(item.label) }, colors = NavigationBarItemDefaults.colors(selectedIconColor = colors.primary, selectedTextColor = colors.primary, indicatorColor = Color(0xFF132B49), unselectedIconColor = colors.onSurfaceVariant, unselectedTextColor = colors.onSurfaceVariant)) } } }) { padding ->
