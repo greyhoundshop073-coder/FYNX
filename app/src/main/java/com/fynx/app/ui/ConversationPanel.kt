@@ -45,8 +45,15 @@ fun ConversationPanel(
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
-    var text by remember { mutableStateOf("") }
-    var messages by remember { mutableStateOf(listOf(ChatMessage(chat.lastMessage, false, id = "initial", delivered = true, read = true))) }
+    val fallbackMessage = remember(chat.lastMessage) {
+        ChatMessage(chat.lastMessage, false, id = "initial", delivered = true, read = true)
+    }
+    var text by remember(chat.username) {
+        mutableStateOf("")
+    }
+    var messages by remember(chat.username) {
+        mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage))
+    }
     var replyToId by remember { mutableStateOf<String?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var attachment by remember { mutableStateOf<Uri?>(null) }
@@ -79,6 +86,10 @@ fun ConversationPanel(
                 }
             }
         }
+    }
+
+    LaunchedEffect(chat.username, messages) {
+        FynxChatStore.save(context, chat.username, messages)
     }
 
     DisposableEffect(Unit) {
