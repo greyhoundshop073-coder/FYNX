@@ -2,9 +2,11 @@ package com.fynx.app.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Call
@@ -50,6 +52,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var authSession by remember { mutableStateOf(FynxAuthStore.load(context)) }
     var notifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
     var inviteCode by remember { mutableStateOf<String?>(null) }
+    var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
 
     LaunchedEffect(deepLinkDestination) {
         when (val destination = deepLinkDestination) {
@@ -109,7 +112,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         return
     }
 
-    FynxTheme {
+    FynxTheme(accent = accent) {
         val mainIndex = mainNav.indexOfFirst { it.key == selected }.coerceAtLeast(0)
         val unreadNotifications = notifications.unreadNotificationCount()
 
@@ -195,7 +198,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     "Notifications" -> NotificationPanel(
                         notifications = notifications,
                         onBack = { selected = "Features" },
-                        onNotificationRead = { id -> notifications = FynxNotificationStore.load(context) },
+                        onNotificationRead = { notifications = FynxNotificationStore.load(context) },
                         onMarkAllRead = { notifications = FynxNotificationStore.load(context) }
                     )
                     "Share" -> FynxSharePanel()
@@ -233,9 +236,42 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         if (showSettings) {
             AlertDialog(
                 onDismissRequest = { showSettings = false },
-                title = { Text("Settings") },
-                text = { Text("FYNX settings") },
-                confirmButton = { TextButton(onClick = { showSettings = false }) { Text("Done") } }
+                title = { Text("FYNX Personalization") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Choose your accent color", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Your choice changes the global FYNX accent while keeping the approved dark surfaces and layout.",
+                            color = FynxDesign.TextSecondary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FynxAccent.values().forEach { option ->
+                                OutlinedButton(
+                                    onClick = {
+                                        accent = option
+                                        FynxPreferencesStore.saveAccent(context, option)
+                                    },
+                                    shape = FynxDesign.ControlShape,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (accent == option) option.primary else FynxDesign.Outline
+                                    )
+                                ) {
+                                    Text("●", color = option.primary)
+                                    Spacer(Modifier.width(5.dp))
+                                    Text(option.name)
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showSettings = false }) { Text("Done") }
+                }
             )
         }
     }
