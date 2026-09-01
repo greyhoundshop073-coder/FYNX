@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import com.fynx.app.ui.FynxApp
 import com.fynx.app.ui.FynxDeepLinkDestination
 import com.fynx.app.ui.FynxDeepLinkParser
@@ -15,6 +16,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         pendingDeepLink = FynxDeepLinkParser.parse(intent?.data)
         FynxNotificationFoundation.createChannels(this)
         setContent {
