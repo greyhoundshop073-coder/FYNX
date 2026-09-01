@@ -35,8 +35,9 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false) {
     var session by remember {
         mutableStateOf(
             initialName?.let {
+                val id = "incoming-${System.currentTimeMillis()}"
                 FynxCallSession(
-                    id = "incoming-${System.currentTimeMillis()}",
+                    id = id,
                     callerUsername = it,
                     participantUsernames = listOf(it),
                     type = if (initialVideo) FynxCallType.VIDEO else FynxCallType.VOICE,
@@ -49,14 +50,19 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false) {
     var calls by remember { mutableStateOf(FynxCallsStore.load(context)) }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        val current = session
         val required = if (video) listOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else listOf(Manifest.permission.RECORD_AUDIO)
-        if (required.all { result[it] == true || ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
-            session = session?.let(FynxCallsFoundation::start)
+        if (current != null && required.all { result[it] == true || ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
+            session = FynxCallsFoundation.start(current)
+            FynxCallsStore.updateStatus(context, current.id, "Connecting")
+            calls = FynxCallsStore.load(context)
             permissionMessage = null
         } else {
             permissionMessage = if (video) "Camera and microphone access are needed for video calls." else "Microphone access is needed for voice calls."
+            current?.let { FynxCallsStore.updateStatus(context, it.id, "Permission denied", missed = false) }
             activeCall = null
             session = null
+            calls = FynxCallsStore.load(context)
         }
     }
 
@@ -64,32 +70,43 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false) {
         video = isVideo
         activeCall = name
         permissionMessage = null
+        val id = "call-${System.currentTimeMillis()}"
         val newSession = FynxCallSession(
-            id = "call-${System.currentTimeMillis()}",
+            id = id,
             callerUsername = "me",
             participantUsernames = listOf(name),
             type = if (isVideo) FynxCallType.VIDEO else FynxCallType.VOICE
         )
         session = newSession
+        FynxCallsStore.add(context, FynxCallRecord(id, name, if (isVideo) "Video call" else "Voice call", "Just now", status = "Outgoing"))
+        calls = FynxCallsStore.load(context)
         val required = if (isVideo) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)
         if (required.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
             session = FynxCallsFoundation.start(newSession)
+            FynxCallsStore.updateStatus(context, id, "Connecting")
+            calls = FynxCallsStore.load(context)
         } else {
             permissionLauncher.launch(required)
         }
-        FynxCallsStore.add(context, FynxCallRecord("call-${System.currentTimeMillis()}", name, if (isVideo) "Video call" else "Voice call", "Just now"))
-        calls = FynxCallsStore.load(context)
     }
 
     if (activeCall != null && session != null) {
         FynxActiveCallPanel(
             name = activeCall!!,
             session = session!!,
-            onAnswer = { session = FynxCallsFoundation.answer(session!!) },
+            onAnswer = {
+                val current = session!!
+                session = FynxCallsFoundation.answer(current)
+                FynxCallsStore.add(context, FynxCallRecord(current.id, activeCall!!, if (video) "Video call" else "Voice call", "Just now", status = "Answered"))
+                calls = FynxCallsStore.load(context)
+            },
             onRetry = {
+                val current = session!!
                 val required = if (video) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)
                 if (required.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
-                    session = FynxCallsFoundation.start(session!!)
+                    session = FynxCallsFoundation.start(current)
+                    FynxCallsStore.updateStatus(context, current.id, "Connecting")
+                    calls = FynxCallsStore.load(context)
                 } else {
                     permissionLauncher.launch(required)
                 }
@@ -97,8 +114,12 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false) {
             onToggleMicrophone = { session = FynxCallsFoundation.toggleMicrophone(session!!) },
             onToggleCamera = { session = FynxCallsFoundation.toggleCamera(session!!) },
             onSwitchCamera = { session = FynxCallsFoundation.switchCamera(session!!) },
+            onToggleSpeaker = { session = FynxCallsFoundation.toggleSpeaker(session!!) },
             onEnd = {
-                session = FynxCallsFoundation.end(session!!)
+                val current = session!!
+                session = FynxCallsFoundation.end(current)
+                FynxCallsStore.updateStatus(context, current.id, if (current.state == FynxCallState.RINGING) "Declined" else "Ended")
+                calls = FynxCallsStore.load(context)
                 activeCall = null
                 session = null
             }
@@ -127,6 +148,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false) {
                         Column(Modifier.weight(1f)) {
                             Text(call.name, style = MaterialTheme.typography.titleMedium)
                             Text("${call.type} • ${call.time}", style = MaterialTheme.typography.bodySmall, color = if (call.missed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(call.status, style = MaterialTheme.typography.labelSmall, color = if (call.missed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         IconButton(onClick = { startCall(call.name, call.type == "Video call") }) {
                             Icon(if (call.type == "Video call") Icons.Default.Videocam else Icons.Default.Call, "Call ${call.name}")
@@ -147,6 +169,7 @@ fun FynxActiveCallPanel(
     onToggleMicrophone: () -> Unit,
     onToggleCamera: () -> Unit,
     onSwitchCamera: () -> Unit,
+    onToggleSpeaker: () -> Unit,
     onEnd: () -> Unit
 ) {
     val isConnecting = session.state == FynxCallState.CONNECTING
@@ -199,7 +222,9 @@ fun FynxActiveCallPanel(
                     }
                     FilledTonalIconButton(onClick = onSwitchCamera) { Icon(Icons.Default.Videocam, "Switch camera") }
                 }
-                FilledTonalIconButton(onClick = {}) { Icon(Icons.Default.VolumeUp, "Speaker") }
+                FilledTonalIconButton(onClick = onToggleSpeaker) {
+                    Icon(if (session.speakerEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff, if (session.speakerEnabled) "Speaker on" else "Speaker off")
+                }
                 FloatingActionButton(onClick = onEnd) { Icon(Icons.Default.CallEnd, "End call") }
             }
         } else if (!isIncoming) {
