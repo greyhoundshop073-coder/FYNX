@@ -146,7 +146,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             topBar = {
                 if (selected == "Home") {
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                        Modifier.fillMaxWidth()
+                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         FynxAvatar("username", Modifier.size(34.dp))
@@ -170,7 +172,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     }
                 } else {
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                        Modifier.fillMaxWidth()
+                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (isSecondaryDestination) {
@@ -209,65 +213,71 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 }
             }
         ) { padding ->
-            Box(
-                Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 8.dp)
-                    .pointerInput(selected) {
-                        var totalDrag = 0f
-                        detectHorizontalDragGestures(
-                            onDragStart = { totalDrag = 0f },
-                            onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
-                            onDragEnd = {
-                                if (kotlin.math.abs(totalDrag) >= 80f) {
-                                    val nextIndex = if (totalDrag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex)
-                                    else (mainIndex - 1).coerceAtLeast(0)
-                                    selected = mainNav[nextIndex].key
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                Box(
+                    Modifier.fillMaxSize()
+                        .padding(padding)
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .widthIn(max = 720.dp)
+                        .align(Alignment.Center)
+                        .pointerInput(selected) {
+                            var totalDrag = 0f
+                            detectHorizontalDragGestures(
+                                onDragStart = { totalDrag = 0f },
+                                onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
+                                onDragEnd = {
+                                    if (kotlin.math.abs(totalDrag) >= 80f) {
+                                        val nextIndex = if (totalDrag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex)
+                                        else (mainIndex - 1).coerceAtLeast(0)
+                                        selected = mainNav[nextIndex].key
+                                    }
                                 }
-                            }
+                            )
+                        }
+                ) {
+                    when (selected) {
+                        "Home" -> HomePanel()
+                        "Chats" -> ChatsPanel(onOpenChat = { openChat = it })
+                        "Friends" -> FriendsPanel()
+                        "Marketplace" -> FynxMarketplacePanel()
+                        "Money Tools" -> MoneyToolsPanel()
+                        "Features" -> FynxFeaturesPanel(onSelect = { selected = it })
+                        "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
+                        "Calendar" -> CalendarPanel()
+                        "Notifications" -> NotificationPanel(
+                            notifications = notifications,
+                            onBack = { selected = "Home" },
+                            onNotificationRead = { notifications = FynxNotificationStore.load(context) },
+                            onMarkAllRead = { notifications = FynxNotificationStore.load(context) }
                         )
+                        "Share" -> FynxSharePanel()
+                        "Invite" -> FynxInvitePanel(
+                            code = inviteCode,
+                            onShare = { FynxShareActions.share(context, FynxShareActions.defaultPayload()) },
+                            onBack = { selected = "Features" }
+                        )
+                        "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo)
+                        "Studio" -> AiStudioPanel()
+                        "To-Do" -> TodoPanel()
+                        "Profile" -> ProfilePanel(session = authSession, onSignOut = {
+                            FynxAuthStore.clear(context)
+                            authSession = AuthSession()
+                        })
+                        "Bills" -> BillsPaymentPanel()
+                        "Transactions" -> TransactionHistoryPanel()
+                        "Accounts" -> AccountsWalletsPanel()
+                        "Budget" -> BudgetPlannerPanel()
+                        "Currency" -> CurrencyConverterPanel()
+                        "Savings" -> SavingsGoalsPanel()
+                        "Subscriptions" -> SubscriptionsPanel()
+                        "Overview" -> FinancialOverviewPanel()
+                        "Receipts" -> ReceiptsExpensePanel()
+                        "Insights" -> MoneyInsightsPanel()
+                        "Spending Insights" -> SpendingInsightsPanel()
+                        "Money Alerts" -> MoneyAlertsPanel()
+                        "Vault" -> SecureMoneyVaultPanel()
+                        else -> HomePanel()
                     }
-            ) {
-                when (selected) {
-                    "Home" -> HomePanel()
-                    "Chats" -> ChatsPanel(onOpenChat = { openChat = it })
-                    "Friends" -> FriendsPanel()
-                    "Marketplace" -> FynxMarketplacePanel()
-                    "Money Tools" -> MoneyToolsPanel()
-                    "Features" -> FynxFeaturesPanel(onSelect = { selected = it })
-                    "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
-                    "Calendar" -> CalendarPanel()
-                    "Notifications" -> NotificationPanel(
-                        notifications = notifications,
-                        onBack = { selected = "Home" },
-                        onNotificationRead = { notifications = FynxNotificationStore.load(context) },
-                        onMarkAllRead = { notifications = FynxNotificationStore.load(context) }
-                    )
-                    "Share" -> FynxSharePanel()
-                    "Invite" -> FynxInvitePanel(
-                        code = inviteCode,
-                        onShare = { FynxShareActions.share(context, FynxShareActions.defaultPayload()) },
-                        onBack = { selected = "Features" }
-                    )
-                    "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo)
-                    "Studio" -> AiStudioPanel()
-                    "To-Do" -> TodoPanel()
-                    "Profile" -> ProfilePanel(session = authSession, onSignOut = {
-                        FynxAuthStore.clear(context)
-                        authSession = AuthSession()
-                    })
-                    "Bills" -> BillsPaymentPanel()
-                    "Transactions" -> TransactionHistoryPanel()
-                    "Accounts" -> AccountsWalletsPanel()
-                    "Budget" -> BudgetPlannerPanel()
-                    "Currency" -> CurrencyConverterPanel()
-                    "Savings" -> SavingsGoalsPanel()
-                    "Subscriptions" -> SubscriptionsPanel()
-                    "Overview" -> FinancialOverviewPanel()
-                    "Receipts" -> ReceiptsExpensePanel()
-                    "Insights" -> MoneyInsightsPanel()
-                    "Spending Insights" -> SpendingInsightsPanel()
-                    "Money Alerts" -> MoneyAlertsPanel()
-                    "Vault" -> SecureMoneyVaultPanel()
-                    else -> HomePanel()
                 }
             }
         }
