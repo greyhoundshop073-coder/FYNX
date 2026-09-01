@@ -6,50 +6,90 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToLong
 
-private data class MoneyEntry(val id: Long, val title: String, val amount: Double, val type: String)
-private data class EmbeddedSavingsGoal(val name: String, val target: Double, val saved: Double)
-
 @Composable
 fun MoneyToolsPanel() {
+    val context = LocalContext.current
     var balance by remember { mutableStateOf(0.0) }
     var title by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("Income") }
-    var entries by remember { mutableStateOf(emptyList<MoneyEntry>()) }
-    var nextId by remember { mutableLongStateOf(1L) }
+    var entries by remember { mutableStateOf(FynxMoneyStore.loadTransactions(context)) }
+    var pendingTransaction by remember { mutableStateOf<FynxMoneyTransaction?>(null) }
+
     val income = entries.filter { it.type == "Income" }.sumOf { it.amount }
     val expenses = entries.filter { it.type == "Expense" }.sumOf { it.amount }
     val net = income - expenses
+    val accountsTotal = FynxMoneyStore.loadAccounts(context).sumOf { it.balance }
+
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         MoneyCalculatorCard()
+        Spacer(Modifier.height(12.dp))
         CurrencyConverterCard()
+        Spacer(Modifier.height(12.dp))
+        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text("Money Dashboard 💰", style = MaterialTheme.typography.titleLarge)
+            Text("Available tracked balance", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(formatMoney(accountsTotal + net + balance), style = MaterialTheme.typography.headlineMedium)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Income ${formatMoney(income)}", color = MaterialTheme.colorScheme.primary)
+                Text("Expenses ${formatMoney(expenses)}", color = MaterialTheme.colorScheme.error)
+            }
+            Text("${entries.size} recorded transaction(s) • ${FynxMoneyStore.loadAccounts(context).size} account(s)", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } }
         Spacer(Modifier.height(12.dp))
         BudgetCard(spent = expenses)
         Spacer(Modifier.height(12.dp))
         SavingsGoalsCard()
         Spacer(Modifier.height(12.dp))
-        Text("Money Tools 💰", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(12.dp))
-        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
-            Text("Money overview", style = MaterialTheme.typography.titleMedium)
-            Text("Balance: ${formatMoney(balance + net)}", style = MaterialTheme.typography.headlineMedium)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Income ${formatMoney(income)}"); Text("Expenses ${formatMoney(expenses)}") }
-        } }
-        Spacer(Modifier.height(12.dp))
+
+        Text("Quick transaction", style = MaterialTheme.typography.titleMedium)
         OutlinedTextField(title, { title = it }, label = { Text("Description") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(amount, { amount = it }, label = { Text("Amount") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = type == "Income", onClick = { type = "Income" }, label = { Text("Income") })
             FilterChip(selected = type == "Expense", onClick = { type = "Expense" }, label = { Text("Expense") })
             Spacer(Modifier.weight(1f))
-            Button(onClick = { val value = amount.toDoubleOrNull(); if (!title.isBlank() && value != null && value > 0) { entries = entries + MoneyEntry(nextId++, title.trim(), value, type); title = ""; amount = "" } }) { Text("Add") }
+            Button(onClick = {
+                val value = amount.toDoubleOrNull()
+                if (title.isNotBlank() && value != null && value > 0) {
+                    pendingTransaction = FynxMoneyTransaction(
+                        (entries.maxOfOrNull { it.id } ?: 0L) + 1L,
+                        title.trim(), value, type, "Today"
+                    )
+                }
+            }, enabled = title.isNotBlank() && (amount.toDoubleOrNull() ?: 0.0) > 0) { Text("Add") }
         }
         Spacer(Modifier.height(12.dp))
-        Text("Transactions", style = MaterialTheme.typography.titleMedium)
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) { items(entries.reversed(), key = { it.id }) { entry -> ListItem(headlineContent = { Text(entry.title) }, supportingContent = { Text(entry.type) }, trailingContent = { Text("${if (entry.type == "Expense") "-" else "+"}${formatMoney(entry.amount)}") }) } }
+        Text("Recent transactions", style = MaterialTheme.typography.titleMedium)
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            items(entries.asReversed().take(8), key = { it.id }) { entry ->
+                ListItem(
+                    headlineContent = { Text(entry.title) },
+                    supportingContent = { Text(entry.type) },
+                    trailingContent = { Text("${if (entry.type == "Expense") "-" else "+"}${formatMoney(entry.amount)}") }
+                )
+            }
+        }
+    }
+
+    pendingTransaction?.let { transaction ->
+        AlertDialog(
+            onDismissRequest = { pendingTransaction = null },
+            title = { Text("Confirm transaction") },
+            text = { Text("Save ${transaction.type.lowercase()} of ${formatMoney(transaction.amount)} for ${transaction.title}? This is a local FYNX record and does not move real money.") },
+            dismissButton = { TextButton(onClick = { pendingTransaction = null }) { Text("Cancel") } },
+            confirmButton = {
+                Button(onClick = {
+                    FynxMoneyStore.addTransaction(context, transaction)
+                    entries = FynxMoneyStore.loadTransactions(context)
+                    title = ""; amount = ""; pendingTransaction = null
+                }) { Text("Confirm") }
+            }
+        )
     }
 }
 
@@ -82,6 +122,8 @@ private fun SavingsGoalsCard() {
         goal?.let { val progress = (it.saved / it.target).coerceIn(0.0, 1.0).toFloat(); Spacer(Modifier.height(8.dp)); Text(it.name, style = MaterialTheme.typography.titleMedium); Text("Saved ${formatMoney(it.saved)} of ${formatMoney(it.target)}"); LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth()); if (it.saved >= it.target) Text("🏆 Goal completed!") else Text("Remaining ${formatMoney(it.target - it.saved)}") }
     } }
 }
+
+private data class EmbeddedSavingsGoal(val name: String, val target: Double, val saved: Double)
 
 @Composable
 private fun MoneyCalculatorCard() {
