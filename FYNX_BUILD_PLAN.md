@@ -5,8 +5,8 @@ Build one major stage at a time. Inspect existing code first. Keep each stage co
 
 ## Ten-stage product build
 1. Foundation & Design System — DONE 🟢
-2. Authentication & User Identity — IN PROGRESS
-3. Chat & Messaging
+2. Authentication & User Identity — DONE 🟢 (UI/local foundation)
+3. Chat & Messaging — IN PROGRESS
 4. Groups & Social
 5. Marketplace
 6. Voice & Video Calls
@@ -15,24 +15,29 @@ Build one major stage at a time. Inspect existing code first. Keep each stage co
 9. FYNX Extra Tools
 10. Final Integration & Polish
 
-## Stage 2 checklist
-- [x] First-launch authentication gate
-- [x] Welcome screen
-- [x] Create-account flow
-- [x] Display name
-- [x] Username
-- [x] Phone number field
-- [x] Verification-code screen foundation
-- [x] Local account/session persistence
-- [x] Returning-user login flow
-- [x] Sign-out keeps the local account but ends the session
-- [x] Validation and safe error states
-- [ ] Production OTP/backend authentication
-- [ ] Secure server-side account storage
-- [ ] Production account recovery
+## Stage 3 checklist
+- [x] Chat list and conversation entry
+- [x] One-to-one conversation screen
+- [x] Text message composer and send
+- [x] Voice-note recording foundation
+- [x] Voice-note playback foundation
+- [x] Copy message text
+- [x] Text selection / copy and paste support
+- [x] Reply to message foundation
+- [x] Edit sent text foundation
+- [x] Delete sent message foundation
+- [x] Message search foundation
+- [x] Attachment picker foundation
+- [x] Local text-message persistence
+- [x] Safe empty/error handling foundations
+- [x] FYNX dark theme and reusable rounded surfaces
+- [ ] Production realtime messaging backend
+- [ ] Server-side message synchronization
+- [ ] End-to-end encryption
+- [ ] Production media/voice upload service
 
 ## Important
-Stage 2 is a UI/local authentication foundation. It does not pretend that local verification is production-grade identity verification. Production OTP, backend accounts, recovery, and server security are connected when the production backend is ready.
+Stage 3 UI and local persistence are foundations. Production messaging requires a backend, realtime transport, authenticated server APIs, secure media storage, and encryption design. Those should be connected before calling the messaging system production-ready.
 
 ## Removed permanently
 AI image generation and AI video generation are NOT part of the FYNX project roadmap. Do not add them back.
