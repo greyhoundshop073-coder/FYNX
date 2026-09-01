@@ -4,6 +4,7 @@ import android.Manifest
 import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -73,7 +74,7 @@ fun ConversationPanel(
         if (granted && !isRecording) {
             val file = File(context.cacheDir, "voice_${System.currentTimeMillis()}.m4a")
             runCatching {
-                MediaRecorder(context).apply {
+                createCompatibleMediaRecorder(context).apply {
                     setAudioSource(MediaRecorder.AudioSource.MIC)
                     setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                     setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
@@ -225,5 +226,14 @@ fun ConversationPanel(
                 }
             }
         }
+    }
+}
+
+@Suppress("DEPRECATION")
+private fun createCompatibleMediaRecorder(context: android.content.Context): MediaRecorder {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        MediaRecorder(context)
+    } else {
+        MediaRecorder()
     }
 }
