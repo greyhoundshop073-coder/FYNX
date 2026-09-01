@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,52 +20,65 @@ fun FynxExtraToolsPanel(onOpenCalendar: () -> Unit) {
     var notes by remember { mutableStateOf(listOf<FynxQuickNote>()) }
     var noteText by remember { mutableStateOf("") }
     var showNoteEditor by remember { mutableStateOf(false) }
-    
-    Column(Modifier.fillMaxSize()) {
+
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Text("Extra Tools", style = MaterialTheme.typography.headlineSmall)
         Text(
             "Useful everyday tools that complement FYNX without duplicating its main modules.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = FynxDesign.TextSecondary
         )
-        Spacer(Modifier.height(12.dp))
 
         Card(
             onClick = { showNoteEditor = true },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            shape = FynxDesign.CardShape,
+            colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+            border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.5f))
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.EditNote, contentDescription = "Quick Notes", tint = MaterialTheme.colorScheme.primary)
+                Surface(shape = FynxDesign.ControlShape, color = FynxDesign.SelectedContainer) {
+                    Icon(Icons.Default.EditNote, "Quick Notes", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(9.dp).size(22.dp))
+                }
                 Spacer(Modifier.width(14.dp))
                 Column {
                     Text("Quick Notes", style = MaterialTheme.typography.titleMedium)
-                    Text("Capture a short note without leaving FYNX.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Capture a short note without leaving FYNX.", color = FynxDesign.TextSecondary)
                 }
             }
         }
 
-        Spacer(Modifier.height(10.dp))
-
         Card(
             onClick = onOpenCalendar,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            shape = FynxDesign.CardShape,
+            colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+            border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.5f))
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.CalendarMonth, contentDescription = "Events", tint = MaterialTheme.colorScheme.primary)
+                Surface(shape = FynxDesign.ControlShape, color = FynxDesign.SelectedContainer) {
+                    Icon(Icons.Default.CalendarMonth, "Events", tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(9.dp).size(22.dp))
+                }
                 Spacer(Modifier.width(14.dp))
                 Column {
                     Text("Events", style = MaterialTheme.typography.titleMedium)
-                    Text("Jump to event planning through Calendar.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Jump to event planning through Calendar.", color = FynxDesign.TextSecondary)
                 }
             }
         }
 
         if (notes.isNotEmpty()) {
-            Spacer(Modifier.height(16.dp))
             Text("Recent notes", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(notes, key = { it.id }) { note ->
-                    Card(Modifier.fillMaxWidth()) {
+                    Card(
+                        Modifier.fillMaxWidth(),
+                        shape = FynxDesign.CardShape,
+                        colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+                        border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.4f))
+                    ) {
                         Text(note.text, Modifier.padding(16.dp))
                     }
                 }
@@ -82,12 +96,11 @@ fun FynxExtraToolsPanel(onOpenCalendar: () -> Unit) {
                     onValueChange = { noteText = it },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3,
+                    shape = FynxDesign.ControlShape,
                     placeholder = { Text("Write a note…") }
                 )
             },
-            dismissButton = {
-                TextButton(onClick = { showNoteEditor = false }) { Text("Cancel") }
-            },
+            dismissButton = { TextButton(onClick = { showNoteEditor = false }) { Text("Cancel") } },
             confirmButton = {
                 TextButton(
                     enabled = noteText.isNotBlank(),
