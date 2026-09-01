@@ -86,7 +86,7 @@ private fun MoneyCalculatorCard() {
 }
 
 private fun calculateSimple(value: String): String {
-    val match = Regex("^\\\\s*(\\\\d+(?:\\\\.\\\\d+)?)\\\\s*([+\\\\-*/])\\\\s*(\\\\d+(?:\\\\.\\\\d+)?)\\\\s*$").matchEntire(value) ?: return "Invalid expression"
+    val match = Regex("^\\s*(\\d+(?:\\.\\d+)?)\\s*([+\\-*/])\\s*(\\d+(?:\\.\\d+)?)\\s*$").matchEntire(value) ?: return "Invalid expression"
     val a = match.groupValues[1].toDouble(); val op = match.groupValues[2]; val b = match.groupValues[3].toDouble()
     if (op == "/" && b == 0.0) return "Cannot divide by zero"
     val answer = when (op) { "+" -> a + b; "-" -> a - b; "*" -> a * b; else -> a / b }
