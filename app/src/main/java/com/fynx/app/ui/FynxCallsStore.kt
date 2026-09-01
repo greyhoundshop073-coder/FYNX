@@ -9,7 +9,8 @@ data class FynxCallRecord(
     val name: String,
     val type: String,
     val time: String,
-    val missed: Boolean = false
+    val missed: Boolean = false,
+    val status: String = "Completed"
 )
 
 object FynxCallsStore {
@@ -33,7 +34,8 @@ object FynxCallsStore {
                             name = name,
                             type = type,
                             time = item.optString("time"),
-                            missed = item.optBoolean("missed", false)
+                            missed = item.optBoolean("missed", false),
+                            status = item.optString("status").ifBlank { if (item.optBoolean("missed", false)) "Missed" else "Completed" }
                         ))
                     }
                 }
@@ -50,6 +52,7 @@ object FynxCallsStore {
                 put("type", call.type)
                 put("time", call.time)
                 put("missed", call.missed)
+                put("status", call.status)
             })
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -60,9 +63,16 @@ object FynxCallsStore {
         save(context, listOf(call) + load(context))
     }
 
+    fun updateStatus(context: Context, id: String, status: String, missed: Boolean? = null) {
+        val updated = load(context).map { call ->
+            if (call.id == id) call.copy(status = status, missed = missed ?: call.missed) else call
+        }
+        save(context, updated)
+    }
+
     private fun defaultCalls(): List<FynxCallRecord> = listOf(
-        FynxCallRecord("call-maria", "Maria", "Voice call", "Today, 10:32"),
-        FynxCallRecord("call-alex", "Alex", "Video call", "Yesterday, 18:41", missed = true),
-        FynxCallRecord("call-david", "David", "Voice call", "Monday, 09:18")
+        FynxCallRecord("call-maria", "Maria", "Voice call", "Today, 10:32", status = "Completed"),
+        FynxCallRecord("call-alex", "Alex", "Video call", "Yesterday, 18:41", missed = true, status = "Missed"),
+        FynxCallRecord("call-david", "David", "Voice call", "Monday, 09:18", status = "Completed")
     )
 }
