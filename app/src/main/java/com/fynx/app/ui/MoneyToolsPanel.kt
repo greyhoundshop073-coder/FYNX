@@ -28,7 +28,6 @@ fun MoneyToolsPanel() {
         MoneyCalculatorCard()
         CurrencyConverterCard()
         Spacer(Modifier.height(12.dp))
-        Spacer(Modifier.height(12.dp))
         Text("Money Tools 💰", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(12.dp))
         Card(Modifier.fillMaxWidth()) {
@@ -73,7 +72,6 @@ fun MoneyToolsPanel() {
 
 private fun formatMoney(value: Double): String = "${(value * 100).roundToLong() / 100.0}"
 
-
 @Composable
 private fun MoneyCalculatorCard() {
     var expression by remember { mutableStateOf("") }
@@ -96,7 +94,6 @@ private fun calculateSimple(value: String): String {
     val answer = when (op) { "+" -> a + b; "-" -> a - b; "*" -> a * b; else -> a / b }
     return formatMoney(answer)
 }
-
 
 @Composable
 private fun CurrencyConverterCard() {
@@ -128,7 +125,7 @@ private fun CurrencyConverterCard() {
 }
 
 @Composable
-private fun CurrencyMenu(label: String, selected: String, values: List<String>, onSelect: (String) -> Unit) {
+private fun RowScope.CurrencyMenu(label: String, selected: String, values: List<String>, onSelect: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box(Modifier.weight(1f)) {
         OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) { Text("$label: $selected") }
