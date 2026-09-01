@@ -5,9 +5,11 @@ import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
 import org.webrtc.Camera2Enumerator
 import org.webrtc.CameraVideoCapturer
+import org.webrtc.EglBase
 import org.webrtc.MediaConstraints
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
+import org.webrtc.SurfaceTextureHelper
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
 
@@ -17,6 +19,7 @@ class FynxWebRtcCallEngine(
     private val iceServers: List<PeerConnection.IceServer> = emptyList()
 ) : FynxCallMediaEngine {
     private val appContext = context.applicationContext
+    private val eglBase = EglBase.create()
     private val factory: PeerConnectionFactory
     private var peerConnection: PeerConnection? = null
     private var audioSource: AudioSource? = null
@@ -24,6 +27,7 @@ class FynxWebRtcCallEngine(
     private var videoSource: VideoSource? = null
     private var videoTrack: VideoTrack? = null
     private var cameraCapturer: CameraVideoCapturer? = null
+    private var surfaceTextureHelper: SurfaceTextureHelper? = null
 
     init {
         PeerConnectionFactory.initialize(
@@ -46,7 +50,7 @@ class FynxWebRtcCallEngine(
             override fun onDataChannel(channel: org.webrtc.DataChannel) = Unit
             override fun onRenegotiationNeeded() = Unit
             override fun onAddTrack(receiver: org.webrtc.RtpReceiver, mediaStreams: Array<out org.webrtc.MediaStream>) = Unit
-        })
+        }) ?: return
         createLocalAudio()
         if (session.type == FynxCallType.VIDEO) createLocalVideo()
     }
@@ -64,15 +68,12 @@ class FynxWebRtcCallEngine(
             ?: enumerator.deviceNames.firstOrNull()
             ?: return
         cameraCapturer = enumerator.createCapturer(deviceName, null)
-        videoSource = factory.createVideoSource(cameraCapturer?.isScreencast ?: false)
+        videoSource = factory.createVideoSource(false)
         videoTrack = factory.createVideoTrack("fynx-video", videoSource)
         videoTrack?.setEnabled(true)
         videoTrack?.let { peerConnection?.addTrack(it) }
-        cameraCapturer?.initialize(
-            org.webrtc.SurfaceTextureHelper.create("FYNX-Camera", factory.eglBase.eglBaseContext),
-            appContext,
-            videoSource?.capturerObserver
-        )
+        surfaceTextureHelper = SurfaceTextureHelper.create("FYNX-Camera", eglBase.eglBaseContext)
+        cameraCapturer?.initialize(surfaceTextureHelper, appContext, videoSource?.capturerObserver)
         cameraCapturer?.startCapture(1280, 720, 30)
     }
 
@@ -85,6 +86,8 @@ class FynxWebRtcCallEngine(
         runCatching { cameraCapturer?.stopCapture() }
         cameraCapturer?.dispose()
         cameraCapturer = null
+        surfaceTextureHelper?.dispose()
+        surfaceTextureHelper = null
         peerConnection?.close()
         peerConnection?.dispose()
         peerConnection = null
@@ -96,5 +99,6 @@ class FynxWebRtcCallEngine(
         audioSource = null
         videoTrack = null
         videoSource = null
+        eglBase.release()
     }
 }
