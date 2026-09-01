@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -50,12 +49,8 @@ fun HomePanel() {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
         ) {
-            item {
-                StoryCircle("＋", "Add Story", true)
-            }
-            item {
-                StoryCircle("You", "You", false)
-            }
+            item { StoryCircle("＋", "Add Story", true) }
+            item { StoryCircle("You", "You", false) }
             items(sampleStories.take(4)) { story ->
                 StoryCircle(story.displayName, story.displayName, false)
             }
@@ -69,10 +64,9 @@ fun HomePanel() {
 
         Card(
             Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
+            shape = FynxDesign.LargeCardShape,
+            colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+            border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.55f))
         ) {
             LazyColumn(
                 Modifier.fillMaxWidth(),
@@ -87,9 +81,7 @@ fun HomePanel() {
                     ) {
                         FynxAvatar(
                             chat.first,
-                            Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
+                            Modifier.size(48.dp).clip(CircleShape)
                         )
                         Column(Modifier.weight(1f)) {
                             Row(
@@ -136,18 +128,14 @@ private fun StoryCircle(name: String, label: String, addStory: Boolean) {
                 .size(62.dp)
                 .border(
                     BorderStroke(
-                        if (addStory) 2.dp else 2.dp,
-                        MaterialTheme.colorScheme.primary
+                        2.dp,
+                        if (addStory) MaterialTheme.colorScheme.primary else FynxDesign.Outline
                     ),
                     CircleShape
                 )
                 .clip(CircleShape)
         )
         Spacer(Modifier.height(5.dp))
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 1
-        )
+        Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
     }
 }
