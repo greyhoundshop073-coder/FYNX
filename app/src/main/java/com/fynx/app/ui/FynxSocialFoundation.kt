@@ -1,11 +1,11 @@
 package com.fynx.app.ui
 
 /**
- * Stage 4 foundation: groups and social relationships.
+ * Stage 4 foundation: social relationships and stories.
  *
- * This file intentionally contains only dependency-free domain models and
- * validation helpers. It does not change navigation, chat, authentication,
- * or existing UI until those integration points are verified separately.
+ * Group and group-invite models live in the existing group batch files so this
+ * foundation does not redeclare them. This file intentionally remains
+ * dependency-free and does not change navigation, chat, authentication, or UI.
  */
 
 data class FynxSocialUser(
@@ -25,21 +25,6 @@ enum class FynxFriendStatus {
 data class FynxFriendConnection(
     val username: String,
     val status: FynxFriendStatus
-)
-
-data class FynxGroup(
-    val id: String,
-    val name: String,
-    val description: String = "",
-    val ownerUsername: String,
-    val memberUsernames: List<String> = emptyList(),
-    val avatarUri: String? = null
-)
-
-data class FynxGroupInvite(
-    val groupId: String,
-    val invitedUsername: String,
-    val invitedByUsername: String
 )
 
 data class FynxStory(
@@ -77,5 +62,5 @@ object FynxSocialValidation {
     }
 
     fun canAddMember(group: FynxGroup, username: String): Boolean =
-        username.isNotBlank() && username !in group.memberUsernames
+        username.isNotBlank() && group.members.none { it.username == username }
 }
