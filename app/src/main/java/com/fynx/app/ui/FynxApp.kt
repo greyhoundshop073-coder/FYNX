@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -238,6 +239,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
 
 @Composable
 private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
+    var searchQuery by remember { mutableStateOf("") }
     val features = listOf(
         Triple("Calls", "Voice & Video Calls", Icons.Default.Call),
         Triple("Notifications", "Notifications", Icons.Default.Notifications),
@@ -260,12 +262,18 @@ private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
         Triple("Vault", "Secure Money Vault", Icons.Default.Lock)
     )
 
+    val filteredFeatures = features.filter { (_, label, _) ->
+        searchQuery.isBlank() || label.contains(searchQuery.trim(), ignoreCase = true)
+    }
+
     Column(Modifier.fillMaxSize()) {
         Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text("Access your tools in one place.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(10.dp))
+        FynxFeatureSearchField(searchQuery, { searchQuery = it })
+        Spacer(Modifier.height(10.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(features, key = { it.first }) { (key, label, icon) ->
+            items(filteredFeatures, key = { it.first }) { (key, label, icon) ->
                 Card(onClick = { onSelect(key) }, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary)
