@@ -2,7 +2,6 @@ package com.fynx.app.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -35,9 +34,8 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit) {
         ) {
             items(sampleChats, key = { it.username }) { chat ->
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onOpenChat(chat) },
+                    onClick = { onOpenChat(chat) },
+                    modifier = Modifier.fillMaxWidth(),
                     shape = FynxDesign.CardShape,
                     colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
                     border = BorderStroke(1.dp, FynxDesign.Outline)
