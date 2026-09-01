@@ -13,7 +13,7 @@ Build one major stage at a time. Inspect existing code first. Keep each stage co
 7. Money Tools
 8. Notifications & Sharing
 9. FYNX Extra Tools
-10. Final Integration & Polish
+10. Final Integration & Polish — IN PROGRESS
 
 ## Stage 3 checklist
 - [x] Chat list and conversation entry
@@ -36,8 +36,22 @@ Build one major stage at a time. Inspect existing code first. Keep each stage co
 - [ ] End-to-end encryption
 - [ ] Production media/voice upload service
 
+## Stage 10 checklist
+- [x] Home, Chats, Friends, Marketplace and Money Tools visual consistency
+- [x] Features hub and Extra Tools visual consistency
+- [x] Calendar and To-Do visual consistency
+- [x] Notifications visual consistency
+- [x] Profile visual polish and local profile persistence foundation
+- [x] Settings & privacy visual polish and local preference persistence foundation
+- [ ] Global personalization/accent preference connection
+- [ ] Full navigation/screen consistency audit
+- [ ] Final UI/UX polish
+- [ ] Full integration build and completion audit
+
 ## Important
 Stage 3 UI and local persistence are foundations. Production messaging requires a backend, realtime transport, authenticated server APIs, secure media storage, and encryption design. Those should be connected before calling the messaging system production-ready.
+
+Profile and settings currently remain local foundations. Production account recovery, export, deletion, privacy enforcement, and server-backed preferences must be connected to the secure backend before launch.
 
 ## Removed permanently
 AI image generation and AI video generation are NOT part of the FYNX project roadmap. Do not add them back.
