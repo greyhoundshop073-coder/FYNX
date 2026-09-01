@@ -26,6 +26,8 @@ fun MoneyToolsPanel() {
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         MoneyCalculatorCard()
+        CurrencyConverterCard()
+        Spacer(Modifier.height(12.dp))
         Spacer(Modifier.height(12.dp))
         Text("Money Tools 💰", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(12.dp))
@@ -93,4 +95,45 @@ private fun calculateSimple(value: String): String {
     if (op == "/" && b == 0.0) return "Cannot divide by zero"
     val answer = when (op) { "+" -> a + b; "-" -> a - b; "*" -> a * b; else -> a / b }
     return formatMoney(answer)
+}
+
+
+@Composable
+private fun CurrencyConverterCard() {
+    val currencies = listOf("USD", "EUR", "GBP", "NGN", "JPY")
+    var from by remember { mutableStateOf("USD") }
+    var to by remember { mutableStateOf("NGN") }
+    var amount by remember { mutableStateOf("") }
+    var result by remember { mutableStateOf("") }
+    val rates = mapOf("USD" to 1.0, "EUR" to 1.09, "GBP" to 1.27, "NGN" to 0.00064, "JPY" to 0.0068)
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Currency Converter 💱", style = MaterialTheme.typography.titleMedium)
+            OutlinedTextField(amount, { amount = it }, label = { Text("Amount") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CurrencyMenu("From", from, currencies) { from = it }
+                CurrencyMenu("To", to, currencies) { to = it }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    val value = amount.toDoubleOrNull()
+                    result = if (value != null && value >= 0) formatMoney(value * (rates[to]!! / rates[from]!!)) else "Enter a valid amount"
+                }) { Text("Convert") }
+                OutlinedButton(onClick = { val old = from; from = to; to = old }) { Text("Swap") }
+            }
+            if (result.isNotEmpty()) Text("$amount $from = $result $to", style = MaterialTheme.typography.titleMedium)
+            Text("Demo rates; connect a live provider for production.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun CurrencyMenu(label: String, selected: String, values: List<String>, onSelect: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(Modifier.weight(1f)) {
+        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) { Text("$label: $selected") }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            values.forEach { value -> DropdownMenuItem(text = { Text(value) }, onClick = { onSelect(value); expanded = false }) }
+        }
+    }
 }
