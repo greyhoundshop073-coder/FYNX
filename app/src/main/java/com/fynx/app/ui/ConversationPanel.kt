@@ -37,7 +37,12 @@ import androidx.compose.ui.platform.LocalContext
 import java.io.File
 
 @Composable
-fun ConversationPanel(\n    chat: ChatPreview,\n    onBack: () -> Unit,\n    onVoiceCall: () -> Unit = {},\n    onVideoCall: () -> Unit = {}\n) {
+fun ConversationPanel(
+    chat: ChatPreview,
+    onBack: () -> Unit,
+    onVoiceCall: () -> Unit = {},
+    onVideoCall: () -> Unit = {}
+) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     var text by remember { mutableStateOf("") }
