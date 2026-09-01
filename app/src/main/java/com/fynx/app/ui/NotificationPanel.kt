@@ -1,8 +1,11 @@
 package com.fynx.app.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ChatBubbleOutline
@@ -16,8 +19,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun NotificationPanel(
@@ -36,58 +39,161 @@ fun NotificationPanel(
         FynxNotificationActivityCenter.filterByType(current, selectedType), unreadOnly
     )
 
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
             TextButton(onClick = onBack) { Text("‹ Back") }
-            Text("Notifications", style = MaterialTheme.typography.titleLarge)
-            TextButton(onClick = {
-                FynxNotificationStore.markAllRead(context)
-                localNotifications = FynxNotificationStore.load(context)
-                onMarkAllRead()
-            }, enabled = current.any { !it.read }) { Text("Read all") }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Notifications", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Stay up to date with FYNX",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = FynxDesign.TextSecondary
+                )
+            }
+            TextButton(
+                onClick = {
+                    FynxNotificationStore.markAllRead(context)
+                    localNotifications = FynxNotificationStore.load(context)
+                    onMarkAllRead()
+                },
+                enabled = current.any { !it.read }
+            ) { Text("Read all") }
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = !unreadOnly, onClick = { unreadOnly = false }, label = { Text("All") })
-            FilterChip(selected = unreadOnly, onClick = { unreadOnly = true }, label = { Text("Unread") })
-        }
-        Spacer(Modifier.height(6.dp))
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            FilterChip(selected = selectedType == null, onClick = { selectedType = null }, label = { Text("All types") })
-            FynxNotificationType.entries.take(4).forEach { type ->
-                FilterChip(selected = selectedType == type, onClick = { selectedType = type }, label = { Text(typeLabel(type)) })
+
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = !unreadOnly,
+                onClick = { unreadOnly = false },
+                label = { Text("All") },
+                shape = FynxDesign.ControlShape
+            )
+            FilterChip(
+                selected = unreadOnly,
+                onClick = { unreadOnly = true },
+                label = { Text("Unread") },
+                shape = FynxDesign.ControlShape
+            )
+            FilterChip(
+                selected = selectedType == null,
+                onClick = { selectedType = null },
+                label = { Text("All types") },
+                shape = FynxDesign.ControlShape
+            )
+            FynxNotificationType.entries.forEach { type ->
+                FilterChip(
+                    selected = selectedType == type,
+                    onClick = { selectedType = type },
+                    label = { Text(typeLabel(type)) },
+                    shape = FynxDesign.ControlShape
+                )
             }
         }
-        HorizontalDivider(Modifier.padding(top = 8.dp))
+
+        HorizontalDivider(color = FynxDesign.Outline.copy(alpha = 0.6f))
+
         if (filtered.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.Notifications, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.height(8.dp))
-                    Text(if (current.isEmpty()) "No notifications yet" else "Nothing matches this filter")
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = FynxDesign.LargeCardShape,
+                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+                border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.55f))
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Surface(
+                        shape = FynxDesign.ControlShape,
+                        color = FynxDesign.SelectedContainer
+                    ) {
+                        Icon(
+                            Icons.Default.Notifications,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(12.dp).size(28.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        if (current.isEmpty()) "No notifications yet" else "Nothing matches this filter",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Your FYNX activity and reminders will appear here.",
+                        color = FynxDesign.TextSecondary
+                    )
                 }
             }
         } else {
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 items(filtered, key = { it.id }) { notification ->
-                    val containerColor = if (notification.read) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer
-                    Card(onClick = {
-                        if (!notification.read) {
-                            FynxNotificationStore.markRead(context, notification.id)
-                            localNotifications = FynxNotificationStore.load(context)
-                            onNotificationRead(notification.id)
-                        }
-                        onNotificationOpen(notification)
-                    }, colors = CardDefaults.cardColors(containerColor = containerColor), modifier = Modifier.fillMaxWidth()) {
-                        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(notificationIcon(notification.type), null, tint = MaterialTheme.colorScheme.primary)
+                    val containerColor = if (notification.read) FynxDesign.Surface else FynxDesign.SelectedContainer
+                    Card(
+                        onClick = {
+                            if (!notification.read) {
+                                FynxNotificationStore.markRead(context, notification.id)
+                                localNotifications = FynxNotificationStore.load(context)
+                                onNotificationRead(notification.id)
+                            }
+                            onNotificationOpen(notification)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = FynxDesign.CardShape,
+                        colors = CardDefaults.cardColors(containerColor = containerColor),
+                        border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.55f))
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                shape = FynxDesign.ControlShape,
+                                color = FynxDesign.SurfaceRaised
+                            ) {
+                                Icon(
+                                    notificationIcon(notification.type),
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(9.dp).size(22.dp)
+                                )
+                            }
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Text(notification.title, style = MaterialTheme.typography.titleMedium)
-                                    if (!notification.read) Text("NEW", style = MaterialTheme.typography.labelSmall)
+                                    if (!notification.read) {
+                                        Text(
+                                            "NEW",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
                                 }
                                 Spacer(Modifier.height(4.dp))
-                                Text(notification.message, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    notification.message,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (notification.read) FynxDesign.TextSecondary else FynxDesign.TextPrimary
+                                )
                             }
                         }
                     }
