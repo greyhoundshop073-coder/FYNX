@@ -3,8 +3,6 @@ package com.fynx.app.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,7 +37,7 @@ fun GiftsPanel(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.CardGiftcard, contentDescription = "Gifts", tint = MaterialTheme.colorScheme.primary)
+            Text("🎁", style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.width(10.dp))
             Column {
                 Text("Send a gift", style = MaterialTheme.typography.titleLarge)
