@@ -2,9 +2,12 @@ package com.fynx.app.ui
 
 import android.content.Context
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
@@ -84,7 +87,12 @@ fun ProfilePanel(session: AuthSession = AuthSession(), onSignOut: () -> Unit = {
                         color = FynxDesign.TextSecondary
                     )
                     Spacer(Modifier.height(18.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         Button(
                             onClick = { editing = true },
                             shape = FynxDesign.ControlShape
@@ -201,7 +209,11 @@ private fun EditProfilePanel(profile: FynxProfile, onSave: (FynxProfile) -> Unit
     var bio by remember(profile) { mutableStateOf(profile.bio) }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Row(
@@ -279,7 +291,7 @@ fun SettingsPanel(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Un
         HorizontalDivider(color = FynxDesign.Outline.copy(alpha = 0.6f))
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
