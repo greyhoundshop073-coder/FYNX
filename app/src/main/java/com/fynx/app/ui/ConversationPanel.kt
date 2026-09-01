@@ -10,18 +10,22 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.AnnotatedString
 import androidx.core.content.ContextCompat
 import java.io.File
 
 @Composable
 fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit) {
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     var text by remember { mutableStateOf("") }
     var messages by remember { mutableStateOf(listOf(ChatMessage(chat.lastMessage, false, id = "initial", delivered = true, read = true))) }
     var replyToId by remember { mutableStateOf<String?>(null) }
@@ -66,13 +70,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit) {
         }
     }
 
-    fun startRecording() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
-        } else {
-            microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
-        }
-    }
+    fun startRecording() = microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
 
     fun cancelRecording() {
         recorder?.release()
@@ -99,9 +97,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit) {
                 voiceUri = file.absolutePath,
                 voiceDurationMs = duration
             )
-        } else {
-            file?.delete()
-        }
+        } else file?.delete()
     }
 
     fun playVoice(message: ChatMessage) {
@@ -138,11 +134,16 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit) {
                             if (message.voiceUri != null) {
                                 TextButton(onClick = { playVoice(message) }) { Text(if (playingVoiceId == message.id) "Playing…" else "▶ Voice") }
                                 Text("${message.voiceDurationMs / 1000}s", style = MaterialTheme.typography.labelSmall)
-                            } else Text(message.text)
+                            } else {
+                                SelectionContainer { Text(message.text) }
+                            }
                             if (message.edited) Text("Edited", style = MaterialTheme.typography.labelSmall)
                             message.reaction?.let { Text(it) }
                             if (message.fromMe) Text(if (message.read) "Read" else if (message.delivered) "Delivered" else "Sent", style = MaterialTheme.typography.labelSmall)
                             Row {
+                                if (message.voiceUri == null) {
+                                    TextButton(onClick = { clipboardManager.setText(AnnotatedString(message.text)) }) { Text("Copy") }
+                                }
                                 TextButton(onClick = { replyToId = message.id }) { Text("Reply") }
                                 TextButton(onClick = { messages = messages.map { if (it.id == message.id) it.copy(reaction = if (it.reaction == "❤️") null else "❤️") else it } }) { Text("❤️") }
                                 if (message.fromMe && message.voiceUri == null) {
@@ -162,9 +163,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit) {
             if (isRecording) {
                 TextButton(onClick = { stopRecording() }) { Text("⏹ Stop") }
                 TextButton(onClick = { cancelRecording() }) { Text("Cancel") }
-            } else {
-                TextButton(onClick = { startRecording() }) { Text("🎤 Voice") }
-            }
+            } else TextButton(onClick = { startRecording() }) { Text("🎤 Voice") }
             OutlinedTextField(text, { text = it }, Modifier.weight(1f), placeholder = { Text(if (editingId == null) "Message…" else "Edit message…") })
             TextButton(onClick = {
                 val value = text.trim()
