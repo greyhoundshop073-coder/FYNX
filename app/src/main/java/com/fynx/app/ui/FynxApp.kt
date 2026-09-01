@@ -72,9 +72,11 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     }
 
     if (authSession.state != AuthState.SIGNED_IN) {
-        FynxAuthGate { username ->
-            FynxAuthStore.save(context, username)
-            authSession = AuthSession(AuthState.SIGNED_IN, username)
+        FynxTheme(accent = accent) {
+            FynxAuthGate { username ->
+                FynxAuthStore.save(context, username)
+                authSession = AuthSession(AuthState.SIGNED_IN, username)
+            }
         }
         return
     }
@@ -107,27 +109,31 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     }
 
     if (openChat != null) {
-        ConversationPanel(
-            chat = openChat!!,
-            onBack = { openChat = null },
-            onVoiceCall = {
-                callTarget = openChat!!.name
-                callVideo = false
-                openChat = null
-                selected = "Calls"
-            },
-            onVideoCall = {
-                callTarget = openChat!!.name
-                callVideo = true
-                openChat = null
-                selected = "Calls"
-            }
-        )
+        FynxTheme(accent = accent) {
+            ConversationPanel(
+                chat = openChat!!,
+                onBack = { openChat = null },
+                onVoiceCall = {
+                    callTarget = openChat!!.name
+                    callVideo = false
+                    openChat = null
+                    selected = "Calls"
+                },
+                onVideoCall = {
+                    callTarget = openChat!!.name
+                    callVideo = true
+                    openChat = null
+                    selected = "Calls"
+                }
+            )
+        }
         return
     }
 
     if (openGroup != null) {
-        FynxGroupConversationPanel(groupName = openGroup!!, onBack = { openGroup = null })
+        FynxTheme(accent = accent) {
+            FynxGroupConversationPanel(groupName = openGroup!!, onBack = { openGroup = null })
+        }
         return
     }
 
