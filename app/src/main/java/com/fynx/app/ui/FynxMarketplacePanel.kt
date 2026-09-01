@@ -1,11 +1,11 @@
 package com.fynx.app.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.Search
@@ -40,31 +40,58 @@ fun FynxMarketplacePanel() {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Marketplace", style = MaterialTheme.typography.headlineSmall)
-                Text("Discover products from FYNX sellers", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Discover products from FYNX sellers", color = FynxDesign.TextSecondary)
             }
             BadgedBox(badge = { if (cartCount > 0) Badge { Text(cartCount.toString()) } }) {
                 IconButton(onClick = {}) { Icon(Icons.Default.ShoppingBag, "Cart") }
             }
         }
         Spacer(Modifier.height(12.dp))
-        OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, "Search") }, placeholder = { Text("Search products…") }, shape = MaterialTheme.shapes.large)
+        OutlinedTextField(
+            query,
+            { query = it },
+            Modifier.fillMaxWidth(),
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Default.Search, "Search") },
+            placeholder = { Text("Search products…") },
+            shape = FynxDesign.ControlShape
+        )
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             categories.forEach { category ->
-                FilterChip(selected = selectedCategory == category, onClick = { selectedCategory = category }, label = { Text(category) })
+                FilterChip(
+                    selected = selectedCategory == category,
+                    onClick = { selectedCategory = category },
+                    label = { Text(category) },
+                    shape = FynxDesign.ControlShape
+                )
             }
         }
         Spacer(Modifier.height(12.dp))
-        LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             items(visible, key = { it.id }) { product ->
-                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = FynxDesign.CardShape,
+                    colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+                    border = BorderStroke(1.dp, FynxDesign.Outline)
+                ) {
                     Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                        Box(Modifier.fillMaxWidth().height(120.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                        Box(
+                            Modifier.fillMaxWidth().height(120.dp).background(FynxDesign.SurfaceRaised, FynxDesign.ControlShape),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Icon(Icons.Default.ShoppingBag, "Product", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(38.dp))
                         }
                         Spacer(Modifier.height(10.dp))
                         Text(product.name, style = MaterialTheme.typography.titleMedium, maxLines = 2)
-                        Text(product.category, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(product.category, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
                         Spacer(Modifier.height(4.dp))
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(product.price, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
