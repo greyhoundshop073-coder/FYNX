@@ -206,7 +206,6 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo)
                     "Studio" -> AiStudioPanel()
                     "To-Do" -> TodoPanel()
-                    "Calendar" -> CalendarPanel()
                     "Profile" -> ProfilePanel(session = authSession, onSignOut = {
                         FynxAuthStore.clear(context)
                         authSession = AuthSession()
