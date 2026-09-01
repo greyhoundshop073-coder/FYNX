@@ -46,7 +46,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var callVideo by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var authSession by remember { mutableStateOf(FynxAuthStore.load(context)) }
-    var notifications by remember { mutableStateOf(emptyList<FynxNotification>()) }
+    var notifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
     var inviteCode by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(deepLinkDestination) {
@@ -60,7 +60,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         }
     }
 
-    LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context) }
+    LaunchedEffect(Unit) {
+        FynxNotificationFoundation.createChannels(context)
+        notifications = FynxNotificationStore.load(context)
+    }
 
     if (authSession.state != AuthState.SIGNED_IN) {
         FynxAuthGate { username ->
@@ -188,8 +191,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     "Notifications" -> NotificationPanel(
                         notifications = notifications,
                         onBack = { selected = "Features" },
-                        onNotificationRead = { id -> notifications = notifications.markNotificationRead(id) },
-                        onMarkAllRead = { notifications = notifications.map { it.copy(read = true) } }
+                        onNotificationRead = { id -> notifications = FynxNotificationStore.load(context) },
+                        onMarkAllRead = { notifications = FynxNotificationStore.load(context) }
                     )
                     "Share" -> FynxSharePanel()
                     "Invite" -> FynxInvitePanel(
