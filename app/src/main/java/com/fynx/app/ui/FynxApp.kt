@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingBag
@@ -37,6 +38,11 @@ fun FynxApp() {
     var callVideo by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var authSession by remember { mutableStateOf(FynxAuthStore.load(context)) }
+    var notifications by remember { mutableStateOf(emptyList<FynxNotification>()) }
+
+    LaunchedEffect(Unit) {
+        FynxNotificationFoundation.createChannels(context)
+    }
 
     if (authSession.state != AuthState.SIGNED_IN) {
         FynxAuthGate { username ->
@@ -153,6 +159,12 @@ fun FynxApp() {
                     "Marketplace" -> FynxMarketplacePanel()
                     "Money Tools" -> MoneyToolsPanel()
                     "Features" -> FynxFeaturesPanel(onSelect = { selected = it })
+                    "Notifications" -> NotificationPanel(
+                        notifications = notifications,
+                        onBack = { selected = "Features" },
+                        onNotificationRead = { id -> notifications = notifications.markNotificationRead(id) },
+                        onMarkAllRead = { notifications = notifications.map { it.copy(read = true) } }
+                    )
                     "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo)
                     "Studio" -> AiStudioPanel()
                     "To-Do" -> TodoPanel()
@@ -195,6 +207,7 @@ fun FynxApp() {
 private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
     val features = listOf(
         Triple("Calls", "Voice & Video Calls", Icons.Default.Call),
+        Triple("Notifications", "Notifications", Icons.Default.Notifications),
         Triple("Studio", "AI Studio", Icons.Default.Settings),
         Triple("To-Do", "To-Do", Icons.Default.Person),
         Triple("Calendar", "Calendar", Icons.Default.Home),
