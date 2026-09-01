@@ -30,6 +30,16 @@ object FynxNotificationFoundation {
     }
 
     fun show(context: Context, channelId: String, id: Int, title: String, message: String) {
+        FynxNotificationStore.add(
+            context,
+            FynxNotification(
+                id = "system-$id-${System.currentTimeMillis()}",
+                type = typeForChannel(channelId),
+                title = title,
+                message = message
+            )
+        )
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return
@@ -42,5 +52,14 @@ object FynxNotificationFoundation {
             .setAutoCancel(true)
             .build()
         NotificationManagerCompat.from(context).notify(id, notification)
+    }
+
+    private fun typeForChannel(channelId: String): FynxNotificationType = when (channelId) {
+        MESSAGES_CHANNEL -> FynxNotificationType.MESSAGE
+        FRIENDS_CHANNEL -> FynxNotificationType.FRIEND_REQUEST
+        GIFTS_CHANNEL -> FynxNotificationType.REACTION
+        MONEY_CHANNEL -> FynxNotificationType.WALLET_ACTIVITY
+        REMINDERS_CHANNEL -> FynxNotificationType.REMINDER
+        else -> FynxNotificationType.SAFETY
     }
 }
