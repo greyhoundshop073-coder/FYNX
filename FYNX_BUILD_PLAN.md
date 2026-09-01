@@ -1,45 +1,38 @@
 # FYNX BUILD PLAN
 
 ## Rule
-Build ONE small step at a time. Inspect existing code first. Build Android after every change. 🟢 Green = continue. 🔴 Red = fix before continuing. Never duplicate existing functions. Never put API secrets in the APK.
+Build one major stage at a time. Inspect existing code first. Keep each stage consolidated. Build Android after every stage. 🟢 Green = continue. 🔴 Red = fix before continuing. Never duplicate existing functions. Never put API secrets in the APK.
 
-## Current
-- Foundation: DONE 🟢
-- AI Home UI: DONE 🟢
-- AI message model: DONE 🟢
-- Local AI conversation UI: DONE 🟢
-- AI image generation: REMOVED from FYNX project
-- AI video generation: REMOVED from FYNX project
-- Current next task: connect the AI Assistant to the backend 🤖
+## Ten-stage product build
+1. Foundation & Design System — DONE 🟢
+2. Authentication & User Identity — IN PROGRESS
+3. Chat & Messaging
+4. Groups & Social
+5. Marketplace
+6. Voice & Video Calls
+7. Money Tools
+8. Notifications & Sharing
+9. FYNX Extra Tools
+10. Final Integration & Polish
 
-## Build Order
-1. AI Assistant 🤖
-2. Messenger 💬
-3. Stories 📖
-4. Authentication + Profile 👤
-5. Everyday-Life Assistant 📅
-6. Safety 🛡️
-7. Money Tools 💰
-8. Social Feed 🌍
-9. Groups & Communities 👥
-10. Voice & Calls 🎤📞
-11. Security 🔐
-12. Monetization 💎
-13. Wallpaper / remaining creative tools 🌌
-14. Full Testing 🧪
-15. Launch 🚀
+## Stage 2 checklist
+- [x] First-launch authentication gate
+- [x] Welcome screen
+- [x] Create-account flow
+- [x] Display name
+- [x] Username
+- [x] Phone number field
+- [x] Verification-code screen foundation
+- [x] Local account/session persistence
+- [x] Returning-user login flow
+- [x] Sign-out keeps the local account but ends the session
+- [x] Validation and safe error states
+- [ ] Production OTP/backend authentication
+- [ ] Secure server-side account storage
+- [ ] Production account recovery
 
-## AI Assistant checklist
-- [x] Message model
-- [x] Local conversation UI
-- [ ] Backend connection
-- [ ] Send prompt
-- [ ] Receive AI response
-- [ ] Loading/typing state
-- [ ] Error + retry
-- [ ] Conversation history
-- [ ] Copy/share
-- [ ] Final AI Assistant testing
+## Important
+Stage 2 is a UI/local authentication foundation. It does not pretend that local verification is production-grade identity verification. Production OTP, backend accounts, recovery, and server security are connected when the production backend is ready.
 
 ## Removed permanently
 AI image generation and AI video generation are NOT part of the FYNX project roadmap. Do not add them back.
