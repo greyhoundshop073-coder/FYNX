@@ -35,8 +35,15 @@ fun FynxApp() {
     var callTarget by remember { mutableStateOf<String?>(null) }
     var callVideo by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    var authSession by remember { mutableStateOf(AuthSession(state = AuthState.SIGNED_IN, username = "username")) }
+    var authSession by remember { mutableStateOf(FynxAuthStore.load(context)) }
     val context = LocalContext.current
+    if (authSession.state != AuthState.SIGNED_IN) {
+        FynxAuthGate { username ->
+            FynxAuthStore.save(context, username)
+            authSession = AuthSession(AuthState.SIGNED_IN, username)
+        }
+        return
+    }
     val mainNav = listOf(
         FynxNavItem("Home", "Home", Icons.Default.Home),
         FynxNavItem("Chats", "Chats", Icons.Default.ChatBubbleOutline),
@@ -133,7 +140,7 @@ fun FynxApp() {
                     "Studio" -> AiStudioPanel()
                     "To-Do" -> TodoPanel()
                     "Calendar" -> CalendarPanel()
-                    "Profile" -> ProfilePanel(session = authSession, onSignOut = { authSession = AuthSession() })
+                    "Profile" -> ProfilePanel(session = authSession, onSignOut = { FynxAuthStore.clear(context); authSession = AuthSession() })
                     "Bills" -> BillsPaymentPanel()
                     "Transactions" -> TransactionHistoryPanel()
                     "Accounts" -> AccountsWalletsPanel()
