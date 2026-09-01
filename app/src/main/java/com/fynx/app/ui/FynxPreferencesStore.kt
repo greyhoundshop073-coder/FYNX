@@ -17,6 +17,7 @@ object FynxPreferencesStore {
     private const val KEY_PRIVATE_PROFILE = "private_profile"
     private const val KEY_READ_RECEIPTS = "read_receipts"
     private const val KEY_STORY_REPLIES = "story_replies"
+    private const val KEY_ACCENT = "accent"
 
     fun loadProfile(context: Context, fallbackUsername: String?): FynxProfile {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -54,6 +55,19 @@ object FynxPreferencesStore {
             .putBoolean(KEY_PRIVATE_PROFILE, settings.privateProfile)
             .putBoolean(KEY_READ_RECEIPTS, settings.readReceipts)
             .putBoolean(KEY_STORY_REPLIES, settings.storyReplies)
+            .apply()
+    }
+
+    fun loadAccent(context: Context): FynxAccent {
+        val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_ACCENT, FynxAccent.Blue.name)
+        return runCatching { FynxAccent.valueOf(stored ?: FynxAccent.Blue.name) }
+            .getOrDefault(FynxAccent.Blue)
+    }
+
+    fun saveAccent(context: Context, accent: FynxAccent) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_ACCENT, accent.name)
             .apply()
     }
 }
