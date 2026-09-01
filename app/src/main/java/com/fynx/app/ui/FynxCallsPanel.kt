@@ -27,8 +27,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 
-enum class FynxCallState { RINGING, CONNECTING, ACTIVE }
-
 @Composable
 fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false) {
     val context = LocalContext.current
@@ -112,15 +110,17 @@ fun FynxActiveCallPanel(name: String, video: Boolean, state: FynxCallState, onRe
     var muted by remember { mutableStateOf(false) }
     var speakerOn by remember { mutableStateOf(false) }
     var cameraOn by remember { mutableStateOf(video) }
-    val isConnecting = state != FynxCallState.ACTIVE
+    val isConnecting = state != FynxCallState.CONNECTED
 
     Column(Modifier.fillMaxSize().background(FynxDesign.Background), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(Modifier.height(44.dp))
         Text(name, style = MaterialTheme.typography.headlineSmall)
         Text(when (state) {
+            FynxCallState.IDLE -> "Ready"
             FynxCallState.RINGING -> "Calling…"
             FynxCallState.CONNECTING -> "Connecting…"
-            FynxCallState.ACTIVE -> if (video) "Video call" else "Voice call"
+            FynxCallState.CONNECTED -> if (video) "Video call" else "Voice call"
+            FynxCallState.ENDED -> "Call ended"
         }, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(30.dp))
         Box(Modifier.size(190.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
