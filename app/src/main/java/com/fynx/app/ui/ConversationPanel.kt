@@ -185,7 +185,11 @@ fun ConversationPanel(
             }
         }
 
-        Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 3.dp,
+            modifier = Modifier.imePadding()
+        ) {
             Column(Modifier.fillMaxWidth().padding(8.dp)) {
                 if (replyToId != null) {
                     Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
