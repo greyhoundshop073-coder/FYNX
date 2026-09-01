@@ -19,14 +19,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-private data class FynxNavItem(val key: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
+private data class FynxNavItem(val key: String, val label: String, val icon: ImageVector)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FynxApp() {
     var selected by remember { mutableStateOf("Home") }
@@ -58,21 +58,21 @@ fun FynxApp() {
         Scaffold(
             containerColor = FynxDesign.Background,
             topBar = {
-                when (selected) {
-                    "Home" -> TopAppBar(
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = FynxDesign.Background),
-                        navigationIcon = { FynxAvatar("username", Modifier.size(34.dp)) },
-                        title = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) } },
-                        actions = {
-                            TextButton(onClick = { shareFynx(context) }) { Text("Share") }
-                            IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, "Settings") }
+                if (selected == "Home") {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FynxAvatar("username", Modifier.size(34.dp))
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                         }
-                    )
-                    else -> TopAppBar(
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = FynxDesign.Background),
-                        title = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Text(selected, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) } },
-                        actions = { Spacer(Modifier.size(48.dp)) }
-                    )
+                        IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, "Settings") }
+                    }
+                } else {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
+                        Text(selected, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    }
                 }
             },
             bottomBar = {
@@ -114,7 +114,7 @@ fun FynxApp() {
                 when (selected) {
                     "Home" -> HomePanel()
                     "Chats" -> ChatsPanel(onOpenChat = { openChat = it })
-                    "Groups" -> FynxGroupsPanel(onOpenGroup = { openGroup = it.name })
+                    "Groups" -> FynxGroupsPanel(onOpenGroup = { openGroup = it })
                     "Marketplace" -> FynxMarketplacePanel()
                     "Money Tools" -> MoneyToolsPanel()
                     "Features" -> FynxFeaturesPanel(onSelect = { selected = it })
