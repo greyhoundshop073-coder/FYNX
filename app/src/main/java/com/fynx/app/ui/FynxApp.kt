@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -278,9 +279,28 @@ private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
         Spacer(Modifier.height(10.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(filteredFeatures, key = { it.first }) { (key, label, icon) ->
-                Card(onClick = { onSelect(key) }, modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary)
+                Card(
+                    onClick = { onSelect(key) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = FynxDesign.CardShape,
+                    colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+                    border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = FynxDesign.ControlShape,
+                            color = FynxDesign.SelectedContainer
+                        ) {
+                            Icon(
+                                icon,
+                                contentDescription = label,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(9.dp).size(22.dp)
+                            )
+                        }
                         Spacer(Modifier.width(14.dp))
                         Text(label, style = MaterialTheme.typography.titleMedium)
                     }
