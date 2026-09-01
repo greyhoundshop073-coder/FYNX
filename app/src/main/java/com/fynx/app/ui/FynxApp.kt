@@ -7,12 +7,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material3.*
@@ -59,10 +59,7 @@ fun FynxApp() {
             containerColor = FynxDesign.Background,
             topBar = {
                 if (selected == "Home") {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         FynxAvatar("username", Modifier.size(34.dp))
                         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                             Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
@@ -95,22 +92,19 @@ fun FynxApp() {
                 }
             }
         ) { padding ->
-            Box(
-                Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 8.dp)
-                    .pointerInput(selected) {
-                        var totalDrag = 0f
-                        detectHorizontalDragGestures(
-                            onDragStart = { totalDrag = 0f },
-                            onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
-                            onDragEnd = {
-                                if (kotlin.math.abs(totalDrag) >= 80f) {
-                                    val nextIndex = if (totalDrag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex) else (mainIndex - 1).coerceAtLeast(0)
-                                    selected = mainNav[nextIndex].key
-                                }
-                            }
-                        )
+            Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 8.dp).pointerInput(selected) {
+                var totalDrag = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { totalDrag = 0f },
+                    onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
+                    onDragEnd = {
+                        if (kotlin.math.abs(totalDrag) >= 80f) {
+                            val nextIndex = if (totalDrag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex) else (mainIndex - 1).coerceAtLeast(0)
+                            selected = mainNav[nextIndex].key
+                        }
                     }
-            ) {
+                )
+            }) {
                 when (selected) {
                     "Home" -> HomePanel()
                     "Chats" -> ChatsPanel(onOpenChat = { openChat = it })
@@ -140,12 +134,7 @@ fun FynxApp() {
             }
         }
         if (showSettings) {
-            AlertDialog(
-                onDismissRequest = { showSettings = false },
-                title = { Text("Settings") },
-                text = { Text("FYNX settings") },
-                confirmButton = { TextButton(onClick = { showSettings = false }) { Text("Done") } }
-            )
+            AlertDialog(onDismissRequest = { showSettings = false }, title = { Text("Settings") }, text = { Text("FYNX settings") }, confirmButton = { TextButton(onClick = { showSettings = false }) { Text("Done") } })
         }
     }
 }
@@ -153,7 +142,7 @@ fun FynxApp() {
 @Composable
 private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
     val features = listOf(
-        Triple("Calls", "Voice & Video Calls", Icons.Default.Search),
+        Triple("Calls", "Voice & Video Calls", Icons.Default.Call),
         Triple("Studio", "AI Studio", Icons.Default.Settings),
         Triple("To-Do", "To-Do", Icons.Default.Person),
         Triple("Calendar", "Calendar", Icons.Default.Home),
