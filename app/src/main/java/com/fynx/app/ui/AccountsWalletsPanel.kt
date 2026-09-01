@@ -1,23 +1,24 @@
 package com.fynx.app.ui
 
+import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import java.util.Locale
 
-private data class FynxAccount(val id: Long, val name: String, val type: String, val balance: Double)
-
 @Composable
 fun AccountsWalletsPanel() {
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var balanceText by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("Cash") }
-    var nextId by remember { mutableLongStateOf(1L) }
-    var accounts by remember { mutableStateOf(emptyList<FynxAccount>()) }
+    var accounts by remember { mutableStateOf(FynxMoneyStore.loadAccounts(context)) }
+    var pendingAccount by remember { mutableStateOf<FynxMoneyAccount?>(null) }
 
     val total = accounts.sumOf { it.balance }
 
@@ -39,10 +40,10 @@ fun AccountsWalletsPanel() {
         Button(onClick = {
             val balance = balanceText.toDoubleOrNull()
             if (name.isNotBlank() && balance != null) {
-                accounts = accounts + FynxAccount(nextId++, name.trim(), type, balance)
-                name = ""; balanceText = ""
+                val nextId = (accounts.maxOfOrNull { it.id } ?: 0L) + 1L
+                pendingAccount = FynxMoneyAccount(nextId, name.trim(), type, balance)
             }
-        }) { Text("Add Account") }
+        }, enabled = name.isNotBlank() && balanceText.toDoubleOrNull() != null) { Text("Add Account") }
         Spacer(Modifier.height(10.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(accounts, key = { it.id }) { account ->
@@ -52,6 +53,22 @@ fun AccountsWalletsPanel() {
                 } }
             }
         }
+    }
+
+    pendingAccount?.let { account ->
+        AlertDialog(
+            onDismissRequest = { pendingAccount = null },
+            title = { Text("Confirm account") },
+            text = { Text("Add ${account.name} with a starting balance of ${money(account.balance)}? This stays on this device.") },
+            dismissButton = { TextButton(onClick = { pendingAccount = null }) { Text("Cancel") } },
+            confirmButton = {
+                Button(onClick = {
+                    FynxMoneyStore.addAccount(context, account)
+                    accounts = FynxMoneyStore.loadAccounts(context)
+                    name = ""; balanceText = ""; pendingAccount = null
+                }) { Text("Confirm") }
+            }
+        )
     }
 }
 
