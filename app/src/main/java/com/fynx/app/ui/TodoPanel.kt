@@ -1,7 +1,10 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -47,38 +50,86 @@ fun TodoPanel() {
         matchesSearch && matchesFilter
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         Text("To-Do", style = MaterialTheme.typography.headlineSmall)
-        Text("Keep track of what you need to do.", style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(search, { search = it }, label = { Text("Search tasks") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Keep track of what you need to do.", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodyMedium)
+
+        OutlinedTextField(
+            search,
+            { search = it },
+            label = { Text("Search tasks") },
+            singleLine = true,
+            shape = FynxDesign.ControlShape,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             TodoFilter.values().forEach { option ->
-                FilterChip(selected = filter == option, onClick = { filter = option }, label = { Text(option.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }) })
+                FilterChip(
+                    selected = filter == option,
+                    onClick = { filter = option },
+                    label = { Text(option.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }) },
+                    shape = FynxDesign.ControlShape
+                )
             }
         }
-        Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(title, { title = it }, label = { Text("New task") }, singleLine = true, modifier = Modifier.weight(1f))
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = {
-                val clean = title.trim()
-                if (clean.isNotEmpty()) {
-                    val todo = FynxTodo(nextId++, clean, priority = if (highPriority) TodoPriority.HIGH else TodoPriority.NORMAL, dueDate = dueDate.trim().ifEmpty { null }, reminder = reminder.trim().ifEmpty { null })
-                    todos = todos + todo
-                    if (!todo.completed && todo.reminder != null) TodoReminderScheduler.schedule(context, todo)
-                    title = ""; dueDate = ""; reminder = ""
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = FynxDesign.CardShape,
+            colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+            border = BorderStroke(1.dp, FynxDesign.Outline)
+        ) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Add a task", style = MaterialTheme.typography.titleMedium)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        title,
+                        { title = it },
+                        label = { Text("New task") },
+                        singleLine = true,
+                        shape = FynxDesign.ControlShape,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(
+                        onClick = {
+                            val clean = title.trim()
+                            if (clean.isNotEmpty()) {
+                                val todo = FynxTodo(nextId++, clean, priority = if (highPriority) TodoPriority.HIGH else TodoPriority.NORMAL, dueDate = dueDate.trim().ifEmpty { null }, reminder = reminder.trim().ifEmpty { null })
+                                todos = todos + todo
+                                if (!todo.completed && todo.reminder != null) TodoReminderScheduler.schedule(context, todo)
+                                title = ""; dueDate = ""; reminder = ""
+                            }
+                        },
+                        shape = FynxDesign.ControlShape
+                    ) { Text("Add") }
                 }
-            }) { Text("Add") }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(highPriority, { highPriority = it })
+                    Text("High priority")
+                }
+                OutlinedTextField(dueDate, { dueDate = it }, label = { Text("Due date (optional)") }, placeholder = { Text("e.g. 2026-09-05") }, singleLine = true, shape = FynxDesign.ControlShape, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(reminder, { reminder = it }, label = { Text("Reminder (optional)") }, placeholder = { Text("e.g. 09:00 on 2026-09-05") }, singleLine = true, shape = FynxDesign.ControlShape, modifier = Modifier.fillMaxWidth())
+            }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(highPriority, { highPriority = it }); Text("High priority") }
-        OutlinedTextField(dueDate, { dueDate = it }, label = { Text("Due date (optional)") }, placeholder = { Text("e.g. 2026-09-05") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(reminder, { reminder = it }, label = { Text("Reminder (optional)") }, placeholder = { Text("e.g. 09:00 on 2026-09-05") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             items(visibleTodos, key = { it.id }) { todo ->
-                TodoRow(todo,
+                TodoRow(
+                    todo,
                     onToggle = {
                         val updated = todo.copy(completed = !todo.completed)
                         if (updated.completed) TodoReminderScheduler.cancel(context, todo.id)
@@ -99,36 +150,40 @@ private fun EditTodoPanel(todo: FynxTodo, onCancel: () -> Unit, onSave: (FynxTod
     var dueDate by remember(todo) { mutableStateOf(todo.dueDate.orEmpty()) }
     var reminder by remember(todo) { mutableStateOf(todo.reminder.orEmpty()) }
     var highPriority by remember(todo) { mutableStateOf(todo.priority == TodoPriority.HIGH) }
-    Column(Modifier.fillMaxSize()) {
+
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onCancel) { Text("Cancel") }
+            TextButton(onClick = onCancel, shape = FynxDesign.ControlShape) { Text("Cancel") }
             Text("Edit task", style = MaterialTheme.typography.titleLarge)
-            TextButton(onClick = { onSave(todo.copy(title = title.trim().ifEmpty { todo.title }, dueDate = dueDate.trim().ifEmpty { null }, reminder = reminder.trim().ifEmpty { null }, priority = if (highPriority) TodoPriority.HIGH else TodoPriority.NORMAL)) }) { Text("Save") }
+            TextButton(onClick = { onSave(todo.copy(title = title.trim().ifEmpty { todo.title }, dueDate = dueDate.trim().ifEmpty { null }, reminder = reminder.trim().ifEmpty { null }, priority = if (highPriority) TodoPriority.HIGH else TodoPriority.NORMAL)) }, shape = FynxDesign.ControlShape) { Text("Save") }
         }
-        HorizontalDivider(); Spacer(Modifier.height(20.dp))
-        OutlinedTextField(title, { title = it }, label = { Text("Task") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(dueDate, { dueDate = it }, label = { Text("Due date (optional)") }, placeholder = { Text("e.g. 2026-09-05") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(reminder, { reminder = it }, label = { Text("Reminder (optional)") }, placeholder = { Text("e.g. 09:00 on 2026-09-05") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        HorizontalDivider(color = FynxDesign.Outline)
+        OutlinedTextField(title, { title = it }, label = { Text("Task") }, singleLine = true, shape = FynxDesign.ControlShape, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(dueDate, { dueDate = it }, label = { Text("Due date (optional)") }, placeholder = { Text("e.g. 2026-09-05") }, singleLine = true, shape = FynxDesign.ControlShape, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(reminder, { reminder = it }, label = { Text("Reminder (optional)") }, placeholder = { Text("e.g. 09:00 on 2026-09-05") }, singleLine = true, shape = FynxDesign.ControlShape, modifier = Modifier.fillMaxWidth())
         Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(highPriority, { highPriority = it }); Text("High priority") }
     }
 }
 
 @Composable
 private fun TodoRow(todo: FynxTodo, onToggle: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = FynxDesign.CardShape,
+        colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+        border = BorderStroke(1.dp, FynxDesign.Outline)
+    ) {
+        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Checkbox(todo.completed, { onToggle() })
-            Column(Modifier.weight(1f)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(todo.title, style = MaterialTheme.typography.bodyLarge)
-                if (todo.priority == TodoPriority.HIGH) Text("High priority", style = MaterialTheme.typography.labelSmall)
-                if (todo.dueDate != null) Text("Due: ${todo.dueDate}", style = MaterialTheme.typography.labelSmall)
-                if (todo.reminder != null) Text("Reminder: ${todo.reminder}", style = MaterialTheme.typography.labelSmall)
-                if (todo.completed) Text("Completed", style = MaterialTheme.typography.labelSmall)
+                if (todo.priority == TodoPriority.HIGH) Text("High priority", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+                if (todo.dueDate != null) Text("Due: ${todo.dueDate}", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.labelSmall)
+                if (todo.reminder != null) Text("Reminder: ${todo.reminder}", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.labelSmall)
+                if (todo.completed) Text("Completed", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.labelSmall)
             }
-            TextButton(onClick = onEdit) { Text("Edit") }
-            TextButton(onClick = onDelete) { Text("Delete") }
+            TextButton(onClick = onEdit, shape = FynxDesign.ControlShape) { Text("Edit") }
+            TextButton(onClick = onDelete, shape = FynxDesign.ControlShape) { Text("Delete") }
         }
     }
 }
