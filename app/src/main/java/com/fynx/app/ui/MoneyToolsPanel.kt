@@ -24,7 +24,9 @@ fun MoneyToolsPanel() {
     val expenses = entries.filter { it.type == "Expense" }.sumOf { it.amount }
     val net = income - expenses
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {\n        MoneyCalculatorCard()\n        Spacer(Modifier.height(12.dp))
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        MoneyCalculatorCard()
+        Spacer(Modifier.height(12.dp))
         Text("Money Tools 💰", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(12.dp))
         Card(Modifier.fillMaxWidth()) {
