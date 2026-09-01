@@ -5,7 +5,6 @@ import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
 import org.webrtc.Camera2Enumerator
 import org.webrtc.CameraVideoCapturer
-import org.webrtc.EglBase
 import org.webrtc.MediaConstraints
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
@@ -19,7 +18,6 @@ class FynxWebRtcCallEngine(
     private val iceServers: List<PeerConnection.IceServer> = emptyList()
 ) : FynxCallMediaEngine {
     private val appContext = context.applicationContext
-    private val eglBase = EglBase.create()
     private val factory: PeerConnectionFactory
     private var peerConnection: PeerConnection? = null
     private var audioSource: AudioSource? = null
@@ -37,20 +35,23 @@ class FynxWebRtcCallEngine(
     }
 
     override fun connect(session: FynxCallSession) {
-        val configuration = PeerConnection.RTCConfiguration(iceServers)
-        peerConnection = factory.createPeerConnection(configuration, object : PeerConnection.Observer {
-            override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
-            override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) = Unit
-            override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
-            override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) = Unit
-            override fun onIceCandidate(candidate: org.webrtc.IceCandidate) = Unit
-            override fun onIceCandidatesRemoved(candidates: Array<out org.webrtc.IceCandidate>) = Unit
-            override fun onAddStream(stream: org.webrtc.MediaStream) = Unit
-            override fun onRemoveStream(stream: org.webrtc.MediaStream) = Unit
-            override fun onDataChannel(channel: org.webrtc.DataChannel) = Unit
-            override fun onRenegotiationNeeded() = Unit
-            override fun onAddTrack(receiver: org.webrtc.RtpReceiver, mediaStreams: Array<out org.webrtc.MediaStream>) = Unit
-        }) ?: return
+        peerConnection?.close()
+        peerConnection = factory.createPeerConnection(
+            PeerConnection.RTCConfiguration(iceServers),
+            object : PeerConnection.Observer {
+                override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
+                override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) = Unit
+                override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
+                override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) = Unit
+                override fun onIceCandidate(candidate: org.webrtc.IceCandidate) = Unit
+                override fun onIceCandidatesRemoved(candidates: Array<out org.webrtc.IceCandidate>) = Unit
+                override fun onAddStream(stream: org.webrtc.MediaStream) = Unit
+                override fun onRemoveStream(stream: org.webrtc.MediaStream) = Unit
+                override fun onDataChannel(channel: org.webrtc.DataChannel) = Unit
+                override fun onRenegotiationNeeded() = Unit
+                override fun onAddTrack(receiver: org.webrtc.RtpReceiver, mediaStreams: Array<out org.webrtc.MediaStream>) = Unit
+            }
+        )
         createLocalAudio()
         if (session.type == FynxCallType.VIDEO) createLocalVideo()
     }
@@ -72,7 +73,11 @@ class FynxWebRtcCallEngine(
         videoTrack = factory.createVideoTrack("fynx-video", videoSource)
         videoTrack?.setEnabled(true)
         videoTrack?.let { peerConnection?.addTrack(it) }
-        surfaceTextureHelper = SurfaceTextureHelper.create("FYNX-Camera", eglBase.eglBaseContext)
+
+        // Use a dedicated EGL context created by WebRTC rather than referencing a
+        // non-existent factory EGL property.
+        val eglContext = org.webrtc.EglBase.create().eglBaseContext
+        surfaceTextureHelper = SurfaceTextureHelper.create("FYNX-Camera", eglContext)
         cameraCapturer?.initialize(surfaceTextureHelper, appContext, videoSource?.capturerObserver)
         cameraCapturer?.startCapture(1280, 720, 30)
     }
@@ -99,6 +104,5 @@ class FynxWebRtcCallEngine(
         audioSource = null
         videoTrack = null
         videoSource = null
-        eglBase.release()
     }
 }
