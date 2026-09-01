@@ -16,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -26,17 +27,24 @@ fun NotificationPanel(
     onMarkAllRead: () -> Unit = {},
     onNotificationOpen: (FynxNotification) -> Unit = {}
 ) {
+    val context = LocalContext.current
+    var localNotifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
+    val current = if (localNotifications.isNotEmpty()) localNotifications else notifications
     var selectedType by remember { mutableStateOf<FynxNotificationType?>(null) }
     var unreadOnly by remember { mutableStateOf(false) }
     val filtered = FynxNotificationActivityCenter.unreadOnly(
-        FynxNotificationActivityCenter.filterByType(notifications, selectedType), unreadOnly
+        FynxNotificationActivityCenter.filterByType(current, selectedType), unreadOnly
     )
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("‹ Back") }
             Text("Notifications", style = MaterialTheme.typography.titleLarge)
-            TextButton(onClick = onMarkAllRead, enabled = notifications.any { !it.read }) { Text("Read all") }
+            TextButton(onClick = {
+                FynxNotificationStore.markAllRead(context)
+                localNotifications = FynxNotificationStore.load(context)
+                onMarkAllRead()
+            }, enabled = current.any { !it.read }) { Text("Read all") }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = !unreadOnly, onClick = { unreadOnly = false }, label = { Text("All") })
@@ -55,14 +63,21 @@ fun NotificationPanel(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.Notifications, null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(8.dp))
-                    Text(if (notifications.isEmpty()) "No notifications yet" else "Nothing matches this filter")
+                    Text(if (current.isEmpty()) "No notifications yet" else "Nothing matches this filter")
                 }
             }
         } else {
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(filtered, key = { it.id }) { notification ->
                     val containerColor = if (notification.read) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer
-                    Card(onClick = { if (!notification.read) onNotificationRead(notification.id); onNotificationOpen(notification) }, colors = CardDefaults.cardColors(containerColor = containerColor), modifier = Modifier.fillMaxWidth()) {
+                    Card(onClick = {
+                        if (!notification.read) {
+                            FynxNotificationStore.markRead(context, notification.id)
+                            localNotifications = FynxNotificationStore.load(context)
+                            onNotificationRead(notification.id)
+                        }
+                        onNotificationOpen(notification)
+                    }, colors = CardDefaults.cardColors(containerColor = containerColor), modifier = Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(notificationIcon(notification.type), null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.width(12.dp))
