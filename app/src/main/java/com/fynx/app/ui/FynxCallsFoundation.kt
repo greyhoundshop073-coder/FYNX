@@ -12,6 +12,7 @@ data class FynxCallSession(
     val state: FynxCallState = FynxCallState.IDLE,
     val microphoneEnabled: Boolean = true,
     val cameraEnabled: Boolean = true,
+    val speakerEnabled: Boolean = false,
     val usingFrontCamera: Boolean = true
 )
 
@@ -21,6 +22,7 @@ object FynxCallsFoundation {
     fun end(session: FynxCallSession): FynxCallSession = session.copy(state = FynxCallState.ENDED)
     fun toggleMicrophone(session: FynxCallSession): FynxCallSession = session.copy(microphoneEnabled = !session.microphoneEnabled)
     fun toggleCamera(session: FynxCallSession): FynxCallSession = session.copy(cameraEnabled = !session.cameraEnabled)
+    fun toggleSpeaker(session: FynxCallSession): FynxCallSession = session.copy(speakerEnabled = !session.speakerEnabled)
     fun switchCamera(session: FynxCallSession): FynxCallSession = session.copy(usingFrontCamera = !session.usingFrontCamera)
     fun canUseCamera(session: FynxCallSession): Boolean = session.type == FynxCallType.VIDEO
 }
