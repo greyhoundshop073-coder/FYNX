@@ -32,6 +32,8 @@ fun FynxApp() {
     var selected by remember { mutableStateOf("Home") }
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
     var openGroup by remember { mutableStateOf<String?>(null) }
+    var callTarget by remember { mutableStateOf<String?>(null) }
+    var callVideo by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var authSession by remember { mutableStateOf(AuthSession(state = AuthState.SIGNED_IN, username = "username")) }
     val context = LocalContext.current
@@ -45,7 +47,22 @@ fun FynxApp() {
     )
 
     if (openChat != null) {
-        ConversationPanel(chat = openChat!!, onBack = { openChat = null })
+        ConversationPanel(
+            chat = openChat!!,
+            onBack = { openChat = null },
+            onVoiceCall = {
+                callTarget = openChat!!.name
+                callVideo = false
+                openChat = null
+                selected = "Calls"
+            },
+            onVideoCall = {
+                callTarget = openChat!!.name
+                callVideo = true
+                openChat = null
+                selected = "Calls"
+            }
+        )
         return
     }
     if (openGroup != null) {
@@ -112,7 +129,7 @@ fun FynxApp() {
                     "Marketplace" -> FynxMarketplacePanel()
                     "Money Tools" -> MoneyToolsPanel()
                     "Features" -> FynxFeaturesPanel(onSelect = { selected = it })
-                    "Calls" -> FynxCallsPanel()
+                    "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo)
                     "Studio" -> AiStudioPanel()
                     "To-Do" -> TodoPanel()
                     "Calendar" -> CalendarPanel()
