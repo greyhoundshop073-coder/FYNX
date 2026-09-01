@@ -49,6 +49,14 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false) {
     var permissionMessage by remember { mutableStateOf<String?>(null) }
     var calls by remember { mutableStateOf(FynxCallsStore.load(context)) }
 
+    LaunchedEffect(initialName, session?.id) {
+        val current = session ?: return@LaunchedEffect
+        if (initialName != null && calls.none { it.id == current.id }) {
+            FynxCallsStore.add(context, FynxCallRecord(current.id, initialName, if (initialVideo) "Video call" else "Voice call", "Just now", missed = true, status = "Incoming"))
+            calls = FynxCallsStore.load(context)
+        }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         val current = session
         val required = if (video) listOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else listOf(Manifest.permission.RECORD_AUDIO)
@@ -97,7 +105,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false) {
             onAnswer = {
                 val current = session!!
                 session = FynxCallsFoundation.answer(current)
-                FynxCallsStore.add(context, FynxCallRecord(current.id, activeCall!!, if (video) "Video call" else "Voice call", "Just now", status = "Answered"))
+                FynxCallsStore.updateStatus(context, current.id, "Answered", missed = false)
                 calls = FynxCallsStore.load(context)
             },
             onRetry = {
@@ -117,8 +125,9 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false) {
             onToggleSpeaker = { session = FynxCallsFoundation.toggleSpeaker(session!!) },
             onEnd = {
                 val current = session!!
+                val wasIncoming = current.state == FynxCallState.RINGING
                 session = FynxCallsFoundation.end(current)
-                FynxCallsStore.updateStatus(context, current.id, if (current.state == FynxCallState.RINGING) "Declined" else "Ended")
+                FynxCallsStore.updateStatus(context, current.id, if (wasIncoming) "Declined" else "Ended", missed = wasIncoming)
                 calls = FynxCallsStore.load(context)
                 activeCall = null
                 session = null
