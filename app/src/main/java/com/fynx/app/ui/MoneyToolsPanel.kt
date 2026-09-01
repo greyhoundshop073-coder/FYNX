@@ -10,7 +10,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToLong
 
 private data class MoneyEntry(val id: Long, val title: String, val amount: Double, val type: String)
-private data class SavingsGoal(val name: String, val target: Double, val saved: Double)
+private data class EmbeddedSavingsGoal(val name: String, val target: Double, val saved: Double)
 
 @Composable
 fun MoneyToolsPanel() {
@@ -69,13 +69,13 @@ private fun BudgetCard(spent: Double) {
 
 @Composable
 private fun SavingsGoalsCard() {
-    var name by remember { mutableStateOf("") }; var targetText by remember { mutableStateOf("") }; var addText by remember { mutableStateOf("") }; var goal by remember { mutableStateOf<SavingsGoal?>(null) }
+    var name by remember { mutableStateOf("") }; var targetText by remember { mutableStateOf("") }; var addText by remember { mutableStateOf("") }; var goal by remember { mutableStateOf<EmbeddedSavingsGoal?>(null) }
     Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
         Text("Savings Goals 🎯", style = MaterialTheme.typography.titleMedium)
         OutlinedTextField(name, { name = it }, label = { Text("Goal name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(targetText, { targetText = it }, label = { Text("Target amount") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { val target = targetText.toDoubleOrNull(); if (!name.isBlank() && target != null && target > 0) goal = SavingsGoal(name.trim(), target, 0.0) }) { Text("Create Goal") }
+            Button(onClick = { val target = targetText.toDoubleOrNull(); if (!name.isBlank() && target != null && target > 0) goal = EmbeddedSavingsGoal(name.trim(), target, 0.0) }) { Text("Create Goal") }
             OutlinedTextField(addText, { addText = it }, label = { Text("Add saved") }, singleLine = true, modifier = Modifier.weight(1f))
             OutlinedButton(onClick = { val add = addText.toDoubleOrNull(); if (add != null && add > 0) goal?.let { goal = it.copy(saved = (it.saved + add).coerceAtMost(it.target)) } }) { Text("Add") }
         }
