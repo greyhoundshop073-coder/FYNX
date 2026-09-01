@@ -8,7 +8,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Notifications
@@ -77,7 +76,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     val mainNav = listOf(
         FynxNavItem("Home", "Home", Icons.Default.Home),
         FynxNavItem("Chats", "Chats", Icons.Default.ChatBubbleOutline),
-        FynxNavItem("Groups", "Groups", Icons.Default.Group),
+        FynxNavItem("Friends", "Friends", Icons.Default.Person),
         FynxNavItem("Marketplace", "Market", Icons.Default.ShoppingBag),
         FynxNavItem("Money Tools", "Money", Icons.Default.AccountBalanceWallet),
         FynxNavItem("Features", "More", Icons.Default.MoreHoriz)
@@ -185,7 +184,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 when (selected) {
                     "Home" -> HomePanel()
                     "Chats" -> ChatsPanel(onOpenChat = { openChat = it })
-                    "Groups" -> FynxGroupsPanel(onOpenGroup = { openGroup = it })
+                    "Friends" -> FriendsPanel()
                     "Marketplace" -> FynxMarketplacePanel()
                     "Money Tools" -> MoneyToolsPanel()
                     "Features" -> FynxFeaturesPanel(onSelect = { selected = it })
