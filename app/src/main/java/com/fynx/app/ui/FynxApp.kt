@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.dp
 private data class FynxNavItem(val key: String, val label: String, val icon: ImageVector)
 
 @Composable
-fun FynxApp() {
+fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     val context = LocalContext.current
     var selected by remember { mutableStateOf("Home") }
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
@@ -47,6 +47,18 @@ fun FynxApp() {
     var showSettings by remember { mutableStateOf(false) }
     var authSession by remember { mutableStateOf(FynxAuthStore.load(context)) }
     var notifications by remember { mutableStateOf(emptyList<FynxNotification>()) }
+    var inviteCode by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(deepLinkDestination) {
+        when (val destination = deepLinkDestination) {
+            is FynxDeepLinkDestination.Invite -> {
+                inviteCode = destination.code
+                selected = "Invite"
+            }
+            FynxDeepLinkDestination.Home -> selected = "Home"
+            null -> Unit
+        }
+    }
 
     LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context) }
 
@@ -180,6 +192,11 @@ fun FynxApp() {
                         onMarkAllRead = { notifications = notifications.map { it.copy(read = true) } }
                     )
                     "Share" -> FynxSharePanel()
+                    "Invite" -> FynxInvitePanel(
+                        code = inviteCode,
+                        onShare = { FynxShareActions.share(context, FynxShareActions.defaultPayload()) },
+                        onBack = { selected = "Features" }
+                    )
                     "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo)
                     "Studio" -> AiStudioPanel()
                     "To-Do" -> TodoPanel()
