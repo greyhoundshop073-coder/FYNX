@@ -29,6 +29,7 @@ private data class FynxNavItem(val key: String, val label: String, val icon: Ima
 
 @Composable
 fun FynxApp() {
+    val context = LocalContext.current
     var selected by remember { mutableStateOf("Home") }
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
     var openGroup by remember { mutableStateOf<String?>(null) }
@@ -36,7 +37,7 @@ fun FynxApp() {
     var callVideo by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var authSession by remember { mutableStateOf(FynxAuthStore.load(context)) }
-    val context = LocalContext.current
+
     if (authSession.state != AuthState.SIGNED_IN) {
         FynxAuthGate { username ->
             FynxAuthStore.save(context, username)
@@ -44,6 +45,7 @@ fun FynxApp() {
         }
         return
     }
+
     val mainNav = listOf(
         FynxNavItem("Home", "Home", Icons.Default.Home),
         FynxNavItem("Chats", "Chats", Icons.Default.ChatBubbleOutline),
@@ -72,6 +74,7 @@ fun FynxApp() {
         )
         return
     }
+
     if (openGroup != null) {
         FynxGroupConversationPanel(groupName = openGroup!!, onBack = { openGroup = null })
         return
@@ -83,12 +86,17 @@ fun FynxApp() {
             containerColor = FynxDesign.Background,
             topBar = {
                 if (selected == "Home") {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         FynxAvatar("username", Modifier.size(34.dp))
                         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                             Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                         }
-                        IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, "Settings") }
+                        IconButton(onClick = { showSettings = true }) {
+                            Icon(Icons.Default.Settings, "Settings")
+                        }
                     }
                 } else {
                     Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
@@ -116,19 +124,28 @@ fun FynxApp() {
                 }
             }
         ) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 8.dp).pointerInput(selected) {
-                var totalDrag = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = { totalDrag = 0f },
-                    onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
-                    onDragEnd = {
-                        if (kotlin.math.abs(totalDrag) >= 80f) {
-                            val nextIndex = if (totalDrag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex) else (mainIndex - 1).coerceAtLeast(0)
-                            selected = mainNav[nextIndex].key
-                        }
+            Box(
+                Modifier.fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .pointerInput(selected) {
+                        var totalDrag = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { totalDrag = 0f },
+                            onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
+                            onDragEnd = {
+                                if (kotlin.math.abs(totalDrag) >= 80f) {
+                                    val nextIndex = if (totalDrag < 0) {
+                                        (mainIndex + 1).coerceAtMost(mainNav.lastIndex)
+                                    } else {
+                                        (mainIndex - 1).coerceAtLeast(0)
+                                    }
+                                    selected = mainNav[nextIndex].key
+                                }
+                            }
+                        )
                     }
-                )
-            }) {
+            ) {
                 when (selected) {
                     "Home" -> HomePanel()
                     "Chats" -> ChatsPanel(onOpenChat = { openChat = it })
@@ -140,7 +157,10 @@ fun FynxApp() {
                     "Studio" -> AiStudioPanel()
                     "To-Do" -> TodoPanel()
                     "Calendar" -> CalendarPanel()
-                    "Profile" -> ProfilePanel(session = authSession, onSignOut = { FynxAuthStore.clear(context); authSession = AuthSession() })
+                    "Profile" -> ProfilePanel(session = authSession, onSignOut = {
+                        FynxAuthStore.clear(context)
+                        authSession = AuthSession()
+                    })
                     "Bills" -> BillsPaymentPanel()
                     "Transactions" -> TransactionHistoryPanel()
                     "Accounts" -> AccountsWalletsPanel()
@@ -157,8 +177,16 @@ fun FynxApp() {
                 }
             }
         }
+
         if (showSettings) {
-            AlertDialog(onDismissRequest = { showSettings = false }, title = { Text("Settings") }, text = { Text("FYNX settings") }, confirmButton = { TextButton(onClick = { showSettings = false }) { Text("Done") } })
+            AlertDialog(
+                onDismissRequest = { showSettings = false },
+                title = { Text("Settings") },
+                text = { Text("FYNX settings") },
+                confirmButton = {
+                    TextButton(onClick = { showSettings = false }) { Text("Done") }
+                }
+            )
         }
     }
 }
@@ -184,6 +212,7 @@ private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
         Triple("Money Alerts", "Money Alerts", Icons.Default.Settings),
         Triple("Vault", "Secure Money Vault", Icons.Default.Settings)
     )
+
     Column(Modifier.fillMaxSize()) {
         Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text("Access your tools in one place.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -191,7 +220,10 @@ private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(features, key = { it.first }) { (key, label, icon) ->
                 Card(onClick = { onSelect(key) }, modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(14.dp))
                         Text(label, style = MaterialTheme.typography.titleMedium)
