@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -12,12 +15,11 @@ import androidx.compose.ui.unit.dp
 private data class FynxQuickNote(val id: Long, val text: String)
 
 @Composable
-fun FynxExtraToolsPanel() {
+fun FynxExtraToolsPanel(onOpenCalendar: () -> Unit) {
     var notes by remember { mutableStateOf(listOf<FynxQuickNote>()) }
     var noteText by remember { mutableStateOf("") }
     var showNoteEditor by remember { mutableStateOf(false) }
-    var showEvents by remember { mutableStateOf(false) }
-
+    
     Column(Modifier.fillMaxSize()) {
         Text("Extra Tools", style = MaterialTheme.typography.headlineSmall)
         Text(
@@ -26,28 +28,12 @@ fun FynxExtraToolsPanel() {
         )
         Spacer(Modifier.height(12.dp))
 
-        if (showEvents) {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Events", style = MaterialTheme.typography.titleLarge)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "Use Calendar for scheduled events and reminders. This shortcut keeps event planning in the same FYNX tool system.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Button(onClick = { showEvents = false }) { Text("Back to tools") }
-                }
-            }
-            return
-        }
-
         Card(
             onClick = { showNoteEditor = true },
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("📝", style = MaterialTheme.typography.titleLarge)
+                Icon(Icons.Default.EditNote, contentDescription = "Quick Notes", tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(14.dp))
                 Column {
                     Text("Quick Notes", style = MaterialTheme.typography.titleMedium)
@@ -59,11 +45,11 @@ fun FynxExtraToolsPanel() {
         Spacer(Modifier.height(10.dp))
 
         Card(
-            onClick = { showEvents = true },
+            onClick = onOpenCalendar,
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("📅", style = MaterialTheme.typography.titleLarge)
+                Icon(Icons.Default.CalendarMonth, contentDescription = "Events", tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(14.dp))
                 Column {
                     Text("Events", style = MaterialTheme.typography.titleMedium)
