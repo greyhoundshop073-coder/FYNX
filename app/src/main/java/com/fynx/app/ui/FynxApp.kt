@@ -213,7 +213,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 }
             }
         ) { padding ->
-            BoxWithConstraints(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize()) {
                 Box(
                     Modifier.fillMaxSize()
                         .padding(padding)
