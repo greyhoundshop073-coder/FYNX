@@ -28,6 +28,8 @@ fun MoneyToolsPanel() {
         MoneyCalculatorCard()
         CurrencyConverterCard()
         Spacer(Modifier.height(12.dp))
+        BudgetCard(spent = expenses)
+        Spacer(Modifier.height(12.dp))
         Text("Money Tools 💰", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(12.dp))
         Card(Modifier.fillMaxWidth()) {
@@ -71,6 +73,47 @@ fun MoneyToolsPanel() {
 }
 
 private fun formatMoney(value: Double): String = "${(value * 100).roundToLong() / 100.0}"
+
+@Composable
+private fun BudgetCard(spent: Double) {
+    var budgetText by remember { mutableStateOf("") }
+    var budget by remember { mutableStateOf(0.0) }
+    val remaining = budget - spent
+    val progress = if (budget > 0) (spent / budget).coerceIn(0.0, 1.0).toFloat() else 0f
+    val overBudget = budget > 0 && spent > budget
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Budget & Spending Limits 🎯", style = MaterialTheme.typography.titleMedium)
+            OutlinedTextField(
+                value = budgetText,
+                onValueChange = { budgetText = it },
+                label = { Text("Monthly budget") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = {
+                budgetText.toDoubleOrNull()?.takeIf { it > 0 }?.let {
+                    budget = it
+                }
+            }) { Text("Set Budget") }
+            if (budget > 0) {
+                Spacer(Modifier.height(8.dp))
+                Text("Spent: ${formatMoney(spent)}")
+                Text(if (overBudget) "Over budget: ${formatMoney(-remaining)}" else "Remaining: ${formatMoney(remaining)}")
+                Spacer(Modifier.height(6.dp))
+                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                if (overBudget) {
+                    Text("⚠️ Spending limit exceeded", color = MaterialTheme.colorScheme.error)
+                } else if (spent >= budget * 0.8) {
+                    Text("⚠️ You are approaching your budget limit")
+                }
+            } else {
+                Text("Set a monthly limit to track your spending.", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
 
 @Composable
 private fun MoneyCalculatorCard() {
