@@ -26,18 +26,15 @@ object FynxGroupsStore {
                             }.getOrDefault(FynxGroupRole.MEMBER)))
                         }
                     }
-                    add(
-                        FynxGroup(
-                            id = item.optString("id"),
-                            name = item.optString("name"),
-                            description = item.optString("description"),
-                            visibility = runCatching {
-                                FynxGroupVisibility.valueOf(item.optString("visibility"))
-                            }.getOrDefault(FynxGroupVisibility.PRIVATE),
-                            ownerUsername = item.optString("ownerUsername"),
-                            members = parsedMembers
-                        )
-                    )
+                    add(FynxGroup(
+                        id = item.optString("id"),
+                        name = item.optString("name"),
+                        description = item.optString("description"),
+                        visibility = runCatching { FynxGroupVisibility.valueOf(item.optString("visibility")) }
+                            .getOrDefault(FynxGroupVisibility.PRIVATE),
+                        ownerUsername = item.optString("ownerUsername"),
+                        members = parsedMembers
+                    ))
                 }
             }.filter { FynxGroupsBatch1.validate(it).isEmpty() }
                 .ifEmpty { defaultGroups() }
@@ -64,9 +61,7 @@ object FynxGroupsStore {
             })
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString(GROUPS_KEY, array.toString())
-            .apply()
+            .edit().putString(GROUPS_KEY, array.toString()).apply()
     }
 
     fun add(context: Context, group: FynxGroup): Boolean {
@@ -77,18 +72,23 @@ object FynxGroupsStore {
         return true
     }
 
+    fun updateGroup(context: Context, updated: FynxGroup): Boolean {
+        if (FynxGroupsBatch1.validate(updated).isNotEmpty()) return false
+        val groups = load(context)
+        if (groups.none { it.id == updated.id }) return false
+        save(context, groups.map { if (it.id == updated.id) updated else it })
+        return true
+    }
+
     private fun defaultGroups(): List<FynxGroup> = listOf(
         FynxGroup("family", "Family", "Family conversations and updates", FynxGroupVisibility.PRIVATE, "@username", listOf(
-            FynxGroupMember("@username", FynxGroupRole.ADMIN),
-            FynxGroupMember("@family", FynxGroupRole.MEMBER)
+            FynxGroupMember("@username", FynxGroupRole.ADMIN), FynxGroupMember("@family", FynxGroupRole.MEMBER)
         )),
         FynxGroup("friends", "Friends", "Stay connected with friends", FynxGroupVisibility.PRIVATE, "@username", listOf(
-            FynxGroupMember("@username", FynxGroupRole.ADMIN),
-            FynxGroupMember("@username2", FynxGroupRole.MEMBER)
+            FynxGroupMember("@username", FynxGroupRole.ADMIN), FynxGroupMember("@username2", FynxGroupRole.MEMBER)
         )),
         FynxGroup("fynx-community", "FYNX Community", "A community for FYNX members", FynxGroupVisibility.PUBLIC, "@username", listOf(
-            FynxGroupMember("@username", FynxGroupRole.ADMIN),
-            FynxGroupMember("@fynx", FynxGroupRole.MEMBER)
+            FynxGroupMember("@username", FynxGroupRole.ADMIN), FynxGroupMember("@fynx", FynxGroupRole.MEMBER)
         ))
     )
 }
