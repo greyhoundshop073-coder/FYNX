@@ -22,9 +22,9 @@ import androidx.compose.ui.unit.dp
 private data class FynxCallItem(val name: String, val type: String, val time: String, val missed: Boolean)
 
 @Composable
-fun FynxCallsPanel() {
-    var activeCall by remember { mutableStateOf<String?>(null) }
-    var video by remember { mutableStateOf(false) }
+fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false) {
+    var activeCall by remember { mutableStateOf(initialName) }
+    var video by remember { mutableStateOf(initialVideo) }
     val calls = remember {
         listOf(
             FynxCallItem("Maria", "Voice call", "Today, 10:32", false),
@@ -52,7 +52,9 @@ fun FynxCallsPanel() {
                             Text(call.name, style = MaterialTheme.typography.titleMedium)
                             Text("${call.type} • ${call.time}", style = MaterialTheme.typography.bodySmall, color = if (call.missed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        IconButton(onClick = { video = call.type == "Video call"; activeCall = call.name }) { Icon(if (call.type == "Video call") Icons.Default.Videocam else Icons.Default.Call, "Call ${call.name}") }
+                        IconButton(onClick = { video = call.type == "Video call"; activeCall = call.name }) {
+                            Icon(if (call.type == "Video call") Icons.Default.Videocam else Icons.Default.Call, "Call ${call.name}")
+                        }
                     }
                 }
             }
@@ -76,7 +78,7 @@ fun FynxActiveCallPanel(name: String, video: Boolean, onEnd: () -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
             FilledTonalIconButton(onClick = { muted = !muted }) { Icon(if (muted) Icons.Default.MicOff else Icons.Default.Mic, "Mute") }
             if (video) FilledTonalIconButton(onClick = { cameraOn = !cameraOn }) { Icon(if (cameraOn) Icons.Default.Videocam else Icons.Default.VideocamOff, "Camera") }
-            FloatingActionButton(onClick = onEnd, containerColor = MaterialTheme.colorScheme.error) { Icon(Icons.Default.CallEnd, "End call") }
+            FloatingActionButton(onClick = onEnd) { Icon(Icons.Default.CallEnd, "End call") }
         }
         Spacer(Modifier.height(32.dp))
     }
