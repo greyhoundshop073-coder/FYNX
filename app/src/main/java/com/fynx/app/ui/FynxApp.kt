@@ -88,6 +88,8 @@ fun FynxApp() {
 
     FynxTheme {
         val mainIndex = mainNav.indexOfFirst { it.key == selected }.coerceAtLeast(0)
+        val unreadNotifications = notifications.unreadNotificationCount()
+
         Scaffold(
             containerColor = FynxDesign.Background,
             topBar = {
@@ -98,20 +100,47 @@ fun FynxApp() {
                     ) {
                         FynxAvatar("username", Modifier.size(34.dp))
                         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                            Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                            Text(
+                                "FYNX",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
-                        IconButton(onClick = { showSettings = true }) {
-                            Icon(Icons.Default.Settings, "Settings")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            BadgedBox(
+                                badge = {
+                                    if (unreadNotifications > 0) {
+                                        Badge { Text(unreadNotifications.toString()) }
+                                    }
+                                }
+                            ) {
+                                IconButton(onClick = { selected = "Notifications" }) {
+                                    Icon(Icons.Default.Notifications, "Notifications")
+                                }
+                            }
+                            IconButton(onClick = { showSettings = true }) {
+                                Icon(Icons.Default.Settings, "Settings")
+                            }
                         }
                     }
                 } else {
-                    Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
-                        Text(selected, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Box(
+                        Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            selected,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             },
             bottomBar = {
-                NavigationBar(containerColor = FynxDesign.Surface, tonalElevation = 8.dp) {
+                NavigationBar(
+                    containerColor = FynxDesign.Surface,
+                    tonalElevation = 8.dp
+                ) {
                     mainNav.forEach { item ->
                         NavigationBarItem(
                             selected = selected == item.key,
@@ -162,8 +191,12 @@ fun FynxApp() {
                     "Notifications" -> NotificationPanel(
                         notifications = notifications,
                         onBack = { selected = "Features" },
-                        onNotificationRead = { id -> notifications = notifications.markNotificationRead(id) },
-                        onMarkAllRead = { notifications = notifications.map { it.copy(read = true) } }
+                        onNotificationRead = { id ->
+                            notifications = notifications.markNotificationRead(id)
+                        },
+                        onMarkAllRead = {
+                            notifications = notifications.map { it.copy(read = true) }
+                        }
                     )
                     "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo)
                     "Studio" -> AiStudioPanel()
@@ -227,19 +260,36 @@ private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
     )
 
     Column(Modifier.fillMaxSize()) {
-        Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Access your tools in one place.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            "FYNX Features",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            "Access your tools in one place.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Spacer(Modifier.height(10.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(features, key = { it.first }) { (key, label, icon) ->
-                Card(onClick = { onSelect(key) }, modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    onClick = { onSelect(key) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Row(
                         Modifier.fillMaxWidth().padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            icon,
+                            contentDescription = label,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                         Spacer(Modifier.width(14.dp))
-                        Text(label, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.titleMedium
+                        )
                     }
                 }
             }
