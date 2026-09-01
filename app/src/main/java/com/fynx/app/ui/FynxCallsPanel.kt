@@ -27,6 +27,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 
+enum class FynxCallHistoryFilter { ALL, MISSED, VIDEO, VOICE }
+
 @Composable
 fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false) {
     val context = LocalContext.current
@@ -48,6 +50,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false) {
     }
     var permissionMessage by remember { mutableStateOf<String?>(null) }
     var calls by remember { mutableStateOf(FynxCallsStore.load(context)) }
+    var filter by remember { mutableStateOf(FynxCallHistoryFilter.ALL) }
 
     LaunchedEffect(initialName, session?.id) {
         val current = session ?: return@LaunchedEffect
@@ -136,31 +139,66 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false) {
         return
     }
 
+    val filteredCalls = remember(calls, filter) {
+        when (filter) {
+            FynxCallHistoryFilter.ALL -> calls
+            FynxCallHistoryFilter.MISSED -> calls.filter { it.missed }
+            FynxCallHistoryFilter.VIDEO -> calls.filter { it.type == "Video call" }
+            FynxCallHistoryFilter.VOICE -> calls.filter { it.type == "Voice call" }
+        }
+    }
+
     Column(Modifier.fillMaxSize().background(FynxDesign.Background).padding(16.dp)) {
         Text("Calls", style = MaterialTheme.typography.headlineSmall)
         Text("Voice and video calls", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            listOf(
+                FynxCallHistoryFilter.ALL to "All",
+                FynxCallHistoryFilter.MISSED to "Missed",
+                FynxCallHistoryFilter.VIDEO to "Video",
+                FynxCallHistoryFilter.VOICE to "Voice"
+            ).forEach { (value, label) ->
+                FilterChip(
+                    selected = filter == value,
+                    onClick = { filter = value },
+                    label = { Text(label) }
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
         permissionMessage?.let {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
                 Text(it, modifier = Modifier.padding(14.dp), color = MaterialTheme.colorScheme.onErrorContainer)
             }
             Spacer(Modifier.height(10.dp))
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(calls, key = { it.id }) { call ->
-                Card(Modifier.fillMaxWidth()) {
-                    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(46.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
-                            Icon(if (call.type == "Video call") Icons.Default.Videocam else Icons.Default.Call, "Call type", tint = MaterialTheme.colorScheme.primary)
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(call.name, style = MaterialTheme.typography.titleMedium)
-                            Text("${call.type} • ${call.time}", style = MaterialTheme.typography.bodySmall, color = if (call.missed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(call.status, style = MaterialTheme.typography.labelSmall, color = if (call.missed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        IconButton(onClick = { startCall(call.name, call.type == "Video call") }) {
-                            Icon(if (call.type == "Video call") Icons.Default.Videocam else Icons.Default.Call, "Call ${call.name}")
+        if (filteredCalls.isEmpty()) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.Call, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    Text("No calls here", style = MaterialTheme.typography.titleMedium)
+                    Text("Your call history will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(filteredCalls, key = { it.id }) { call ->
+                    Card(Modifier.fillMaxWidth()) {
+                        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(46.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+                                Icon(if (call.type == "Video call") Icons.Default.Videocam else Icons.Default.Call, "Call type", tint = MaterialTheme.colorScheme.primary)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(call.name, style = MaterialTheme.typography.titleMedium)
+                                Text("${call.type} • ${call.time}", style = MaterialTheme.typography.bodySmall, color = if (call.missed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(call.status, style = MaterialTheme.typography.labelSmall, color = if (call.missed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = { startCall(call.name, call.type == "Video call") }) {
+                                Icon(if (call.type == "Video call") Icons.Default.Videocam else Icons.Default.Call, "Call ${call.name}")
+                            }
                         }
                     }
                 }
