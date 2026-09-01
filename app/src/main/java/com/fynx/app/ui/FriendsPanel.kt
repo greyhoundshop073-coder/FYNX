@@ -1,5 +1,7 @@
 package com.fynx.app.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,7 +26,12 @@ fun FriendsPanel() {
     val requests = results.take(2)
     val suggestions = results.drop(2)
 
-    Column(Modifier.fillMaxSize()) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(FynxDesign.Background)
+            .padding(16.dp)
+    ) {
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -36,9 +43,14 @@ fun FriendsPanel() {
                 modifier = Modifier.weight(1f),
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                placeholder = { Text("Search by username") }
+                placeholder = { Text("Search by username") },
+                shape = FynxDesign.ControlShape
             )
-            OutlinedButton(onClick = { shareFynx(context) }) { Text("Invite") }
+            OutlinedButton(
+                onClick = { shareFynx(context) },
+                shape = FynxDesign.ControlShape,
+                border = BorderStroke(1.dp, FynxDesign.Outline)
+            ) { Text("Invite") }
         }
 
         Spacer(Modifier.height(18.dp))
@@ -61,20 +73,25 @@ fun FriendsPanel() {
         ) {
             items(requests, key = { "request_${it.username}" }) { person ->
                 var accepted by remember(person.username) { mutableStateOf(false) }
-                Card(Modifier.fillMaxWidth()) {
+                Card(
+                    Modifier.fillMaxWidth(),
+                    shape = FynxDesign.CardShape,
+                    colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+                    border = BorderStroke(1.dp, FynxDesign.Outline)
+                ) {
                     Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         FynxAvatar(person.displayName, Modifier.size(48.dp))
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(person.displayName, style = MaterialTheme.typography.titleMedium)
-                            Text(person.username, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(person.username, color = FynxDesign.TextSecondary)
                         }
                         if (accepted) {
                             Text("Friends", color = MaterialTheme.colorScheme.primary)
                         } else {
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Button(onClick = { accepted = true }) { Text("Confirm") }
-                                OutlinedButton(onClick = {}) { Text("Delete") }
+                                Button(onClick = { accepted = true }, shape = FynxDesign.ControlShape) { Text("Confirm") }
+                                OutlinedButton(onClick = {}, shape = FynxDesign.ControlShape) { Text("Delete") }
                             }
                         }
                     }
@@ -91,15 +108,24 @@ fun FriendsPanel() {
 
             items(suggestions, key = { "suggestion_${it.username}" }) { person ->
                 var requestSent by remember(person.username) { mutableStateOf(person.requestSent) }
-                Card(Modifier.fillMaxWidth()) {
+                Card(
+                    Modifier.fillMaxWidth(),
+                    shape = FynxDesign.CardShape,
+                    colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+                    border = BorderStroke(1.dp, FynxDesign.Outline)
+                ) {
                     Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         FynxAvatar(person.displayName, Modifier.size(48.dp))
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(person.displayName, style = MaterialTheme.typography.titleMedium)
-                            Text(person.username, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(person.username, color = FynxDesign.TextSecondary)
                         }
-                        Button(onClick = { requestSent = true }, enabled = !requestSent && !person.isFriend) {
+                        Button(
+                            onClick = { requestSent = true },
+                            enabled = !requestSent && !person.isFriend,
+                            shape = FynxDesign.ControlShape
+                        ) {
                             Text(if (requestSent) "Sent" else if (person.isFriend) "Friends" else "Add Friend")
                         }
                     }
