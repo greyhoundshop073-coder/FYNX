@@ -223,6 +223,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     "Spending Insights" -> SpendingInsightsPanel()
                     "Money Alerts" -> MoneyAlertsPanel()
                     "Vault" -> SecureMoneyVaultPanel()
+                    // Safe fallback: a stale/deep-linked destination must never leave a blank screen.
+                    else -> HomePanel()
                 }
             }
         }
