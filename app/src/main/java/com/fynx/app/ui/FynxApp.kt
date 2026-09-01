@@ -188,6 +188,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     "Marketplace" -> FynxMarketplacePanel()
                     "Money Tools" -> MoneyToolsPanel()
                     "Features" -> FynxFeaturesPanel(onSelect = { selected = it })
+                    "Extra Tools" -> FynxExtraToolsPanel()
                     "Notifications" -> NotificationPanel(
                         notifications = notifications,
                         onBack = { selected = "Features" },
@@ -258,7 +259,8 @@ private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
         Triple("Insights", "Money Insights", Icons.Default.PieChart),
         Triple("Spending Insights", "Spending Insights", Icons.Default.PieChart),
         Triple("Money Alerts", "Money Alerts", Icons.Default.Notifications),
-        Triple("Vault", "Secure Money Vault", Icons.Default.Lock)
+        Triple("Vault", "Secure Money Vault", Icons.Default.Lock),
+        Triple("Extra Tools", "Extra Tools", Icons.Default.Build)
     )
 
     val filteredFeatures = features.filter { (_, label, _) ->
