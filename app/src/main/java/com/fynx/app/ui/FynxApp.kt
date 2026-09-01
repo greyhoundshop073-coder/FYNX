@@ -1,6 +1,5 @@
 package com.fynx.app.ui
 
-import android.content.Context
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,7 +12,6 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Build
@@ -25,6 +23,7 @@ import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -49,9 +48,7 @@ fun FynxApp() {
     var authSession by remember { mutableStateOf(FynxAuthStore.load(context)) }
     var notifications by remember { mutableStateOf(emptyList<FynxNotification>()) }
 
-    LaunchedEffect(Unit) {
-        FynxNotificationFoundation.createChannels(context)
-    }
+    LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context) }
 
     if (authSession.state != AuthState.SIGNED_IN) {
         FynxAuthGate { username ->
@@ -109,18 +106,12 @@ fun FynxApp() {
                     ) {
                         FynxAvatar("username", Modifier.size(34.dp))
                         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                            Text(
-                                "FYNX",
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             BadgedBox(
                                 badge = {
-                                    if (unreadNotifications > 0) {
-                                        Badge { Text(unreadNotifications.toString()) }
-                                    }
+                                    if (unreadNotifications > 0) Badge { Text(unreadNotifications.toString()) }
                                 }
                             ) {
                                 IconButton(onClick = { selected = "Notifications" }) {
@@ -133,23 +124,13 @@ fun FynxApp() {
                         }
                     }
                 } else {
-                    Box(
-                        Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            selected,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
+                    Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
+                        Text(selected, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     }
                 }
             },
             bottomBar = {
-                NavigationBar(
-                    containerColor = FynxDesign.Surface,
-                    tonalElevation = 8.dp
-                ) {
+                NavigationBar(containerColor = FynxDesign.Surface, tonalElevation = 8.dp) {
                     mainNav.forEach { item ->
                         NavigationBarItem(
                             selected = selected == item.key,
@@ -169,9 +150,7 @@ fun FynxApp() {
             }
         ) { padding ->
             Box(
-                Modifier.fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 8.dp)
                     .pointerInput(selected) {
                         var totalDrag = 0f
                         detectHorizontalDragGestures(
@@ -179,11 +158,8 @@ fun FynxApp() {
                             onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
                             onDragEnd = {
                                 if (kotlin.math.abs(totalDrag) >= 80f) {
-                                    val nextIndex = if (totalDrag < 0) {
-                                        (mainIndex + 1).coerceAtMost(mainNav.lastIndex)
-                                    } else {
-                                        (mainIndex - 1).coerceAtLeast(0)
-                                    }
+                                    val nextIndex = if (totalDrag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex)
+                                    else (mainIndex - 1).coerceAtLeast(0)
                                     selected = mainNav[nextIndex].key
                                 }
                             }
@@ -200,13 +176,10 @@ fun FynxApp() {
                     "Notifications" -> NotificationPanel(
                         notifications = notifications,
                         onBack = { selected = "Features" },
-                        onNotificationRead = { id ->
-                            notifications = notifications.markNotificationRead(id)
-                        },
-                        onMarkAllRead = {
-                            notifications = notifications.map { it.copy(read = true) }
-                        }
+                        onNotificationRead = { id -> notifications = notifications.markNotificationRead(id) },
+                        onMarkAllRead = { notifications = notifications.map { it.copy(read = true) } }
                     )
+                    "Share" -> FynxSharePanel()
                     "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo)
                     "Studio" -> AiStudioPanel()
                     "To-Do" -> TodoPanel()
@@ -237,9 +210,7 @@ fun FynxApp() {
                 onDismissRequest = { showSettings = false },
                 title = { Text("Settings") },
                 text = { Text("FYNX settings") },
-                confirmButton = {
-                    TextButton(onClick = { showSettings = false }) { Text("Done") }
-                }
+                confirmButton = { TextButton(onClick = { showSettings = false }) { Text("Done") } }
             )
         }
     }
@@ -250,6 +221,7 @@ private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
     val features = listOf(
         Triple("Calls", "Voice & Video Calls", Icons.Default.Call),
         Triple("Notifications", "Notifications", Icons.Default.Notifications),
+        Triple("Share", "Share & Invite", Icons.Default.Share),
         Triple("Studio", "AI Studio", Icons.Default.Build),
         Triple("To-Do", "To-Do", Icons.Default.CheckCircle),
         Triple("Calendar", "Calendar", Icons.Default.DateRange),
@@ -269,36 +241,16 @@ private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
     )
 
     Column(Modifier.fillMaxSize()) {
-        Text(
-            "FYNX Features",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            "Access your tools in one place.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("Access your tools in one place.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(10.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(features, key = { it.first }) { (key, label, icon) ->
-                Card(
-                    onClick = { onSelect(key) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            icon,
-                            contentDescription = label,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                Card(onClick = { onSelect(key) }, modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(14.dp))
-                        Text(
-                            label,
-                            style = MaterialTheme.typography.titleMedium
-                        )
+                        Text(label, style = MaterialTheme.typography.titleMedium)
                     }
                 }
             }
