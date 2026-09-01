@@ -16,6 +16,15 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingBag
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -241,22 +250,22 @@ private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
     val features = listOf(
         Triple("Calls", "Voice & Video Calls", Icons.Default.Call),
         Triple("Notifications", "Notifications", Icons.Default.Notifications),
-        Triple("Studio", "AI Studio", Icons.Default.Settings),
-        Triple("To-Do", "To-Do", Icons.Default.Person),
-        Triple("Calendar", "Calendar", Icons.Default.Home),
-        Triple("Bills", "Bills & Payment Reminders", Icons.Default.Person),
-        Triple("Transactions", "Transaction History", Icons.Default.Person),
-        Triple("Accounts", "Accounts & Wallets", Icons.Default.Person),
-        Triple("Budget", "Budget Planner", Icons.Default.Person),
-        Triple("Currency", "Currency Converter", Icons.Default.Person),
-        Triple("Savings", "Savings Goals", Icons.Default.Person),
-        Triple("Subscriptions", "Subscriptions & Recurring Payments", Icons.Default.Person),
-        Triple("Overview", "Financial Overview", Icons.Default.Home),
-        Triple("Receipts", "Receipts & Expenses", Icons.Default.Person),
-        Triple("Insights", "Money Insights", Icons.Default.Home),
-        Triple("Spending Insights", "Spending Insights", Icons.Default.Home),
-        Triple("Money Alerts", "Money Alerts", Icons.Default.Settings),
-        Triple("Vault", "Secure Money Vault", Icons.Default.Settings)
+        Triple("Studio", "AI Studio", Icons.Default.Build),
+        Triple("To-Do", "To-Do", Icons.Default.CheckCircle),
+        Triple("Calendar", "Calendar", Icons.Default.DateRange),
+        Triple("Bills", "Bills & Payment Reminders", Icons.Default.AccountBalance),
+        Triple("Transactions", "Transaction History", Icons.Default.History),
+        Triple("Accounts", "Accounts & Wallets", Icons.Default.AccountBalanceWallet),
+        Triple("Budget", "Budget Planner", Icons.Default.AttachMoney),
+        Triple("Currency", "Currency Converter", Icons.Default.AttachMoney),
+        Triple("Savings", "Savings Goals", Icons.Default.AccountBalance),
+        Triple("Subscriptions", "Subscriptions & Recurring Payments", Icons.Default.Autorenew),
+        Triple("Overview", "Financial Overview", Icons.Default.PieChart),
+        Triple("Receipts", "Receipts & Expenses", Icons.Default.AccountBalance),
+        Triple("Insights", "Money Insights", Icons.Default.PieChart),
+        Triple("Spending Insights", "Spending Insights", Icons.Default.PieChart),
+        Triple("Money Alerts", "Money Alerts", Icons.Default.Notifications),
+        Triple("Vault", "Secure Money Vault", Icons.Default.Lock)
     )
 
     Column(Modifier.fillMaxSize()) {
