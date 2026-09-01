@@ -24,7 +24,7 @@ fun MoneyToolsPanel() {
     val expenses = entries.filter { it.type == "Expense" }.sumOf { it.amount }
     val net = income - expenses
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {\n        MoneyCalculatorCard()\n        Spacer(Modifier.height(12.dp))
         Text("Money Tools 💰", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(12.dp))
         Card(Modifier.fillMaxWidth()) {
@@ -68,3 +68,27 @@ fun MoneyToolsPanel() {
 }
 
 private fun formatMoney(value: Double): String = "${(value * 100).roundToLong() / 100.0}"
+
+
+@Composable
+private fun MoneyCalculatorCard() {
+    var expression by remember { mutableStateOf("") }
+    var result by remember { mutableStateOf("") }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Quick Calculator", style = MaterialTheme.typography.titleMedium)
+            OutlinedTextField(expression, { expression = it }, label = { Text("Example: 125 + 75") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = { result = calculateSimple(expression) }) { Text("Calculate") }
+            if (result.isNotEmpty()) Text("Result: $result", style = MaterialTheme.typography.titleMedium)
+        }
+    }
+}
+
+private fun calculateSimple(value: String): String {
+    val match = Regex("^\\\\s*(\\\\d+(?:\\\\.\\\\d+)?)\\\\s*([+\\\\-*/])\\\\s*(\\\\d+(?:\\\\.\\\\d+)?)\\\\s*$").matchEntire(value) ?: return "Invalid expression"
+    val a = match.groupValues[1].toDouble(); val op = match.groupValues[2]; val b = match.groupValues[3].toDouble()
+    if (op == "/" && b == 0.0) return "Cannot divide by zero"
+    val answer = when (op) { "+" -> a + b; "-" -> a - b; "*" -> a * b; else -> a / b }
+    return formatMoney(answer)
+}
