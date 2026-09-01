@@ -37,7 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import java.io.File
 
 @Composable
-fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit) {
+fun ConversationPanel(\n    chat: ChatPreview,\n    onBack: () -> Unit,\n    onVoiceCall: () -> Unit = {},\n    onVideoCall: () -> Unit = {}\n) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     var text by remember { mutableStateOf("") }
@@ -115,8 +115,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit) {
                     Text(chat.name, style = MaterialTheme.typography.titleMedium)
                     Text(if (chat.online) "online" else chat.username, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                IconButton(onClick = { }) { Icon(Icons.Default.Call, "Voice call") }
-                IconButton(onClick = { }) { Icon(Icons.Default.Videocam, "Video call") }
+                IconButton(onClick = onVoiceCall) { Icon(Icons.Default.Call, "Voice call") }
+                IconButton(onClick = onVideoCall) { Icon(Icons.Default.Videocam, "Video call") }
                 IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search") }
                 IconButton(onClick = { }) { Icon(Icons.Default.MoreVert, "More") }
             }
