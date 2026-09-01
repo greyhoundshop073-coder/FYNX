@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -9,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Home
@@ -27,7 +29,6 @@ import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -86,6 +87,24 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         FynxNavItem("Money Tools", "Money", Icons.Default.AccountBalanceWallet),
         FynxNavItem("Features", "More", Icons.Default.MoreHoriz)
     )
+    val mainDestinationKeys = remember(mainNav) { mainNav.map { it.key }.toSet() }
+    val isSecondaryDestination = selected !in mainDestinationKeys
+
+    BackHandler(enabled = openChat != null) {
+        openChat = null
+    }
+
+    BackHandler(enabled = openGroup != null && openChat == null) {
+        openGroup = null
+    }
+
+    BackHandler(enabled = openChat == null && openGroup == null && selected != "Home") {
+        selected = if (isSecondaryDestination) {
+            if (selected == "Notifications") "Home" else "Features"
+        } else {
+            "Home"
+        }
+    }
 
     if (openChat != null) {
         ConversationPanel(
@@ -144,8 +163,23 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         }
                     }
                 } else {
-                    Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
-                        Text(selected, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (isSecondaryDestination) {
+                            IconButton(onClick = {
+                                selected = if (selected == "Notifications") "Home" else "Features"
+                            }) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                            }
+                        } else {
+                            Spacer(Modifier.size(48.dp))
+                        }
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            Text(selected, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.size(48.dp))
                     }
                 }
             },
@@ -197,7 +231,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     "Calendar" -> CalendarPanel()
                     "Notifications" -> NotificationPanel(
                         notifications = notifications,
-                        onBack = { selected = "Features" },
+                        onBack = { selected = "Home" },
                         onNotificationRead = { notifications = FynxNotificationStore.load(context) },
                         onMarkAllRead = { notifications = FynxNotificationStore.load(context) }
                     )
@@ -227,7 +261,6 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     "Spending Insights" -> SpendingInsightsPanel()
                     "Money Alerts" -> MoneyAlertsPanel()
                     "Vault" -> SecureMoneyVaultPanel()
-                    // Safe fallback: a stale/deep-linked destination must never leave a blank screen.
                     else -> HomePanel()
                 }
             }
