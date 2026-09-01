@@ -36,7 +36,20 @@ fun FynxApp() {
             else -> TopAppBar(colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background), navigationIcon = { if (selected != "Money Tools" && selected != "Features") IconButton(onClick = { selected = "Home" }) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") } }, title = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Text(if (selected == "Money Tools") "Money Tools" else selected, color = colors.primary, fontWeight = FontWeight.Bold) } }, actions = { Spacer(Modifier.size(48.dp)) })
         } }, bottomBar = { NavigationBar(containerColor = colors.surface, tonalElevation = 8.dp) { mainNav.forEach { item -> NavigationBarItem(selected = selected == item.key, onClick = { selected = item.key }, icon = { Icon(item.icon, contentDescription = item.label) }, label = { Text(item.label) }, colors = NavigationBarItemDefaults.colors(selectedIconColor = colors.primary, selectedTextColor = colors.primary, indicatorColor = Color(0xFF132B49), unselectedIconColor = colors.onSurfaceVariant, unselectedTextColor = colors.onSurfaceVariant)) } } }) { padding ->
             Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 8.dp).pointerInput(selected) { var totalDrag = 0f; detectHorizontalDragGestures(onDragStart = { totalDrag = 0f }, onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount }, onDragEnd = { if (kotlin.math.abs(totalDrag) >= 80f) { val nextIndex = if (totalDrag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex) else (mainIndex - 1).coerceAtLeast(0); selected = mainNav[nextIndex].key } }) }) {
-                when (selected) { "Home" -> HomePanel(); "Chats" -> ChatsPanel(onOpenChat = { openChat = it }); "Friends" -> FriendsPanel(); "Stories" -> StoriesPanel(); "Money Tools" -> MoneyToolsPanel(); "Features" -> FynxFeaturesPanel(onSelect = { selected = it }); "Studio" -> AiStudioPanel(); "To-Do" -> TodoPanel(); "Calendar" -> CalendarPanel(); "Profile" -> ProfilePanel(session = authSession, onSignOut = { authSession = AuthSession() }); "Bills" -> BillsPaymentPanel() }
+                when (selected) {
+                    "Home" -> HomePanel()
+                    "Chats" -> ChatsPanel(onOpenChat = { openChat = it })
+                    "Friends" -> FriendsPanel()
+                    "Stories" -> StoriesPanel()
+                    "Money Tools" -> MoneyToolsPanel()
+                    "Features" -> FynxFeaturesPanel(onSelect = { selected = it })
+                    "Studio" -> AiStudioPanel()
+                    "To-Do" -> TodoPanel()
+                    "Calendar" -> CalendarPanel()
+                    "Profile" -> ProfilePanel(session = authSession, onSignOut = { authSession = AuthSession() })
+                    "Bills" -> BillsPaymentPanel()
+                    "Transactions" -> TransactionHistoryPanel()
+                }
             }
         }
         if (showSettings) AlertDialog(onDismissRequest = { showSettings = false }, title = { Text("Settings") }, text = { Text("FYNX settings") }, confirmButton = { TextButton(onClick = { showSettings = false }) { Text("Done") } })
@@ -45,7 +58,7 @@ fun FynxApp() {
 
 @Composable
 private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
-    val features = listOf(Triple("Studio", "AI Studio", Icons.Default.Settings), Triple("To-Do", "To-Do", Icons.Default.Person), Triple("Calendar", "Calendar", Icons.Default.Home), Triple("Bills", "Bills & Payment Reminders", Icons.Default.Person))
+    val features = listOf(Triple("Studio", "AI Studio", Icons.Default.Settings), Triple("To-Do", "To-Do", Icons.Default.Person), Triple("Calendar", "Calendar", Icons.Default.Home), Triple("Bills", "Bills & Payment Reminders", Icons.Default.Person), Triple("Transactions", "Transaction History", Icons.Default.Person))
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text("Access your tools in one place.", color = MaterialTheme.colorScheme.onSurfaceVariant)
