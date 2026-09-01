@@ -3,14 +3,9 @@ package com.fynx.app.ui
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,25 +27,20 @@ fun FynxApp() {
     var authSession by remember { mutableStateOf(AuthSession(state = AuthState.SIGNED_IN, username = "username")) }
 
     val colors = darkColorScheme(
-        primary = Color(0xFF2F8CFF),
-        onPrimary = Color.White,
-        secondary = Color(0xFF22C7F2),
-        background = Color(0xFF071326),
-        onBackground = Color(0xFFF5F8FF),
-        surface = Color(0xFF0D1B2E),
-        onSurface = Color(0xFFF5F8FF),
-        surfaceVariant = Color(0xFF15263D),
-        onSurfaceVariant = Color(0xFFB9C6D8),
+        primary = Color(0xFF2F8CFF), onPrimary = Color.White, secondary = Color(0xFF22C7F2),
+        background = Color(0xFF071326), onBackground = Color(0xFFF5F8FF), surface = Color(0xFF0D1B2E),
+        onSurface = Color(0xFFF5F8FF), surfaceVariant = Color(0xFF15263D), onSurfaceVariant = Color(0xFFB9C6D8),
         outline = Color(0xFF31445F)
     )
 
+    // Use only icons confirmed to exist in the current project. Labels/features remain unchanged.
     val mainNav = listOf(
         FynxNavItem("Home", "Home", Icons.Default.Home),
-        FynxNavItem("Chats", "Chats", Icons.Default.ChatBubbleOutline),
-        FynxNavItem("Friends", "Friends", Icons.Default.People),
-        FynxNavItem("Stories", "Stories", Icons.Default.PhotoCamera),
-        FynxNavItem("Money Tools", "Money", Icons.Default.AccountBalanceWallet),
-        FynxNavItem("Features", "Features", Icons.Default.Apps)
+        FynxNavItem("Chats", "Chats", Icons.Default.Person),
+        FynxNavItem("Friends", "Friends", Icons.Default.Person),
+        FynxNavItem("Stories", "Stories", Icons.Default.Home),
+        FynxNavItem("Money Tools", "Money", Icons.Default.Person),
+        FynxNavItem("Features", "Features", Icons.Default.Settings)
     )
 
     if (openChat != null) {
@@ -60,7 +50,6 @@ fun FynxApp() {
 
     MaterialTheme(colorScheme = colors) {
         val mainIndex = mainNav.indexOfFirst { it.key == selected }.coerceAtLeast(0)
-
         Scaffold(
             containerColor = colors.background,
             topBar = {
@@ -68,49 +57,19 @@ fun FynxApp() {
                     "Home" -> TopAppBar(
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background),
                         navigationIcon = { FynxAvatar("username", Modifier.size(34.dp)) },
-                        title = {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Text("FYNX", color = colors.primary, fontWeight = FontWeight.Bold)
-                            }
-                        },
-                        actions = {
-                            IconButton(onClick = { showSettings = true }) {
-                                Icon(Icons.Default.Settings, contentDescription = "Settings")
-                            }
-                        }
+                        title = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Text("FYNX", color = colors.primary, fontWeight = FontWeight.Bold) } },
+                        actions = { IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, contentDescription = "Settings") } }
                     )
                     "Friends", "Stories" -> TopAppBar(
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background),
-                        navigationIcon = {
-                            IconButton(onClick = { selected = "Home" }) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                            }
-                        },
-                        title = {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Text(selected, color = colors.primary, fontWeight = FontWeight.Bold)
-                            }
-                        },
+                        navigationIcon = { IconButton(onClick = { selected = "Home" }) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") } },
+                        title = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Text(selected, color = colors.primary, fontWeight = FontWeight.Bold) } },
                         actions = { Spacer(Modifier.size(48.dp)) }
                     )
                     else -> TopAppBar(
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background),
-                        navigationIcon = {
-                            if (selected != "Money Tools" && selected != "Features") {
-                                IconButton(onClick = { selected = "Home" }) {
-                                    Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                                }
-                            }
-                        },
-                        title = {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Text(
-                                    if (selected == "Money Tools") "Money Tools" else selected,
-                                    color = colors.primary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        },
+                        navigationIcon = { if (selected != "Money Tools" && selected != "Features") IconButton(onClick = { selected = "Home" }) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") } },
+                        title = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Text(if (selected == "Money Tools") "Money Tools" else selected, color = colors.primary, fontWeight = FontWeight.Bold) } },
                         actions = { Spacer(Modifier.size(48.dp)) }
                     )
                 }
@@ -119,15 +78,11 @@ fun FynxApp() {
                 NavigationBar(containerColor = colors.surface, tonalElevation = 8.dp) {
                     mainNav.forEach { item ->
                         NavigationBarItem(
-                            selected = selected == item.key,
-                            onClick = { selected = item.key },
-                            icon = { Icon(item.icon, contentDescription = item.label) },
-                            label = { Text(item.label) },
+                            selected = selected == item.key, onClick = { selected = item.key },
+                            icon = { Icon(item.icon, contentDescription = item.label) }, label = { Text(item.label) },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = colors.primary,
-                                selectedTextColor = colors.primary,
-                                indicatorColor = Color(0xFF132B49),
-                                unselectedIconColor = colors.onSurfaceVariant,
+                                selectedIconColor = colors.primary, selectedTextColor = colors.primary,
+                                indicatorColor = Color(0xFF132B49), unselectedIconColor = colors.onSurfaceVariant,
                                 unselectedTextColor = colors.onSurfaceVariant
                             )
                         )
@@ -136,27 +91,19 @@ fun FynxApp() {
             }
         ) { padding ->
             Box(
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .pointerInput(selected) {
-                        var totalDrag = 0f
-                        detectHorizontalDragGestures(
-                            onDragStart = { totalDrag = 0f },
-                            onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
-                            onDragEnd = {
-                                if (kotlin.math.abs(totalDrag) >= 80f) {
-                                    val nextIndex = if (totalDrag < 0) {
-                                        (mainIndex + 1).coerceAtMost(mainNav.lastIndex)
-                                    } else {
-                                        (mainIndex - 1).coerceAtLeast(0)
-                                    }
-                                    selected = mainNav[nextIndex].key
-                                }
+                Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 8.dp).pointerInput(selected) {
+                    var totalDrag = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { totalDrag = 0f },
+                        onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
+                        onDragEnd = {
+                            if (kotlin.math.abs(totalDrag) >= 80f) {
+                                val nextIndex = if (totalDrag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex) else (mainIndex - 1).coerceAtLeast(0)
+                                selected = mainNav[nextIndex].key
                             }
-                        )
-                    }
+                        }
+                    )
+                }
             ) {
                 when (selected) {
                     "Home" -> HomePanel()
@@ -168,23 +115,12 @@ fun FynxApp() {
                     "Studio" -> AiStudioPanel()
                     "To-Do" -> TodoPanel()
                     "Calendar" -> CalendarPanel()
-                    "Profile" -> ProfilePanel(
-                        session = authSession,
-                        onSignOut = { authSession = AuthSession() }
-                    )
+                    "Profile" -> ProfilePanel(session = authSession, onSignOut = { authSession = AuthSession() })
                 }
             }
         }
-
         if (showSettings) {
-            AlertDialog(
-                onDismissRequest = { showSettings = false },
-                title = { Text("Settings") },
-                text = { Text("FYNX settings") },
-                confirmButton = {
-                    TextButton(onClick = { showSettings = false }) { Text("Done") }
-                }
-            )
+            AlertDialog(onDismissRequest = { showSettings = false }, title = { Text("Settings") }, text = { Text("FYNX settings") }, confirmButton = { TextButton(onClick = { showSettings = false }) { Text("Done") } })
         }
     }
 }
@@ -192,27 +128,17 @@ fun FynxApp() {
 @Composable
 private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
     val features = listOf(
-        Triple("Studio", "AI Studio", Icons.Default.Apps),
+        Triple("Studio", "AI Studio", Icons.Default.Settings),
         Triple("To-Do", "To-Do", Icons.Default.Person),
-        Triple("Calendar", "Calendar", Icons.Default.PhotoCamera)
+        Triple("Calendar", "Calendar", Icons.Default.Home)
     )
-
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(
-            "Access your tools in one place.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Text("Access your tools in one place.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(6.dp))
         features.forEach { (key, label, icon) ->
-            Card(
-                onClick = { onSelect(key) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            Card(onClick = { onSelect(key) }, modifier = Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(14.dp))
                     Text(label, style = MaterialTheme.typography.titleMedium)
