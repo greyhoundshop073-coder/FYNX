@@ -8,56 +8,69 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun MoneyInsightsPanel() {
-    var incomeText by remember { mutableStateOf("") }
-    var expenseText by remember { mutableStateOf("") }
-    var savingsText by remember { mutableStateOf("") }
-    var categoryText by remember { mutableStateOf("") }
-    var showReport by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val transactions = remember { mutableStateOf(FynxMoneyStore.loadTransactions(context)) }
+    var selectedType by remember { mutableStateOf("All") }
 
-    val income = incomeText.toDoubleOrNull() ?: 0.0
-    val expenses = expenseText.toDoubleOrNull() ?: 0.0
-    val savings = savingsText.toDoubleOrNull() ?: 0.0
+    val visible = transactions.value.filter { selectedType == "All" || it.type == selectedType }
+    val income = transactions.value.filter { it.type == "Income" }.sumOf { it.amount }
+    val expenses = transactions.value.filter { it.type == "Expense" }.sumOf { it.amount }
     val net = income - expenses
-    val savingsRate = if (income > 0) (savings / income * 100).coerceIn(0.0, 100.0) else 0.0
+    val savingsRate = if (income > 0) ((net / income) * 100).coerceIn(0.0, 100.0) else 0.0
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Money Insights & Reports 📊", style = MaterialTheme.typography.headlineSmall)
-        Text("A simple view of your money patterns.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Money Insights & Reports", style = MaterialTheme.typography.headlineSmall)
+        Text("Insights are calculated from your saved FYNX money activity.", color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Report inputs", style = MaterialTheme.typography.titleMedium)
-                OutlinedTextField(incomeText, { incomeText = it }, label = { Text("Income") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(expenseText, { expenseText = it }, label = { Text("Expenses") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(savingsText, { savingsText = it }, label = { Text("Savings") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(categoryText, { categoryText = it }, label = { Text("Top spending category (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Button(onClick = { showReport = true }) { Text("Generate Report") }
+                Text("Financial Summary", style = MaterialTheme.typography.titleMedium)
+                Text("Income: ${money(income)}")
+                Text("Expenses: ${money(expenses)}")
+                Text("Net: ${money(net)}")
+                Text("Savings rate: ${money(savingsRate)}%")
             }
         }
 
-        if (showReport) {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Text("Financial Summary", style = MaterialTheme.typography.titleMedium)
-                    Text("Income: ${money(income)}")
-                    Text("Expenses: ${money(expenses)}")
-                    Text("Net: ${money(net)}")
-                    Text("Savings: ${money(savings)}")
-                    Text("Savings rate: ${money(savingsRate)}%")
-                    if (categoryText.isNotBlank()) Text("Top spending category: ${categoryText.trim()}")
-                    Text(
-                        when {
-                            income <= 0.0 -> "💡 Add income to generate a more useful insight."
-                            expenses > income -> "⚠️ Your expenses are higher than your income. Consider reviewing your spending."
-                            savingsRate >= 20.0 -> "🌟 Good progress: your savings rate is at least 20%."
-                            savings > 0.0 -> "💡 You are saving, but there may be room to increase your savings rate."
-                            else -> "💡 Consider setting a small savings target for the next period."
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = selectedType == "All", onClick = { selectedType = "All" }, label = { Text("All") })
+            FilterChip(selected = selectedType == "Income", onClick = { selectedType = "Income" }, label = { Text("Income") })
+            FilterChip(selected = selectedType == "Expense", onClick = { selectedType = "Expense" }, label = { Text("Expenses") })
+        }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text("Activity", style = MaterialTheme.typography.titleMedium)
+                if (visible.isEmpty()) {
+                    Text("No saved transactions yet. Add activity from Money Tools.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    visible.takeLast(8).reversed().forEach { item ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column(Modifier.weight(1f)) {
+                                Text(item.title)
+                                Text(item.date, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Text("${if (item.type == "Income") "+" else "-"}${money(item.amount)}")
                         }
-                    )
-                    Text("This report only analyzes information entered in FYNX; it does not move money or access a bank account.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }
+
+        Card(Modifier.fillMaxWidth()) {
+            Text(
+                when {
+                    transactions.value.isEmpty() -> "Add a few transactions to unlock useful spending and income patterns."
+                    expenses > income -> "Your saved expenses currently exceed your saved income. Review recent spending."
+                    savingsRate >= 20.0 -> "Your saved activity shows a savings rate of at least 20%. Keep it consistent."
+                    net > 0.0 -> "Your saved activity is currently positive. Consider assigning part of the surplus to a savings goal."
+                    else -> "Keep recording transactions to make these insights more useful."
+                },
+                modifier = Modifier.padding(16.dp)
+            )
+        }
+
+        Text("FYNX only analyzes locally saved activity here. It does not access bank accounts or move real money.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
