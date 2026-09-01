@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,7 +21,7 @@ import androidx.compose.ui.unit.dp
 private data class FynxGroupItem(val name: String, val members: Int, val online: Int, val preview: String)
 
 @Composable
-fun FynxGroupsPanel(onOpenGroup: (FynxGroupItem) -> Unit = {}) {
+fun FynxGroupsPanel(onOpenGroup: (String) -> Unit = {}) {
     var query by remember { mutableStateOf("") }
     val groups = remember {
         listOf(
@@ -53,7 +54,7 @@ fun FynxGroupsPanel(onOpenGroup: (FynxGroupItem) -> Unit = {}) {
         Spacer(Modifier.height(14.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(visible, key = { it.name }) { group ->
-                Card(onClick = { onOpenGroup(group) }, modifier = Modifier.fillMaxWidth()) {
+                Card(onClick = { onOpenGroup(group.name) }, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
                             Icon(Icons.Default.Group, "Group", tint = MaterialTheme.colorScheme.primary)
@@ -77,11 +78,11 @@ fun FynxGroupConversationPanel(groupName: String, onBack: () -> Unit) {
     var text by remember { mutableStateOf("") }
     var messages by remember { mutableStateOf(listOf("Welcome to $groupName")) }
     Column(Modifier.fillMaxSize().background(FynxDesign.Background)) {
-        TopAppBar(
-            title = { Text(groupName) },
-            navigationIcon = { IconButton(onClick = onBack) { Text("‹") } },
-            actions = { IconButton(onClick = {}) { Icon(Icons.Default.Group, "Members") } }
-        )
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Text("‹") }
+            Text(groupName, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            IconButton(onClick = {}) { Icon(Icons.Default.Group, "Members") }
+        }
         LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(messages) { message ->
                 Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.large) {
@@ -90,9 +91,9 @@ fun FynxGroupConversationPanel(groupName: String, onBack: () -> Unit) {
             }
         }
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.Bottom) {
-            OutlinedTextField(text, { text = it }, Modifier.weight(1f), placeholder = { Text("Message…") }, maxLines = 4)
+            OutlinedTextField(text, { text = it }, Modifier.weight(1f), placeholder = { Text("Message…") }, maxLines = 4, shape = MaterialTheme.shapes.large)
             Spacer(Modifier.width(6.dp))
-            IconButton(onClick = { if (text.isNotBlank()) { messages = messages + text.trim(); text = "" } }) { Text("➤") }
+            IconButton(onClick = { if (text.isNotBlank()) { messages = messages + text.trim(); text = "" } }) { Icon(Icons.Default.Send, "Send") }
         }
     }
 }
