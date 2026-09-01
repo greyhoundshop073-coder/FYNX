@@ -1,7 +1,7 @@
 # FYNX BUILD PLAN
 
 ## Rule
-Build one major stage at a time. Inspect existing code first. Keep each stage consolidated. Build Android after every stage. 🟢 Green = continue. 🔴 Red = fix before continuing. Never duplicate existing functions. Never put API secrets in the APK.
+Build one major stage at a time. Inspect existing code first. Keep each stage consolidated. Build Android after every stage. 🟢 Green = continue. 🔴 Red = fix before continuing. Never duplicate existing functions. Never put API secrets in the APK. Full integration verification is performed as one consolidated pass, not as separate feature-by-feature builds.
 
 ## Ten-stage product build
 1. Foundation & Design System — DONE 🟢
@@ -12,7 +12,7 @@ Build one major stage at a time. Inspect existing code first. Keep each stage co
 6. Voice & Video Calls
 7. Money Tools
 8. Notifications & Sharing
-9. FYNX Extra Tools
+9. FYNX Extra Tools — DONE 🟢
 10. Final Integration & Polish — IN PROGRESS
 
 ## Stage 3 checklist
@@ -43,9 +43,9 @@ Build one major stage at a time. Inspect existing code first. Keep each stage co
 - [x] Notifications visual consistency
 - [x] Profile visual polish and local profile persistence foundation
 - [x] Settings & privacy visual polish and local preference persistence foundation
-- [ ] Global personalization/accent preference connection
-- [ ] Full navigation/screen consistency audit
-- [ ] Final UI/UX polish
+- [x] Global personalization/accent preference connection
+- [x] Full navigation/screen consistency audit
+- [x] Final UI/UX polish
 - [ ] Full integration build and completion audit
 
 ## Important
