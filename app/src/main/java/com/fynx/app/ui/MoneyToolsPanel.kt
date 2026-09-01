@@ -30,6 +30,8 @@ fun MoneyToolsPanel() {
         Spacer(Modifier.height(12.dp))
         CurrencyConverterCard()
         Spacer(Modifier.height(12.dp))
+        FynxMoneyTransferPanel()
+        Spacer(Modifier.height(12.dp))
         Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("Money Dashboard 💰", style = MaterialTheme.typography.titleLarge)
             Text("Available tracked balance", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
