@@ -3,6 +3,7 @@ package com.fynx.app.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,25 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.ShoppingBag
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.AttachMoney
-import androidx.compose.material.icons.filled.Autorenew
-import androidx.compose.material.icons.filled.PieChart
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,7 +23,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 private const val FYNX_PREVIEW_MODE = true
-
 private data class FynxNavItem(val key: String, val label: String, val icon: ImageVector)
 
 @Composable
@@ -51,10 +33,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var openGroup by remember { mutableStateOf<String?>(null) }
     var callTarget by remember { mutableStateOf<String?>(null) }
     var callVideo by remember { mutableStateOf(false) }
-    var showSettings by remember { mutableStateOf(false) }
-    var authSession by remember {
-        mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else FynxAuthStore.load(context))
-    }
+    var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else FynxAuthStore.load(context)) }
     var notifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
     var inviteCode by remember { mutableStateOf<String?>(null) }
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
@@ -95,7 +74,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     BackHandler(enabled = openChat != null) { openChat = null }
     BackHandler(enabled = openGroup != null && openChat == null) { openGroup = null }
     BackHandler(enabled = openChat == null && openGroup == null && selected != "Home") {
-        selected = if (isSecondaryDestination) { if (selected == "Notifications") "Home" else "Features" } else "Home"
+        selected = if (isSecondaryDestination) {
+            when (selected) { "Notifications", "Stories", "Profile" -> "Home"; else -> "Features" }
+        } else "Home"
     }
 
     if (openChat != null) {
@@ -117,26 +98,29 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     FynxTheme(accent = accent) {
         val mainIndex = mainNav.indexOfFirst { it.key == selected }.coerceAtLeast(0)
         val unreadNotifications = notifications.unreadNotificationCount()
+
         Scaffold(
             containerColor = FynxDesign.Background,
             topBar = {
                 if (selected == "Home") {
                     Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        FynxAvatar(authSession.username?.ifBlank { "preview" } ?: "preview", Modifier.size(34.dp))
+                        IconButton(onClick = { selected = "Profile" }) {
+                            FynxAvatar(authSession.username?.ifBlank { "preview" } ?: "preview", Modifier.size(34.dp))
+                        }
                         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             BadgedBox(badge = { if (unreadNotifications > 0) Badge { Text(unreadNotifications.toString()) } }) {
                                 IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
                             }
-                            IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, "Settings") }
+                            IconButton(onClick = { selected = "Profile" }) { Icon(Icons.Default.Settings, "Settings") }
                         }
                     }
                 } else {
                     Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (isSecondaryDestination) {
-                            IconButton(onClick = { selected = if (selected == "Notifications") "Home" else "Features" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                            IconButton(onClick = { selected = if (selected == "Notifications" || selected == "Stories" || selected == "Profile") "Home" else "Features" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                         } else Spacer(Modifier.size(48.dp))
-                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text(selected, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text(if (selected == "Marketplace") "Marketplace" else selected, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
                         Spacer(Modifier.size(48.dp))
                     }
                 }
@@ -149,31 +133,45 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                             onClick = { selected = item.key },
                             icon = { Icon(item.icon, contentDescription = item.label) },
                             label = { Text(item.label) },
-                            colors = NavigationBarItemDefaults.colors(selectedIconColor = MaterialTheme.colorScheme.primary, selectedTextColor = MaterialTheme.colorScheme.primary, indicatorColor = FynxDesign.SelectedContainer, unselectedIconColor = FynxDesign.TextSecondary, unselectedTextColor = FynxDesign.TextSecondary)
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = FynxDesign.SelectedContainer,
+                                unselectedIconColor = FynxDesign.TextSecondary,
+                                unselectedTextColor = FynxDesign.TextSecondary
+                            )
                         )
                     }
                 }
             }
         ) { padding ->
             Box(Modifier.fillMaxSize()) {
-                Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 8.dp).widthIn(max = 720.dp).align(Alignment.Center).pointerInput(selected) {
-                    var totalDrag = 0f
-                    detectHorizontalDragGestures(onDragStart = { totalDrag = 0f }, onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount }, onDragEnd = {
-                        if (kotlin.math.abs(totalDrag) >= 80f) {
-                            val nextIndex = if (totalDrag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex) else (mainIndex - 1).coerceAtLeast(0)
-                            selected = mainNav[nextIndex].key
+                Box(
+                    Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 8.dp).widthIn(max = 720.dp).align(Alignment.Center)
+                        .pointerInput(selected) {
+                            var totalDrag = 0f
+                            detectHorizontalDragGestures(
+                                onDragStart = { totalDrag = 0f },
+                                onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
+                                onDragEnd = {
+                                    if (kotlin.math.abs(totalDrag) >= 80f) {
+                                        val nextIndex = if (totalDrag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex) else (mainIndex - 1).coerceAtLeast(0)
+                                        selected = mainNav[nextIndex].key
+                                    }
+                                }
+                            )
                         }
-                    })
-                }) {
+                ) {
                     when (selected) {
-                        "Home" -> HomePanel()
-                        "Chats" -> ChatsPanel(onOpenChat = { openChat = it })
+                        "Home" -> HomePanel(onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" })
+                        "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it })
                         "Friends" -> FriendsPanel()
                         "Marketplace" -> FynxMarketplacePanel()
                         "Money Tools" -> MoneyToolsPanel()
                         "Features" -> FynxFeaturesPanel(onSelect = { selected = it })
                         "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
                         "Calendar" -> CalendarPanel()
+                        "Stories" -> StoriesPanel()
                         "Notifications" -> NotificationPanel(notifications = notifications, onBack = { selected = "Home" }, onNotificationRead = { notifications = FynxNotificationStore.load(context) }, onMarkAllRead = { notifications = FynxNotificationStore.load(context) })
                         "Share" -> FynxSharePanel()
                         "Invite" -> FynxInvitePanel(code = inviteCode, onShare = { FynxShareActions.share(context, FynxShareActions.defaultPayload()) }, onBack = { selected = "Features" })
@@ -193,25 +191,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         "Spending Insights" -> SpendingInsightsPanel()
                         "Money Alerts" -> MoneyAlertsPanel()
                         "Vault" -> SecureMoneyVaultPanel()
-                        else -> HomePanel()
+                        else -> HomePanel(onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" })
                     }
                 }
             }
-        }
-        if (showSettings) {
-            AlertDialog(onDismissRequest = { showSettings = false }, title = { Text("FYNX Personalization") }, text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Choose your accent color", style = MaterialTheme.typography.titleMedium)
-                    Text("Your choice changes the global FYNX accent while keeping the approved dark surfaces and layout.", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall)
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FynxAccent.values().forEach { option ->
-                            OutlinedButton(onClick = { accent = option; FynxPreferencesStore.saveAccent(context, option) }, shape = FynxDesign.ControlShape, border = BorderStroke(1.dp, if (accent == option) option.primary else FynxDesign.Outline)) {
-                                Text("●", color = option.primary); Spacer(Modifier.width(5.dp)); Text(option.name)
-                            }
-                        }
-                    }
-                }
-            }, confirmButton = { TextButton(onClick = { showSettings = false }) { Text("Done") } })
         }
     }
 }
@@ -220,7 +203,16 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
 private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
     var searchQuery by remember { mutableStateOf("") }
     val features = listOf(
-        Triple("Calls", "Voice & Video Calls", Icons.Default.Call), Triple("Notifications", "Notifications", Icons.Default.Notifications), Triple("Share", "Share & Invite", Icons.Default.Share), Triple("To-Do", "To-Do", Icons.Default.CheckCircle), Triple("Calendar", "Calendar", Icons.Default.DateRange), Triple("Bills", "Bills & Payment Reminders", Icons.Default.AccountBalance), Triple("Transactions", "Transaction History", Icons.Default.History), Triple("Accounts", "Accounts & Wallets", Icons.Default.AccountBalanceWallet), Triple("Budget", "Budget Planner", Icons.Default.AttachMoney), Triple("Currency", "Currency Converter", Icons.Default.AttachMoney), Triple("Savings", "Savings Goals", Icons.Default.AccountBalance), Triple("Subscriptions", "Subscriptions & Recurring Payments", Icons.Default.Autorenew), Triple("Overview", "Financial Overview", Icons.Default.PieChart), Triple("Receipts", "Receipts & Expenses", Icons.Default.AccountBalance), Triple("Insights", "Money Insights", Icons.Default.PieChart), Triple("Spending Insights", "Spending Insights", Icons.Default.PieChart), Triple("Money Alerts", "Money Alerts", Icons.Default.Notifications), Triple("Vault", "Secure Money Vault", Icons.Default.Lock), Triple("Extra Tools", "Extra Tools", Icons.Default.Build)
+        Triple("Calls", "Voice & Video Calls", Icons.Default.Call), Triple("Notifications", "Notifications", Icons.Default.Notifications),
+        Triple("Share", "Share & Invite", Icons.Default.Share), Triple("To-Do", "To-Do", Icons.Default.CheckCircle),
+        Triple("Calendar", "Calendar", Icons.Default.DateRange), Triple("Bills", "Bills & Payment Reminders", Icons.Default.AccountBalance),
+        Triple("Transactions", "Transaction History", Icons.Default.History), Triple("Accounts", "Accounts & Wallets", Icons.Default.AccountBalanceWallet),
+        Triple("Budget", "Budget Planner", Icons.Default.AttachMoney), Triple("Currency", "Currency Converter", Icons.Default.AttachMoney),
+        Triple("Savings", "Savings Goals", Icons.Default.AccountBalance), Triple("Subscriptions", "Subscriptions & Recurring Payments", Icons.Default.Autorenew),
+        Triple("Overview", "Financial Overview", Icons.Default.PieChart), Triple("Receipts", "Receipts & Expenses", Icons.Default.AccountBalance),
+        Triple("Insights", "Money Insights", Icons.Default.PieChart), Triple("Spending Insights", "Spending Insights", Icons.Default.PieChart),
+        Triple("Money Alerts", "Money Alerts", Icons.Default.Notifications), Triple("Vault", "Secure Money Vault", Icons.Default.Lock),
+        Triple("Extra Tools", "Extra Tools", Icons.Default.Build)
     )
     val filteredFeatures = features.filter { (_, label, _) -> searchQuery.isBlank() || label.contains(searchQuery.trim(), ignoreCase = true) }
     Column(Modifier.fillMaxSize()) {
