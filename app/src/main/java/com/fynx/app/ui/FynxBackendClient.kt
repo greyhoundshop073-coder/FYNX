@@ -37,8 +37,8 @@ object FynxBackendClient {
     fun hasAccessToken(context: Context): Boolean = accessToken(context) != null
 
     suspend fun get(context: Context, path: String): Result<String> = request(context, "GET", path, null)
-
     suspend fun postJson(context: Context, path: String, body: String): Result<String> = request(context, "POST", path, body)
+    suspend fun delete(context: Context, path: String): Result<String> = request(context, "DELETE", path, null)
 
     private suspend fun request(context: Context, method: String, path: String, body: String?): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
