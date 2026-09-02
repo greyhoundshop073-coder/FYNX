@@ -19,9 +19,13 @@ import androidx.compose.ui.unit.dp
 fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
     val context = LocalContext.current
     val store = remember { FynxFriendsStore(context) }
+    val privacyStore = remember { FynxPhoneDiscoveryPrivacyStore(context) }
     val currentUsername = remember { FynxAuthStore.storedUsername(context)?.let(::normalizeUsername) ?: "@preview" }
     var query by remember { mutableStateOf("") }
     var section by remember { mutableStateOf("Friends") }
+    var searchMethod by remember { mutableStateOf(FynxPeopleSearchMethod.USERNAME) }
+    var showPhonePrivacy by remember { mutableStateOf(false) }
+    var phonePrivacy by remember { mutableStateOf(privacyStore.load()) }
     var relationships by remember { mutableStateOf(store.load()) }
     var chats by remember { mutableStateOf(FynxChatStore.loadPreviews(context)) }
 
@@ -39,7 +43,17 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
             chats.none { normalizeUsername(it.username).equals(normalizeUsername(relationship.username), ignoreCase = true) }
         }).distinctBy { normalizeUsername(it.username) }
     }
-    val filtered = knownProfiles.filter { query.isBlank() || it.username.contains(query.trim(), true) || it.displayName.contains(query.trim(), true) }
+
+    val normalizedQuery = if (searchMethod == FynxPeopleSearchMethod.USERNAME) {
+        normalizeUsername(query)
+    } else {
+        FynxPeopleDiscovery.normalizePhone(query)
+    }
+    val filtered = if (query.isBlank()) knownProfiles else knownProfiles.filter {
+        if (searchMethod == FynxPeopleSearchMethod.USERNAME) {
+            it.username.contains(query.trim(), true) || it.displayName.contains(query.trim(), true)
+        } else false
+    }
     val friends = filtered.filter { it.status == FynxFriendStatus.FRIENDS }
     val incoming = filtered.filter { it.status == FynxFriendStatus.INCOMING_PENDING }
     val outgoing = filtered.filter { it.status == FynxFriendStatus.OUTGOING_PENDING }
@@ -47,13 +61,66 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
     val blocked = filtered.filter { it.status == FynxFriendStatus.BLOCKED }
 
     Column(Modifier.fillMaxSize().background(FynxDesign.Background).padding(16.dp)) {
+        Text("Find People", style = MaterialTheme.typography.headlineSmall)
+        Text("Connect using a FYNX username or phone number.", color = FynxDesign.TextSecondary)
+        Spacer(Modifier.height(10.dp))
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FilterChip(
+                selected = searchMethod == FynxPeopleSearchMethod.USERNAME,
+                onClick = { searchMethod = FynxPeopleSearchMethod.USERNAME; query = "" },
+                label = { Text("Username") }
+            )
+            FilterChip(
+                selected = searchMethod == FynxPeopleSearchMethod.PHONE,
+                onClick = { searchMethod = FynxPeopleSearchMethod.PHONE; query = "" },
+                label = { Text("Phone number") }
+            )
+            Spacer(Modifier.weight(1f))
+            OutlinedButton(onClick = { showPhonePrivacy = true }, shape = FynxDesign.ControlShape, border = BorderStroke(1.dp, FynxDesign.Outline)) {
+                Text("Privacy")
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(value = query, onValueChange = { query = it.take(80) }, modifier = Modifier.weight(1f), singleLine = true,
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") }, placeholder = { Text("Search known FYNX usernames") }, shape = FynxDesign.ControlShape)
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it.take(80) },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                placeholder = { Text(if (searchMethod == FynxPeopleSearchMethod.USERNAME) "@username" else "+234 801 234 5678") },
+                shape = FynxDesign.ControlShape
+            )
             OutlinedButton(onClick = { shareFynx(context) }, shape = FynxDesign.ControlShape, border = BorderStroke(1.dp, FynxDesign.Outline)) { Text("Invite") }
         }
+
+        if (searchMethod == FynxPeopleSearchMethod.PHONE && query.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            val validation = FynxPeopleDiscovery.validate(FynxPeopleSearchRequest(searchMethod, normalizedQuery))
+            if (validation != null) {
+                Text(validation, color = MaterialTheme.colorScheme.error)
+            } else {
+                Card(
+                    Modifier.fillMaxWidth(),
+                    shape = FynxDesign.CardShape,
+                    colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+                    border = BorderStroke(1.dp, FynxDesign.Outline)
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Phone-number search is ready for secure account lookup", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "FYNX will match a verified phone number to an account without revealing the number. Server-wide lookup will activate when the social backend is connected.",
+                            color = FynxDesign.TextSecondary
+                        )
+                    }
+                }
+            }
+        }
+
         Spacer(Modifier.height(14.dp))
-        Text("Friends", style = MaterialTheme.typography.headlineSmall)
+        Text("Friends", style = MaterialTheme.typography.titleLarge)
         Text("Manage real people you have connected with. No demo accounts are added.", color = FynxDesign.TextSecondary)
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -86,9 +153,14 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
                     }
                 }
                 "Discover" -> {
-                    if (discover.isEmpty()) emptyState("No people to discover", "Search a known FYNX username or use Invite to bring someone to FYNX. Server-wide discovery will be connected with the social backend.")
-                    items(discover, key = { "discover_${it.username}" }) { person ->
-                        FriendRow(person, "Add Friend", onOpenProfile, onAction = { store.sendRequest(person); refresh() })
+                    if (searchMethod == FynxPeopleSearchMethod.PHONE) {
+                        emptyState("Phone discovery is backend-ready", "Enter a phone number above. A secure FYNX account lookup will return the matching profile once server account sync is connected.")
+                    } else if (discover.isEmpty()) {
+                        emptyState("No people to discover", "Search a known FYNX username or use Invite to bring someone to FYNX. Server-wide discovery will be connected with the social backend.")
+                    } else {
+                        items(discover, key = { "discover_${it.username}" }) { person ->
+                            FriendRow(person, "Add Friend", onOpenProfile, onAction = { store.sendRequest(person); refresh() })
+                        }
                     }
                 }
                 else -> {
@@ -99,6 +171,35 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
                 }
             }
         }
+    }
+
+    if (showPhonePrivacy) {
+        AlertDialog(
+            onDismissRequest = { showPhonePrivacy = false },
+            title = { Text("Phone discovery privacy") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Choose who can use your verified phone number to find your FYNX account.")
+                    FynxPhoneDiscoveryVisibility.values().forEach { option ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = phonePrivacy == option, onClick = {
+                                phonePrivacy = option
+                                privacyStore.save(option)
+                            })
+                            Text(
+                                when (option) {
+                                    FynxPhoneDiscoveryVisibility.EVERYONE -> "Everyone"
+                                    FynxPhoneDiscoveryVisibility.CONTACTS_ONLY -> "Contacts only"
+                                    FynxPhoneDiscoveryVisibility.NOBODY -> "Nobody"
+                                }
+                            )
+                        }
+                    }
+                    Text("This preference is stored locally until account privacy settings are synchronized with the FYNX backend.", color = FynxDesign.TextSecondary)
+                }
+            },
+            confirmButton = { TextButton(onClick = { showPhonePrivacy = false }) { Text("Done") } }
+        )
     }
 }
 
