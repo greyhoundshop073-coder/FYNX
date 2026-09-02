@@ -44,6 +44,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
     val incoming = filtered.filter { it.status == FynxFriendStatus.INCOMING_PENDING }
     val outgoing = filtered.filter { it.status == FynxFriendStatus.OUTGOING_PENDING }
     val discover = filtered.filter { it.status == FynxFriendStatus.NONE || it.status == FynxFriendStatus.DECLINED }
+    val blocked = filtered.filter { it.status == FynxFriendStatus.BLOCKED }
 
     Column(Modifier.fillMaxSize().background(FynxDesign.Background).padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -56,7 +57,9 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
         Text("Manage real people you have connected with. No demo accounts are added.", color = FynxDesign.TextSecondary)
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("Friends", "Requests", "Sent", "Discover").forEach { tab -> FilterChip(selected = section == tab, onClick = { section = tab }, label = { Text(tab) }) }
+            listOf("Friends", "Requests", "Sent", "Discover", "Blocked").forEach { tab ->
+                FilterChip(selected = section == tab, onClick = { section = tab }, label = { Text(tab) })
+            }
         }
         Spacer(Modifier.height(10.dp))
 
@@ -82,10 +85,16 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
                         FriendRow(person, "Cancel", onOpenProfile, onAction = { store.cancelRequest(person.username); refresh() })
                     }
                 }
-                else -> {
-                    if (discover.isEmpty()) emptyState("No people to discover", "Open a real conversation first or use Invite to bring someone to FYNX.")
+                "Discover" -> {
+                    if (discover.isEmpty()) emptyState("No people to discover", "Search a known FYNX username or use Invite to bring someone to FYNX. Server-wide discovery will be connected with the social backend.")
                     items(discover, key = { "discover_${it.username}" }) { person ->
                         FriendRow(person, "Add Friend", onOpenProfile, onAction = { store.sendRequest(person); refresh() })
+                    }
+                }
+                else -> {
+                    if (blocked.isEmpty()) emptyState("No blocked accounts", "Accounts you block will stay out of your normal friend and discovery lists.")
+                    items(blocked, key = { "blocked_${it.username}" }) { person ->
+                        FriendRow(person, "Unblock", onOpenProfile, onAction = { store.unblock(person.username); refresh() })
                     }
                 }
             }
