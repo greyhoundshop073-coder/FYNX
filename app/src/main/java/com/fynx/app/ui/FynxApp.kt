@@ -82,7 +82,20 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     }
 
     if (profileUser != null) {
-        FynxTheme(accent = accent) { OtherUserProfilePanel(username = profileUser!!, onBack = { profileUser = null }, onMessage = { name -> openChat = sampleChats.firstOrNull { it.username == name } ?: ChatPreview(name, name, "", false, "Start a conversation"); profileUser = null }) }\n        return\n    }\n    if (openChat != null) {
+        FynxTheme(accent = accent) {
+            OtherUserProfilePanel(
+                username = profileUser!!,
+                onBack = { profileUser = null },
+                onMessage = { name ->
+                    openChat = sampleChats.firstOrNull { it.username == name }
+                        ?: ChatPreview(name, name, "Start a conversation", "Now")
+                    profileUser = null
+                }
+            )
+        }
+        return
+    }
+    if (openChat != null) {
         FynxTheme(accent = accent) {
             ConversationPanel(
                 chat = openChat!!,
