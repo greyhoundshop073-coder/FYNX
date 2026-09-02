@@ -88,14 +88,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 onBack = { profileUser = null },
                 onMessage = { username ->
                     val normalizedUsername = username.trim().let { if (it.startsWith("@")) it else "@$it" }
-                    val existing = FynxChatStore.loadPreviews(context)
-                        .firstOrNull { it.username.equals(normalizedUsername, ignoreCase = true) }
-                    openChat = existing ?: ChatPreview(
-                        name = normalizedUsername.removePrefix("@").ifBlank { "FYNX user" },
-                        username = normalizedUsername,
-                        lastMessage = "Start a conversation",
-                        time = "Now"
-                    )
+                    val existing = FynxChatStore.loadPreviews(context).firstOrNull { it.username.equals(normalizedUsername, ignoreCase = true) }
+                    openChat = existing ?: ChatPreview(name = normalizedUsername.removePrefix("@").ifBlank { "FYNX user" }, username = normalizedUsername, lastMessage = "Start a conversation", time = "Now")
                     FynxChatStore.savePreview(context, openChat!!)
                     profileUser = null
                 }
@@ -108,6 +102,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             ConversationPanel(
                 chat = openChat!!,
                 onBack = { openChat = null },
+                onOpenProfile = { username ->
+                    profileUser = username
+                    openChat = null
+                },
                 onVoiceCall = { callTarget = openChat!!.name; callVideo = false; openChat = null; selected = "Calls" },
                 onVideoCall = { callTarget = openChat!!.name; callVideo = true; openChat = null; selected = "Calls" }
             )
@@ -122,28 +120,21 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     FynxTheme(accent = accent) {
         val mainIndex = mainNav.indexOfFirst { it.key == selected }.coerceAtLeast(0)
         val unreadNotifications = notifications.unreadNotificationCount()
-
         Scaffold(
             containerColor = FynxDesign.Background,
             topBar = {
                 if (selected == "Home") {
                     Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { selected = "Profile" }) {
-                            FynxAvatar(authSession.username?.ifBlank { "preview" } ?: "preview", Modifier.size(34.dp))
-                        }
+                        IconButton(onClick = { selected = "Profile" }) { FynxAvatar(authSession.username?.ifBlank { "preview" } ?: "preview", Modifier.size(34.dp)) }
                         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            BadgedBox(badge = { if (unreadNotifications > 0) Badge { Text(unreadNotifications.toString()) } }) {
-                                IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
-                            }
+                            BadgedBox(badge = { if (unreadNotifications > 0) Badge { Text(unreadNotifications.toString()) } }) { IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") } }
                             IconButton(onClick = { selected = "Profile" }) { Icon(Icons.Default.Settings, "Settings") }
                         }
                     }
                 } else {
                     Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (isSecondaryDestination) {
-                            IconButton(onClick = { selected = if (selected == "Notifications" || selected == "Stories" || selected == "Profile") "Home" else if (selected == "Money Center") "Money Tools" else "Features" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                        } else Spacer(Modifier.size(48.dp))
+                        if (isSecondaryDestination) IconButton(onClick = { selected = if (selected == "Notifications" || selected == "Stories" || selected == "Profile") "Home" else if (selected == "Money Center") "Money Tools" else "Features" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } else Spacer(Modifier.size(48.dp))
                         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text(if (selected == "Marketplace") "Marketplace" else if (selected == "Money Tools") "Money Center" else selected, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
                         Spacer(Modifier.size(48.dp))
                     }
@@ -152,40 +143,16 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             bottomBar = {
                 NavigationBar(containerColor = FynxDesign.Surface, tonalElevation = 8.dp) {
                     mainNav.forEach { item ->
-                        NavigationBarItem(
-                            selected = selected == item.key,
-                            onClick = { selected = item.key },
-                            icon = { Icon(item.icon, contentDescription = item.label) },
-                            label = { Text(item.label) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                indicatorColor = FynxDesign.SelectedContainer,
-                                unselectedIconColor = FynxDesign.TextSecondary,
-                                unselectedTextColor = FynxDesign.TextSecondary
-                            )
-                        )
+                        NavigationBarItem(selected = selected == item.key, onClick = { selected = item.key }, icon = { Icon(item.icon, contentDescription = item.label) }, label = { Text(item.label) }, colors = NavigationBarItemDefaults.colors(selectedIconColor = MaterialTheme.colorScheme.primary, selectedTextColor = MaterialTheme.colorScheme.primary, indicatorColor = FynxDesign.SelectedContainer, unselectedIconColor = FynxDesign.TextSecondary, unselectedTextColor = FynxDesign.TextSecondary))
                     }
                 }
             }
         ) { padding ->
             Box(Modifier.fillMaxSize()) {
-                Box(
-                    Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 8.dp).widthIn(max = 720.dp).align(Alignment.Center)
-                        .pointerInput(selected) {
-                            var totalDrag = 0f
-                            detectHorizontalDragGestures(
-                                onDragStart = { totalDrag = 0f },
-                                onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
-                                onDragEnd = {
-                                    if (kotlin.math.abs(totalDrag) >= 80f) {
-                                        val nextIndex = if (totalDrag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex) else (mainIndex - 1).coerceAtLeast(0)
-                                        selected = mainNav[nextIndex].key
-                                    }
-                                }
-                            )
-                        }
-                ) {
+                Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 8.dp).widthIn(max = 720.dp).align(Alignment.Center).pointerInput(selected) {
+                    var totalDrag = 0f
+                    detectHorizontalDragGestures(onDragStart = { totalDrag = 0f }, onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount }, onDragEnd = { if (kotlin.math.abs(totalDrag) >= 80f) { val nextIndex = if (totalDrag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex) else (mainIndex - 1).coerceAtLeast(0); selected = mainNav[nextIndex].key } })
+                }) {
                     when (selected) {
                         "Home" -> HomePanel(onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" })
                         "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" })
@@ -216,29 +183,18 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
 private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
     var searchQuery by remember { mutableStateOf("") }
     val features = listOf(
-        Triple("Calls", "Voice & Video Calls", Icons.Default.Call),
-        Triple("Notifications", "Notifications", Icons.Default.Notifications),
-        Triple("Gifts", "Gifts", Icons.Default.CardGiftcard),
-        Triple("Share", "Share & Invite", Icons.Default.Share),
-        Triple("To-Do", "To-Do", Icons.Default.CheckCircle),
-        Triple("Calendar", "Calendar", Icons.Default.DateRange),
-        Triple("Money Tools", "Money Center", Icons.Default.AccountBalanceWallet),
-        Triple("Extra Tools", "Extra Tools", Icons.Default.Build)
+        Triple("Calls", "Voice & Video Calls", Icons.Default.Call), Triple("Notifications", "Notifications", Icons.Default.Notifications), Triple("Gifts", "Gifts", Icons.Default.CardGiftcard), Triple("Share", "Share & Invite", Icons.Default.Share), Triple("To-Do", "To-Do", Icons.Default.CheckCircle), Triple("Calendar", "Calendar", Icons.Default.DateRange), Triple("Money Tools", "Money Center", Icons.Default.AccountBalanceWallet), Triple("Extra Tools", "Extra Tools", Icons.Default.Build)
     )
     val filteredFeatures = features.filter { (_, label, _) -> searchQuery.isBlank() || label.contains(searchQuery.trim(), ignoreCase = true) }
     Column(Modifier.fillMaxSize()) {
         Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text("Access your tools in one place. Money tools are grouped together in Money Center.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(10.dp))
-        FynxFeatureSearchField(searchQuery, { searchQuery = it })
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(10.dp)); FynxFeatureSearchField(searchQuery, { searchQuery = it }); Spacer(Modifier.height(10.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(filteredFeatures, key = { it.first }) { (key, label, icon) ->
                 Card(onClick = { onSelect(key) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.5f))) {
                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Surface(shape = FynxDesign.ControlShape, color = FynxDesign.SelectedContainer) {
-                            Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(9.dp).size(22.dp))
-                        }
+                        Surface(shape = FynxDesign.ControlShape, color = FynxDesign.SelectedContainer) { Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(9.dp).size(22.dp)) }
                         Spacer(Modifier.width(14.dp)); Text(label, style = MaterialTheme.typography.titleMedium)
                     }
                 }
