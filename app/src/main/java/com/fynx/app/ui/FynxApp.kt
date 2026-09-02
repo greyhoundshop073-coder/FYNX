@@ -157,7 +157,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         "Home" -> HomePanel(onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" })
                         "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" })
                         "Friends" -> FriendsPanel(onOpenProfile = { profileUser = it })
-                        "Marketplace" -> FynxMarketplacePanel()
+                        "Marketplace" -> FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it })
                         "Money Tools" -> MoneyCenterPanel()
                         "Features" -> FynxFeaturesPanel(onSelect = { selected = it })
                         "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
