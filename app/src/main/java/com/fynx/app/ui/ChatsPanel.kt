@@ -8,13 +8,20 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 @Composable
 fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit = {}) {
     var section by remember { mutableStateOf("Chats") }
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
+    var chats by remember { mutableStateOf(FynxChatStore.loadPreviews(context)) }
     var groups by remember { mutableStateOf(FynxGroupsStore.load(context)) }
+    var showNewChat by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+
+    fun refreshChats() { chats = FynxChatStore.loadPreviews(context) }
 
     Column(Modifier.fillMaxSize().background(FynxDesign.Background).padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -29,18 +36,24 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         Spacer(Modifier.height(12.dp))
 
         if (section == "Chats") {
-            OutlinedButton(onClick = { }, shape = FynxDesign.ControlShape, border = BorderStroke(1.dp, FynxDesign.Outline)) { Text("＋ New chat") }
+            OutlinedButton(onClick = { name = ""; username = ""; showNewChat = true }, shape = FynxDesign.ControlShape, border = BorderStroke(1.dp, FynxDesign.Outline)) { Text("＋ New chat") }
             Spacer(Modifier.height(14.dp))
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
-                items(sampleChats, key = { it.username }) { chat ->
-                    Card(onClick = { onOpenChat(chat) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline)) {
-                        ListItem(
-                            headlineContent = { Text(chat.name) },
-                            leadingContent = { FynxAvatar(chat.name) },
-                            supportingContent = { Text(chat.lastMessage, color = FynxDesign.TextSecondary) },
-                            trailingContent = { Text(chat.time, color = FynxDesign.TextSecondary) },
-                            colors = ListItemDefaults.colors(containerColor = FynxDesign.Surface)
-                        )
+            if (chats.isEmpty()) {
+                Text("No conversations yet", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(4.dp))
+                Text("Start a chat with a real FYNX username. Conversations are stored locally until shared-account sync is connected.", color = FynxDesign.TextSecondary)
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
+                    items(chats, key = { it.username }) { chat ->
+                        Card(onClick = { onOpenChat(chat) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline)) {
+                            ListItem(
+                                headlineContent = { Text(chat.name) },
+                                leadingContent = { FynxAvatar(chat.name) },
+                                supportingContent = { Text(chat.lastMessage.ifBlank { "No messages yet" }, color = FynxDesign.TextSecondary) },
+                                trailingContent = { Text(chat.time, color = FynxDesign.TextSecondary) },
+                                colors = ListItemDefaults.colors(containerColor = FynxDesign.Surface)
+                            )
+                        }
                     }
                 }
             }
@@ -72,5 +85,30 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 }
             }
         }
+    }
+
+    if (showNewChat) {
+        AlertDialog(
+            onDismissRequest = { showNewChat = false },
+            title = { Text("New chat") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Enter the person’s real FYNX identity. This creates the local conversation shell; server delivery will be connected in the backend stages.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
+                    OutlinedTextField(value = name, onValueChange = { name = it.take(80) }, label = { Text("Name") }, singleLine = true)
+                    OutlinedTextField(value = username, onValueChange = { username = it.take(50) }, label = { Text("Username") }, singleLine = true)
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = name.isNotBlank() && username.isNotBlank(), onClick = {
+                    val normalized = if (username.trim().startsWith("@")) username.trim() else "@${username.trim()}"
+                    val chat = ChatPreview(name.trim(), normalized, "", "New")
+                    FynxChatStore.savePreview(context, chat)
+                    refreshChats()
+                    showNewChat = false
+                    onOpenChat(chat)
+                }) { Text("Open chat") }
+            },
+            dismissButton = { TextButton(onClick = { showNewChat = false }) { Text("Cancel") } }
+        )
     }
 }
