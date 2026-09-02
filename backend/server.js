@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 import { WebSocketServer } from "ws";
+import { registerSocialRoutes } from "./socialRoutes.js";
 
 const { Pool } = pg;
 const app = express();
@@ -44,6 +45,24 @@ async function initDatabase() {
     );
     CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages (sender_id, recipient_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS messages_recipient_idx ON messages (recipient_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS friendships (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      friend_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'accepted')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, friend_id)
+    );
+    CREATE INDEX IF NOT EXISTS friendships_user_idx ON friendships (user_id, status);
+    CREATE INDEX IF NOT EXISTS friendships_friend_idx ON friendships (friend_id, status);
+    CREATE TABLE IF NOT EXISTS blocks (
+      blocker_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      blocked_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (blocker_id, blocked_id),
+      CHECK (blocker_id <> blocked_id)
+    );
+    CREATE INDEX IF NOT EXISTS blocks_blocked_idx ON blocks (blocked_id);
   `);
 }
 
@@ -119,6 +138,8 @@ app.get("/api/messages/:username", auth, async (req, res) => {
   try {
     const other = await findUserByUsername(req.params.username.trim().toLowerCase());
     if (!other) return res.status(404).json({ error: "user not found" });
+    const blocked = await pool.query(`SELECT 1 FROM blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1`, [req.user.sub, other.id]);
+    if (blocked.rowCount) return res.status(403).json({ error: "conversation unavailable" });
     const result = await pool.query(`SELECT m.id, m.sender_id, sender.username AS sender_username, m.recipient_id, recipient.username AS recipient_username, m.text, EXTRACT(EPOCH FROM m.created_at) * 1000 AS timestamp, m.edited, m.deleted, m.reply_to_id FROM messages m JOIN users sender ON sender.id = m.sender_id JOIN users recipient ON recipient.id = m.recipient_id WHERE (m.sender_id = $1 AND m.recipient_id = $2) OR (m.sender_id = $2 AND m.recipient_id = $1) ORDER BY m.created_at ASC LIMIT 200`, [req.user.sub, other.id]);
     return res.json({ messages: result.rows });
   } catch (error) { console.error("messages", error); return res.status(500).json({ error: "message history failed" }); }
@@ -133,12 +154,16 @@ app.post("/api/messages", auth, async (req, res) => {
     const recipient = await findUserByUsername(recipientUsername);
     if (!recipient) return res.status(404).json({ error: "recipient not found" });
     if (String(recipient.id) === String(req.user.sub)) return res.status(400).json({ error: "cannot message yourself" });
+    const blocked = await pool.query(`SELECT 1 FROM blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1`, [req.user.sub, recipient.id]);
+    if (blocked.rowCount) return res.status(403).json({ error: "messaging unavailable" });
     const result = await pool.query("INSERT INTO messages (sender_id, recipient_id, text, reply_to_id) VALUES ($1, $2, $3, $4) RETURNING id, sender_id, recipient_id, text, EXTRACT(EPOCH FROM created_at) * 1000 AS timestamp, edited, deleted, reply_to_id", [req.user.sub, recipient.id, text, Number.isInteger(replyToId) ? replyToId : null]);
     const row = result.rows[0];
     const message = { id: String(row.id), senderId: String(row.sender_id), recipientId: String(row.recipient_id), text: row.text, timestamp: Number(row.timestamp), edited: row.edited, deleted: row.deleted, replyToId: row.reply_to_id == null ? null : String(row.reply_to_id) };
     await broadcastMessage(message); return res.status(201).json({ message });
   } catch (error) { console.error("send message", error); return res.status(500).json({ error: "message send failed" }); }
 });
+
+registerSocialRoutes({ app, pool, auth, findUserByUsername });
 
 app.post("/api/assistant", auth, async (req, res) => {
   try {
