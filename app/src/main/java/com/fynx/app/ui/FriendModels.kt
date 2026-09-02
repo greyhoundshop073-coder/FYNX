@@ -1,14 +1,5 @@
 package com.fynx.app.ui
 
-enum class FynxFriendStatus {
-    NONE,
-    OUTGOING_PENDING,
-    INCOMING_PENDING,
-    FRIENDS,
-    DECLINED,
-    BLOCKED
-}
-
 data class FriendProfile(
     val displayName: String,
     val username: String,
