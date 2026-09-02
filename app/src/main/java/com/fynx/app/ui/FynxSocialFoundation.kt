@@ -18,7 +18,10 @@ enum class FynxFriendStatus {
     NONE,
     REQUESTED,
     PENDING,
+    OUTGOING_PENDING,
+    INCOMING_PENDING,
     FRIENDS,
+    DECLINED,
     BLOCKED
 }
 
