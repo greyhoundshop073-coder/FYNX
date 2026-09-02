@@ -4,14 +4,18 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Local chat persistence foundation. Server sync can replace this later without changing the UI contract. */
+/**
+ * Local chat persistence foundation.
+ * Data is isolated per signed-in account so multiple FYNX users sharing a device
+ * cannot see each other's conversations. Server sync can replace this later
+ * without changing the UI contract.
+ */
 object FynxChatStore {
     private const val PREFS = "fynx_chat_store"
-    private const val CHAT_LIST_KEY = "chat_previews"
 
     fun load(context: Context, chatKey: String, fallback: ChatMessage? = null): List<ChatMessage> {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(key(chatKey), null) ?: return fallback?.let { listOf(it) } ?: emptyList()
+            .getString(key(context, chatKey), null) ?: return fallback?.let { listOf(it) } ?: emptyList()
         return runCatching {
             val array = JSONArray(raw)
             buildList {
@@ -61,12 +65,12 @@ object FynxChatStore {
             )
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(key(chatKey), array.toString()).apply()
+            .edit().putString(key(context, chatKey), array.toString()).apply()
     }
 
     fun loadPreviews(context: Context): List<ChatPreview> {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(CHAT_LIST_KEY, null) ?: return emptyList()
+            .getString(previewKey(context), null) ?: return emptyList()
         return runCatching {
             val array = JSONArray(raw)
             buildList {
@@ -100,13 +104,21 @@ object FynxChatStore {
             })
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(CHAT_LIST_KEY, array.toString()).apply()
+            .edit().putString(previewKey(context), array.toString()).apply()
     }
 
     fun clear(context: Context, chatKey: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().remove(key(chatKey)).apply()
+            .edit().remove(key(context, chatKey)).apply()
     }
 
-    private fun key(chatKey: String): String = "chat_${chatKey.replace(Regex("[^A-Za-z0-9_@.-]"), "_")}"
+    private fun accountKey(context: Context): String =
+        FynxAuthStore.storedUsername(context)?.trim()?.lowercase()?.ifBlank { "preview" } ?: "preview"
+
+    private fun previewKey(context: Context): String = "chat_previews_${safeKey(accountKey(context))}"
+
+    private fun key(context: Context, chatKey: String): String =
+        "chat_${safeKey(accountKey(context))}_${safeKey(chatKey)}"
+
+    private fun safeKey(value: String): String = value.replace(Regex("[^A-Za-z0-9_@.-]"), "_")
 }
