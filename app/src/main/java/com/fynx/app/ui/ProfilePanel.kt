@@ -301,6 +301,11 @@ fun SettingsPanel(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Un
     var darkMode by remember { mutableStateOf(prefs.getBoolean("dark_mode", false)) }
     var saveMedia by remember { mutableStateOf(prefs.getBoolean("save_media", true)) }
     var sounds by remember { mutableStateOf(prefs.getBoolean("chat_sounds", true)) }
+    var photoVisibility by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, "photo_visibility")) }
+    var bioVisibility by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, "bio_visibility")) }
+    var descriptionVisibility by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, "description_visibility")) }
+    var friendsVisibility by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, "friends_visibility", "Friends")) }
+    var findability by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, "findability")) }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)
@@ -359,6 +364,23 @@ fun SettingsPanel(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Un
                     checked = settings.storyReplies,
                     onCheckedChange = { onSettingsChange(settings.copy(storyReplies = it)) }
                 )
+            }
+
+            item { SettingsSectionTitle("Profile visibility") }
+            item {
+                VisibilitySettingCard("Profile photo", photoVisibility) { photoVisibility = it; FynxPreferencesStore.saveVisibility(context, "photo_visibility", it) }
+            }
+            item {
+                VisibilitySettingCard("Bio", bioVisibility) { bioVisibility = it; FynxPreferencesStore.saveVisibility(context, "bio_visibility", it) }
+            }
+            item {
+                VisibilitySettingCard("About / description", descriptionVisibility) { descriptionVisibility = it; FynxPreferencesStore.saveVisibility(context, "description_visibility", it) }
+            }
+            item {
+                VisibilitySettingCard("Friends list", friendsVisibility) { friendsVisibility = it; FynxPreferencesStore.saveVisibility(context, "friends_visibility", it) }
+            }
+            item {
+                VisibilitySettingCard("Who can find me", findability) { findability = it; FynxPreferencesStore.saveVisibility(context, "findability", it) }
             }
 
             item { SettingsSectionTitle("Notifications") }
@@ -523,6 +545,24 @@ private fun SettingSwitchCard(
             }
             Spacer(Modifier.width(8.dp))
             Switch(checked = checked, onCheckedChange = onCheckedChange)
+        }
+    }
+}
+
+@Composable
+private fun VisibilitySettingCard(title: String, value: String, onChange: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val options = listOf("Everyone", "Friends", "Nobody")
+    Card(modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.55f))) {
+        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Visibility, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.titleSmall); Text(value, color = FynxDesign.TextSecondary) }
+                TextButton(onClick = { open = !open }) { Text("Change") }
+            }
+            if (open) {
+                options.forEach { option -> TextButton(onClick = { onChange(option); open = false }, modifier = Modifier.fillMaxWidth()) { Text(option) } }
+            }
         }
     }
 }
