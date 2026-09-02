@@ -3,13 +3,11 @@ package com.fynx.app.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,9 +31,7 @@ fun HomePanel(
     val notifications = remember { FynxNotificationStore.load(context) }
     val displayUsername = currentUsername.trim().removePrefix("@").ifBlank { "preview" }
 
-    LaunchedEffect(Unit) {
-        chatPreviews = FynxChatStore.loadPreviews(context)
-    }
+    LaunchedEffect(Unit) { chatPreviews = FynxChatStore.loadPreviews(context) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -51,14 +47,8 @@ fun HomePanel(
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text("✦", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-                            }
+                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(48.dp)) {
+                            Box(contentAlignment = Alignment.Center) { Text("✦", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary) }
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
@@ -70,11 +60,7 @@ fun HomePanel(
                         PulseStat("💬", chatPreviews.size.toString(), "Chats", onOpenChats, Modifier.weight(1f))
                         PulseStat("🔔", notifications.unreadNotificationCount().toString(), "Updates", onOpenNotifications, Modifier.weight(1f))
                     }
-                    Text(
-                        "Your Pulse is built from your real FYNX activity. Nothing is invented to make the app look busy.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = FynxDesign.TextSecondary
-                    )
+                    Text("Your Pulse is built from your real FYNX activity. Nothing is invented to make the app look busy.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
                 }
             }
         }
@@ -92,27 +78,13 @@ fun HomePanel(
             SectionHeader("Your conversations", "Open Chats", onOpenChats)
             Spacer(Modifier.height(8.dp))
             if (chatPreviews.isEmpty()) {
-                EmptyHomeCard(
-                    "Your FYNX circle starts here",
-                    "When you connect with real people and start conversations, they will appear here.",
-                    "Open Chats",
-                    onOpenChats
-                )
+                EmptyHomeCard("Your FYNX circle starts here", "When you connect with real people and start conversations, they will appear here.", "Open Chats", onOpenChats)
             } else {
                 val visibleChats = chatPreviews.take(3)
-                Card(
-                    Modifier.fillMaxWidth(),
-                    shape = FynxDesign.LargeCardShape,
-                    colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
-                    border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.55f))
-                ) {
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.55f))) {
                     Column(Modifier.fillMaxWidth()) {
                         visibleChats.forEachIndexed { index, chat ->
-                            Row(
-                                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 FynxAvatar(chat.username, Modifier.size(46.dp).clip(CircleShape))
                                 Column(Modifier.weight(1f)) {
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -133,23 +105,10 @@ fun HomePanel(
         item {
             SectionHeader("Marketplace Discover", "Open Market", onOpenMarketplace)
             Spacer(Modifier.height(8.dp))
-            Card(
-                Modifier.fillMaxWidth(),
-                shape = FynxDesign.LargeCardShape,
-                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
-                border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.55f))
-            ) {
+            Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.55f))) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(shape = FynxDesign.ControlShape, color = FynxDesign.SelectedContainer) {
-                            Icon(Icons.Default.ShoppingBag, contentDescription = "Marketplace", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(9.dp).size(22.dp))
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Discover real listings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            Text("Products will appear here as real sellers publish listings.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
-                        }
-                    }
+                    Text("Discover real listings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Products will appear here as real sellers publish listings.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
                     OutlinedButton(onClick = onOpenMarketplace, modifier = Modifier.fillMaxWidth()) {
                         Text("Explore Marketplace")
                         Spacer(Modifier.width(6.dp))
@@ -160,13 +119,7 @@ fun HomePanel(
         }
 
         item {
-            Card(
-                onClick = onOpenProfile,
-                modifier = Modifier.fillMaxWidth(),
-                shape = FynxDesign.CardShape,
-                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
-                border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.45f))
-            ) {
+            Card(onClick = onOpenProfile, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.45f))) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     FynxAvatar(displayUsername, Modifier.size(44.dp))
                     Spacer(Modifier.width(12.dp))
@@ -191,31 +144,16 @@ private fun SectionHeader(title: String, action: String, onClick: () -> Unit) {
 
 @Composable
 private fun PulseStat(icon: String, value: String, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Card(
-        onClick = onClick,
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = FynxDesign.SurfaceRaised),
-        shape = FynxDesign.ControlShape
-    ) {
+    Card(onClick = onClick, modifier = modifier, colors = CardDefaults.cardColors(containerColor = FynxDesign.SurfaceRaised), shape = FynxDesign.ControlShape) {
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(icon)
-            Spacer(Modifier.width(7.dp))
-            Column {
-                Text(value, fontWeight = FontWeight.Bold)
-                Text(label, style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
-            }
+            Text(icon); Spacer(Modifier.width(7.dp)); Column { Text(value, fontWeight = FontWeight.Bold); Text(label, style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary) }
         }
     }
 }
 
 @Composable
 private fun EmptyHomeCard(title: String, description: String, action: String, onClick: () -> Unit) {
-    Card(
-        Modifier.fillMaxWidth(),
-        shape = FynxDesign.LargeCardShape,
-        colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
-        border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.55f))
-    ) {
+    Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.55f))) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(description, color = FynxDesign.TextSecondary)
@@ -228,13 +166,7 @@ private fun EmptyHomeCard(title: String, description: String, action: String, on
 private fun StoryCircle(name: String, label: String, addStory: Boolean, onClick: () -> Unit) {
     Column(Modifier.width(72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         IconButton(onClick = onClick, modifier = Modifier.size(66.dp)) {
-            FynxAvatar(
-                name,
-                Modifier.size(62.dp).border(
-                    BorderStroke(2.dp, if (addStory) MaterialTheme.colorScheme.primary else FynxDesign.Outline),
-                    CircleShape
-                ).clip(CircleShape)
-            )
+            FynxAvatar(name, Modifier.size(62.dp).border(BorderStroke(2.dp, if (addStory) MaterialTheme.colorScheme.primary else FynxDesign.Outline), CircleShape).clip(CircleShape))
         }
         Spacer(Modifier.height(3.dp))
         Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
