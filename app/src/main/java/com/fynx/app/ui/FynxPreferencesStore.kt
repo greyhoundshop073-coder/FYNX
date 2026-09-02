@@ -19,6 +19,11 @@ object FynxPreferencesStore {
     private const val KEY_READ_RECEIPTS = "read_receipts"
     private const val KEY_STORY_REPLIES = "story_replies"
     private const val KEY_ACCENT = "accent"
+    private const val KEY_PHOTO_VISIBILITY = "photo_visibility"
+    private const val KEY_BIO_VISIBILITY = "bio_visibility"
+    private const val KEY_DESCRIPTION_VISIBILITY = "description_visibility"
+    private const val KEY_FRIENDS_VISIBILITY = "friends_visibility"
+    private const val KEY_FINDABILITY = "findability"
 
     fun loadProfile(context: Context, fallbackUsername: String?): FynxProfile {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -63,6 +68,12 @@ object FynxPreferencesStore {
             .putBoolean(KEY_READ_RECEIPTS, settings.readReceipts)
             .putBoolean(KEY_STORY_REPLIES, settings.storyReplies)
             .apply()
+    }
+
+    fun loadVisibility(context: Context, key: String, default: String = "Everyone"): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(key, default) ?: default
+
+    fun saveVisibility(context: Context, key: String, value: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(key, value).apply()
     }
 
     fun loadAccent(context: Context): FynxAccent {
