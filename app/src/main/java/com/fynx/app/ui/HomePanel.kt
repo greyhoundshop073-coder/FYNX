@@ -1,6 +1,5 @@
 package com.fynx.app.ui
 
-import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
