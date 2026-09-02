@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
 import java.io.File
 
 @Composable
-fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onVoiceCall: () -> Unit = {}, onVideoCall: () -> Unit = {}) {
+fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (String) -> Unit = {}, onVoiceCall: () -> Unit = {}, onVideoCall: () -> Unit = {}) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val fallbackMessage = remember(chat.lastMessage) { chat.lastMessage.takeIf { it.isNotBlank() }?.let { ChatMessage(it, false, id = "initial", delivered = true, read = true) } }
@@ -108,23 +108,17 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onVoiceCall: () -> 
 
     Column(Modifier.fillMaxSize().background(FynxDesign.Background)) {
         Surface(color = FynxDesign.Surface, tonalElevation = 3.dp) {
-            Column(
-                Modifier.fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = onBack) { Text("‹", style = MaterialTheme.typography.headlineSmall) }
-                    FynxAvatar(chat.name, modifier = Modifier.size(46.dp))
+                    IconButton(onClick = { onOpenProfile(chat.username) }) {
+                        FynxAvatar(chat.name, modifier = Modifier.size(46.dp))
+                    }
                     Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                        Text(chat.name, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            if (chat.online) "● Online" else chat.username,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = FynxDesign.TextSecondary
-                        )
+                        TextButton(onClick = { onOpenProfile(chat.username) }, contentPadding = PaddingValues(0.dp)) {
+                            Text(chat.name, style = MaterialTheme.typography.titleMedium)
+                        }
+                        Text(if (chat.online) "● Online" else chat.username, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
                     }
                     IconButton(onClick = onVoiceCall) { Icon(Icons.Default.Call, "Voice call") }
                     IconButton(onClick = onVideoCall) { Icon(Icons.Default.Videocam, "Video call") }
@@ -215,12 +209,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onVoiceCall: () -> 
     }
 
     if (showGifts) {
-        AlertDialog(
-            onDismissRequest = { showGifts = false },
-            title = { Text("Send a gift") },
-            text = { Column(Modifier.fillMaxWidth().heightIn(max = 420.dp)) { GiftsPanel(recipientName = chat.name, onGiftSelected = { showGifts = false }) } },
-            confirmButton = { TextButton(onClick = { showGifts = false }) { Text("Close") } }
-        )
+        AlertDialog(onDismissRequest = { showGifts = false }, title = { Text("Send a gift") }, text = { Column(Modifier.fillMaxWidth().heightIn(max = 420.dp)) { GiftsPanel(recipientName = chat.name, onGiftSelected = { showGifts = false }) } }, confirmButton = { TextButton(onClick = { showGifts = false }) { Text("Close") } })
     }
 }
 
