@@ -17,11 +17,18 @@ data class FynxGift(
 )
 
 private val fynxGiftCatalog = listOf(
-    FynxGift("rose", "Rose", "🌹", "A simple gesture of appreciation"),
-    FynxGift("heart", "Heart", "💖", "Send a little love to a friend"),
-    FynxGift("star", "Star", "⭐", "Celebrate someone special"),
-    FynxGift("coffee", "Coffee", "☕", "A warm virtual treat"),
-    FynxGift("cake", "Cake", "🎂", "Celebrate a special moment")
+    FynxGift("fynx_diamond", "FYNX Diamond", "💎", "A premium FYNX symbol of appreciation"),
+    FynxGift("royal_ring", "Royal Ring", "💍", "A timeless gift for someone special"),
+    FynxGift("golden_rose", "Golden Rose", "🌹", "A special FYNX gesture of admiration"),
+    FynxGift("love_heart", "Love Heart", "❤️", "Send a little love to a friend"),
+    FynxGift("crown", "Crown", "👑", "Celebrate someone who stands out"),
+    FynxGift("butterfly", "Butterfly", "🦋", "A bright gift for a beautiful moment"),
+    FynxGift("fynx_star", "FYNX Star", "⭐", "Celebrate someone special"),
+    FynxGift("galaxy", "FYNX Galaxy", "💫", "A memorable gift with a little magic"),
+    FynxGift("fire_heart", "Fire Heart", "🔥", "Show bold appreciation"),
+    FynxGift("mystery_box", "Mystery Gift", "🎁", "A surprise for someone special"),
+    FynxGift("flower", "Flower", "🌸", "A gentle gesture of friendship"),
+    FynxGift("trophy", "Trophy", "🏆", "Celebrate an achievement")
 )
 
 @Composable
