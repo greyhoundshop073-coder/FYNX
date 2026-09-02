@@ -7,7 +7,7 @@ import org.json.JSONObject
 /** Device-local relationship state. Server synchronization will replace this store in the backend stage. */
 class FynxFriendsStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("fynx_friends", Context.MODE_PRIVATE)
-    private val key = "profiles"
+    private val key = "profiles_${normalize(FynxAuthStore.storedUsername(context) ?: "@preview")}" 
 
     fun load(): List<FriendProfile> = runCatching {
         val raw = prefs.getString(key, null) ?: return emptyList()
@@ -49,16 +49,13 @@ class FynxFriendsStore(context: Context) {
     }
 
     fun sendRequest(profile: FriendProfile) = upsert(profile.copy(status = FynxFriendStatus.OUTGOING_PENDING))
-
     fun cancelRequest(username: String) = setStatus(username, FynxFriendStatus.NONE)
-
     fun acceptRequest(username: String) = setStatus(username, FynxFriendStatus.FRIENDS)
-
     fun declineRequest(username: String) = setStatus(username, FynxFriendStatus.DECLINED)
-
     fun removeFriend(username: String) = setStatus(username, FynxFriendStatus.NONE)
-
     fun block(username: String) = setStatus(username, FynxFriendStatus.BLOCKED)
 
-    private fun normalize(username: String): String = username.trim().let { if (it.startsWith("@")) it else "@$it" }
+    private companion object {
+        fun normalize(username: String): String = username.trim().let { if (it.startsWith("@")) it else "@$it" }
+    }
 }
