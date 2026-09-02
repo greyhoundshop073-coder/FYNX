@@ -142,9 +142,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 } else {
                     Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (isSecondaryDestination) {
-                            IconButton(onClick = { selected = if (selected == "Notifications" || selected == "Stories" || selected == "Profile") "Home" else "Features" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                            IconButton(onClick = { selected = if (selected == "Notifications" || selected == "Stories" || selected == "Profile") "Home" else if (selected == "Money Center") "Money Tools" else "Features" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                         } else Spacer(Modifier.size(48.dp))
-                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text(if (selected == "Marketplace") "Marketplace" else selected, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text(if (selected == "Marketplace") "Marketplace" else if (selected == "Money Tools") "Money Center" else selected, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
                         Spacer(Modifier.size(48.dp))
                     }
                 }
@@ -187,16 +187,11 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         }
                 ) {
                     when (selected) {
-                        "Home" -> HomePanel(
-                            onOpenChats = { selected = "Chats" },
-                            onOpenStories = { selected = "Stories" },
-                            onOpenProfile = { selected = "Profile" },
-                            onOpenMarketplace = { selected = "Marketplace" }
-                        )
+                        "Home" -> HomePanel(onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" })
                         "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" })
                         "Friends" -> FriendsPanel(onOpenProfile = { profileUser = it })
                         "Marketplace" -> FynxMarketplacePanel()
-                        "Money Tools" -> MoneyToolsPanel()
+                        "Money Tools" -> MoneyCenterPanel()
                         "Features" -> FynxFeaturesPanel(onSelect = { selected = it })
                         "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
                         "Calendar" -> CalendarPanel()
@@ -209,19 +204,6 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo)
                         "To-Do" -> TodoPanel()
                         "Profile" -> ProfilePanel(session = authSession, onSignOut = { authSession = if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { FynxAuthStore.clear(context); AuthSession() } })
-                        "Bills" -> BillsPaymentPanel()
-                        "Transactions" -> TransactionHistoryPanel()
-                        "Accounts" -> AccountsWalletsPanel()
-                        "Budget" -> BudgetPlannerPanel()
-                        "Currency" -> CurrencyConverterPanel()
-                        "Savings" -> SavingsGoalsPanel()
-                        "Subscriptions" -> SubscriptionsPanel()
-                        "Overview" -> FinancialOverviewPanel()
-                        "Receipts" -> ReceiptsExpensePanel()
-                        "Insights" -> MoneyInsightsPanel()
-                        "Spending Insights" -> SpendingInsightsPanel()
-                        "Money Alerts" -> MoneyAlertsPanel()
-                        "Vault" -> SecureMoneyVaultPanel()
                         else -> HomePanel(onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" })
                     }
                 }
@@ -234,22 +216,19 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
 private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
     var searchQuery by remember { mutableStateOf("") }
     val features = listOf(
-        Triple("Calls", "Voice & Video Calls", Icons.Default.Call), Triple("Notifications", "Notifications", Icons.Default.Notifications),
+        Triple("Calls", "Voice & Video Calls", Icons.Default.Call),
+        Triple("Notifications", "Notifications", Icons.Default.Notifications),
         Triple("Gifts", "Gifts", Icons.Default.CardGiftcard),
-        Triple("Share", "Share & Invite", Icons.Default.Share), Triple("To-Do", "To-Do", Icons.Default.CheckCircle),
-        Triple("Calendar", "Calendar", Icons.Default.DateRange), Triple("Bills", "Bills & Payment Reminders", Icons.Default.AccountBalance),
-        Triple("Transactions", "Transaction History", Icons.Default.History), Triple("Accounts", "Accounts & Wallets", Icons.Default.AccountBalanceWallet),
-        Triple("Budget", "Budget Planner", Icons.Default.AttachMoney), Triple("Currency", "Currency Converter", Icons.Default.AttachMoney),
-        Triple("Savings", "Savings Goals", Icons.Default.AccountBalance), Triple("Subscriptions", "Subscriptions & Recurring Payments", Icons.Default.Autorenew),
-        Triple("Overview", "Financial Overview", Icons.Default.PieChart), Triple("Receipts", "Receipts & Expenses", Icons.Default.AccountBalance),
-        Triple("Insights", "Money Insights", Icons.Default.PieChart), Triple("Spending Insights", "Spending Insights", Icons.Default.PieChart),
-        Triple("Money Alerts", "Money Alerts", Icons.Default.Notifications), Triple("Vault", "Secure Money Vault", Icons.Default.Lock),
+        Triple("Share", "Share & Invite", Icons.Default.Share),
+        Triple("To-Do", "To-Do", Icons.Default.CheckCircle),
+        Triple("Calendar", "Calendar", Icons.Default.DateRange),
+        Triple("Money Tools", "Money Center", Icons.Default.AccountBalanceWallet),
         Triple("Extra Tools", "Extra Tools", Icons.Default.Build)
     )
     val filteredFeatures = features.filter { (_, label, _) -> searchQuery.isBlank() || label.contains(searchQuery.trim(), ignoreCase = true) }
     Column(Modifier.fillMaxSize()) {
         Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Access your tools in one place.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Access your tools in one place. Money tools are grouped together in Money Center.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(10.dp))
         FynxFeatureSearchField(searchQuery, { searchQuery = it })
         Spacer(Modifier.height(10.dp))
