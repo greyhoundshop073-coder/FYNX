@@ -77,7 +77,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     BackHandler(enabled = openGroup != null && openChat == null) { openGroup = null }
     BackHandler(enabled = openChat == null && openGroup == null && selected != "Home") {
         selected = if (isSecondaryDestination) {
-            when (selected) { "Notifications", "Stories", "Profile" -> "Home"; "Groups" -> "Chats"; else -> "Features" }
+            when (selected) { "Notifications", "Stories", "Profile" -> "Home"; "Groups" -> "Chats"; "Gifts" -> "Features"; else -> "Features" }
         } else "Home"
     }
 
@@ -196,6 +196,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
                         "Calendar" -> CalendarPanel()
                         "Stories" -> StoriesPanel()
+                        "Gifts" -> GiftsPanel()
                         "Groups" -> FynxGroupsPanel(currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", onOpenGroup = { openGroup = it })
                         "Notifications" -> NotificationPanel(notifications = notifications, onBack = { selected = "Home" }, onNotificationRead = { notifications = FynxNotificationStore.load(context) }, onMarkAllRead = { notifications = FynxNotificationStore.load(context) })
                         "Share" -> FynxSharePanel()
@@ -229,6 +230,7 @@ private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
     var searchQuery by remember { mutableStateOf("") }
     val features = listOf(
         Triple("Calls", "Voice & Video Calls", Icons.Default.Call), Triple("Notifications", "Notifications", Icons.Default.Notifications),
+        Triple("Gifts", "Gifts", Icons.Default.CardGiftcard),
         Triple("Share", "Share & Invite", Icons.Default.Share), Triple("To-Do", "To-Do", Icons.Default.CheckCircle),
         Triple("Calendar", "Calendar", Icons.Default.DateRange), Triple("Bills", "Bills & Payment Reminders", Icons.Default.AccountBalance),
         Triple("Transactions", "Transaction History", Icons.Default.History), Triple("Accounts", "Accounts & Wallets", Icons.Default.AccountBalanceWallet),
