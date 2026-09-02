@@ -10,6 +10,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.DataUsage
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
@@ -291,6 +297,10 @@ private fun EditProfilePanel(profile: FynxProfile, description: String, onSave: 
 fun SettingsPanel(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     var showDeleteConfirmation by remember { mutableStateOf(false) }
+    val prefs = context.getSharedPreferences("fynx_preferences", Context.MODE_PRIVATE)
+    var darkMode by remember { mutableStateOf(prefs.getBoolean("dark_mode", false)) }
+    var saveMedia by remember { mutableStateOf(prefs.getBoolean("save_media", true)) }
+    var sounds by remember { mutableStateOf(prefs.getBoolean("chat_sounds", true)) }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)
@@ -359,6 +369,58 @@ fun SettingsPanel(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Un
                     description = "Enable or disable FYNX notification preferences. Android notification permission remains controlled by the system.",
                     checked = settings.notifications,
                     onCheckedChange = { onSettingsChange(settings.copy(notifications = it)) }
+                )
+            }
+
+            item { SettingsSectionTitle("Chats & media") }
+            item {
+                SettingSwitchCard(
+                    icon = Icons.Default.VolumeOff,
+                    label = "Chat sounds",
+                    description = "Play sound feedback for incoming and outgoing chat activity.",
+                    checked = sounds,
+                    onCheckedChange = { sounds = it; prefs.edit().putBoolean("chat_sounds", it).apply() }
+                )
+            }
+            item {
+                SettingSwitchCard(
+                    icon = Icons.Default.Storage,
+                    label = "Save media",
+                    description = "Keep received media available in the device's normal media storage when supported.",
+                    checked = saveMedia,
+                    onCheckedChange = { saveMedia = it; prefs.edit().putBoolean("save_media", it).apply() }
+                )
+            }
+
+            item { SettingsSectionTitle("Appearance & app") }
+            item {
+                SettingSwitchCard(
+                    icon = Icons.Default.DarkMode,
+                    label = "Dark appearance",
+                    description = "Store your preferred FYNX appearance. The full theme can follow this preference as the theme system expands.",
+                    checked = darkMode,
+                    onCheckedChange = { darkMode = it; prefs.edit().putBoolean("dark_mode", it).apply() }
+                )
+            }
+            item {
+                SettingsInfoCard(
+                    icon = Icons.Default.Palette,
+                    title = "Colors & accent",
+                    description = "Choose FYNX's accent and visual personality from the appearance controls."
+                )
+            }
+            item {
+                SettingsInfoCard(
+                    icon = Icons.Default.Language,
+                    title = "Language",
+                    description = "FYNX currently follows the device language. Additional language selection can be added without changing your account."
+                )
+            }
+            item {
+                SettingsInfoCard(
+                    icon = Icons.Default.DataUsage,
+                    title = "Data usage",
+                    description = "Review media and network behavior before connecting FYNX to production data services."
                 )
             }
 
