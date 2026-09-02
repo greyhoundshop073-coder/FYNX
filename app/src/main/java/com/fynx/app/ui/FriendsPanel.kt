@@ -47,8 +47,8 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
             val blockedResult = FynxSocialClient.blocked(context)
             friends = friendsResult.getOrElse { emptyList() }
             val requests = requestResult.getOrElse { emptyList() }
-            incoming = requests.filter { it.status.equals("pending", true) }
-            outgoing = requests.filter { it.status.equals("outgoing", true) || it.status.equals("sent", true) }
+            incoming = requests.filter { it.status.equals("incoming", true) }
+            outgoing = requests.filter { it.status.equals("outgoing", true) }
             blocked = blockedResult.getOrElse { emptyList() }
             val error = friendsResult.exceptionOrNull() ?: requestResult.exceptionOrNull() ?: blockedResult.exceptionOrNull()
             if (error != null) message = error.message ?: "Could not load your connections."
@@ -77,7 +77,6 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
         name !in friendNames && name !in blockedNames && name !in incomingNames && name !in outgoingNames
     }
 
-    fun displayUsername(value: String): String = if (value.startsWith("@")) value else "@$value"
     fun userFromRequest(request: FynxSocialClient.FriendRequest) = FynxSocialClient.User(request.username, request.displayName, "")
     fun runAction(username: String, action: suspend () -> Result<Unit>, success: String? = null) {
         scope.launch {
@@ -122,7 +121,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
                     "Friends" -> {
                         if (friends.isEmpty()) emptyState("No friends yet", "Accepted FYNX connections will appear here.")
                         items(friends, key = { "friend_${it.username}" }) { person ->
-                            RemoteFriendRow(person, "Remove", busyUsername == person.username, onOpenProfile) { runAction(person.username) { FynxSocialClient.removeFriend(context, person.username) } }
+                            RemoteFriendRow(person, "Remove", busyUsername == person.username, onOpenProfile, onAction = { runAction(person.username) { FynxSocialClient.removeFriend(context, person.username) } })
                         }
                     }
                     "Requests" -> {
@@ -134,7 +133,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
                     "Sent" -> {
                         if (outgoing.isEmpty()) emptyState("No sent requests", "Requests you send will appear here until they are accepted or rejected.")
                         items(outgoing, key = { "outgoing_${it.id}" }) { request ->
-                            RemoteFriendRow(userFromRequest(request), "Cancel", busyUsername == request.username, onOpenProfile) { runAction(request.username) { FynxSocialClient.rejectRequest(context, request.id) } }
+                            RemoteFriendRow(userFromRequest(request), "Cancel", busyUsername == request.username, onOpenProfile, onAction = { runAction(request.username) { FynxSocialClient.cancelRequest(context, request.id) } })
                         }
                     }
                     "Discover" -> {
@@ -142,13 +141,13 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
                         else if (query.trim().length < 2) emptyState("Search for a FYNX user", "Type at least two characters of a username or display name.")
                         else if (discover.isEmpty()) emptyState("No matching people", "No available FYNX account matched that search.")
                         else items(discover, key = { "discover_${it.username}" }) { person ->
-                            RemoteFriendRow(person, "Add", busyUsername == person.username, onOpenProfile) { runAction(person.username) { FynxSocialClient.sendRequest(context, person.username) } }
+                            RemoteFriendRow(person, "Add", busyUsername == person.username, onOpenProfile, onAction = { runAction(person.username) { FynxSocialClient.sendRequest(context, person.username) } })
                         }
                     }
                     else -> {
                         if (blocked.isEmpty()) emptyState("No blocked accounts", "Blocked accounts stay out of normal connection lists.")
                         items(blocked, key = { "blocked_${it.username}" }) { person ->
-                            RemoteFriendRow(person, "Unblock", busyUsername == person.username, onOpenProfile) { runAction(person.username) { FynxSocialClient.unblock(context, person.username) } }
+                            RemoteFriendRow(person, "Unblock", busyUsername == person.username, onOpenProfile, onAction = { runAction(person.username) { FynxSocialClient.unblock(context, person.username) } })
                         }
                     }
                 }
