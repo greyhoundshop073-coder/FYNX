@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import java.util.UUID
 
 data class FynxGift(
     val id: String,
@@ -41,6 +42,7 @@ fun GiftsPanel(
 ) {
     var selectedGift by remember { mutableStateOf<FynxGift?>(null) }
     var sent by remember { mutableStateOf(false) }
+    var preparedTransfer by remember { mutableStateOf<FynxGiftTransfer?>(null) }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -63,6 +65,7 @@ fun GiftsPanel(
                     onClick = {
                         selectedGift = gift
                         sent = false
+                        preparedTransfer = null
                     },
                     colors = CardDefaults.cardColors(
                         containerColor = if (selectedGift?.id == gift.id)
@@ -92,13 +95,38 @@ fun GiftsPanel(
                     Text("Value: ${gift.value} FYNX • ${gift.rarity}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     Button(
                         onClick = {
+                            val transactionId = UUID.randomUUID().toString()
+                            val transfer = FynxGiftTransfer(
+                                transaction = FynxSecureTransaction(
+                                    id = transactionId,
+                                    reference = FynxTransactionFoundation.createReference(transactionId),
+                                    amount = gift.value.toDouble(),
+                                    currency = "FYNX",
+                                    type = FynxWalletTransactionType.GIFT_SENT
+                                ),
+                                senderName = "You",
+                                recipientName = recipientName,
+                                gift = gift
+                            )
+                            preparedTransfer = transfer
                             sent = true
                             onGiftSelected(gift)
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(if (sent) "Gift selected" else "Continue")
+                        Text(if (sent) "Gift prepared" else "Prepare gift")
                     }
+                }
+            }
+        }
+
+        preparedTransfer?.let { transfer ->
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Ready for secure delivery", style = MaterialTheme.typography.titleSmall)
+                    Text("${transfer.gift.emoji} ${transfer.gift.name} • ${transfer.transaction.amount.toInt()} FYNX")
+                    Text("Recipient: ${transfer.recipientName}")
+                    Text("Reference: ${transfer.transaction.reference}", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
