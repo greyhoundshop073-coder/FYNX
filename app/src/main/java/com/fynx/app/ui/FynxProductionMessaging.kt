@@ -4,10 +4,7 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Production messaging boundary. The UI can keep using ChatMessage while the
- * backend becomes the source of truth for authenticated conversations.
- */
+/** Production messaging boundary. The server is the source of truth for chat state. */
 object FynxProductionMessaging {
     data class RemoteMessage(
         val id: String,
@@ -15,6 +12,8 @@ object FynxProductionMessaging {
         val recipientId: String,
         val text: String,
         val timestamp: Long,
+        val delivered: Boolean,
+        val read: Boolean,
         val edited: Boolean,
         val deleted: Boolean,
         val replyToId: String?
@@ -27,18 +26,7 @@ object FynxProductionMessaging {
                 buildList {
                     for (index in 0 until messages.length()) {
                         val item = messages.getJSONObject(index)
-                        add(
-                            RemoteMessage(
-                                id = item.optString("id"),
-                                senderId = item.optString("sender_id"),
-                                recipientId = item.optString("recipient_id"),
-                                text = item.optString("text"),
-                                timestamp = item.optDouble("timestamp", 0.0).toLong(),
-                                edited = item.optBoolean("edited"),
-                                deleted = item.optBoolean("deleted"),
-                                replyToId = item.optString("reply_to_id").takeIf { it.isNotBlank() && it != "null" }
-                            )
-                        )
+                        add(fromJson(item))
                     }
                 }
             }
@@ -50,17 +38,16 @@ object FynxProductionMessaging {
             if (replyToId.isNullOrBlank()) put("replyToId", JSONObject.NULL) else put("replyToId", replyToId.toLongOrNull() ?: JSONObject.NULL)
         }
         return FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { raw ->
-            val item = JSONObject(raw).getJSONObject("message")
-            RemoteMessage(
-                id = item.optString("id"),
-                senderId = item.optString("senderId"),
-                recipientId = item.optString("recipientId"),
-                text = item.optString("text"),
-                timestamp = item.optDouble("timestamp", 0.0).toLong(),
-                edited = item.optBoolean("edited"),
-                deleted = item.optBoolean("deleted"),
-                replyToId = item.optString("replyToId").takeIf { it.isNotBlank() && it != "null" }
-            )
+            fromJson(JSONObject(raw).getJSONObject("message"))
+        }
+    }
+
+    suspend fun markRead(context: Context, messageIds: List<String>): Result<Int> {
+        val body = JSONObject().apply {
+            put("messageIds", JSONArray(messageIds.mapNotNull { it.toLongOrNull() }))
+        }
+        return FynxBackendClient.postJson(context, "/api/messages/read", body.toString()).mapCatching { raw ->
+            JSONObject(raw).optInt("updated", 0)
         }
     }
 
@@ -69,10 +56,23 @@ object FynxProductionMessaging {
         fromMe = message.senderId == currentUserId,
         id = message.id,
         timestamp = message.timestamp,
-        delivered = true,
-        read = message.senderId == currentUserId,
+        delivered = message.delivered,
+        read = message.read,
         replyToId = message.replyToId,
         edited = message.edited
+    )
+
+    fun fromJson(item: JSONObject): RemoteMessage = RemoteMessage(
+        id = item.optString("id"),
+        senderId = item.optString("sender_id", item.optString("senderId")),
+        recipientId = item.optString("recipient_id", item.optString("recipientId")),
+        text = item.optString("text"),
+        timestamp = item.optDouble("timestamp", 0.0).toLong(),
+        delivered = item.optBoolean("delivered", false),
+        read = item.optBoolean("read", false),
+        edited = item.optBoolean("edited", false),
+        deleted = item.optBoolean("deleted", false),
+        replyToId = item.optString("reply_to_id", item.optString("replyToId")).takeIf { it.isNotBlank() && it != "null" }
     )
 
     private fun encodePathSegment(value: String): String =
