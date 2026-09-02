@@ -9,8 +9,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Home
@@ -181,7 +181,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                             IconButton(onClick = {
                                 selected = if (selected == "Notifications") "Home" else "Features"
                             }) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                             }
                         } else {
                             Spacer(Modifier.size(48.dp))
@@ -257,7 +257,6 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                             onBack = { selected = "Features" }
                         )
                         "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo)
-                        "Studio" -> AiStudioPanel()
                         "To-Do" -> TodoPanel()
                         "Profile" -> ProfilePanel(session = authSession, onSignOut = {
                             FynxAuthStore.clear(context)
@@ -333,7 +332,6 @@ private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
         Triple("Calls", "Voice & Video Calls", Icons.Default.Call),
         Triple("Notifications", "Notifications", Icons.Default.Notifications),
         Triple("Share", "Share & Invite", Icons.Default.Share),
-        Triple("Studio", "AI Studio", Icons.Default.Build),
         Triple("To-Do", "To-Do", Icons.Default.CheckCircle),
         Triple("Calendar", "Calendar", Icons.Default.DateRange),
         Triple("Bills", "Bills & Payment Reminders", Icons.Default.AccountBalance),
