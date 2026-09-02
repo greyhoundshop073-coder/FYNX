@@ -10,7 +10,7 @@ data class StoryPreview(
 
 enum class FynxStoryType { PHOTO, VIDEO, TEXT }
 
-data class FynxStoryItem(
+data class FynxStory(
     val id: String,
     val ownerName: String,
     val ownerUsername: String,
