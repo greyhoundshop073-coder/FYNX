@@ -29,6 +29,7 @@ class FynxRealtimeClient(
 
     private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
+        .pingInterval(30, TimeUnit.SECONDS)
         .build()
     private var socket: WebSocket? = null
 
