@@ -31,6 +31,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var selected by remember { mutableStateOf("Home") }
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
     var openGroup by remember { mutableStateOf<String?>(null) }
+    var profileUser by remember { mutableStateOf<String?>(null) }
     var callTarget by remember { mutableStateOf<String?>(null) }
     var callVideo by remember { mutableStateOf(false) }
     var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else FynxAuthStore.load(context)) }
@@ -71,7 +72,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     val mainDestinationKeys = remember(mainNav) { mainNav.map { it.key }.toSet() }
     val isSecondaryDestination = selected !in mainDestinationKeys
 
-    BackHandler(enabled = openChat != null) { openChat = null }
+    BackHandler(enabled = profileUser != null) { profileUser = null }\n    BackHandler(enabled = openChat != null) { openChat = null }
     BackHandler(enabled = openGroup != null && openChat == null) { openGroup = null }
     BackHandler(enabled = openChat == null && openGroup == null && selected != "Home") {
         selected = if (isSecondaryDestination) {
@@ -79,7 +80,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         } else "Home"
     }
 
-    if (openChat != null) {
+    if (profileUser != null) {\n        FynxTheme(accent = accent) { OtherUserProfilePanel(username = profileUser!!, onBack = { profileUser = null }, onMessage = { name -> openChat = sampleChats.firstOrNull { it.username == name } ?: ChatPreview(name, name, "", false, "Start a conversation"); profileUser = null }) }\n        return\n    }\n    if (openChat != null) {
         FynxTheme(accent = accent) {
             ConversationPanel(
                 chat = openChat!!,
@@ -165,7 +166,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     when (selected) {
                         "Home" -> HomePanel(onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" })
                         "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it })
-                        "Friends" -> FriendsPanel()
+                        "Friends" -> FriendsPanel(onOpenProfile = { profileUser = it })
                         "Marketplace" -> FynxMarketplacePanel()
                         "Money Tools" -> MoneyToolsPanel()
                         "Features" -> FynxFeaturesPanel(onSelect = { selected = it })
