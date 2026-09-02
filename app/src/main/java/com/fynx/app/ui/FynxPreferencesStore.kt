@@ -13,6 +13,7 @@ object FynxPreferencesStore {
     private const val KEY_DISPLAY_NAME = "display_name"
     private const val KEY_USERNAME = "username"
     private const val KEY_BIO = "bio"
+    private const val KEY_DESCRIPTION = "description"
     private const val KEY_NOTIFICATIONS = "notifications"
     private const val KEY_PRIVATE_PROFILE = "private_profile"
     private const val KEY_READ_RECEIPTS = "read_receipts"
@@ -29,6 +30,12 @@ object FynxPreferencesStore {
             username = username.removePrefix("@"),
             bio = prefs.getString(KEY_BIO, null) ?: "Welcome to FYNX"
         )
+    }
+
+    fun loadDescription(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_DESCRIPTION, "") ?: ""
+
+    fun saveDescription(context: Context, description: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_DESCRIPTION, description.trim()).apply()
     }
 
     fun saveProfile(context: Context, profile: FynxProfile) {
