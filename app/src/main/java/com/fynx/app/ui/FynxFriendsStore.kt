@@ -4,45 +4,61 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Small local persistence layer for friend/request state. No backend required. */
+/** Device-local relationship state. Server synchronization will replace this store in the backend stage. */
 class FynxFriendsStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("fynx_friends", Context.MODE_PRIVATE)
     private val key = "profiles"
 
-    fun load(): List<FriendProfile> {
-        val raw = prefs.getString(key, null) ?: return samplePeople
-        return runCatching {
-            val array = JSONArray(raw)
-            List(array.length()) { index ->
-                val o = array.getJSONObject(index)
-                FriendProfile(
-                    displayName = o.optString("displayName"),
-                    username = o.optString("username"),
-                    bio = o.optString("bio"),
-                    hasProfilePhoto = o.optBoolean("hasProfilePhoto"),
-                    isFriend = o.optBoolean("isFriend"),
-                    requestSent = o.optBoolean("requestSent")
-                )
-            }
-        }.getOrElse { samplePeople }
-    }
+    fun load(): List<FriendProfile> = runCatching {
+        val raw = prefs.getString(key, null) ?: return emptyList()
+        val array = JSONArray(raw)
+        List(array.length()) { index ->
+            val o = array.getJSONObject(index)
+            FriendProfile(
+                displayName = o.optString("displayName"),
+                username = o.optString("username"),
+                bio = o.optString("bio"),
+                hasProfilePhoto = o.optBoolean("hasProfilePhoto"),
+                status = runCatching { FynxFriendStatus.valueOf(o.optString("status")) }.getOrDefault(FynxFriendStatus.NONE)
+            )
+        }.filter { it.username.isNotBlank() }
+    }.getOrElse { emptyList() }
 
     fun save(profiles: List<FriendProfile>) {
         val array = JSONArray()
-        profiles.forEach { person ->
+        profiles.distinctBy { normalize(it.username) }.forEach { person ->
             array.put(JSONObject().apply {
                 put("displayName", person.displayName)
-                put("username", person.username)
+                put("username", normalize(person.username))
                 put("bio", person.bio)
                 put("hasProfilePhoto", person.hasProfilePhoto)
-                put("isFriend", person.isFriend)
-                put("requestSent", person.requestSent)
+                put("status", person.status.name)
             })
         }
         prefs.edit().putString(key, array.toString()).apply()
     }
 
-    fun update(username: String, transform: (FriendProfile) -> FriendProfile) {
-        save(load().map { if (it.username == username) transform(it) else it })
+    fun upsert(profile: FriendProfile) {
+        val normalized = normalize(profile.username)
+        save(load().filterNot { normalize(it.username) == normalized } + profile.copy(username = normalized))
     }
+
+    fun setStatus(username: String, status: FynxFriendStatus) {
+        val normalized = normalize(username)
+        save(load().map { if (normalize(it.username) == normalized) it.copy(status = status) else it })
+    }
+
+    fun sendRequest(profile: FriendProfile) = upsert(profile.copy(status = FynxFriendStatus.OUTGOING_PENDING))
+
+    fun cancelRequest(username: String) = setStatus(username, FynxFriendStatus.NONE)
+
+    fun acceptRequest(username: String) = setStatus(username, FynxFriendStatus.FRIENDS)
+
+    fun declineRequest(username: String) = setStatus(username, FynxFriendStatus.DECLINED)
+
+    fun removeFriend(username: String) = setStatus(username, FynxFriendStatus.NONE)
+
+    fun block(username: String) = setStatus(username, FynxFriendStatus.BLOCKED)
+
+    private fun normalize(username: String): String = username.trim().let { if (it.startsWith("@")) it else "@$it" }
 }
