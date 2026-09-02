@@ -9,6 +9,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 
@@ -91,9 +93,11 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     if (showNewChat) {
         AlertDialog(
             onDismissRequest = { showNewChat = false },
-            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true, usePlatformDefaultWidth = true, scrimAlpha = 0f),
+            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true, usePlatformDefaultWidth = true),
             title = { Text("New chat") },
             text = {
+                val dialogView = LocalView.current
+                SideEffect { (dialogView.parent as? DialogWindowProvider)?.window?.setDimAmount(0f) }
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Enter the person’s real FYNX identity. Messages use the production FYNX service and remain available across supported devices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedTextField(value = name, onValueChange = { name = it.take(80) }, label = { Text("Name") }, singleLine = true)
