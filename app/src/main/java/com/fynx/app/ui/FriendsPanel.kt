@@ -16,117 +16,95 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
-    var query by remember { mutableStateOf("") }
     val context = LocalContext.current
-    val results = samplePeople.filter {
-        query.isBlank() ||
-            it.username.contains(query.trim(), ignoreCase = true) ||
-            it.displayName.contains(query.trim(), ignoreCase = true)
-    }
-    val requests = results.take(2)
-    val suggestions = results.drop(2)
+    val store = remember { FynxFriendsStore(context) }
+    val currentUsername = remember { FynxAuthStore.storedUsername(context)?.let(::normalizeUsername) ?: "@preview" }
+    var query by remember { mutableStateOf("") }
+    var section by remember { mutableStateOf("Friends") }
+    var relationships by remember { mutableStateOf(store.load()) }
+    var chats by remember { mutableStateOf(FynxChatStore.loadPreviews(context)) }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(FynxDesign.Background)
-            .padding(16.dp)
-    ) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+    fun refresh() {
+        relationships = store.load()
+        chats = FynxChatStore.loadPreviews(context)
+    }
+
+    val knownProfiles = remember(relationships, chats) {
+        val stored = relationships.associateBy { normalizeUsername(it.username) }
+        chats.mapNotNull { chat ->
+            val username = normalizeUsername(chat.username)
+            if (username.equals(currentUsername, ignoreCase = true)) null
+            else stored[username] ?: FriendProfile(chat.name, username)
+        }.plus(relationships.filter { relationship ->
+            chats.none { normalizeUsername(it.username).equals(normalizeUsername(relationship.username), ignoreCase = true) }
+        }).distinctBy { normalizeUsername(it.username) }
+    }
+
+    val filtered = knownProfiles.filter {
+        query.isBlank() || it.username.contains(query.trim(), ignoreCase = true) || it.displayName.contains(query.trim(), ignoreCase = true)
+    }
+    val friends = filtered.filter { it.status == FynxFriendStatus.FRIENDS }
+    val incoming = filtered.filter { it.status == FynxFriendStatus.INCOMING_PENDING }
+    val outgoing = filtered.filter { it.status == FynxFriendStatus.OUTGOING_PENDING }
+    val discover = filtered.filter { it.status == FynxFriendStatus.NONE || it.status == FynxFriendStatus.DECLINED }
+
+    Column(Modifier.fillMaxSize().background(FynxDesign.Background).padding(16.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = query,
-                onValueChange = { query = it },
+                onValueChange = { query = it.take(80) },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                placeholder = { Text("Search by username") },
+                placeholder = { Text("Search known FYNX usernames") },
                 shape = FynxDesign.ControlShape
             )
-            OutlinedButton(
-                onClick = { shareFynx(context) },
-                shape = FynxDesign.ControlShape,
-                border = BorderStroke(1.dp, FynxDesign.Outline)
-            ) { Text("Invite") }
+            OutlinedButton(onClick = { shareFynx(context) }, shape = FynxDesign.ControlShape, border = BorderStroke(1.dp, FynxDesign.Outline)) { Text("Invite") }
         }
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(14.dp))
+        Text("Friends", style = MaterialTheme.typography.headlineSmall)
+        Text("Manage real people you have connected with. No demo accounts are added.", color = FynxDesign.TextSecondary)
+        Spacer(Modifier.height(12.dp))
 
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Friend Requests", style = MaterialTheme.typography.titleMedium)
-            Text("${requests.size}", color = MaterialTheme.colorScheme.primary)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("Friends", "Requests", "Sent", "Discover").forEach { tab ->
+                FilterChip(selected = section == tab, onClick = { section = tab }, label = { Text(tab) })
+            }
         }
+        Spacer(Modifier.height(10.dp))
 
-        Spacer(Modifier.height(8.dp))
-
-        LazyColumn(
-            Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(bottom = 12.dp)
-        ) {
-            items(requests, key = { "request_${it.username}" }) { person ->
-                var accepted by remember(person.username) { mutableStateOf(false) }
-                Card(
-                    Modifier.fillMaxWidth(),
-                    shape = FynxDesign.CardShape,
-                    colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
-                    border = BorderStroke(1.dp, FynxDesign.Outline)
-                ) {
-                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { onOpenProfile(person.username) }) { FynxAvatar(person.displayName, Modifier.size(48.dp)) }
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(person.displayName, style = MaterialTheme.typography.titleMedium)
-                            Text(person.username, color = FynxDesign.TextSecondary)
-                        }
-                        if (accepted) {
-                            Text("Friends", color = MaterialTheme.colorScheme.primary)
-                        } else {
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Button(onClick = { accepted = true }, shape = FynxDesign.ControlShape) { Text("Confirm") }
-                                OutlinedButton(onClick = {}, shape = FynxDesign.ControlShape) { Text("Delete") }
-                            }
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
+            when (section) {
+                "Friends" -> {
+                    if (friends.isEmpty()) emptyState("No friends yet", "When a real FYNX connection is accepted, it will appear here.")
+                    items(friends, key = { "friend_${it.username}" }) { person ->
+                        FriendRow(person, "Friends", onOpenProfile) {
+                            store.removeFriend(person.username); refresh()
                         }
                     }
                 }
-            }
-
-            item {
-                Spacer(Modifier.height(10.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("People You May Know", style = MaterialTheme.typography.titleMedium)
-                    Text("View All", color = MaterialTheme.colorScheme.primary)
-                }
-            }
-
-            items(suggestions, key = { "suggestion_${it.username}" }) { person ->
-                var requestSent by remember(person.username) { mutableStateOf(person.requestSent) }
-                Card(
-                    Modifier.fillMaxWidth(),
-                    shape = FynxDesign.CardShape,
-                    colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
-                    border = BorderStroke(1.dp, FynxDesign.Outline)
-                ) {
-                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        FynxAvatar(person.displayName, Modifier.size(48.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(person.displayName, style = MaterialTheme.typography.titleMedium)
-                            Text(person.username, color = FynxDesign.TextSecondary)
+                "Requests" -> {
+                    if (incoming.isEmpty()) emptyState("No incoming requests", "Friend requests from other accounts will appear here after server sync is connected.")
+                    items(incoming, key = { "incoming_${it.username}" }) { person ->
+                        FriendRow(person, "Confirm", onOpenProfile, secondaryAction = "Delete") {
+                            store.acceptRequest(person.username); refresh()
                         }
-                        Button(
-                            onClick = { requestSent = true },
-                            enabled = !requestSent && !person.isFriend,
-                            shape = FynxDesign.ControlShape
-                        ) {
-                            Text(if (requestSent) "Sent" else if (person.isFriend) "Friends" else "Add Friend")
+                    }
+                }
+                "Sent" -> {
+                    if (outgoing.isEmpty()) emptyState("No sent requests", "Requests you send will stay visible here until accepted, declined, or cancelled.")
+                    items(outgoing, key = { "outgoing_${it.username}" }) { person ->
+                        FriendRow(person, "Sent", onOpenProfile) {
+                            store.cancelRequest(person.username); refresh()
+                        }
+                    }
+                }
+                else -> {
+                    if (discover.isEmpty()) emptyState("No people to discover", "Open a real conversation first or use Invite to bring someone to FYNX.")
+                    items(discover, key = { "discover_${it.username}" }) { person ->
+                        FriendRow(person, "Add Friend", onOpenProfile) {
+                            store.sendRequest(person); refresh()
                         }
                     }
                 }
@@ -134,3 +112,54 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
         }
     }
 }
+
+@Composable
+private fun FriendRow(
+    person: FriendProfile,
+    actionText: String,
+    onOpenProfile: (String) -> Unit,
+    secondaryAction: String? = null,
+    onAction: () -> Unit
+) {
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = FynxDesign.CardShape,
+        colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+        border = BorderStroke(1.dp, FynxDesign.Outline)
+    ) {
+        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { onOpenProfile(person.username) }) { FynxAvatar(person.displayName, Modifier.size(48.dp)) }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(person.displayName, style = MaterialTheme.typography.titleMedium)
+                Text(person.username, color = FynxDesign.TextSecondary)
+                if (person.bio.isNotBlank()) Text(person.bio, color = FynxDesign.TextSecondary, maxLines = 1)
+            }
+            if (secondaryAction == null) {
+                Button(
+                    onClick = onAction,
+                    enabled = actionText != "Sent" && actionText != "Friends",
+                    shape = FynxDesign.ControlShape
+                ) { Text(actionText) }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Button(onClick = onAction, shape = FynxDesign.ControlShape) { Text(actionText) }
+                    OutlinedButton(onClick = { onAction() }, shape = FynxDesign.ControlShape) { Text(secondaryAction) }
+                }
+            }
+        }
+    }
+}
+
+private fun LazyListScope.emptyState(title: String, body: String) {
+    item {
+        Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline)) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(body, color = FynxDesign.TextSecondary)
+            }
+        }
+    }
+}
+
+private fun normalizeUsername(value: String): String = value.trim().let { if (it.startsWith("@")) it else "@$it" }
