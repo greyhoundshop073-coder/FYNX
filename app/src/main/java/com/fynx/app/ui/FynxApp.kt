@@ -72,7 +72,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     val mainDestinationKeys = remember(mainNav) { mainNav.map { it.key }.toSet() }
     val isSecondaryDestination = selected !in mainDestinationKeys
 
-    BackHandler(enabled = profileUser != null) { profileUser = null }\n    BackHandler(enabled = openChat != null) { openChat = null }
+    BackHandler(enabled = profileUser != null) { profileUser = null }
+    BackHandler(enabled = openChat != null) { openChat = null }
     BackHandler(enabled = openGroup != null && openChat == null) { openGroup = null }
     BackHandler(enabled = openChat == null && openGroup == null && selected != "Home") {
         selected = if (isSecondaryDestination) {
@@ -80,7 +81,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         } else "Home"
     }
 
-    if (profileUser != null) {\n        FynxTheme(accent = accent) { OtherUserProfilePanel(username = profileUser!!, onBack = { profileUser = null }, onMessage = { name -> openChat = sampleChats.firstOrNull { it.username == name } ?: ChatPreview(name, name, "", false, "Start a conversation"); profileUser = null }) }\n        return\n    }\n    if (openChat != null) {
+    if (profileUser != null) {
+        FynxTheme(accent = accent) { OtherUserProfilePanel(username = profileUser!!, onBack = { profileUser = null }, onMessage = { name -> openChat = sampleChats.firstOrNull { it.username == name } ?: ChatPreview(name, name, "", false, "Start a conversation"); profileUser = null }) }\n        return\n    }\n    if (openChat != null) {
         FynxTheme(accent = accent) {
             ConversationPanel(
                 chat = openChat!!,
