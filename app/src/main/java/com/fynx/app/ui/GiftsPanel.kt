@@ -13,22 +13,25 @@ data class FynxGift(
     val id: String,
     val name: String,
     val emoji: String,
-    val description: String
+    val description: String,
+    val value: Int,
+    val rarity: String
 )
 
 private val fynxGiftCatalog = listOf(
-    FynxGift("fynx_diamond", "FYNX Diamond", "💎", "A premium FYNX symbol of appreciation"),
-    FynxGift("royal_ring", "Royal Ring", "💍", "A timeless gift for someone special"),
-    FynxGift("golden_rose", "Golden Rose", "🌹", "A special FYNX gesture of admiration"),
-    FynxGift("love_heart", "Love Heart", "❤️", "Send a little love to a friend"),
-    FynxGift("crown", "Crown", "👑", "Celebrate someone who stands out"),
-    FynxGift("butterfly", "Butterfly", "🦋", "A bright gift for a beautiful moment"),
-    FynxGift("fynx_star", "FYNX Star", "⭐", "Celebrate someone special"),
-    FynxGift("galaxy", "FYNX Galaxy", "💫", "A memorable gift with a little magic"),
-    FynxGift("fire_heart", "Fire Heart", "🔥", "Show bold appreciation"),
-    FynxGift("mystery_box", "Mystery Gift", "🎁", "A surprise for someone special"),
-    FynxGift("flower", "Flower", "🌸", "A gentle gesture of friendship"),
-    FynxGift("trophy", "Trophy", "🏆", "Celebrate an achievement")
+    FynxGift("fynx_flower", "FYNX Flower", "🌸", "A gentle gesture of friendship", 5, "Common"),
+    FynxGift("coffee", "Coffee", "☕", "A warm virtual treat", 10, "Common"),
+    FynxGift("love_heart", "Love Heart", "❤️", "Send a little love", 25, "Common"),
+    FynxGift("fynx_star", "FYNX Star", "⭐", "Celebrate someone special", 50, "Uncommon"),
+    FynxGift("butterfly", "Butterfly", "🦋", "A bright gift for a beautiful moment", 75, "Uncommon"),
+    FynxGift("golden_rose", "Golden Rose", "🌹", "A special FYNX gesture of admiration", 100, "Rare"),
+    FynxGift("fire_heart", "Fire Heart", "🔥", "Show bold appreciation", 250, "Rare"),
+    FynxGift("mystery_box", "Mystery Gift", "🎁", "A surprise for someone special", 500, "Epic"),
+    FynxGift("trophy", "Trophy", "🏆", "Celebrate an achievement", 750, "Epic"),
+    FynxGift("royal_ring", "Royal Ring", "💍", "A timeless gift for someone special", 1000, "Legendary"),
+    FynxGift("crown", "Crown", "👑", "Celebrate someone who stands out", 2500, "Legendary"),
+    FynxGift("fynx_diamond", "FYNX Diamond", "💎", "A premium FYNX symbol of appreciation", 5000, "Ultra"),
+    FynxGift("fynx_galaxy", "FYNX Galaxy", "💫", "A legendary FYNX gift", 10000, "Ultra")
 )
 
 @Composable
@@ -74,6 +77,8 @@ fun GiftsPanel(
                         Text(gift.emoji, style = MaterialTheme.typography.headlineMedium)
                         Spacer(Modifier.height(6.dp))
                         Text(gift.name, style = MaterialTheme.typography.labelLarge)
+                        Text("${gift.value} FYNX", style = MaterialTheme.typography.labelSmall)
+                        Text(gift.rarity, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -84,6 +89,7 @@ fun GiftsPanel(
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("${gift.emoji} ${gift.name}", style = MaterialTheme.typography.titleMedium)
                     Text(gift.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Value: ${gift.value} FYNX • ${gift.rarity}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     Button(
                         onClick = {
                             sent = true
