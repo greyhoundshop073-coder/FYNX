@@ -77,7 +77,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     BackHandler(enabled = openGroup != null && openChat == null) { openGroup = null }
     BackHandler(enabled = openChat == null && openGroup == null && selected != "Home") {
         selected = if (isSecondaryDestination) {
-            when (selected) { "Notifications", "Stories", "Profile" -> "Home"; else -> "Features" }
+            when (selected) { "Notifications", "Stories", "Profile" -> "Home"; "Groups" -> "Chats"; else -> "Features" }
         } else "Home"
     }
 
@@ -188,7 +188,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 ) {
                     when (selected) {
                         "Home" -> HomePanel(onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" })
-                        "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it })
+                        "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" })
                         "Friends" -> FriendsPanel(onOpenProfile = { profileUser = it })
                         "Marketplace" -> FynxMarketplacePanel()
                         "Money Tools" -> MoneyToolsPanel()
@@ -196,6 +196,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
                         "Calendar" -> CalendarPanel()
                         "Stories" -> StoriesPanel()
+                        "Groups" -> FynxGroupsPanel(currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", onOpenGroup = { openGroup = it })
                         "Notifications" -> NotificationPanel(notifications = notifications, onBack = { selected = "Home" }, onNotificationRead = { notifications = FynxNotificationStore.load(context) }, onMarkAllRead = { notifications = FynxNotificationStore.load(context) })
                         "Share" -> FynxSharePanel()
                         "Invite" -> FynxInvitePanel(code = inviteCode, onShare = { FynxShareActions.share(context, FynxShareActions.defaultPayload()) }, onBack = { selected = "Features" })
