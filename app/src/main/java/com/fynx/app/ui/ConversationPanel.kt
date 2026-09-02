@@ -111,20 +111,14 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = onBack) { Text("‹", style = MaterialTheme.typography.headlineSmall) }
-                    IconButton(onClick = { onOpenProfile(chat.username) }) {
-                        FynxAvatar(chat.name, modifier = Modifier.size(46.dp))
-                    }
+                    IconButton(onClick = { onOpenProfile(chat.username) }) { FynxAvatar(chat.name, modifier = Modifier.size(46.dp)) }
                     Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                        TextButton(onClick = { onOpenProfile(chat.username) }, contentPadding = PaddingValues(0.dp)) {
-                            Text(chat.name, style = MaterialTheme.typography.titleMedium)
-                        }
+                        TextButton(onClick = { onOpenProfile(chat.username) }, contentPadding = PaddingValues(0.dp)) { Text(chat.name, style = MaterialTheme.typography.titleMedium) }
                         Text(if (chat.online) "● Online" else chat.username, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
                     }
                     IconButton(onClick = onVoiceCall) { Icon(Icons.Default.Call, "Voice call") }
                     IconButton(onClick = onVideoCall) { Icon(Icons.Default.Videocam, "Video call") }
-                    IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }) {
-                        Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search")
-                    }
+                    IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search") }
                     IconButton(onClick = { showGifts = true }) { Icon(Icons.Default.CardGiftcard, "Send gift") }
                 }
             }
@@ -138,6 +132,12 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) {
                         Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(18.dp), tonalElevation = 1.dp, modifier = Modifier.widthIn(max = 320.dp)) {
                             Column(Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) {
+                                if (message.replyToId != null) {
+                                    val replied = messages.firstOrNull { it.id == message.replyToId }
+                                    Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 7.dp)) {
+                                        Text("↳ ${replied?.text?.take(80) ?: "Original message"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp))
+                                    }
+                                }
                                 if (message.voiceUri != null) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         IconButton(onClick = { playVoice(message) }) { Text(if (playingVoiceId == message.id) "Ⅱ" else "▶") }
@@ -146,7 +146,18 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                             Text((message.voiceDurationMs / 1000).toString() + "s", style = MaterialTheme.typography.labelSmall)
                                         }
                                     }
-                                } else SelectionContainer { Text(message.text) }
+                                } else {
+                                    if (message.attachmentUri != null) {
+                                        Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth().padding(bottom = if (message.text.isBlank()) 0.dp else 7.dp)) {
+                                            Row(Modifier.padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Image, "Photo attachment")
+                                                Spacer(Modifier.width(8.dp))
+                                                Text(if (message.attachmentType == "image") "Photo attached" else "Attachment", style = MaterialTheme.typography.bodySmall)
+                                            }
+                                        }
+                                    }
+                                    if (message.text.isNotBlank()) SelectionContainer { Text(message.text) }
+                                }
                                 if (message.edited) Text("Edited", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 message.reaction?.let { Text(it) }
                                 if (message.fromMe) Text(if (message.read) "Read" else if (message.delivered) "Delivered" else "Sent", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -158,9 +169,9 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     }
                     if (menuMessageId == message.id) {
                         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) {
-                            if (message.voiceUri == null) IconButton(onClick = { clipboardManager.setText(AnnotatedString(message.text)); menuMessageId = null }) { Icon(Icons.Default.ContentCopy, "Copy") }
+                            if (message.voiceUri == null && message.text.isNotBlank()) IconButton(onClick = { clipboardManager.setText(AnnotatedString(message.text)); menuMessageId = null }) { Icon(Icons.Default.ContentCopy, "Copy") }
                             IconButton(onClick = { replyToId = message.id; menuMessageId = null }) { Icon(Icons.Default.Reply, "Reply") }
-                            if (message.fromMe && message.voiceUri == null) {
+                            if (message.fromMe && message.voiceUri == null && message.text.isNotBlank()) {
                                 IconButton(onClick = { editingId = message.id; text = message.text; menuMessageId = null }) { Icon(Icons.Default.Edit, "Edit") }
                                 IconButton(onClick = { messages = messages.filterNot { it.id == message.id }; menuMessageId = null }) { Icon(Icons.Default.Delete, "Delete") }
                             }
@@ -174,15 +185,12 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             Column(Modifier.fillMaxWidth().padding(8.dp)) {
                 if (attachment != null) {
                     Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Image, null)
-                        Text("Photo attached", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                        IconButton(onClick = { attachment = null }) { Icon(Icons.Default.Close, "Remove attachment") }
+                        Icon(Icons.Default.Image, null); Text("Photo attached", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); IconButton(onClick = { attachment = null }) { Icon(Icons.Default.Close, "Remove attachment") }
                     }
                 }
                 if (replyToId != null) {
                     Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Replying to message", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                        IconButton(onClick = { replyToId = null }) { Icon(Icons.Default.Close, "Cancel reply") }
+                        Text("Replying to message", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); IconButton(onClick = { replyToId = null }) { Icon(Icons.Default.Close, "Cancel reply") }
                     }
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
