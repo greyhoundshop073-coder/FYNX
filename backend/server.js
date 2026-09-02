@@ -179,11 +179,19 @@ app.post("/api/assistant", auth, async (req, res) => {
 
 wss.on("connection", (socket, req) => {
   try {
-    const url = new URL(req.url, `http://${req.headers.host || "localhost"}`); const token = url.searchParams.get("token") || "";
+    const header = req.headers.authorization || "";
+    const queryToken = new URL(req.url || "/realtime", `http://${req.headers.host || "localhost"}`).searchParams.get("token") || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7).trim() : queryToken;
     if (!token || !JWT_SECRET) return socket.close(1008, "authentication required");
-    const user = jwt.verify(token, JWT_SECRET); const userId = String(user.sub);
-    const sockets = clientsByUserId.get(userId) || new Set(); sockets.add(socket); clientsByUserId.set(userId, sockets);
-    socket.on("close", () => { sockets.delete(socket); if (sockets.size === 0) clientsByUserId.delete(userId); });
+    const user = jwt.verify(token, JWT_SECRET);
+    const userId = String(user.sub);
+    const sockets = clientsByUserId.get(userId) || new Set();
+    sockets.add(socket);
+    clientsByUserId.set(userId, sockets);
+    socket.on("close", () => {
+      sockets.delete(socket);
+      if (sockets.size === 0) clientsByUserId.delete(userId);
+    });
   } catch { socket.close(1008, "invalid token"); }
 });
 
