@@ -88,8 +88,8 @@ fun ProfilePanel(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = FynxDesign.LargeCardShape,
-                colors = CardDefaults.cardColors(FynxDesign.Surface),
-                border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .6f))
+                colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .6f))
             ) {
                 Column(
                     modifier = Modifier
@@ -102,18 +102,18 @@ fun ProfilePanel(
                     Text(profile.displayName, style = MaterialTheme.typography.headlineSmall)
                     Text(
                         "@${profile.username.removePrefix("@")}",
-                        color = FynxDesign.TextSecondary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
                         profile.bio.ifBlank { "Welcome to FYNX" },
-                        color = FynxDesign.TextSecondary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (description.isNotBlank()) {
                         Text(
                             description,
                             style = MaterialTheme.typography.bodySmall,
-                            color = FynxDesign.TextSecondary
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Spacer(Modifier.height(14.dp))
@@ -176,8 +176,8 @@ private fun ProfileInfoCard(title: String, value: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = FynxDesign.CardShape,
-        colors = CardDefaults.cardColors(FynxDesign.Surface),
-        border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))
+        colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))
     ) {
         Row(
             modifier = Modifier
@@ -190,7 +190,7 @@ private fun ProfileInfoCard(title: String, value: String) {
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.weight(1f)
             )
-            Text(value, color = FynxDesign.TextSecondary)
+            Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -485,8 +485,8 @@ private fun SettingSwitchCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = FynxDesign.CardShape,
-        colors = CardDefaults.cardColors(FynxDesign.Surface),
-        border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))
+        colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))
     ) {
         Row(
             modifier = Modifier
@@ -514,8 +514,8 @@ private fun SettingsActionCard(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = FynxDesign.CardShape,
-        colors = CardDefaults.cardColors(FynxDesign.Surface),
-        border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))
+        colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))
     ) {
         Row(
             modifier = Modifier
@@ -525,12 +525,12 @@ private fun SettingsActionCard(
         ) {
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(value, color = FynxDesign.TextSecondary)
+                Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Icon(
                 Icons.Default.ChevronRight,
                 contentDescription = null,
-                tint = FynxDesign.TextSecondary
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
