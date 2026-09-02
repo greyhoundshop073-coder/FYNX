@@ -1,14 +1,16 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import java.util.UUID
+
 
 data class FynxGift(
     val id: String,
@@ -37,51 +39,107 @@ private val fynxGiftCatalog = listOf(
 
 @Composable
 fun GiftsPanel(
-    recipientName: String = "Your friend",
+    recipientName: String? = null,
     onGiftSelected: (FynxGift) -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val authUsername = FynxAuthStore.storedUsername(context)?.let { if (it.startsWith("@")) it else "@$it" }
+    val actualProfiles = remember(context) {
+        FynxFriendsStore(context).load().filterNot { it in samplePeople }
+    }
+    val initialRecipient = remember(recipientName, actualProfiles) {
+        actualProfiles.firstOrNull { it.displayName.equals(recipientName, ignoreCase = true) || it.username.equals(recipientName, ignoreCase = true) }
+    }
+    var selectedRecipient by remember { mutableStateOf(initialRecipient) }
     var selectedGift by remember { mutableStateOf<FynxGift?>(null) }
-    var sent by remember { mutableStateOf(false) }
+    var confirmationOpen by remember { mutableStateOf(false) }
     var preparedTransfer by remember { mutableStateOf<FynxGiftTransfer?>(null) }
+    val historyStore = remember { FynxGiftHistoryStore() }
 
     Column(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("🎁", style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.width(10.dp))
             Column {
                 Text("Send a gift", style = MaterialTheme.typography.titleLarge)
-                Text("To $recipientName", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    selectedRecipient?.let { "To ${it.displayName}" } ?: "Choose a recipient",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Text("Recipient", style = MaterialTheme.typography.titleMedium)
+        if (actualProfiles.isEmpty()) {
+            Text(
+                "No real FYNX users are available to select yet. Gifts will appear here when another user account is available.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 150.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(actualProfiles, key = { it.username }) { person ->
+                    Card(
+                        onClick = {
+                            selectedRecipient = person
+                            selectedGift = null
+                            preparedTransfer = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (selectedRecipient?.username == person.username)
+                                MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            FynxAvatar(person.username, Modifier.size(40.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(person.displayName, style = MaterialTheme.typography.titleSmall)
+                                Text(person.username, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            if (selectedRecipient?.username == person.username) Text("✓", color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
             }
         }
 
         Text("Choose a gift", style = MaterialTheme.typography.titleMedium)
-
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        LazyColumn(
+            modifier = Modifier.heightIn(max = 290.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             items(fynxGiftCatalog, key = { it.id }) { gift ->
                 Card(
                     onClick = {
                         selectedGift = gift
-                        sent = false
                         preparedTransfer = null
                     },
+                    modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = if (selectedGift?.id == gift.id)
                             MaterialTheme.colorScheme.primaryContainer
                         else MaterialTheme.colorScheme.surfaceVariant
                     )
                 ) {
-                    Column(
-                        Modifier.width(92.dp).padding(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(gift.emoji, style = MaterialTheme.typography.headlineMedium)
-                        Spacer(Modifier.height(6.dp))
-                        Text(gift.name, style = MaterialTheme.typography.labelLarge)
-                        Text("${gift.value} FYNX", style = MaterialTheme.typography.labelSmall)
-                        Text(gift.rarity, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(gift.emoji, style = MaterialTheme.typography.headlineSmall)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(gift.name, style = MaterialTheme.typography.titleSmall)
+                            Text(gift.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("${gift.value} FYNX", style = MaterialTheme.typography.labelLarge)
+                            Text(gift.rarity, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 }
             }
@@ -91,31 +149,16 @@ fun GiftsPanel(
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("${gift.emoji} ${gift.name}", style = MaterialTheme.typography.titleMedium)
-                    Text(gift.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Value: ${gift.value} FYNX • ${gift.rarity}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    Text("Value: ${gift.value} FYNX • ${gift.rarity}", color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        selectedRecipient?.let { "Recipient: ${it.displayName} (${it.username})" } ?: "Select a recipient before continuing",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Button(
-                        onClick = {
-                            val transactionId = UUID.randomUUID().toString()
-                            val transfer = FynxGiftTransfer(
-                                transaction = FynxSecureTransaction(
-                                    id = transactionId,
-                                    reference = FynxTransactionFoundation.createReference(transactionId),
-                                    amount = gift.value.toDouble(),
-                                    currency = "FYNX",
-                                    type = FynxWalletTransactionType.GIFT_SENT
-                                ),
-                                senderName = "You",
-                                recipientName = recipientName,
-                                gift = gift
-                            )
-                            preparedTransfer = transfer
-                            sent = true
-                            onGiftSelected(gift)
-                        },
+                        enabled = selectedRecipient != null && authUsername != null && preparedTransfer == null,
+                        onClick = { confirmationOpen = true },
                         modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(if (sent) "Gift prepared" else "Prepare gift")
-                    }
+                    ) { Text("Review gift") }
                 }
             }
         }
@@ -123,18 +166,74 @@ fun GiftsPanel(
         preparedTransfer?.let { transfer ->
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Ready for secure delivery", style = MaterialTheme.typography.titleSmall)
+                    Text("Gift prepared", style = MaterialTheme.typography.titleSmall)
                     Text("${transfer.gift.emoji} ${transfer.gift.name} • ${transfer.transaction.amount.toInt()} FYNX")
-                    Text("Recipient: ${transfer.recipientName}")
+                    Text("To: ${transfer.recipientName} (${transfer.recipientUsername})")
+                    Text("Status: ${transfer.transaction.status}")
                     Text("Reference: ${transfer.transaction.reference}", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "This is a virtual FYNX gift record. No real money was charged and no backend delivery has occurred yet.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
 
+        val sentHistory = historyStore.sentBy(authUsername.orEmpty())
+        if (sentHistory.isNotEmpty()) {
+            Text("Sent Gifts", style = MaterialTheme.typography.titleMedium)
+            sentHistory.forEach { entry ->
+                ListItem(
+                    headlineContent = { Text("${entry.transfer.gift.emoji} ${entry.giftName}") },
+                    supportingContent = { Text("To ${entry.recipient} • ${entry.amount.toInt()} FYNX • ${entry.status}") },
+                    trailingContent = { Text(entry.reference.takeLast(8), style = MaterialTheme.typography.labelSmall) }
+                )
+            }
+        }
+
         Text(
-            "Gift payments and real delivery will be connected later through the secure production backend. This foundation does not charge money.",
+            "Real payment, wallet debits, cross-device delivery and received-gift syncing will be connected later through the secure production backend.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
+    if (confirmationOpen && selectedGift != null && selectedRecipient != null && authUsername != null) {
+        val gift = selectedGift!!
+        val recipient = selectedRecipient!!
+        AlertDialog(
+            onDismissRequest = { confirmationOpen = false },
+            title = { Text("Confirm gift") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("${gift.emoji} ${gift.name}", style = MaterialTheme.typography.titleMedium)
+                    Text("Send to ${recipient.displayName} (${recipient.username})?")
+                    Text("Value: ${gift.value} FYNX • ${gift.rarity}")
+                    Text("This only prepares a virtual FYNX transaction; it does not move real money.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val transactionId = UUID.randomUUID().toString()
+                    val (status, transfer) = FynxGiftFlow.prepare(
+                        wallet = FynxWalletFoundation.empty("FYNX"),
+                        senderName = authUsername.removePrefix("@").ifBlank { "FYNX user" },
+                        senderUsername = authUsername,
+                        recipientName = recipient.displayName,
+                        recipientUsername = recipient.username,
+                        gift = gift,
+                        transactionId = transactionId
+                    )
+                    if (status == FynxGiftFlowStatus.READY && transfer != null) {
+                        preparedTransfer = transfer
+                        historyStore.add(FynxGiftHistoryEntry(transfer, System.currentTimeMillis()))
+                        onGiftSelected(gift)
+                    }
+                    confirmationOpen = false
+                }) { Text("Prepare gift") }
+            },
+            dismissButton = { TextButton(onClick = { confirmationOpen = false }) { Text("Cancel") } }
         )
     }
 }
