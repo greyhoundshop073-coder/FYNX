@@ -1,17 +1,15 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.NotificationsNone
-import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,33 +19,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-private data class HomeMarketplacePick(
-    val name: String,
-    val price: String,
-    val category: String
-)
-
 @Composable
 fun HomePanel(
+    currentUsername: String = "preview",
     onOpenChats: () -> Unit = {},
     onOpenStories: () -> Unit = {},
     onOpenProfile: () -> Unit = {},
-    onOpenMarketplace: () -> Unit = {}
+    onOpenMarketplace: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var chatPreviews by remember { mutableStateOf(FynxChatStore.loadPreviews(context)) }
     val notifications = remember { FynxNotificationStore.load(context) }
+    val displayUsername = currentUsername.trim().removePrefix("@").ifBlank { "preview" }
 
     LaunchedEffect(Unit) {
         chatPreviews = FynxChatStore.loadPreviews(context)
-    }
-
-    val marketplacePicks = remember {
-        listOf(
-            HomeMarketplacePick("Wireless Headphones", "₦45,000", "Electronics"),
-            HomeMarketplacePick("Classic Sneakers", "₦32,000", "Fashion"),
-            HomeMarketplacePick("Travel Backpack", "₦28,000", "Fashion")
-        )
     }
 
     LazyColumn(
@@ -81,10 +68,10 @@ fun HomePanel(
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         PulseStat("💬", chatPreviews.size.toString(), "Chats", onOpenChats, Modifier.weight(1f))
-                        PulseStat("🔔", notifications.unreadNotificationCount().toString(), "Updates", { }, Modifier.weight(1f))
+                        PulseStat("🔔", notifications.unreadNotificationCount().toString(), "Updates", onOpenNotifications, Modifier.weight(1f))
                     }
                     Text(
-                        "FYNX Pulse will grow with your real friends, conversations, stories, groups and activity. No artificial activity is added.",
+                        "Your Pulse is built from your real FYNX activity. Nothing is invented to make the app look busy.",
                         style = MaterialTheme.typography.bodySmall,
                         color = FynxDesign.TextSecondary
                     )
@@ -97,7 +84,7 @@ fun HomePanel(
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StoryCircle("＋", "Add story", true, onOpenStories)
-                StoryCircle("You", "Your story", false, onOpenStories)
+                StoryCircle(displayUsername, "Your story", false, onOpenStories)
             }
         }
 
@@ -152,31 +139,15 @@ fun HomePanel(
                 colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
                 border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.55f))
             ) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(shape = FynxDesign.ControlShape, color = FynxDesign.SelectedContainer) {
                             Icon(Icons.Default.ShoppingBag, contentDescription = "Marketplace", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(9.dp).size(22.dp))
                         }
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("Discover while you scroll", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            Text("Marketplace photos and videos can appear here as real listings are published.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
-                        }
-                    }
-                    marketplacePicks.forEach { product ->
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                Modifier.size(58.dp).background(FynxDesign.SurfaceRaised, FynxDesign.ControlShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.ShoppingBag, contentDescription = "Product", tint = MaterialTheme.colorScheme.primary)
-                            }
-                            Spacer(Modifier.width(10.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(product.name, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                                Text(product.category, style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
-                            }
-                            Text(product.price, style = MaterialTheme.typography.labelLarge)
+                            Text("Discover real listings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text("Products will appear here as real sellers publish listings.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
                         }
                     }
                     OutlinedButton(onClick = onOpenMarketplace, modifier = Modifier.fillMaxWidth()) {
@@ -197,7 +168,7 @@ fun HomePanel(
                 border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.45f))
             ) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    FynxAvatar("You", Modifier.size(44.dp))
+                    FynxAvatar(displayUsername, Modifier.size(44.dp))
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Your profile", fontWeight = FontWeight.SemiBold)
