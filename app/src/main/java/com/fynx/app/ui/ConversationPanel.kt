@@ -36,6 +36,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var editingId by remember { mutableStateOf<String?>(null) }
     var attachment by remember { mutableStateOf<Uri?>(null) }
     var isRecording by remember { mutableStateOf(false) }
+    var recordingElapsed by remember { mutableLongStateOf(0L) }
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var recordingFile by remember { mutableStateOf<File?>(null) }
     var recordingStartedAt by remember { mutableStateOf(0L) }
@@ -57,9 +58,20 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                     setOutputFile(file.absolutePath)
                     prepare(); start()
-                    recorder = this; recordingFile = file; recordingStartedAt = System.currentTimeMillis(); isRecording = true
+                    recorder = this
+                    recordingFile = file
+                    recordingStartedAt = System.currentTimeMillis()
+                    recordingElapsed = 0L
+                    isRecording = true
                 }
             }
+        }
+    }
+
+    LaunchedEffect(isRecording, recordingStartedAt) {
+        while (isRecording) {
+            recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L)
+            kotlinx.coroutines.delay(200L)
         }
     }
 
@@ -85,13 +97,13 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     fun startRecording() = microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
     fun cancelRecording() {
-        recorder?.release(); recorder = null; recordingFile?.delete(); recordingFile = null; isRecording = false
+        recorder?.release(); recorder = null; recordingFile?.delete(); recordingFile = null; recordingElapsed = 0L; isRecording = false
     }
     fun stopRecording() {
         val r = recorder ?: return
         val file = recordingFile
         val duration = System.currentTimeMillis() - recordingStartedAt
-        runCatching { r.stop() }; r.release(); recorder = null; isRecording = false; recordingFile = null
+        runCatching { r.stop() }; r.release(); recorder = null; isRecording = false; recordingFile = null; recordingElapsed = 0L
         if (file != null && file.exists() && file.length() > 0L && duration >= 300L) {
             messages = messages + ChatMessage("Voice message", true, id = System.currentTimeMillis().toString(), delivered = true, voiceUri = file.absolutePath, voiceDurationMs = duration)
         } else file?.delete()
@@ -193,20 +205,41 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         Text("Replying to message", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); IconButton(onClick = { replyToId = null }) { Icon(Icons.Default.Close, "Cancel reply") }
                     }
                 }
+                if (isRecording) {
+                    Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(9.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Recording", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                            Spacer(Modifier.width(8.dp))
+                            Text(formatRecordingTime(recordingElapsed), style = MaterialTheme.typography.labelLarge)
+                            Spacer(Modifier.width(10.dp))
+                            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+                                repeat(18) { index ->
+                                    val height = 5.dp + (((recordingElapsed / 100L + index * 7L) % 20L).toInt()).dp
+                                    Box(Modifier.width(3.dp).height(height).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)))
+                                }
+                            }
+                        }
+                    }
+                }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                    IconButton(onClick = { imagePicker.launch("image/*") }) { Icon(Icons.Default.AttachFile, "Attach") }
-                    OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), placeholder = { Text(if (editingId == null) "Message…" else "Edit message…") }, maxLines = 5)
+                    IconButton(onClick = { imagePicker.launch("image/*") }, enabled = !isRecording) { Icon(Icons.Default.AttachFile, "Attach") }
+                    OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), placeholder = { Text(if (editingId == null) "Message…" else "Edit message…") }, maxLines = 5, enabled = !isRecording)
                     if (isRecording) {
                         IconButton(onClick = { stopRecording() }) { Icon(Icons.Default.Stop, "Stop recording") }
                         IconButton(onClick = { cancelRecording() }) { Icon(Icons.Default.Close, "Cancel recording") }
-                    } else if (text.isBlank()) {
+                    } else if (text.isBlank() && attachment == null) {
                         IconButton(onClick = { startRecording() }) { Icon(Icons.Default.Mic, "Voice note") }
                     } else {
                         IconButton(onClick = {
                             val value = text.trim()
-                            if (value.isNotEmpty()) {
-                                if (editingId != null) messages = messages.map { if (it.id == editingId) it.copy(text = value, edited = true) else it }
-                                else messages = messages + ChatMessage(value, true, id = System.currentTimeMillis().toString(), delivered = true, replyToId = replyToId, attachmentUri = attachment?.toString(), attachmentType = if (attachment != null) "image" else null)
+                            if (value.isNotEmpty() || attachment != null) {
+                                if (editingId != null) {
+                                    messages = messages.map { if (it.id == editingId) it.copy(text = value, edited = true) else it }
+                                } else {
+                                    messages = messages + ChatMessage(value, true, id = System.currentTimeMillis().toString(), delivered = true, replyToId = replyToId, attachmentUri = attachment?.toString(), attachmentType = if (attachment != null) "image" else null)
+                                }
                                 text = ""; editingId = null; replyToId = null; attachment = null
                             }
                         }) { Icon(if (editingId == null) Icons.Default.Send else Icons.Default.Edit, if (editingId == null) "Send" else "Save") }
@@ -219,6 +252,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     if (showGifts) {
         AlertDialog(onDismissRequest = { showGifts = false }, title = { Text("Send a gift") }, text = { Column(Modifier.fillMaxWidth().heightIn(max = 420.dp)) { GiftsPanel(recipientName = chat.name, onGiftSelected = { showGifts = false }) } }, confirmButton = { TextButton(onClick = { showGifts = false }) { Text("Close") } })
     }
+}
+
+private fun formatRecordingTime(milliseconds: Long): String {
+    val totalSeconds = milliseconds / 1000L
+    return "%02d:%02d".format(totalSeconds / 60L, totalSeconds % 60L)
 }
 
 private fun formatChatTime(timestamp: Long): String {
