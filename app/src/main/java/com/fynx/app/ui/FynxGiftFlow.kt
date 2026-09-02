@@ -7,7 +7,9 @@ data class FynxGiftTransfer(
     val transaction: FynxSecureTransaction,
     val senderName: String,
     val recipientName: String,
-    val gift: FynxGift
+    val gift: FynxGift,
+    val senderUsername: String = "",
+    val recipientUsername: String = ""
 )
 
 object FynxGiftFlow {
@@ -16,10 +18,14 @@ object FynxGiftFlow {
         senderName: String,
         recipientName: String,
         gift: FynxGift,
-        amount: Double,
-        transactionId: String
+        amount: Double = gift.value.toDouble(),
+        transactionId: String,
+        senderUsername: String = "",
+        recipientUsername: String = ""
     ): Pair<FynxGiftFlowStatus, FynxGiftTransfer?> {
-        if (!FynxTransactionFoundation.canDebit(wallet, amount)) {
+        // Gift values are virtual FYNX units at this stage. The wallet argument is
+        // retained for API compatibility, but no real-money wallet balance is debited.
+        if (amount <= 0.0 || amount != gift.value.toDouble()) {
             return FynxGiftFlowStatus.INSUFFICIENT_BALANCE to null
         }
 
@@ -27,7 +33,7 @@ object FynxGiftFlow {
             id = transactionId,
             reference = FynxTransactionFoundation.createReference(transactionId),
             amount = amount,
-            currency = wallet.currency,
+            currency = "FYNX",
             type = FynxWalletTransactionType.GIFT_SENT
         )
 
@@ -35,7 +41,9 @@ object FynxGiftFlow {
             transaction = transaction,
             senderName = senderName,
             recipientName = recipientName,
-            gift = gift
+            gift = gift,
+            senderUsername = senderUsername,
+            recipientUsername = recipientUsername
         )
     }
 
