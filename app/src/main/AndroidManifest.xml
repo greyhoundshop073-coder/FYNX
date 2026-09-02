@@ -35,7 +35,8 @@
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <category android:host="fynx.app" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="fynx.app" />
             </intent-filter>
         </activity>
         <receiver android:name=".ui.TodoReminderReceiver" android:exported="false" />
