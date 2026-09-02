@@ -24,13 +24,15 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun ProfilePanel(
     session: AuthSession = AuthSession(),
+    openSettingsInitially: Boolean = false,
+    onSettingsClosed: () -> Unit = {},
     onSignOut: () -> Unit = {},
     onAppearanceChanged: (String) -> Unit = {},
     onAccentChanged: (FynxAccent) -> Unit = {}
 ) {
     val context = LocalContext.current
     var editing by remember { mutableStateOf(false) }
-    var settingsOpen by remember { mutableStateOf(false) }
+    var settingsOpen by remember { mutableStateOf(openSettingsInitially) }
     var profile by remember(session.username) {
         mutableStateOf(FynxPreferencesStore.loadProfile(context, session.username))
     }
@@ -70,7 +72,7 @@ fun ProfilePanel(
                 settings = it
                 FynxPreferencesStore.saveSettings(context, it)
             },
-            onBack = { settingsOpen = false },
+            onBack = { settingsOpen = false; onSettingsClosed() },
             onAppearanceChanged = onAppearanceChanged,
             onAccentChanged = onAccentChanged
         )
