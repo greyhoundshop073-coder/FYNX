@@ -38,5 +38,10 @@ dependencies {
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("io.github.webrtc-sdk:android:144.7559.14")
+
+    // Real phone-number SMS verification.
+    implementation(platform("com.google.firebase:firebase-bom:34.18.0"))
+    implementation("com.google.firebase:firebase-auth")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
