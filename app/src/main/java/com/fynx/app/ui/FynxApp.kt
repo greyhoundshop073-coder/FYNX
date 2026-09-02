@@ -86,9 +86,17 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             OtherUserProfilePanel(
                 username = profileUser!!,
                 onBack = { profileUser = null },
-                onMessage = { name ->
-                    openChat = sampleChats.firstOrNull { it.username == name }
-                        ?: ChatPreview(name, name, "Start a conversation", "Now")
+                onMessage = { username ->
+                    val normalizedUsername = username.trim().let { if (it.startsWith("@")) it else "@$it" }
+                    val existing = FynxChatStore.loadPreviews(context)
+                        .firstOrNull { it.username.equals(normalizedUsername, ignoreCase = true) }
+                    openChat = existing ?: ChatPreview(
+                        name = normalizedUsername.removePrefix("@").ifBlank { "FYNX user" },
+                        username = normalizedUsername,
+                        lastMessage = "Start a conversation",
+                        time = "Now"
+                    )
+                    FynxChatStore.savePreview(context, openChat!!)
                     profileUser = null
                 }
             )
