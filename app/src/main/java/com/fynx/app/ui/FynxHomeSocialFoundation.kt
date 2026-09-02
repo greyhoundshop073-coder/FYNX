@@ -26,7 +26,7 @@ object FynxHomePostStore {
         (FynxAuthStore.storedUsername(context) ?: "@preview")
             .trim().lowercase().removePrefix("@").ifBlank { "preview" }
 
-    private fun key(context: Context) = "posts_$accountKey"
+    private fun key(context: Context) = "posts_${accountKey(context)}"
 
     fun load(context: Context): List<FynxPost> = runCatching {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(key(context), null) ?: return emptyList()
