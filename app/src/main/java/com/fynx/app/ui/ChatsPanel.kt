@@ -12,7 +12,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit = {}) {
+fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit = {}, onCreateGroup: () -> Unit = {}) {
     var section by remember { mutableStateOf("Chats") }
     val context = LocalContext.current
     var chats by remember { mutableStateOf(FynxChatStore.loadPreviews(context)) }
@@ -60,7 +60,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         } else {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Your groups", style = MaterialTheme.typography.titleMedium)
-                TextButton(onClick = { }) { Text("Create group") }
+                TextButton(onClick = onCreateGroup) { Text("Create group") }
             }
             Spacer(Modifier.height(8.dp))
             if (groups.isEmpty()) {
@@ -73,7 +73,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(groups, key = { it.id }) { group ->
-                        Card(onClick = { onOpenGroup(group.name) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline)) {
+                        Card(onClick = { onOpenGroup(group.id) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline)) {
                             ListItem(
                                 headlineContent = { Text(group.name) },
                                 leadingContent = { FynxAvatar(group.name) },
