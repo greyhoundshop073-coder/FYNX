@@ -19,11 +19,10 @@ object FynxPreferencesStore {
     private const val KEY_READ_RECEIPTS = "read_receipts"
     private const val KEY_STORY_REPLIES = "story_replies"
     private const val KEY_ACCENT = "accent"
-    private const val KEY_PHOTO_VISIBILITY = "photo_visibility"
-    private const val KEY_BIO_VISIBILITY = "bio_visibility"
-    private const val KEY_DESCRIPTION_VISIBILITY = "description_visibility"
-    private const val KEY_FRIENDS_VISIBILITY = "friends_visibility"
-    private const val KEY_FINDABILITY = "findability"
+    private const val KEY_PROFILE_PHOTO = "profile_photo_uri"
+    private const val KEY_LANGUAGE = "language"
+    private const val KEY_APPEARANCE = "appearance"
+    private const val KEY_ASSET = "selected_asset_uri"
 
     fun loadProfile(context: Context, fallbackUsername: String?): FynxProfile {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -77,15 +76,39 @@ object FynxPreferencesStore {
     }
 
     fun loadAccent(context: Context): FynxAccent {
-        val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_ACCENT, FynxAccent.Blue.name)
-        return runCatching { FynxAccent.valueOf(stored ?: FynxAccent.Blue.name) }
-            .getOrDefault(FynxAccent.Blue)
+        val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_ACCENT, FynxAccent.Blue.name)
+        return runCatching { FynxAccent.valueOf(stored ?: FynxAccent.Blue.name) }.getOrDefault(FynxAccent.Blue)
     }
 
     fun saveAccent(context: Context, accent: FynxAccent) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(KEY_ACCENT, accent.name)
-            .apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_ACCENT, accent.name).apply()
+    }
+
+    fun loadProfilePhoto(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_PROFILE_PHOTO, null)
+
+    fun saveProfilePhoto(context: Context, uri: String?) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
+            if (uri.isNullOrBlank()) remove(KEY_PROFILE_PHOTO) else putString(KEY_PROFILE_PHOTO, uri)
+        }.apply()
+    }
+
+    fun loadAppearance(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_APPEARANCE, "System") ?: "System"
+
+    fun saveAppearance(context: Context, value: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_APPEARANCE, value).apply()
+    }
+
+    fun loadLanguage(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_LANGUAGE, "Device default") ?: "Device default"
+
+    fun saveLanguage(context: Context, value: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_LANGUAGE, value).apply()
+    }
+
+    fun loadAsset(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_ASSET, null)
+
+    fun saveAsset(context: Context, uri: String?) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
+            if (uri.isNullOrBlank()) remove(KEY_ASSET) else putString(KEY_ASSET, uri)
+        }.apply()
     }
 }
