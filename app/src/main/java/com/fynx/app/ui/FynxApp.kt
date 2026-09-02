@@ -100,24 +100,31 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         val mainIndex = mainNav.indexOfFirst { it.key == selected }.coerceAtLeast(0)
         val unread = notifications.unreadNotificationCount()
         Scaffold(
-            containerColor = FynxDesign.Background,
+            containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (isSecondary) IconButton(onClick = { selected = "Home" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } else Spacer(Modifier.size(48.dp))
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text(if (selected == "Marketplace") "Marketplace" else if (selected == "Money Tools") "Money Center" else if (selected == "Home") "FYNX" else selected, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
                     if (selected == "Friends") {
                         val myProfile = FynxPreferencesStore.loadProfile(context, authSession.username)
                         val myPhoto = FynxPreferencesStore.loadProfilePhoto(context)
                         IconButton(onClick = { selected = "Profile"; openProfileSettings = false }) {
                             FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
                         }
-                    } else Spacer(Modifier.size(48.dp))
-                    if (selected == "Home") BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) { IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") } } else if (selected == "Friends") { IconButton(onClick = { selected = "Profile"; openProfileSettings = true }) { Icon(Icons.Default.Settings, "Settings") } } else Spacer(Modifier.size(48.dp))
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            Text("Friends", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        }
+                        IconButton(onClick = { selected = "Profile"; openProfileSettings = true }) {
+                            Icon(Icons.Default.Settings, "Settings")
+                        }
+                    } else {
+                        if (isSecondary) IconButton(onClick = { selected = "Home" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } else Spacer(Modifier.size(48.dp))
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text(if (selected == "Marketplace") "Marketplace" else if (selected == "Money Tools") "Money Center" else if (selected == "Home") "FYNX" else selected, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
+                        if (selected == "Home") BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) { IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") } } else Spacer(Modifier.size(48.dp))
+                    }
                 }
             },
             bottomBar = {
-                NavigationBar(containerColor = FynxDesign.Surface, tonalElevation = 8.dp) {
-                    mainNav.forEach { item -> NavigationBarItem(selected = selected == item.key, onClick = { selected = item.key }, icon = { Icon(item.icon, item.label) }, label = { Text(item.label) }, colors = NavigationBarItemDefaults.colors(selectedIconColor = MaterialTheme.colorScheme.primary, selectedTextColor = MaterialTheme.colorScheme.primary, indicatorColor = FynxDesign.SelectedContainer, unselectedIconColor = FynxDesign.TextSecondary, unselectedTextColor = FynxDesign.TextSecondary)) }
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 8.dp) {
+                    mainNav.forEach { item -> NavigationBarItem(selected = selected == item.key, onClick = { selected = item.key }, icon = { Icon(item.icon, item.label) }, label = { Text(item.label) }, colors = NavigationBarItemDefaults.colors(selectedIconColor = MaterialTheme.colorScheme.primary, selectedTextColor = MaterialTheme.colorScheme.primary, indicatorColor = MaterialTheme.colorScheme.secondaryContainer, unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant, unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant)) }
                 }
             }
         ) { padding ->
