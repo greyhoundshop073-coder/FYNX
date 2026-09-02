@@ -15,7 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun FriendsPanel() {
+fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
     var query by remember { mutableStateOf("") }
     val context = LocalContext.current
     val results = samplePeople.filter {
@@ -80,7 +80,7 @@ fun FriendsPanel() {
                     border = BorderStroke(1.dp, FynxDesign.Outline)
                 ) {
                     Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        FynxAvatar(person.displayName, Modifier.size(48.dp))
+                        IconButton(onClick = { onOpenProfile(person.username) }) { FynxAvatar(person.displayName, Modifier.size(48.dp)) }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(person.displayName, style = MaterialTheme.typography.titleMedium)
