@@ -74,7 +74,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     BackHandler(enabled = openChat == null && openGroup == null && selected != "Home") { selected = if (isSecondary) "Home" else "Home" }
 
     if (profileUser != null) {
-        FynxTheme(accent = accent) {
+        FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }) {
             OtherUserProfilePanel(username = profileUser!!, onBack = { profileUser = null }, onMessage = { username ->
                 val normalized = username.trim().let { if (it.startsWith("@")) it else "@$it" }
                 openChat = FynxChatStore.loadPreviews(context).firstOrNull { it.username.equals(normalized, true) }
@@ -86,17 +86,17 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         return
     }
     if (openChat != null) {
-        FynxTheme(accent = accent) {
+        FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }) {
             ConversationPanel(chat = openChat!!, onBack = { openChat = null }, onOpenProfile = { profileUser = it; openChat = null }, onVoiceCall = { callTarget = openChat!!.name; callVideo = false; openChat = null; selected = "Calls" }, onVideoCall = { callTarget = openChat!!.name; callVideo = true; openChat = null; selected = "Calls" })
         }
         return
     }
     if (openGroup != null) {
-        FynxTheme(accent = accent) { FynxGroupConversationPanel(groupId = openGroup!!, currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", onBack = { openGroup = null }) }
+        FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }) { FynxGroupConversationPanel(groupId = openGroup!!, currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", onBack = { openGroup = null }) }
         return
     }
 
-    FynxTheme(accent = accent) {
+    FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }) {
         val mainIndex = mainNav.indexOfFirst { it.key == selected }.coerceAtLeast(0)
         val unread = notifications.unreadNotificationCount()
         Scaffold(
