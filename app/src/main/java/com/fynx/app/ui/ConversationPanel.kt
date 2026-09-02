@@ -106,18 +106,33 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onVoiceCall: () -> 
 
     val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, ignoreCase = true) }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
-            Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("‹") }
-                Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
-                    Text(chat.name, style = MaterialTheme.typography.titleMedium)
-                    Text(if (chat.online) "online" else chat.username, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(Modifier.fillMaxSize().background(FynxDesign.Background)) {
+        Surface(color = FynxDesign.Surface, tonalElevation = 3.dp) {
+            Column(
+                Modifier.fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onBack) { Text("‹", style = MaterialTheme.typography.headlineSmall) }
+                    FynxAvatar(chat.name, modifier = Modifier.size(46.dp))
+                    Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                        Text(chat.name, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (chat.online) "● Online" else chat.username,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = FynxDesign.TextSecondary
+                        )
+                    }
+                    IconButton(onClick = onVoiceCall) { Icon(Icons.Default.Call, "Voice call") }
+                    IconButton(onClick = onVideoCall) { Icon(Icons.Default.Videocam, "Video call") }
+                    IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }) {
+                        Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search")
+                    }
+                    IconButton(onClick = { showGifts = true }) { Icon(Icons.Default.CardGiftcard, "Send gift") }
                 }
-                IconButton(onClick = onVoiceCall) { Icon(Icons.Default.Call, "Voice call") }
-                IconButton(onClick = onVideoCall) { Icon(Icons.Default.Videocam, "Video call") }
-                IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search") }
-                IconButton(onClick = { showGifts = true }) { Icon(Icons.Default.CardGiftcard, "Send gift") }
             }
         }
 
@@ -161,7 +176,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onVoiceCall: () -> 
             }
         }
 
-        Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp, modifier = Modifier.navigationBarsPadding().imePadding()) {
+        Surface(color = FynxDesign.Surface, tonalElevation = 3.dp, modifier = Modifier.navigationBarsPadding().imePadding()) {
             Column(Modifier.fillMaxWidth().padding(8.dp)) {
                 if (attachment != null) {
                     Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
