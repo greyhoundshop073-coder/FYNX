@@ -54,6 +54,7 @@ class FynxFriendsStore(context: Context) {
     fun declineRequest(username: String) = setStatus(username, FynxFriendStatus.DECLINED)
     fun removeFriend(username: String) = setStatus(username, FynxFriendStatus.NONE)
     fun block(username: String) = setStatus(username, FynxFriendStatus.BLOCKED)
+    fun unblock(username: String) = setStatus(username, FynxFriendStatus.NONE)
 
     private companion object {
         fun normalize(username: String): String = username.trim().let { if (it.startsWith("@")) it else "@$it" }
