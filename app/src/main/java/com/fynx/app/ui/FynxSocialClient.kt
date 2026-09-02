@@ -43,6 +43,9 @@ object FynxSocialClient {
     suspend fun rejectRequest(context: Context, id: String): Result<Unit> =
         FynxBackendClient.postJson(context, "/api/friends/requests/$id/reject", "{}").map { }
 
+    suspend fun cancelRequest(context: Context, id: String): Result<Unit> =
+        FynxBackendClient.delete(context, "/api/friends/requests/$id").map { }
+
     suspend fun removeFriend(context: Context, username: String): Result<Unit> =
         FynxBackendClient.delete(context, "/api/friends/${encode(username)}").map { }
 
