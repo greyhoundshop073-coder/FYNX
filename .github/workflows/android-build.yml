@@ -26,6 +26,9 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
+      - name: Generate Android signing fingerprints
+        run: ./gradlew signingReport --no-daemon
+
       - name: Run consolidated integration verification
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug --no-daemon
 
