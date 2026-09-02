@@ -166,7 +166,6 @@ app.get("/api/messages/:username", auth, async (req, res) => {
     const blocked = await pool.query(`SELECT 1 FROM blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1`, [req.user.sub, other.id]);
     if (blocked.rowCount) return res.status(403).json({ error: "conversation unavailable" });
     const result = await pool.query(`SELECT m.id, m.sender_id, sender.username AS sender_username, m.recipient_id, recipient.username AS recipient_username, m.text, EXTRACT(EPOCH FROM m.created_at) * 1000 AS timestamp, m.delivered_at IS NOT NULL AS delivered, m.read_at IS NOT NULL AS read, m.edited, m.deleted, m.reply_to_id FROM messages m JOIN users sender ON sender.id = m.sender_id JOIN users recipient ON recipient.id = m.recipient_id WHERE (m.sender_id = $1 AND m.recipient_id = $2) OR (m.sender_id = $2 AND m.recipient_id = $1) ORDER BY m.created_at ASC LIMIT 200`, [req.user.sub, other.id]);
-    await pool.query("UPDATE messages SET read_at = COALESCE(read_at, NOW()), delivered_at = COALESCE(delivered_at, NOW()) WHERE sender_id = $1 AND recipient_id = $2 AND read_at IS NULL", [other.id, req.user.sub]);
     return res.json({ messages: result.rows });
   } catch (error) { console.error("messages", error); return res.status(500).json({ error: "message history failed" }); }
 });
@@ -219,8 +218,7 @@ app.post("/api/assistant", auth, async (req, res) => {
 wss.on("connection", async (socket, req) => {
   try {
     const header = req.headers.authorization || "";
-    const queryToken = new URL(req.url || "/realtime", `http://${req.headers.host || "localhost"}`).searchParams.get("token") || "";
-    const token = header.startsWith("Bearer ") ? header.slice(7).trim() : queryToken;
+    const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
     if (!token || !JWT_SECRET) return socket.close(1008, "authentication required");
     const user = jwt.verify(token, JWT_SECRET);
     const userId = String(user.sub);
