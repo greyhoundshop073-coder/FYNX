@@ -72,9 +72,10 @@ fun FynxMarketplacePanel(
     var selectedCategory by remember { mutableStateOf("All") }
     var showCreate by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<FynxMarketListing?>(null) }
+    var pickedMediaUri by remember { mutableStateOf<Uri?>(null) }
     var cartCount by remember { mutableIntStateOf(0) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) selected = selected?.copy(mediaUri = uri.toString())
+        if (uri != null) pickedMediaUri = uri
     }
 
     val categories = listOf("All", "Electronics", "Fashion", "Home")
@@ -119,13 +120,14 @@ fun FynxMarketplacePanel(
     selected?.let { listing ->
         if (listing.id.startsWith("new-")) {
             ProductComposer(
-                listing = listing,
+                listing = listing.copy(mediaUri = pickedMediaUri?.toString() ?: listing.mediaUri),
                 onPickMedia = { picker.launch("image/*") },
-                onCancel = { selected = null },
+                onCancel = { selected = null; pickedMediaUri = null },
                 onPublish = { published ->
                     listings = listOf(published) + listings
                     FynxMarketStore.save(context, listings)
                     selected = null
+                    pickedMediaUri = null
                 }
             )
         } else {
