@@ -203,8 +203,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, ignoreCase = true) }
 
-    Column(Modifier.fillMaxSize().background(FynxDesign.Background)) {
-        Surface(color = FynxDesign.Surface, tonalElevation = 3.dp) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
             Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = onBack) { Text("‹", style = MaterialTheme.typography.headlineSmall) }
@@ -215,7 +215,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             otherIsTyping -> "typing…"
                             isOnline -> "● Online"
                             else -> chat.username
-                        }, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
+                        }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = onVoiceCall) { Icon(Icons.Default.Call, "Voice call") }
                     IconButton(onClick = onVideoCall) { Icon(Icons.Default.Videocam, "Video call") }
@@ -283,7 +283,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             }
         }
 
-        Surface(color = FynxDesign.Surface, tonalElevation = 3.dp, modifier = Modifier.navigationBarsPadding().imePadding()) {
+        Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp, modifier = Modifier.navigationBarsPadding().imePadding()) {
             Column(Modifier.fillMaxWidth().padding(8.dp)) {
                 if (attachment != null) {
                     Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
