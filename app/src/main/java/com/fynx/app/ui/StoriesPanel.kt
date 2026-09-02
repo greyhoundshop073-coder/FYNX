@@ -15,17 +15,20 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun StoriesPanel() {
-    var privacy by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = context.getSharedPreferences("fynx_stories", android.content.Context.MODE_PRIVATE)
+    var privacy by remember { mutableStateOf(prefs.getBoolean("private_story", false)) }
+    var shared by remember { mutableStateOf(prefs.getBoolean("story_shared", false)) }
     var storyType by remember { mutableStateOf<String?>(null) }
     var storyUri by remember { mutableStateOf<Uri?>(null) }
     var textStory by remember { mutableStateOf("") }
     var showTextComposer by remember { mutableStateOf(false) }
 
-    val mediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            storyUri = uri
-            storyType = if (uri.toString().contains("video", true)) "Video" else "Photo"
-        }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) { storyUri = uri; storyType = "Photo"; shared = false }
+    }
+    val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) { storyUri = uri; storyType = "Video"; shared = false }
     }
 
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -41,12 +44,15 @@ fun StoriesPanel() {
                     }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { mediaPicker.launch("image/*") }, modifier = Modifier.weight(1f)) { Text("Photo") }
-                    OutlinedButton(onClick = { mediaPicker.launch("video/*") }, modifier = Modifier.weight(1f)) { Text("Video") }
+                    OutlinedButton(onClick = { photoPicker.launch("image/*") }, modifier = Modifier.weight(1f)) { Text("Photo") }
+                    OutlinedButton(onClick = { videoPicker.launch("video/*") }, modifier = Modifier.weight(1f)) { Text("Video") }
                     OutlinedButton(onClick = { showTextComposer = true }, modifier = Modifier.weight(1f)) { Text("Text") }
                 }
                 if (storyType != null) {
-                    Button(onClick = { }, modifier = Modifier.fillMaxWidth()) { Text("Share story") }
+                    Button(onClick = {
+                        prefs.edit().putBoolean("story_shared", true).putBoolean("private_story", privacy).apply()
+                        shared = true
+                    }, modifier = Modifier.fillMaxWidth()) { Text(if (shared) "Story shared" else "Share story") }
                 }
             }
         }
@@ -70,7 +76,7 @@ fun StoriesPanel() {
                 Text("Private story", style = MaterialTheme.typography.titleSmall)
                 Text("Only selected friends can view it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Switch(checked = privacy, onCheckedChange = { privacy = it })
+            Switch(checked = privacy, onCheckedChange = { privacy = it; prefs.edit().putBoolean("private_story", it).apply() })
         }
     }
 
@@ -79,7 +85,7 @@ fun StoriesPanel() {
             onDismissRequest = { showTextComposer = false },
             title = { Text("Text story") },
             text = { OutlinedTextField(value = textStory, onValueChange = { textStory = it }, modifier = Modifier.fillMaxWidth(), minLines = 4, placeholder = { Text("Write something…") }) },
-            confirmButton = { TextButton(enabled = textStory.isNotBlank(), onClick = { storyType = "Text"; storyUri = null; showTextComposer = false }) { Text("Done") } },
+            confirmButton = { TextButton(enabled = textStory.isNotBlank(), onClick = { storyType = "Text"; storyUri = null; shared = false; showTextComposer = false }) { Text("Done") } },
             dismissButton = { TextButton(onClick = { showTextComposer = false }) { Text("Cancel") } }
         )
     }
