@@ -39,6 +39,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
+private const val FYNX_PREVIEW_MODE = true
+
 private data class FynxNavItem(val key: String, val label: String, val icon: ImageVector)
 
 @Composable
@@ -50,7 +52,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var callTarget by remember { mutableStateOf<String?>(null) }
     var callVideo by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    var authSession by remember { mutableStateOf(FynxAuthStore.load(context)) }
+    var authSession by remember {
+        mutableStateOf(
+            if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview")
+            else FynxAuthStore.load(context)
+        )
+    }
     var notifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
     var inviteCode by remember { mutableStateOf<String?>(null) }
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
@@ -71,7 +78,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         notifications = FynxNotificationStore.load(context)
     }
 
-    if (authSession.state != AuthState.SIGNED_IN) {
+    if (!FYNX_PREVIEW_MODE && authSession.state != AuthState.SIGNED_IN) {
         FynxTheme(accent = accent) {
             FynxAuthGate { username ->
                 FynxAuthStore.save(context, username)
@@ -92,20 +99,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     val mainDestinationKeys = remember(mainNav) { mainNav.map { it.key }.toSet() }
     val isSecondaryDestination = selected !in mainDestinationKeys
 
-    BackHandler(enabled = openChat != null) {
-        openChat = null
-    }
-
-    BackHandler(enabled = openGroup != null && openChat == null) {
-        openGroup = null
-    }
-
+    BackHandler(enabled = openChat != null) { openChat = null }
+    BackHandler(enabled = openGroup != null && openChat == null) { openGroup = null }
     BackHandler(enabled = openChat == null && openGroup == null && selected != "Home") {
         selected = if (isSecondaryDestination) {
             if (selected == "Notifications") "Home" else "Features"
-        } else {
-            "Home"
-        }
+        } else "Home"
     }
 
     if (openChat != null) {
@@ -151,15 +150,13 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        FynxAvatar("username", Modifier.size(34.dp))
+                        FynxAvatar(authSession.username.ifBlank { "preview" }, Modifier.size(34.dp))
                         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                             Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             BadgedBox(
-                                badge = {
-                                    if (unreadNotifications > 0) Badge { Text(unreadNotifications.toString()) }
-                                }
+                                badge = { if (unreadNotifications > 0) Badge { Text(unreadNotifications.toString()) } }
                             ) {
                                 IconButton(onClick = { selected = "Notifications" }) {
                                     Icon(Icons.Default.Notifications, "Notifications")
@@ -178,9 +175,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (isSecondaryDestination) {
-                            IconButton(onClick = {
-                                selected = if (selected == "Notifications") "Home" else "Features"
-                            }) {
+                            IconButton(onClick = { selected = if (selected == "Notifications") "Home" else "Features" }) {
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                             }
                         } else {
@@ -259,8 +254,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo)
                         "To-Do" -> TodoPanel()
                         "Profile" -> ProfilePanel(session = authSession, onSignOut = {
-                            FynxAuthStore.clear(context)
-                            authSession = AuthSession()
+                            if (FYNX_PREVIEW_MODE) {
+                                authSession = AuthSession(AuthState.SIGNED_IN, "preview")
+                            } else {
+                                FynxAuthStore.clear(context)
+                                authSession = AuthSession()
+                            }
                         })
                         "Bills" -> BillsPaymentPanel()
                         "Transactions" -> TransactionHistoryPanel()
@@ -304,10 +303,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                                         FynxPreferencesStore.saveAccent(context, option)
                                     },
                                     shape = FynxDesign.ControlShape,
-                                    border = BorderStroke(
-                                        1.dp,
-                                        if (accent == option) option.primary else FynxDesign.Outline
-                                    )
+                                    border = BorderStroke(1.dp, if (accent == option) option.primary else FynxDesign.Outline)
                                 ) {
                                     Text("●", color = option.primary)
                                     Spacer(Modifier.width(5.dp))
@@ -317,9 +313,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         }
                     }
                 },
-                confirmButton = {
-                    TextButton(onClick = { showSettings = false }) { Text("Done") }
-                }
+                confirmButton = { TextButton(onClick = { showSettings = false }) { Text("Done") } }
             )
         }
     }
@@ -369,14 +363,8 @@ private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
                     colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
                     border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.5f))
                 ) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = FynxDesign.ControlShape,
-                            color = FynxDesign.SelectedContainer
-                        ) {
+                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Surface(shape = FynxDesign.ControlShape, color = FynxDesign.SelectedContainer) {
                             Icon(
                                 icon,
                                 contentDescription = label,
