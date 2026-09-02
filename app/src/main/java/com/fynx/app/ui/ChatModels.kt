@@ -24,8 +24,3 @@ data class ChatMessage(
     val voiceUri: String? = null,
     val voiceDurationMs: Long = 0L
 )
-
-val sampleChats = listOf(
-    ChatPreview("FYNX Assistant", "@fynx", "How can I help you today?", "Now"),
-    ChatPreview("Your first friend", "@username", "Start a conversation", "—")
-)
