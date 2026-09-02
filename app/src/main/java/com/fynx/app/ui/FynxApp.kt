@@ -115,7 +115,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         return
     }
     if (openGroup != null) {
-        FynxTheme(accent = accent) { FynxGroupConversationPanel(groupName = openGroup!!, onBack = { openGroup = null }) }
+        FynxTheme(accent = accent) { FynxGroupConversationPanel(groupId = openGroup!!, currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", onBack = { openGroup = null }) }
         return
     }
 
