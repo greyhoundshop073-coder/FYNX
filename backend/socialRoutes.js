@@ -30,12 +30,13 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   app.get("/api/friends/requests", auth, async (req, res) => {
     try {
       const result = await pool.query(
-        `SELECT f.id, f.status, f.created_at, u.id AS user_id, u.username, u.display_name
+        `SELECT f.id, f.status, f.created_at, u.id AS user_id, u.username, u.display_name,
+                CASE WHEN f.friend_id = $1 THEN 'incoming' ELSE 'outgoing' END AS direction
          FROM friendships f JOIN users u ON u.id = CASE WHEN f.user_id = $1 THEN f.friend_id ELSE f.user_id END
          WHERE (f.user_id = $1 OR f.friend_id = $1) AND f.status = 'pending'
          ORDER BY f.created_at DESC`, [req.user.sub]
       );
-      return res.json({ requests: result.rows });
+      return res.json({ requests: result.rows.map((row) => ({ ...row, status: row.direction })) });
     } catch (error) { console.error("friend requests", error); return res.status(500).json({ error: "friend requests lookup failed" }); }
   });
 
@@ -84,6 +85,17 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       if (!result.rows[0]) return res.status(404).json({ error: "request not found" });
       return res.json({ ok: true });
     } catch (error) { console.error("reject friend", error); return res.status(500).json({ error: "reject failed" }); }
+  });
+
+  app.delete("/api/friends/requests/:id", auth, async (req, res) => {
+    try {
+      const result = await pool.query(
+        `DELETE FROM friendships WHERE id = $1 AND user_id = $2 AND status = 'pending' RETURNING id`,
+        [req.params.id, req.user.sub]
+      );
+      if (!result.rows[0]) return res.status(404).json({ error: "outgoing request not found" });
+      return res.json({ ok: true });
+    } catch (error) { console.error("cancel friend request", error); return res.status(500).json({ error: "cancel request failed" }); }
   });
 
   app.delete("/api/friends/:username", auth, async (req, res) => {
