@@ -6,21 +6,18 @@ import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/**
- * Small dependency-free HTTP boundary for FYNX server work.
- * It is disabled until a real HTTPS backend endpoint is configured, so the
- * current app keeps its local behavior and never attempts a fake network call.
- */
+/** Secure network boundary for the real FYNX backend. */
 object FynxBackendClient {
     private const val PREFS = "fynx_backend"
     private const val KEY_BASE_URL = "base_url"
     private const val KEY_ACCESS_TOKEN = "access_token"
+    private const val PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"
 
     fun availability(context: Context): FynxBackendAvailability =
         if (baseUrl(context).isBlank()) FynxBackendAvailability.DISABLED else FynxBackendAvailability.CONFIGURED
 
     fun baseUrl(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        .getString(KEY_BASE_URL, "")?.trim()?.trimEnd('/') ?: ""
+        .getString(KEY_BASE_URL, PRODUCTION_BASE_URL)?.trim()?.trimEnd('/') ?: PRODUCTION_BASE_URL
 
     fun configureBaseUrl(context: Context, value: String) {
         val normalized = value.trim().trimEnd('/')
@@ -34,32 +31,28 @@ object FynxBackendClient {
         }.apply()
     }
 
-    fun hasAccessToken(context: Context): Boolean = !context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        .getString(KEY_ACCESS_TOKEN, null).isNullOrBlank()
+    fun accessToken(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        .getString(KEY_ACCESS_TOKEN, null)?.takeIf { it.isNotBlank() }
+
+    fun hasAccessToken(context: Context): Boolean = accessToken(context) != null
 
     suspend fun get(context: Context, path: String): Result<String> = request(context, "GET", path, null)
 
-    suspend fun postJson(context: Context, path: String, body: String): Result<String> =
-        request(context, "POST", path, body)
+    suspend fun postJson(context: Context, path: String, body: String): Result<String> = request(context, "POST", path, body)
 
     private suspend fun request(context: Context, method: String, path: String, body: String?): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val root = baseUrl(context)
             require(root.isNotBlank()) { "FYNX backend is not configured." }
             require(path.startsWith("/")) { "Backend path must start with /." }
-
             val connection = (URL(root + path).openConnection() as HttpURLConnection).apply {
                 requestMethod = method
                 connectTimeout = 10_000
-                readTimeout = 15_000
+                readTimeout = 20_000
                 useCaches = false
                 setRequestProperty("Accept", "application/json")
-                context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                    .getString(KEY_ACCESS_TOKEN, null)
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { setRequestProperty("Authorization", "Bearer $it") }
+                accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
             }
-
             try {
                 if (body != null) {
                     connection.doOutput = true
@@ -71,9 +64,7 @@ object FynxBackendClient {
                 val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 if (status !in 200..299) throw IllegalStateException("FYNX backend returned HTTP $status${if (response.isBlank()) "" else ": $response"}")
                 response
-            } finally {
-                connection.disconnect()
-            }
+            } finally { connection.disconnect() }
         }
     }
 }
