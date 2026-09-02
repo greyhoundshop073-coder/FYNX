@@ -16,21 +16,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-private data class FynxProduct(val id: String, val name: String, val price: String, val category: String)
+private data class FynxProduct(val id: String, val name: String, val price: String, val category: String, val seller: String, val rating: String)
 
 @Composable
 fun FynxMarketplacePanel() {
     var query by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All") }
     var cartCount by remember { mutableIntStateOf(0) }
+    var selectedProduct by remember { mutableStateOf<FynxProduct?>(null) }
     val products = remember {
         listOf(
-            FynxProduct("1", "Wireless Headphones", "₦45,000", "Electronics"),
-            FynxProduct("2", "Smart Watch", "₦38,000", "Electronics"),
-            FynxProduct("3", "Classic Sneakers", "₦32,000", "Fashion"),
-            FynxProduct("4", "Travel Backpack", "₦28,000", "Fashion"),
-            FynxProduct("5", "Desk Lamp", "₦18,500", "Home"),
-            FynxProduct("6", "Phone Stand", "₦9,500", "Home")
+            FynxProduct("1", "Wireless Headphones", "₦45,000", "Electronics", "FYNX Tech Store", "4.8"),
+            FynxProduct("2", "Smart Watch", "₦38,000", "Electronics", "Nova Gadgets", "4.7"),
+            FynxProduct("3", "Classic Sneakers", "₦32,000", "Fashion", "Urban FYNX", "4.9"),
+            FynxProduct("4", "Travel Backpack", "₦28,000", "Fashion", "Voyage Shop", "4.6"),
+            FynxProduct("5", "Desk Lamp", "₦18,500", "Home", "HomeSpace", "4.8"),
+            FynxProduct("6", "Phone Stand", "₦9,500", "Home", "FYNX Essentials", "4.5")
         )
     }
     val categories = listOf("All", "Electronics", "Fashion", "Home")
@@ -77,6 +78,7 @@ fun FynxMarketplacePanel() {
         ) {
             items(visible, key = { it.id }) { product ->
                 Card(
+                    onClick = { selectedProduct = product },
                     modifier = Modifier.fillMaxWidth(),
                     shape = FynxDesign.CardShape,
                     colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
@@ -92,6 +94,8 @@ fun FynxMarketplacePanel() {
                         Spacer(Modifier.height(10.dp))
                         Text(product.name, style = MaterialTheme.typography.titleMedium, maxLines = 2)
                         Text(product.category, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
+                        Text(product.seller, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary, maxLines = 1)
+                        Text("★ " + product.rating, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.height(4.dp))
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(product.price, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
@@ -101,5 +105,26 @@ fun FynxMarketplacePanel() {
                 }
             }
         }
+    }
+
+    selectedProduct?.let { product ->
+        AlertDialog(
+            onDismissRequest = { selectedProduct = null },
+            title = { Text(product.name) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(product.price, style = MaterialTheme.typography.titleLarge)
+                    Text("Sold by " + product.seller, color = FynxDesign.TextSecondary)
+                    Text("★ " + product.rating + " seller rating", color = MaterialTheme.colorScheme.primary)
+                    Text("Category: " + product.category)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { cartCount++; selectedProduct = null }) { Text("Add to cart") }
+            },
+            dismissButton = {
+                TextButton(onClick = { selectedProduct = null }) { Text("Close") }
+            }
+        )
     }
 }
