@@ -306,6 +306,11 @@ fun SettingsPanel(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Un
     var descriptionVisibility by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, "description_visibility")) }
     var friendsVisibility by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, "friends_visibility", "Friends")) }
     var findability by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, "findability")) }
+    var messagesVisibility by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, "messages_visibility", "Everyone")) }
+    var groupsVisibility by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, "groups_visibility", "Friends")) }
+    var callsVisibility by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, "calls_visibility", "Everyone")) }
+    var onlineVisibility by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, "online_visibility", "Friends")) }
+    var lastActiveVisibility by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, "last_active_visibility", "Friends")) }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)
@@ -382,6 +387,13 @@ fun SettingsPanel(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Un
             item {
                 VisibilitySettingCard("Who can find me", findability) { findability = it; FynxPreferencesStore.saveVisibility(context, "findability", it) }
             }
+
+            item { SettingsSectionTitle("Contact & activity privacy") }
+            item { VisibilitySettingCard("Who can message me", messagesVisibility) { messagesVisibility = it; FynxPreferencesStore.saveVisibility(context, "messages_visibility", it) } }
+            item { VisibilitySettingCard("Who can add me to groups", groupsVisibility) { groupsVisibility = it; FynxPreferencesStore.saveVisibility(context, "groups_visibility", it) } }
+            item { VisibilitySettingCard("Who can call me", callsVisibility) { callsVisibility = it; FynxPreferencesStore.saveVisibility(context, "calls_visibility", it) } }
+            item { VisibilitySettingCard("Online status", onlineVisibility) { onlineVisibility = it; FynxPreferencesStore.saveVisibility(context, "online_visibility", it) } }
+            item { VisibilitySettingCard("Last active", lastActiveVisibility) { lastActiveVisibility = it; FynxPreferencesStore.saveVisibility(context, "last_active_visibility", it) } }
 
             item { SettingsSectionTitle("Notifications") }
             item {
