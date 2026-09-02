@@ -14,6 +14,9 @@ data class FynxPost(
     val text: String,
     val timestamp: Long,
     val visibility: FynxPostVisibility = FynxPostVisibility.PUBLIC,
+    val mediaUri: String? = null,
+    val likeCount: Int = 0,
+    val commentCount: Int = 0,
     val likedByCurrentUser: Boolean = false,
     val savedByCurrentUser: Boolean = false
 )
@@ -37,13 +40,17 @@ object FynxHomePostStore {
                 val id = item.optString("id")
                 val text = item.optString("text").trim()
                 val author = item.optString("authorUsername")
-                if (id.isNotBlank() && text.isNotBlank() && author.isNotBlank()) {
+                val mediaUri = item.optString("mediaUri").ifBlank { null }
+                if (id.isNotBlank() && author.isNotBlank() && (text.isNotBlank() || mediaUri != null)) {
                     add(FynxPost(
                         id = id,
                         authorUsername = author,
                         text = text,
                         timestamp = item.optLong("timestamp", 0L),
                         visibility = runCatching { FynxPostVisibility.valueOf(item.optString("visibility")) }.getOrDefault(FynxPostVisibility.PUBLIC),
+                        mediaUri = mediaUri,
+                        likeCount = item.optInt("likeCount", if (item.optBoolean("likedByCurrentUser")) 1 else 0).coerceAtLeast(0),
+                        commentCount = item.optInt("commentCount", 0).coerceAtLeast(0),
                         likedByCurrentUser = item.optBoolean("likedByCurrentUser"),
                         savedByCurrentUser = item.optBoolean("savedByCurrentUser")
                     ))
@@ -61,6 +68,9 @@ object FynxHomePostStore {
                 put("text", post.text)
                 put("timestamp", post.timestamp)
                 put("visibility", post.visibility.name)
+                put("mediaUri", post.mediaUri ?: "")
+                put("likeCount", post.likeCount.coerceAtLeast(0))
+                put("commentCount", post.commentCount.coerceAtLeast(0))
                 put("likedByCurrentUser", post.likedByCurrentUser)
                 put("savedByCurrentUser", post.savedByCurrentUser)
             })
@@ -68,16 +78,24 @@ object FynxHomePostStore {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(key(context), array.toString()).apply()
     }
 
-    fun create(context: Context, text: String, visibility: FynxPostVisibility): FynxPost? {
+    fun create(context: Context, text: String, visibility: FynxPostVisibility, mediaUri: String? = null): FynxPost? {
         val clean = text.trim()
-        if (clean.isBlank()) return null
+        val cleanMedia = mediaUri?.trim()?.takeIf { it.isNotBlank() }
+        if (clean.isBlank() && cleanMedia == null) return null
         val username = FynxAuthStore.storedUsername(context)?.trim()?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview"
-        val post = FynxPost(UUID.randomUUID().toString(), username, clean, System.currentTimeMillis(), visibility)
+        val post = FynxPost(UUID.randomUUID().toString(), username, clean, System.currentTimeMillis(), visibility, cleanMedia)
         save(context, listOf(post) + load(context))
         return post
     }
 
-    fun toggleLike(context: Context, id: String) = save(context, load(context).map { if (it.id == id) it.copy(likedByCurrentUser = !it.likedByCurrentUser) else it })
+    fun toggleLike(context: Context, id: String) = save(context, load(context).map {
+        if (it.id != id) it else {
+            val nextLiked = !it.likedByCurrentUser
+            it.copy(likedByCurrentUser = nextLiked, likeCount = (it.likeCount + if (nextLiked) 1 else -1).coerceAtLeast(0))
+        }
+    })
+
+    fun addComment(context: Context, id: String) = save(context, load(context).map { if (it.id == id) it.copy(commentCount = it.commentCount + 1) else it })
     fun toggleSave(context: Context, id: String) = save(context, load(context).map { if (it.id == id) it.copy(savedByCurrentUser = !it.savedByCurrentUser) else it })
     fun delete(context: Context, id: String) = save(context, load(context).filterNot { it.id == id })
 }
