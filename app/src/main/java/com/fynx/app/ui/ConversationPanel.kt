@@ -29,7 +29,7 @@ import java.io.File
 fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onVoiceCall: () -> Unit = {}, onVideoCall: () -> Unit = {}) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
-    val fallbackMessage = remember(chat.lastMessage) { ChatMessage(chat.lastMessage, false, id = "initial", delivered = true, read = true) }
+    val fallbackMessage = remember(chat.lastMessage) { chat.lastMessage.takeIf { it.isNotBlank() }?.let { ChatMessage(it, false, id = "initial", delivered = true, read = true) } }
     var text by remember(chat.username) { mutableStateOf("") }
     var messages by remember(chat.username) { mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage)) }
     var replyToId by remember { mutableStateOf<String?>(null) }
@@ -63,7 +63,19 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onVoiceCall: () -> 
         }
     }
 
-    LaunchedEffect(chat.username, messages) { FynxChatStore.save(context, chat.username, messages) }
+    LaunchedEffect(chat.username, messages) {
+        FynxChatStore.save(context, chat.username, messages)
+        val latest = messages.maxByOrNull { it.timestamp }
+        if (latest != null) {
+            val previewText = when {
+                latest.voiceUri != null -> "Voice message"
+                latest.attachmentUri != null && latest.text.isBlank() -> "Photo"
+                else -> latest.text
+            }
+            FynxChatStore.savePreview(context, chat.copy(lastMessage = previewText, time = formatChatTime(latest.timestamp)))
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             runCatching { recorder?.stop() }
@@ -194,6 +206,16 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onVoiceCall: () -> 
             text = { Column(Modifier.fillMaxWidth().heightIn(max = 420.dp)) { GiftsPanel(recipientName = chat.name, onGiftSelected = { showGifts = false }) } },
             confirmButton = { TextButton(onClick = { showGifts = false }) { Text("Close") } }
         )
+    }
+}
+
+private fun formatChatTime(timestamp: Long): String {
+    val elapsed = System.currentTimeMillis() - timestamp
+    return when {
+        elapsed < 60_000L -> "Now"
+        elapsed < 3_600_000L -> "${elapsed / 60_000L}m"
+        elapsed < 86_400_000L -> "${elapsed / 3_600_000L}h"
+        else -> "${elapsed / 86_400_000L}d"
     }
 }
 
