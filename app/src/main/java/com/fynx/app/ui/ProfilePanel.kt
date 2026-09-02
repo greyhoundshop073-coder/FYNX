@@ -26,6 +26,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), onSignOut: () -> Unit = {
     val context = LocalContext.current
     var settingsOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
+    var description by remember(session.username) { mutableStateOf(FynxPreferencesStore.loadDescription(context)) }
     var profile by remember(session.username) {
         mutableStateOf(FynxPreferencesStore.loadProfile(context, session.username))
     }
@@ -48,9 +49,12 @@ fun ProfilePanel(session: AuthSession = AuthSession(), onSignOut: () -> Unit = {
     if (editing) {
         EditProfilePanel(
             profile = profile,
-            onSave = {
-                profile = it
-                FynxPreferencesStore.saveProfile(context, it)
+            description = description,
+            onSave = { updated, updatedDescription ->
+                profile = updated
+                description = updatedDescription
+                FynxPreferencesStore.saveProfile(context, updated)
+                FynxPreferencesStore.saveDescription(context, updatedDescription)
                 editing = false
             },
             onCancel = { editing = false }
@@ -82,10 +86,11 @@ fun ProfilePanel(session: AuthSession = AuthSession(), onSignOut: () -> Unit = {
                     Spacer(Modifier.height(3.dp))
                     Text(username, color = FynxDesign.TextSecondary)
                     Spacer(Modifier.height(10.dp))
-                    Text(
-                        profile.bio.ifBlank { "Welcome to FYNX" },
-                        color = FynxDesign.TextSecondary
-                    )
+                    Text(profile.bio.ifBlank { "Welcome to FYNX" }, color = FynxDesign.TextSecondary)
+                    if (description.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(description, color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall)
+                    }
                     Spacer(Modifier.height(18.dp))
                     Row(
                         modifier = Modifier
@@ -203,10 +208,11 @@ private fun SettingPreviewCard(icon: androidx.compose.ui.graphics.vector.ImageVe
 }
 
 @Composable
-private fun EditProfilePanel(profile: FynxProfile, onSave: (FynxProfile) -> Unit, onCancel: () -> Unit) {
+private fun EditProfilePanel(profile: FynxProfile, description: String, onSave: (FynxProfile, String) -> Unit, onCancel: () -> Unit) {
     var displayName by remember(profile) { mutableStateOf(profile.displayName) }
     var username by remember(profile) { mutableStateOf(profile.username) }
     var bio by remember(profile) { mutableStateOf(profile.bio) }
+    var descriptionText by remember(profile, description) { mutableStateOf(description) }
 
     Column(
         modifier = Modifier
@@ -230,7 +236,8 @@ private fun EditProfilePanel(profile: FynxProfile, onSave: (FynxProfile) -> Unit
                             displayName = displayName.trim().ifEmpty { profile.displayName },
                             username = username.trim().removePrefix("@").replace(" ", "").ifEmpty { profile.username.removePrefix("@") },
                             bio = bio.trim()
-                        )
+                        ),
+                        descriptionText.trim()
                     )
                 }
             ) { Text("Save") }
@@ -263,6 +270,17 @@ private fun EditProfilePanel(profile: FynxProfile, onSave: (FynxProfile) -> Unit
             onValueChange = { bio = it },
             label = { Text("Bio") },
             minLines = 3,
+            shape = FynxDesign.ControlShape,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+            value = descriptionText,
+            onValueChange = { descriptionText = it },
+            label = { Text("About / description") },
+            placeholder = { Text("Tell people a little about yourself…") },
+            minLines = 4,
+            maxLines = 6,
             shape = FynxDesign.ControlShape,
             modifier = Modifier.fillMaxWidth()
         )
