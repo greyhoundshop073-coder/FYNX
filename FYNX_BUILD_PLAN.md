@@ -48,6 +48,55 @@ Build one major stage at a time. Inspect existing code first. Keep each stage co
 - [x] Final UI/UX polish
 - [x] Full integration build and completion audit
 
+## Future development backlog — saved for later
+These are planned product features, not part of the current green build batch. Build them when their development phase is reached, without restarting or replacing the existing FYNX project.
+
+### Social Updates & Personal Timeline
+- [ ] Personal Status/Timeline for every FYNX user
+- [ ] User-created text, photo, video and link updates
+- [ ] Per-post audience/privacy controls
+- [ ] User-owned edit/delete controls where supported
+- [ ] Likes, reactions, comments/replies and view counts
+- [ ] Comment/reply controls, mute and block controls
+- [ ] Optional disappearing status/updates
+- [ ] Server-side ownership and privacy enforcement for every user's content
+
+### FYNX Official Updates
+- [ ] Official FYNX Updates/Announcements area separate from private chats
+- [ ] Authorized FYNX admin/owner publishing controls
+- [ ] Create, edit and remove official announcements
+- [ ] Important/security/emergency announcements
+- [ ] Delivery/view metrics where appropriate
+- [ ] Secure server-side admin authorization; ordinary users must not be able to impersonate admin
+
+### Personal Notification & Privacy Controls
+- [ ] Per-user notification preferences for messages, likes, comments, friend requests, announcements and channels
+- [ ] Security-critical notifications protected from ordinary notification toggles where necessary
+- [ ] Per-user privacy controls for profile, posts/status and interactions
+- [ ] Server-backed preferences rather than device-only settings for production behavior
+
+### FYNX Owner/Admin Control Center
+- [ ] Secure admin dashboard/control center
+- [ ] Platform announcements and system controls
+- [ ] Trust & Safety review queue
+- [ ] Scam reports, account restrictions and appeals
+- [ ] Audit trail for sensitive administrative actions
+- [ ] Strong role/permission checks enforced on the backend
+
+### Anti-Scam, Account Safety & Appeals
+- [ ] Scam/risk detection across messages, profiles, posts and marketplace activity
+- [ ] Risk levels: Normal, Watch, Restricted, Frozen
+- [ ] Behavioral signals, reports, rate limits and anomaly detection
+- [ ] Protective restrictions for high-risk behavior
+- [ ] Evidence-preserving moderation actions
+- [ ] Account freeze that can be appealed
+- [ ] Appeal submission and case status for affected users
+- [ ] Review evidence before final action
+- [ ] Restore/unfreeze account when review shows the user was innocent/right
+- [ ] Keep restriction or remove account when malicious behavior is confirmed
+- [ ] Audit trail recording reason, action, review decision and timestamp
+- [ ] Abuse-resistant appeal/review controls
+
 ## Final completion state
 The current FYNX repository build scope is complete after the consolidated final audit and successful Android build verification. No additional feature-development batch is required for this completion cycle. Future product work should be treated as a new development phase rather than another completion step.
 
