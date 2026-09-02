@@ -27,7 +27,8 @@ data class FynxFriendConnection(
     val status: FynxFriendStatus
 )
 
-data class FynxStory(
+/** Legacy social-foundation Story model retained for compatibility. */
+data class FynxSocialStory(
     val id: String,
     val authorUsername: String,
     val mediaUri: String,
