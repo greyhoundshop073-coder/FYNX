@@ -121,19 +121,19 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
                     "Friends" -> {
                         if (friends.isEmpty()) emptyState("No friends yet", "Accepted FYNX connections will appear here.")
                         items(friends, key = { "friend_${it.username}" }) { person ->
-                            RemoteFriendRow(person, "Remove", busyUsername == person.username, onOpenProfile, onAction = { runAction(person.username) { FynxSocialClient.removeFriend(context, person.username) } })
+                            RemoteFriendRow(person = person, actionText = "Remove", busy = busyUsername == person.username, onOpenProfile = onOpenProfile, onAction = { runAction(person.username, action = { FynxSocialClient.removeFriend(context, person.username) }) })
                         }
                     }
                     "Requests" -> {
                         if (incoming.isEmpty()) emptyState("No incoming requests", "Friend requests from other FYNX accounts will appear here.")
                         items(incoming, key = { "incoming_${it.id}" }) { request ->
-                            RemoteFriendRow(userFromRequest(request), "Confirm", busyUsername == request.username, onOpenProfile, secondaryAction = "Delete", onAction = { runAction(request.username) { FynxSocialClient.acceptRequest(context, request.id) } }, onSecondaryAction = { runAction(request.username) { FynxSocialClient.rejectRequest(context, request.id) } })
+                            RemoteFriendRow(person = userFromRequest(request), actionText = "Confirm", busy = busyUsername == request.username, onOpenProfile = onOpenProfile, secondaryAction = "Delete", onAction = { runAction(request.username, action = { FynxSocialClient.acceptRequest(context, request.id) }) }, onSecondaryAction = { runAction(request.username, action = { FynxSocialClient.rejectRequest(context, request.id) }) })
                         }
                     }
                     "Sent" -> {
                         if (outgoing.isEmpty()) emptyState("No sent requests", "Requests you send will appear here until they are accepted or rejected.")
                         items(outgoing, key = { "outgoing_${it.id}" }) { request ->
-                            RemoteFriendRow(userFromRequest(request), "Cancel", busyUsername == request.username, onOpenProfile, onAction = { runAction(request.username) { FynxSocialClient.cancelRequest(context, request.id) } })
+                            RemoteFriendRow(person = userFromRequest(request), actionText = "Cancel", busy = busyUsername == request.username, onOpenProfile = onOpenProfile, onAction = { runAction(request.username, action = { FynxSocialClient.cancelRequest(context, request.id) }) })
                         }
                     }
                     "Discover" -> {
@@ -141,13 +141,13 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
                         else if (query.trim().length < 2) emptyState("Search for a FYNX user", "Type at least two characters of a username or display name.")
                         else if (discover.isEmpty()) emptyState("No matching people", "No available FYNX account matched that search.")
                         else items(discover, key = { "discover_${it.username}" }) { person ->
-                            RemoteFriendRow(person, "Add", busyUsername == person.username, onOpenProfile, onAction = { runAction(person.username) { FynxSocialClient.sendRequest(context, person.username) } })
+                            RemoteFriendRow(person = person, actionText = "Add", busy = busyUsername == person.username, onOpenProfile = onOpenProfile, onAction = { runAction(person.username, action = { FynxSocialClient.sendRequest(context, person.username) }) })
                         }
                     }
                     else -> {
                         if (blocked.isEmpty()) emptyState("No blocked accounts", "Blocked accounts stay out of normal connection lists.")
                         items(blocked, key = { "blocked_${it.username}" }) { person ->
-                            RemoteFriendRow(person, "Unblock", busyUsername == person.username, onOpenProfile, onAction = { runAction(person.username) { FynxSocialClient.unblock(context, person.username) } })
+                            RemoteFriendRow(person = person, actionText = "Unblock", busy = busyUsername == person.username, onOpenProfile = onOpenProfile, onAction = { runAction(person.username, action = { FynxSocialClient.unblock(context, person.username) }) })
                         }
                     }
                 }
