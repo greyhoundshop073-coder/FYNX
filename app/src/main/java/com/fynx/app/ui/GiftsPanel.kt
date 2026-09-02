@@ -11,7 +11,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import java.util.UUID
 
-
 data class FynxGift(
     val id: String,
     val name: String,
@@ -37,6 +36,8 @@ private val fynxGiftCatalog = listOf(
     FynxGift("fynx_galaxy", "FYNX Galaxy", "💫", "A legendary FYNX gift", 10000, "Ultra")
 )
 
+private fun findFynxGift(id: String): FynxGift? = fynxGiftCatalog.firstOrNull { it.id == id }
+
 @Composable
 fun GiftsPanel(
     recipientName: String? = null,
@@ -48,13 +49,18 @@ fun GiftsPanel(
         FynxFriendsStore(context).load().filterNot { it in samplePeople }
     }
     val initialRecipient = remember(recipientName, actualProfiles) {
-        actualProfiles.firstOrNull { it.displayName.equals(recipientName, ignoreCase = true) || it.username.equals(recipientName, ignoreCase = true) }
+        actualProfiles.firstOrNull {
+            it.displayName.equals(recipientName, ignoreCase = true) ||
+                it.username.equals(recipientName, ignoreCase = true)
+        }
     }
     var selectedRecipient by remember { mutableStateOf(initialRecipient) }
     var selectedGift by remember { mutableStateOf<FynxGift?>(null) }
     var confirmationOpen by remember { mutableStateOf(false) }
     var preparedTransfer by remember { mutableStateOf<FynxGiftTransfer?>(null) }
-    val historyStore = remember { FynxGiftHistoryStore() }
+    var historyVersion by remember { mutableIntStateOf(0) }
+    var historyTab by remember { mutableStateOf("Sent") }
+    val historyStore = remember(context) { FynxGiftHistoryStore(context, ::findFynxGift) }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -97,14 +103,19 @@ fun GiftsPanel(
                             else MaterialTheme.colorScheme.surfaceVariant
                         )
                     ) {
-                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             FynxAvatar(person.username, Modifier.size(40.dp))
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(person.displayName, style = MaterialTheme.typography.titleSmall)
                                 Text(person.username, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            if (selectedRecipient?.username == person.username) Text("✓", color = MaterialTheme.colorScheme.primary)
+                            if (selectedRecipient?.username == person.username) {
+                                Text("✓", color = MaterialTheme.colorScheme.primary)
+                            }
                         }
                     }
                 }
@@ -129,7 +140,10 @@ fun GiftsPanel(
                         else MaterialTheme.colorScheme.surfaceVariant
                     )
                 ) {
-                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(gift.emoji, style = MaterialTheme.typography.headlineSmall)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
@@ -138,7 +152,11 @@ fun GiftsPanel(
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text("${gift.value} FYNX", style = MaterialTheme.typography.labelLarge)
-                            Text(gift.rarity, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            Text(
+                                gift.rarity,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 }
@@ -151,7 +169,8 @@ fun GiftsPanel(
                     Text("${gift.emoji} ${gift.name}", style = MaterialTheme.typography.titleMedium)
                     Text("Value: ${gift.value} FYNX • ${gift.rarity}", color = MaterialTheme.colorScheme.primary)
                     Text(
-                        selectedRecipient?.let { "Recipient: ${it.displayName} (${it.username})" } ?: "Select a recipient before continuing",
+                        selectedRecipient?.let { "Recipient: ${it.displayName} (${it.username})" }
+                            ?: "Select a recipient before continuing",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Button(
@@ -180,14 +199,49 @@ fun GiftsPanel(
             }
         }
 
+        @Suppress("UNUSED_VARIABLE")
+        val _historyVersion = historyVersion
         val sentHistory = historyStore.sentBy(authUsername.orEmpty())
-        if (sentHistory.isNotEmpty()) {
-            Text("Sent Gifts", style = MaterialTheme.typography.titleMedium)
-            sentHistory.forEach { entry ->
+        val receivedHistory = historyStore.receivedBy(authUsername.orEmpty())
+        val visibleHistory = if (historyTab == "Sent") sentHistory else receivedHistory
+
+        Text("My Gifts", style = MaterialTheme.typography.titleMedium)
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            SegmentedButton(
+                selected = historyTab == "Sent",
+                onClick = { historyTab = "Sent" },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+            ) { Text("Sent (${sentHistory.size})") }
+            SegmentedButton(
+                selected = historyTab == "Received",
+                onClick = { historyTab = "Received" },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+            ) { Text("Received (${receivedHistory.size})") }
+        }
+
+        if (visibleHistory.isEmpty()) {
+            Text(
+                if (historyTab == "Sent")
+                    "Your prepared gifts will stay here on this device."
+                else
+                    "Received gifts will appear here after secure cross-device delivery is connected.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            visibleHistory.forEach { entry ->
                 ListItem(
                     headlineContent = { Text("${entry.transfer.gift.emoji} ${entry.giftName}") },
-                    supportingContent = { Text("To ${entry.recipient} • ${entry.amount.toInt()} FYNX • ${entry.status}") },
-                    trailingContent = { Text(entry.reference.takeLast(8), style = MaterialTheme.typography.labelSmall) }
+                    supportingContent = {
+                        Text(
+                            if (historyTab == "Sent")
+                                "To ${entry.recipient} • ${entry.amount.toInt()} FYNX • ${entry.status}"
+                            else
+                                "From ${entry.sender} • ${entry.amount.toInt()} FYNX • ${entry.status}"
+                        )
+                    },
+                    trailingContent = {
+                        Text(entry.reference.takeLast(8), style = MaterialTheme.typography.labelSmall)
+                    }
                 )
             }
         }
@@ -210,7 +264,10 @@ fun GiftsPanel(
                     Text("${gift.emoji} ${gift.name}", style = MaterialTheme.typography.titleMedium)
                     Text("Send to ${recipient.displayName} (${recipient.username})?")
                     Text("Value: ${gift.value} FYNX • ${gift.rarity}")
-                    Text("This only prepares a virtual FYNX transaction; it does not move real money.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "This only prepares a virtual FYNX transaction; it does not move real money.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             },
             confirmButton = {
@@ -228,12 +285,15 @@ fun GiftsPanel(
                     if (status == FynxGiftFlowStatus.READY && transfer != null) {
                         preparedTransfer = transfer
                         historyStore.add(FynxGiftHistoryEntry(transfer, System.currentTimeMillis()))
+                        historyVersion++
                         onGiftSelected(gift)
                     }
                     confirmationOpen = false
                 }) { Text("Prepare gift") }
             },
-            dismissButton = { TextButton(onClick = { confirmationOpen = false }) { Text("Cancel") } }
+            dismissButton = {
+                TextButton(onClick = { confirmationOpen = false }) { Text("Cancel") }
+            }
         )
     }
 }
