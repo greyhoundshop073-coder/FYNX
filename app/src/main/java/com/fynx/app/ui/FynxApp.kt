@@ -187,7 +187,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         }
                 ) {
                     when (selected) {
-                        "Home" -> HomePanel(onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" })
+                        "Home" -> HomePanel(
+                            onOpenChats = { selected = "Chats" },
+                            onOpenStories = { selected = "Stories" },
+                            onOpenProfile = { selected = "Profile" },
+                            onOpenMarketplace = { selected = "Marketplace" }
+                        )
                         "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" })
                         "Friends" -> FriendsPanel(onOpenProfile = { profileUser = it })
                         "Marketplace" -> FynxMarketplacePanel()
@@ -217,7 +222,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         "Spending Insights" -> SpendingInsightsPanel()
                         "Money Alerts" -> MoneyAlertsPanel()
                         "Vault" -> SecureMoneyVaultPanel()
-                        else -> HomePanel(onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" })
+                        else -> HomePanel(onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" })
                     }
                 }
             }
