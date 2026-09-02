@@ -1,13 +1,15 @@
 package com.fynx.app.ui
 
+import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -17,6 +19,13 @@ fun HomePanel(
     onOpenStories: () -> Unit = {},
     onOpenProfile: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    var chatPreviews by remember { mutableStateOf(FynxChatStore.loadPreviews(context)) }
+
+    LaunchedEffect(Unit) {
+        chatPreviews = FynxChatStore.loadPreviews(context)
+    }
+
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text("Stories", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -33,12 +42,13 @@ fun HomePanel(
             TextButton(onClick = onOpenChats) { Text("See all") }
         }
 
-        if (sampleChats.isEmpty()) {
+        if (chatPreviews.isEmpty()) {
             EmptyHomeCard("No conversations yet", "Start a chat with a friend and your conversations will appear here.", "Open Chats", onOpenChats)
         } else {
+            val visibleChats = chatPreviews.take(4)
             Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.55f))) {
                 Column(Modifier.fillMaxWidth()) {
-                    sampleChats.take(4).forEachIndexed { index, chat ->
+                    visibleChats.forEachIndexed { index, chat ->
                         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                             FynxAvatar(chat.name, Modifier.size(48.dp).clip(CircleShape))
                             Column(Modifier.weight(1f)) {
@@ -49,7 +59,7 @@ fun HomePanel(
                                 Text(chat.lastMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                             }
                         }
-                        if (index < sampleChats.take(4).lastIndex) HorizontalDivider(modifier = Modifier.padding(start = 74.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+                        if (index < visibleChats.lastIndex) HorizontalDivider(modifier = Modifier.padding(start = 74.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
                     }
                 }
             }
