@@ -1,6 +1,5 @@
 package com.fynx.app.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -14,7 +13,9 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (String) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val person = samplePeople.firstOrNull { it.username.equals(username, true) }
+    val person = remember(username) {
+        FynxFriendsStore(context).load().firstOrNull { it.username.equals(username, true) }
+    }
     val photoVisibility = FynxPreferencesStore.loadVisibility(context, "photo_visibility")
     val bioVisibility = FynxPreferencesStore.loadVisibility(context, "bio_visibility")
     val descriptionVisibility = FynxPreferencesStore.loadVisibility(context, "description_visibility")
@@ -36,7 +37,7 @@ fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (Stri
             if (show(bioVisibility)) {
                 Spacer(Modifier.height(12.dp))
                 Text("Bio", style = MaterialTheme.typography.labelLarge)
-                Text("Available on FYNX", color = FynxDesign.TextSecondary)
+                Text(person.bio.ifBlank { "Available on FYNX" }, color = FynxDesign.TextSecondary)
             }
             if (show(descriptionVisibility)) {
                 Spacer(Modifier.height(12.dp))
