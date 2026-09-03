@@ -187,6 +187,58 @@ app.post("/api/media", auth, async (req, res) => {
   } catch (error) { console.error("media upload", error); return res.status(500).json({ error: "media upload failed" }); }
 });
 
+const statusSchema = async () => {
+  await pool.query(`CREATE TABLE IF NOT EXISTS statuses (
+    id UUID PRIMARY KEY,
+    owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type TEXT NOT NULL CHECK (type IN ('TEXT','PHOTO','VIDEO','VOICE')),
+    text TEXT NOT NULL DEFAULT '',
+    media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL,
+    background_color BIGINT NOT NULL DEFAULT 4279308561,
+    foreground_color BIGINT NOT NULL DEFAULT 4294967295,
+    font TEXT NOT NULL DEFAULT 'CLASSIC',
+    alignment INTEGER NOT NULL DEFAULT 1 CHECK (alignment BETWEEN 0 AND 2),
+    private_status BOOLEAN NOT NULL DEFAULT FALSE,
+    voice_duration_ms BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL
+  ); CREATE INDEX IF NOT EXISTS statuses_owner_idx ON statuses(owner_id,created_at DESC); CREATE INDEX IF NOT EXISTS statuses_expiry_idx ON statuses(expires_at);`);
+};
+
+app.get("/api/statuses", auth, async (req, res) => {
+  try {
+    await statusSchema();
+    const result = await pool.query(`SELECT s.id,s.owner_id,u.username,u.display_name,s.type,s.text,s.media_id,s.background_color,s.foreground_color,s.font,s.alignment,s.private_status,s.voice_duration_ms,EXTRACT(EPOCH FROM s.created_at)*1000 AS created_at,EXTRACT(EPOCH FROM s.expires_at)*1000 AS expires_at
+      FROM statuses s JOIN users u ON u.id=s.owner_id
+      WHERE s.expires_at > NOW() AND (s.owner_id=$1 OR s.private_status=FALSE OR EXISTS(
+        SELECT 1 FROM friendships f WHERE ((f.user_id=s.owner_id AND f.friend_id=$1) OR (f.user_id=$1 AND f.friend_id=s.owner_id)) AND f.status='accepted'
+      )) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=s.owner_id) OR (b.blocker_id=s.owner_id AND b.blocked_id=$1))
+      ORDER BY s.created_at DESC LIMIT 200`, [req.user.sub]);
+    return res.json({ statuses: result.rows.map(row => ({ id:String(row.id), ownerUsername:row.username, ownerDisplayName:row.display_name, type:row.type, text:row.text || null, mediaId:row.media_id == null ? null : String(row.media_id), mediaUrl:row.media_id == null ? null : `/api/media/${row.media_id}`, backgroundColor:Number(row.background_color), foregroundColor:Number(row.foreground_color), font:row.font, alignment:Number(row.alignment), privateStatus:Boolean(row.private_status), voiceDurationMs:Number(row.voice_duration_ms), createdAtMillis:Number(row.created_at), expiresAtMillis:Number(row.expires_at) })) });
+  } catch (error) { console.error("statuses", error); return res.status(500).json({ error:"status lookup failed" }); }
+});
+
+app.post("/api/statuses", auth, async (req, res) => {
+  try {
+    await statusSchema();
+    const id = typeof req.body?.id === "string" ? req.body.id.trim() : "";
+    const type = typeof req.body?.type === "string" ? req.body.type.trim().toUpperCase() : "";
+    const text = typeof req.body?.text === "string" ? req.body.text.trim().slice(0,700) : "";
+    const mediaId = req.body?.mediaId == null ? null : Number(req.body.mediaId);
+    const backgroundColor = Number(req.body?.backgroundColor ?? 4279308561);
+    const foregroundColor = Number(req.body?.foregroundColor ?? 4294967295);
+    const font = typeof req.body?.font === "string" ? req.body.font.trim().slice(0,30) : "CLASSIC";
+    const alignment = Number(req.body?.alignment ?? 1);
+    const privateStatus = Boolean(req.body?.privateStatus);
+    const voiceDurationMs = Number(req.body?.voiceDurationMs ?? 0);
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id) || !["TEXT","PHOTO","VIDEO","VOICE"].includes(type) || (type==="TEXT" && !text) || !Number.isFinite(backgroundColor) || !Number.isFinite(foregroundColor) || !Number.isInteger(alignment) || alignment<0 || alignment>2 || !Number.isFinite(voiceDurationMs) || voiceDurationMs<0 || voiceDurationMs>30000) return res.status(400).json({error:"invalid status"});
+    if (type !== "TEXT" && (!Number.isInteger(mediaId) || mediaId < 1)) return res.status(400).json({error:"media is required"});
+    if (mediaId != null) { const media=await pool.query("SELECT id FROM message_media WHERE id=$1 AND owner_id=$2",[mediaId,req.user.sub]); if(!media.rows[0]) return res.status(403).json({error:"media is not owned by this account"}); }
+    const result=await pool.query("INSERT INTO statuses (id,owner_id,type,text,media_id,background_color,foreground_color,font,alignment,private_status,voice_duration_ms,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW()+INTERVAL '24 hours') RETURNING id,created_at,expires_at",[id,req.user.sub,type,text,mediaId,backgroundColor,foregroundColor,font,alignment,privateStatus,voiceDurationMs]);
+    return res.status(201).json({status:{id:String(result.rows[0].id),createdAtMillis:new Date(result.rows[0].created_at).getTime(),expiresAtMillis:new Date(result.rows[0].expires_at).getTime()}});
+  } catch (error) { if(error?.code==="23505") return res.status(409).json({error:"status already exists"}); console.error("status create",error); return res.status(500).json({error:"status creation failed"}); }
+});
+
 app.get("/api/media/:id", auth, async (req, res) => {
   try {
     const mediaId = Number(req.params.id);
