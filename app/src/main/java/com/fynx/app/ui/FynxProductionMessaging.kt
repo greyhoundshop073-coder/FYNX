@@ -41,7 +41,7 @@ object FynxProductionMessaging {
         val body = JSONObject().apply {
             put("recipientUsername", normalizedRecipient)
             put("text", text.trim())
-            if (replyToId.isNullOrBlank()) put("replyToId", JSONObject.NULL) else put("replyToId", replyToId.toLongOrNull() ?: JSONObject.NULL)
+            put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL)
         }
         return FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { raw ->
             fromJson(JSONObject(raw).getJSONObject("message"))
@@ -78,9 +78,9 @@ object FynxProductionMessaging {
         read = item.optBoolean("read", false),
         edited = item.optBoolean("edited", false),
         deleted = item.optBoolean("deleted", false),
-        replyToId = item.optString("reply_to_id", item.optString("replyToId")).takeIf { it.isNotBlank() && it != "null" }
+        replyToId = if (item.isNull("reply_to_id") && item.isNull("replyToId")) null else item.optString("reply_to_id", item.optString("replyToId")).takeIf { it.isNotBlank() }
     )
 
     private fun encodePathSegment(value: String): String =
-        java.net.URLEncoder.encode(value.trim().removePrefix("@"), Charsets.UTF_8.name())
+        java.net.URLEncoder.encode(value.trim().removePrefix("@"), "UTF-8")
 }
