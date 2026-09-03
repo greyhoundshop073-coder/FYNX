@@ -112,57 +112,24 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (selected == "Home") {
-                        IconButton(onClick = { selected = "Profile"; openProfileSettings = false }) {
-                            FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp))
-                        }
-                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                            Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                        }
-                        IconButton(onClick = { selected = "Profile"; openProfileSettings = true }) {
-                            Icon(Icons.Default.Settings, "Settings")
-                        }
-                        BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
-                            IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
-                        }
+                        IconButton(onClick = { selected = "Profile"; openProfileSettings = false }) { FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp)) }
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) }
+                        IconButton(onClick = { selected = "Profile"; openProfileSettings = true }) { Icon(Icons.Default.Settings, "Settings") }
+                        BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) { IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") } }
                     } else if (selected == "Friends") {
-                        IconButton(onClick = { selected = "Profile"; openProfileSettings = false }) {
-                            FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp))
-                        }
-                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                            Text("Friends", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                        }
+                        IconButton(onClick = { selected = "Profile"; openProfileSettings = false }) { FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp)) }
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text("Friends", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) }
                         Spacer(Modifier.size(48.dp))
                     } else {
                         if (isSecondary) IconButton(onClick = { selected = "Home" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } else Spacer(Modifier.size(48.dp))
-                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                            Text(
-                                when (selected) {
-                                    "Marketplace" -> "Marketplace"
-                                    "Money Tools" -> "Money Center"
-                                    else -> selected
-                                },
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.titleLarge
-                            )
-                        }
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text(when (selected) { "Marketplace" -> "Marketplace"; "Money Tools" -> "Money Center"; else -> selected }, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) }
                         Spacer(Modifier.size(48.dp))
                     }
                 }
             },
-            bottomBar = {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 8.dp) {
-                    mainNav.forEach { item -> NavigationBarItem(selected = selected == item.key, onClick = { selected = item.key }, icon = { Icon(item.icon, item.label) }, label = { Text(item.label) }, colors = NavigationBarItemDefaults.colors(selectedIconColor = MaterialTheme.colorScheme.primary, selectedTextColor = MaterialTheme.colorScheme.primary, indicatorColor = MaterialTheme.colorScheme.secondaryContainer, unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant, unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant)) }
-                }
-            }
+            bottomBar = { NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 8.dp) { mainNav.forEach { item -> NavigationBarItem(selected = selected == item.key, onClick = { selected = item.key }, icon = { Icon(item.icon, item.label) }, label = { Text(item.label) }, colors = NavigationBarItemDefaults.colors(selectedIconColor = MaterialTheme.colorScheme.primary, selectedTextColor = MaterialTheme.colorScheme.primary, indicatorColor = MaterialTheme.colorScheme.secondaryContainer, unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant, unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant)) } } }
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 6.dp).pointerInput(selected) {
                 var drag = 0f
@@ -172,7 +139,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     "Home" -> HomePanel(currentUsername = authSession.username ?: "preview", onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" })
                     "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" })
                     "Friends" -> FriendsPanel(onOpenProfile = { profileUser = it })
-                    "Marketplace" -> FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it })
+                    "Marketplace" -> FynxMarketplaceRemotePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it })
                     "Money Tools" -> MoneyCenterPanel()
                     "Features" -> FynxFeaturesPanel(onSelect = { selected = it })
                     "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
