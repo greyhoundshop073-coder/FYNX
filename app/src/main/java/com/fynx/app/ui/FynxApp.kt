@@ -59,7 +59,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" })
             "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" })
             "Friends" -> FriendsPanel(onOpenProfile = { profileUser = it })
-            "Marketplace" -> FynxMarketplaceRemotePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it })
+            "Marketplace" -> FynxMarketplaceRemotePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenChat = { username -> val normalized = username.trim().let { if (it.startsWith("@")) it else "@$it" }; openChat = FynxChatStore.loadPreviews(context).firstOrNull { it.username.equals(normalized, true) } ?: ChatPreview(normalized.removePrefix("@").ifBlank { "FYNX seller" }, normalized, "Start a conversation", "Now"); FynxChatStore.savePreview(context, openChat!!) })
             "Money Tools" -> MoneyCenterPanel()
             "Features" -> FynxFeaturesPanel(onSelect = { selected = it })
             "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
