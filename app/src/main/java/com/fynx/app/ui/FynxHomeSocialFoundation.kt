@@ -1,8 +1,11 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
 import java.util.UUID
 
 enum class FynxPostVisibility { PUBLIC, FRIENDS_ONLY }
@@ -65,10 +68,37 @@ object FynxHomePostStore {
         context.getSharedPreferences(COMMENTS_PREFS, Context.MODE_PRIVATE).edit().putString(commentsKey(context), array.toString()).apply()
     }
 
+    /**
+     * Copies picker media into FYNX private storage before the post is saved.
+     * Temporary content-provider URIs can expire after the picker/app lifecycle;
+     * a post must retain its media after restart. This is intentionally local for
+     * this stability fix; server synchronization will replace the stored URI later.
+     */
+    private fun persistMedia(context: Context, mediaUri: String?): String? {
+        val source = mediaUri?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return runCatching {
+            val uri = Uri.parse(source)
+            val input = context.contentResolver.openInputStream(uri) ?: return null
+            val extension = when (uri.toString().substringBefore('?').lowercase()) {
+                else -> when {
+                    uri.toString().contains("video", ignoreCase = true) -> ".mp4"
+                    else -> ".jpg"
+                }
+            }
+            val file = File(context.filesDir, "fynx_post_${UUID.randomUUID()}$extension")
+            input.use { stream -> FileOutputStream(file).use { output -> stream.copyTo(output) } }
+            Uri.fromFile(file).toString()
+        }.getOrNull()
+    }
+
     fun create(context: Context, text: String, visibility: FynxPostVisibility, mediaUri: String? = null): FynxPost? {
-        val clean = text.trim(); val cleanMedia = mediaUri?.trim()?.takeIf { it.isNotBlank() }; if (clean.isBlank() && cleanMedia == null) return null
+        val clean = text.trim()
+        val cleanMedia = persistMedia(context, mediaUri)
+        if (clean.isBlank() && cleanMedia == null) return null
         val username = FynxAuthStore.storedUsername(context)?.trim()?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview"
-        val post = FynxPost(UUID.randomUUID().toString(), username, clean, System.currentTimeMillis(), visibility, cleanMedia); save(context, listOf(post) + load(context)); return post
+        val post = FynxPost(UUID.randomUUID().toString(), username, clean, System.currentTimeMillis(), visibility, cleanMedia)
+        save(context, listOf(post) + load(context))
+        return post
     }
 
     fun toggleLike(context: Context, id: String) = save(context, load(context).map { if (it.id != id) it else { val liked = !it.likedByCurrentUser; it.copy(likedByCurrentUser = liked, likeCount = (it.likeCount + if (liked) 1 else -1).coerceAtLeast(0)) } })
@@ -87,5 +117,10 @@ object FynxHomePostStore {
     }
 
     fun toggleSave(context: Context, id: String) = save(context, load(context).map { if (it.id == id) it.copy(savedByCurrentUser = !it.savedByCurrentUser) else it })
-    fun delete(context: Context, id: String) { save(context, load(context).filterNot { it.id == id }); saveComments(context, loadAllComments(context).filterNot { it.postId == id }) }
+    fun delete(context: Context, id: String) {
+        val media = load(context).firstOrNull { it.id == id }?.mediaUri
+        save(context, load(context).filterNot { it.id == id })
+        saveComments(context, loadAllComments(context).filterNot { it.postId == id })
+        media?.let { runCatching { File(Uri.parse(it).path ?: "").delete() } }
+    }
 }
