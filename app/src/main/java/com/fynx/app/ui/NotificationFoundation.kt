@@ -21,6 +21,20 @@ object FynxNotificationFoundation {
     const val REMINDERS_CHANNEL = "fynx_reminders"
     private const val PREFS = "fynx_notification_preferences"
     private const val KEY_SPEAK = "speak_notifications"
+    private const val KEY_DEDUPE = "recent_notification_ids"
+
+    private fun shouldShow(context: Context, stableKey: String): Boolean {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val values = prefs.getStringSet(KEY_DEDUPE, emptySet()).orEmpty()
+        val fresh = values.filter { entry -> val parts = entry.split("|", limit = 2); parts.size == 2 && now - parts[1].toLongOrNull().orZero() < 30_000 }.toMutableSet()
+        if (fresh.any { it.startsWith("$stableKey|") }) return false
+        fresh.add("$stableKey|$now")
+        prefs.edit().putStringSet(KEY_DEDUPE, fresh).apply()
+        return true
+    }
+
+    private fun Long?.orZero() = this ?: 0L
 
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -72,7 +86,8 @@ object FynxNotificationFoundation {
         }
     }
 
-    fun show(context: Context, channelId: String, id: Int, title: String, message: String) {
+    fun show(context: Context, channelId: String, id: Int, title: String, message: String, stableKey: String = "$channelId:$id:$title:$message") {
+        if (!shouldShow(context, stableKey)) return
         FynxNotificationStore.add(
             context,
             FynxNotification(
