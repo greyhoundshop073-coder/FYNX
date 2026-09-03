@@ -33,7 +33,7 @@ object FynxProductionMessaging {
 
     suspend fun sendText(context: Context, recipientUsername: String, text: String, replyToId: String? = null): Result<RemoteMessage> {
         val normalizedRecipient = recipientUsername.trim().removePrefix("@").lowercase()
-        val currentUsername = FynxAuthStore.load(context).username.trim().removePrefix("@").lowercase()
+        val currentUsername = (FynxAuthStore.load(context).username ?: "").trim().removePrefix("@").lowercase()
         if (normalizedRecipient.isBlank()) return Result.failure(IllegalArgumentException("A recipient is required."))
         if (currentUsername.isNotBlank() && normalizedRecipient == currentUsername) {
             return Result.failure(IllegalArgumentException("You cannot send a message to your own account."))
