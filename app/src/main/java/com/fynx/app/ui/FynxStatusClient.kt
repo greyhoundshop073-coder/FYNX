@@ -8,7 +8,7 @@ import org.json.JSONObject
 /** Account-scoped Status API. Local StatusStore remains as a cache/fallback. */
 object FynxStatusClient {
     suspend fun uploadMedia(context: Context, uri: Uri, mimeType: String): Result<String> = runCatching {
-        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Could not read selected media.")
+        val bytes = context.contentResolver.openInputStream(uri)?.use { input ->\n            val out = java.io.ByteArrayOutputStream()\n            val buffer = ByteArray(8192)\n            while (true) { val read = input.read(buffer); if (read < 0) break; out.write(buffer, 0, read); if (out.size() > 50 * 1024 * 1024) error("Selected media is too large.") }\n            out.toByteArray()\n        } ?: error("Could not read selected media.")
         val body = JSONObject().put("mimeType", mimeType).put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP)).toString()
         val raw = FynxBackendClient.postJson(context, "/api/media", body).getOrThrow()
         JSONObject(raw).getJSONObject("media").getString("id")
