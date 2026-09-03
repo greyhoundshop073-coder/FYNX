@@ -59,9 +59,10 @@ object FynxBackendClient {
                 require(path.startsWith("/")) { "Backend path must start with /." }
 
                 var attempt = 0
-                while (true) {
+                var response: String? = null
+                while (response == null) {
                     try {
-                        return@runCatching executeRequest(context, root, method, path, body)
+                        response = executeRequest(context, root, method, path, body)
                     } catch (error: Exception) {
                         val retryable = method == "GET" || method == "DELETE"
                         if (!retryable || !isTransientNetworkFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) {
@@ -71,6 +72,7 @@ object FynxBackendClient {
                         delay(RETRY_DELAY_MS * attempt)
                     }
                 }
+                response
             }
         }
 
