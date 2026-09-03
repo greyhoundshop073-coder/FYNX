@@ -1,0 +1,172 @@
+package com.fynx.app.ui
+
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Environment
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.FallbackStrategy
+import androidx.camera.video.MediaStoreOutputOptions
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recorder
+import androidx.camera.video.Recording
+import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
+import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.delay
+import java.io.File
+
+@Composable
+fun FynxCameraCapturePanel(
+    onCaptured: (Uri, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    var hasCamera by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
+    var hasAudio by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        hasCamera = result[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        hasAudio = result[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    }
+    LaunchedEffect(Unit) {
+        val missing = buildList {
+            if (!hasCamera) add(Manifest.permission.CAMERA)
+            if (!hasAudio) add(Manifest.permission.RECORD_AUDIO)
+        }
+        if (missing.isNotEmpty()) permissionLauncher.launch(missing.toTypedArray())
+    }
+
+    var lens by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
+    var mode by remember { mutableStateOf(CameraMode.PHOTO) }
+    var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    var videoCapture by remember { mutableStateOf<VideoCapture<Recorder>?>(null) }
+    var recording by remember { mutableStateOf<Recording?>(null) }
+    var recordingStartedAt by remember { mutableLongStateOf(0L) }
+    var recordingElapsed by remember { mutableLongStateOf(0L) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(recording != null, recordingStartedAt) {
+        while (recording != null) {
+            recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L)
+            delay(200L)
+        }
+    }
+
+    fun bindCamera(previewView: PreviewView) {
+        if (!hasCamera) return
+        val future = ProcessCameraProvider.getInstance(context)
+        future.addListener({
+            runCatching {
+                val provider = future.get()
+                val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
+                val selector = CameraSelector.Builder().requireLensFacing(lens).build()
+                val capture = ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build()
+                val recorder = Recorder.Builder()
+                    .setQualitySelector(QualitySelector.from(Quality.HD, FallbackStrategy.lowerQualityOrHigherThan(Quality.SD)))
+                    .build()
+                val video = VideoCapture.withOutput(recorder)
+                provider.unbindAll()
+                if (mode == CameraMode.PHOTO) provider.bindToLifecycle(context as androidx.lifecycle.LifecycleOwner, selector, preview, capture)
+                else provider.bindToLifecycle(context as androidx.lifecycle.LifecycleOwner, selector, preview, video)
+                imageCapture = capture
+                videoCapture = video
+            }.onFailure { error = it.message ?: "Camera could not start" }
+        }, ContextCompat.getMainExecutor(context))
+    }
+
+    if (!hasCamera) {
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("FYNX needs camera access to capture photos and videos.")
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = { permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)) }) { Text("Allow camera") }
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        }
+        return
+    }
+
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.black)) {
+        AndroidView(
+            factory = { PreviewView(it).also { view -> bindCamera(view) } },
+            update = { bindCamera(it) },
+            modifier = Modifier.fillMaxSize()
+        )
+        Column(Modifier.fillMaxWidth().statusBarsPadding().padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { if (recording == null) onDismiss() }) { Icon(Icons.Default.Close, "Close camera", tint = MaterialTheme.colorScheme.onSurface) }
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = {
+                    if (recording == null) lens = if (lens == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
+                }) { Icon(Icons.Default.Cameraswitch, "Switch front/back camera", tint = MaterialTheme.colorScheme.onSurface) }
+            }
+        }
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp)) }
+            if (recording != null) Text("Recording ${formatRecordingTime(recordingElapsed)}", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                FilterChip(selected = mode == CameraMode.PHOTO, onClick = { if (recording == null) mode = CameraMode.PHOTO }, label = { Text("Photo") }, leadingIcon = { Icon(Icons.Default.PhotoCamera, null) })
+                FilledIconButton(onClick = {
+                    if (mode == CameraMode.PHOTO) {
+                        val file = File(context.cacheDir, "fynx_photo_${System.currentTimeMillis()}.jpg")
+                        val output = ImageCapture.OutputFileOptions.Builder(file).build()
+                        imageCapture?.takePicture(output, ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageSavedCallback {
+                            override fun onImageSaved(result: ImageCapture.OutputFileResults) { onCaptured(Uri.fromFile(file), "image") }
+                            override fun onError(exception: ImageCaptureException) { error = exception.message ?: "Photo capture failed" }
+                        }) ?: run { error = "Camera is still starting" }
+                    } else {
+                        val active = recording
+                        if (active != null) {
+                            active.stop()
+                            recording = null
+                        } else {
+                            val capture = videoCapture ?: run { error = "Video camera is still starting"; return@FilledIconButton }
+                            val file = File(context.cacheDir, "fynx_video_${System.currentTimeMillis()}.mp4")
+                            val output = FileOutputOptions.Builder(file).build()
+                            val pending = capture.output.prepareRecording(context, output)
+                            val withAudio = if (hasAudio) pending.withAudioEnabled() else pending
+                            recordingStartedAt = System.currentTimeMillis()
+                            recording = withAudio.start(ContextCompat.getMainExecutor(context)) { event ->
+                                if (event is VideoRecordEvent.Finalize) {
+                                    if (!event.hasError() && file.exists() && file.length() > 0L) onCaptured(Uri.fromFile(file), "video")
+                                    else error = event.error.toString()
+                                    recording = null
+                                }
+                            }
+                        }
+                    }
+                }, modifier = Modifier.size(72.dp)) {
+                    Icon(if (mode == CameraMode.PHOTO) Icons.Default.PhotoCamera else if (recording != null) Icons.Default.Stop else Icons.Default.Videocam, if (recording != null) "Stop video" else if (mode == CameraMode.PHOTO) "Take photo" else "Record video")
+                }
+                FilterChip(selected = mode == CameraMode.VIDEO, onClick = { if (recording == null) mode = CameraMode.VIDEO }, label = { Text("Video") }, leadingIcon = { Icon(Icons.Default.Videocam, null) })
+            }
+        }
+    }
+}
+
+enum class CameraMode { PHOTO, VIDEO }
