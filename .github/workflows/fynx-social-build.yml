@@ -1,11 +1,23 @@
 name: FYNX social core build
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 permissions:
   contents: write
 jobs:
-  inspect:
+  build-social-core:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "FYNX Social Core implementation workflow ready"
+      - name: Apply social core source changes
+        run: python3 scripts/apply_social_core.py
+      - name: Validate backend syntax
+        run: node --check backend/socialRoutes.js
+      - name: Commit social core
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/socialRoutes.js app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt app/src/main/java/com/fynx/app/ui/HomePanel.kt
+          git diff --cached --quiet || (git commit -m "BUILD A — complete real social feed interactions" && git push)
