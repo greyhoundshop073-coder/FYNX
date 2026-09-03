@@ -9,9 +9,11 @@ object FynxSocialClient {
     data class User(val username: String, val displayName: String, val phone: String, val id: String = "")
     data class FriendRequest(val id: String, val username: String, val displayName: String, val status: String)
 
-    suspend fun searchUsers(context: Context, query: String): Result<List<User>> =
-        FynxBackendClient.get(context, "/api/users/search?q=${java.net.URLEncoder.encode(query.trim(), "UTF-8")}").mapCatching { raw ->
-            val users = JSONArray(JSONObject(raw).getJSONArray("users").toString())
+    suspend fun searchUsers(context: Context, query: String, phoneSearch: Boolean = false): Result<List<User>> {
+        val encoded = java.net.URLEncoder.encode(query.trim(), "UTF-8")
+        val mode = if (phoneSearch) "phone" else "username"
+        return FynxBackendClient.get(context, "/api/users/search?q=$encoded&mode=$mode").mapCatching { raw ->
+            val users = JSONObject(raw).getJSONArray("users")
             buildList {
                 for (index in 0 until users.length()) {
                     val item = users.getJSONObject(index)
@@ -19,6 +21,7 @@ object FynxSocialClient {
                 }
             }
         }
+    }
 
     suspend fun friends(context: Context): Result<List<User>> =
         FynxBackendClient.get(context, "/api/friends").mapCatching { raw -> parseUsers(JSONObject(raw).getJSONArray("friends")) }
