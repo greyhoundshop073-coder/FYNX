@@ -25,10 +25,15 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     var selectedUser by remember { mutableStateOf<FynxSocialClient.User?>(null) }
     var searchBusy by remember { mutableStateOf(false) }
     var searchError by remember { mutableStateOf<String?>(null) }
+    var selfUsername by remember { mutableStateOf<String?>(null) }
 
     fun refreshChats() { chats = FynxChatStore.loadPreviews(context) }
 
-    LaunchedEffect(showNewChat, username) {
+    LaunchedEffect(Unit) {
+        selfUsername = FynxAuthStore.load(context).username.removePrefix("@").trim().lowercase().takeIf { it.isNotBlank() }
+    }
+
+    LaunchedEffect(showNewChat, username, selfUsername) {
         if (!showNewChat || username.trim().length < 2) {
             searchResults = emptyList()
             searchBusy = false
@@ -38,7 +43,12 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         searchBusy = true
         searchError = null
         FynxSocialClient.searchUsers(context, username.trim())
-            .onSuccess { searchResults = it }
+            .onSuccess {
+                searchResults = it.filterNot { person ->
+                    val candidate = person.username.removePrefix("@").trim().lowercase()
+                    selfUsername != null && candidate == selfUsername
+                }
+            }
             .onFailure { searchResults = emptyList(); searchError = it.message ?: "Could not search FYNX accounts." }
         searchBusy = false
     }
@@ -64,7 +74,10 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 Text("Start a chat with a real FYNX username. Messages are synchronized through the FYNX account service.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
-                    items(chats, key = { it.username }) { chat ->
+                    items(chats.filterNot { chat ->
+                        val candidate = chat.username.removePrefix("@").trim().lowercase()
+                        selfUsername != null && candidate == selfUsername
+                    }, key = { it.username }) { chat ->
                         Card(onClick = { onOpenChat(chat) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                             ListItem(
                                 headlineContent = { Text(chat.name) },
@@ -119,7 +132,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                     searchError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                     if (searchBusy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
                     else if (username.trim().length >= 2) {
-                        if (searchResults.isEmpty()) Text("No matching FYNX accounts.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        if (searchResults.isEmpty()) Text("No other matching FYNX accounts.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                         else LazyColumn(Modifier.heightIn(max = 220.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             items(searchResults, key = { it.id.ifBlank { it.username } }) { person ->
                                 val selected = selectedUser?.username.equals(person.username, true)
@@ -133,14 +146,19 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                         }
                     }
                     selectedUser?.let { person ->
-                        Text("Selected: @${person.username.removePrefix("@")}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+                        Text("Selected: @${person.username.removePrefix("@").trim()}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             },
             confirmButton = {
-                TextButton(enabled = selectedUser != null, onClick = {
+                TextButton(enabled = selectedUser != null && selectedUser?.username?.removePrefix("@").equals(selfUsername, true).not(), onClick = {
                     val person = selectedUser ?: return@TextButton
                     val normalized = person.username.removePrefix("@").trim()
+                    if (selfUsername != null && normalized.equals(selfUsername, true)) {
+                        searchError = "You cannot start a chat with your own account."
+                        selectedUser = null
+                        return@TextButton
+                    }
                     val chat = ChatPreview(person.displayName.ifBlank { normalized }, "@$normalized", "", "New")
                     FynxChatStore.savePreview(context, chat)
                     refreshChats()
@@ -148,7 +166,8 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                     onOpenChat(chat)
                 }) { Text("Open chat") }
             },
-            dismissButton = { TextButton(onClick = { showNewChat = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { showNewChat = false }) { Text("Cancel") }
+            }
         )
     }
 }
