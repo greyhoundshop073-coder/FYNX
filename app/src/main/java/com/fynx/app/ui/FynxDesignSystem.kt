@@ -99,6 +99,8 @@ fun FynxTheme(
             medium = FynxDesign.CardShape,
             large = FynxDesign.LargeCardShape
         ),
-        content = content
+        content = {
+            FynxCustomizationBackground(content)
+        }
     )
 }
