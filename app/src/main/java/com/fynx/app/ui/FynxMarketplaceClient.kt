@@ -55,7 +55,8 @@ object FynxMarketplaceClient {
         if (deliveryFee != null && (!deliveryFee.isFinite() || deliveryFee < 0.0)) {
             return Result.failure(IllegalArgumentException("Enter a valid delivery fee."))
         }
-        val media = JSONArray().apply { mediaIds.distinct().take(12).forEach { put(it) } }
+        val distinctMediaIds = mediaIds.distinct().take(12)
+        val media = JSONArray().apply { distinctMediaIds.forEach { put(it) } }
         val body = JSONObject()
             .put("title", title.trim())
             .put("description", description.trim())
@@ -72,6 +73,21 @@ object FynxMarketplaceClient {
         if (deliveryFee != null) body.put("deliveryFee", deliveryFee)
         return FynxBackendClient.postJson(context, "/api/marketplace/listings", body.toString()).mapCatching {
             JSONObject(it).getJSONObject("listing").getString("id")
+        }.also { result ->
+            result.onSuccess { listingId ->
+                // Every real listing gets a real social-feed product post so Marketplace
+                // discovery is part of the FYNX social experience. No fake engagement is created.
+                FynxRemoteSocialClient.createMarketplaceAd(
+                    context = context,
+                    listingId = listingId,
+                    title = title.trim(),
+                    description = description.trim(),
+                    storeName = storeName.trim(),
+                    price = price,
+                    currency = currency.trim().uppercase(),
+                    mediaId = distinctMediaIds.firstOrNull()
+                )
+            }
         }
     }
 
