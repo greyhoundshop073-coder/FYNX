@@ -73,7 +73,8 @@ object FynxFutureIntelligencePolicy {
  * Event vocabulary for the future intelligence/event pipeline.
  * Events contain identifiers and metadata only; sensitive content must stay
  * behind explicit authorization checks.
- */nenum class FynxActivityEventType {
+ */
+enum class FynxActivityEventType {
     MESSAGE_SENT,
     POST_CREATED,
     POST_LIKED,
