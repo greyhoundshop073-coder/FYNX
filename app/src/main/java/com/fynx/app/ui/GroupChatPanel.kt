@@ -3,7 +3,6 @@ package com.fynx.app.ui
 import android.Manifest
 import android.content.ContentValues
 import android.content.Context
-import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.media.ToneGenerator
 import android.media.AudioManager
@@ -152,7 +151,7 @@ fun GroupChatPanel(
                     Text(group.name, style = MaterialTheme.typography.titleMedium)
                     Text("${group.memberUsernames.size} members", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                IconButton(onClick = { /* group details remain available below */ }) { Icon(Icons.Default.Groups, "Group") }
+                IconButton(onClick = { }) { Icon(Icons.Default.Groups, "Group") }
             }
         }
 
@@ -162,7 +161,7 @@ fun GroupChatPanel(
                     Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(18.dp), modifier = Modifier.widthIn(max = 330.dp)) {
                         Column(Modifier.padding(10.dp)) {
                             if (message.attachmentUri != null) {
-                                AndroidView(factory = { ImageViewWithUri(context, message.attachmentUri, message.attachmentType) }, modifier = Modifier.sizeIn(maxWidth = 290.dp, maxHeight = 240.dp))
+                                AndroidView(factory = { ImageViewWithUri(context, message.attachmentUri!!, message.attachmentType ?: "image") }, modifier = Modifier.sizeIn(maxWidth = 290.dp, maxHeight = 240.dp))
                             }
                             if (message.voiceUri != null) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -195,7 +194,7 @@ fun GroupChatPanel(
                             Spacer(Modifier.width(8.dp))
                             Text("Recording ${elapsed / 1000}s", Modifier.weight(1f))
                             Row(horizontalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
-                                repeat(10) { i -> Box(Modifier.width(4.dp).height((8 + ((elapsed / 120 + i * 5) % 18)).dp).background(MaterialTheme.colorScheme.primary, CircleShape)) }
+                                repeat(10) { i -> Box(Modifier.width(4.dp).height((8 + ((elapsed / 120 + i * 5) % 18)).toInt().dp).background(MaterialTheme.colorScheme.primary, CircleShape)) }
                             }
                             TextButton(onClick = { recorder?.release(); recorder = null; recordingFile?.delete(); recordingFile = null; isRecording = false; elapsed = 0L }) { Text("Cancel") }
                             Button(onClick = { stopVoice() }) { Text("Send") }
@@ -263,7 +262,7 @@ private fun loadGroupMessages(context: Context, groupId: String): List<ChatMessa
     }.getOrElse { emptyList() }
 }
 
-private fun ImageViewWithUri(context: Context, uriString: String?, type: String): android.widget.ImageView {
+private fun ImageViewWithUri(context: Context, uriString: String, type: String): android.widget.ImageView {
     return android.widget.ImageView(context).apply {
         scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
         if (type == "image") setImageURI(runCatching { Uri.parse(uriString) }.getOrNull())
