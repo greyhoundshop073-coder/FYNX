@@ -48,6 +48,13 @@ object FynxMarketplaceClient {
         deliveryFee: Double?,
         mediaIds: List<String>
     ): Result<String> {
+        val assessment = FynxMarketplaceSafety.analyze(title, description, storeName, location)
+        FynxMarketplaceSafety.publishDecision(assessment).getOrElse { return Result.failure(it) }
+        if (!price.isFinite() || price <= 0.0) return Result.failure(IllegalArgumentException("Enter a valid product price."))
+        if (quantity <= 0) return Result.failure(IllegalArgumentException("Product quantity must be at least 1."))
+        if (deliveryFee != null && (!deliveryFee.isFinite() || deliveryFee < 0.0)) {
+            return Result.failure(IllegalArgumentException("Enter a valid delivery fee."))
+        }
         val media = JSONArray().apply { mediaIds.distinct().take(12).forEach { put(it) } }
         val body = JSONObject()
             .put("title", title.trim())
@@ -70,6 +77,9 @@ object FynxMarketplaceClient {
 
     suspend fun deleteListing(context: Context, listingId: String): Result<Unit> =
         FynxBackendClient.delete(context, "/api/marketplace/listings/${encode(listingId)}").map { }
+
+    fun safetyAssessment(listing: Listing): FynxMarketplaceSafetyAssessment =
+        FynxMarketplaceSafety.analyze(listing.title, listing.description, listing.storeName, listing.location)
 
     fun mediaUrl(context: Context, mediaId: String): String =
         "${FynxBackendClient.baseUrl(context)}/api/media/${encode(mediaId)}"
