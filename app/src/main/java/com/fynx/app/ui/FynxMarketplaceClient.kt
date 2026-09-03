@@ -75,8 +75,10 @@ object FynxMarketplaceClient {
             JSONObject(it).getJSONObject("listing").getString("id")
         }.also { result ->
             result.onSuccess { listingId ->
-                // Every real listing gets a real social-feed product post so Marketplace
-                // discovery is part of the FYNX social experience. No fake engagement is created.
+                // A real listing is also published as a real social-feed product post.
+                // The advertisement intentionally starts without media because the existing
+                // listing API does not expose each media item's MIME type to this client.
+                // This avoids ever labeling a video as an image.
                 FynxRemoteSocialClient.createMarketplaceAd(
                     context = context,
                     listingId = listingId,
@@ -85,7 +87,7 @@ object FynxMarketplaceClient {
                     storeName = storeName.trim(),
                     price = price,
                     currency = currency.trim().uppercase(),
-                    mediaId = distinctMediaIds.firstOrNull()
+                    mediaId = null
                 )
             }
         }
