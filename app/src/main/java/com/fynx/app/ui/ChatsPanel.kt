@@ -2,6 +2,7 @@ package com.fynx.app.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -66,9 +67,13 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             OutlinedButton(onClick = { username = ""; selectedUser = null; searchResults = emptyList(); searchError = null; showNewChat = true }, shape = FynxDesign.ControlShape, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) { Text("＋ New chat") }
             Spacer(Modifier.height(14.dp))
             if (chats.isEmpty()) {
-                Text("No conversations yet", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(4.dp))
-                Text("Start a chat with a real FYNX username. Messages are synchronized through the FYNX account service.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
+                    Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Messages", style = MaterialTheme.typography.titleLarge)
+                        Text("Your private conversations will appear here. Start one with a real FYNX user.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Button(onClick = { showNewChat = true; username = ""; selectedUser = null }) { Text("Start a conversation") }
+                    }
+                }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
                     items(chats.filterNot { chat ->
@@ -125,13 +130,12 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                         ListItem(
                             headlineContent = { Text(person.displayName.ifBlank { personUsername }) },
                             supportingContent = { Text("@$personUsername") },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().clickable { selectedUser = person },
                             leadingContent = { FynxAvatar(person.displayName.ifBlank { personUsername }) },
                             trailingContent = { if (selectedUser?.username == person.username) Text("✓") },
                             colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                         )
                         HorizontalDivider()
-                        TextButton(onClick = { selectedUser = person }) { Text("Select") }
                     }
                 }
             },
