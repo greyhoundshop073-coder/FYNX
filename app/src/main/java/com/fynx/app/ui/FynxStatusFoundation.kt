@@ -2,6 +2,8 @@ package com.fynx.app.ui
 
 import android.content.Context
 import android.net.Uri
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -61,23 +63,11 @@ object FynxStatusStore {
                     val type = runCatching { FynxStatusType.valueOf(o.optString("type")) }.getOrNull() ?: continue
                     val font = runCatching { FynxStatusTextFont.valueOf(o.optString("font", FynxStatusTextFont.CLASSIC.name)) }.getOrDefault(FynxStatusTextFont.CLASSIC)
                     val status = FynxStatus(
-                        id = o.optString("id"),
-                        ownerUsername = o.optString("ownerUsername"),
-                        ownerDisplayName = o.optString("ownerDisplayName"),
-                        type = type,
-                        contentUri = o.optString("contentUri").ifBlank { null },
-                        text = o.optString("text").ifBlank { null },
-                        createdAtMillis = o.optLong("createdAtMillis"),
-                        expiresAtMillis = o.optLong("expiresAtMillis"),
-                        textStyle = FynxStatusTextStyle(
-                            backgroundColor = o.optLong("backgroundColor", 0xFF111111),
-                            foregroundColor = o.optLong("foregroundColor", 0xFFFFFFFF),
-                            font = font,
-                            alignment = o.optInt("alignment", 1)
-                        ),
-                        privateStatus = o.optBoolean("privateStatus"),
-                        voiceDurationMs = o.optLong("voiceDurationMs", 0L),
-                        muted = o.optBoolean("muted")
+                        id = o.optString("id"), ownerUsername = o.optString("ownerUsername"), ownerDisplayName = o.optString("ownerDisplayName"),
+                        type = type, contentUri = o.optString("contentUri").ifBlank { null }, text = o.optString("text").ifBlank { null },
+                        createdAtMillis = o.optLong("createdAtMillis"), expiresAtMillis = o.optLong("expiresAtMillis"),
+                        textStyle = FynxStatusTextStyle(o.optLong("backgroundColor", 0xFF111111), o.optLong("foregroundColor", 0xFFFFFFFF), font, o.optInt("alignment", 1)),
+                        privateStatus = o.optBoolean("privateStatus"), voiceDurationMs = o.optLong("voiceDurationMs", 0L), muted = o.optBoolean("muted")
                     )
                     if (status.id.isNotBlank() && status.ownerUsername.isNotBlank() && !status.isExpired()) add(status)
                 }
@@ -101,34 +91,27 @@ object FynxStatusStore {
         status?.contentUri?.let { path -> runCatching { File(Uri.parse(path).path ?: "").delete() } }
     }
 
-    fun persistMedia(context: Context, sourceUri: Uri, type: FynxStatusType): Uri? = runCatching {
-        val input = context.contentResolver.openInputStream(sourceUri) ?: return null
-        val extension = when (type) {
-            FynxStatusType.PHOTO -> ".jpg"
-            FynxStatusType.VIDEO -> ".mp4"
-            FynxStatusType.VOICE -> ".m4a"
-            FynxStatusType.TEXT -> return null
-        }
-        val file = File(context.filesDir, "fynx_status_${UUID.randomUUID()}$extension")
-        input.use { stream -> FileOutputStream(file).use { output -> stream.copyTo(output) } }
-        Uri.fromFile(file)
-    }.getOrNull()
+    suspend fun persistMedia(context: Context, sourceUri: Uri, type: FynxStatusType): Uri? = withContext(Dispatchers.IO) {
+        runCatching {
+            val input = context.contentResolver.openInputStream(sourceUri) ?: return@runCatching null
+            val extension = when (type) {
+                FynxStatusType.PHOTO -> ".jpg"
+                FynxStatusType.VIDEO -> ".mp4"
+                FynxStatusType.VOICE -> ".m4a"
+                FynxStatusType.TEXT -> return@runCatching null
+            }
+            val file = File(context.filesDir, "fynx_status_${UUID.randomUUID()}$extension")
+            input.use { stream -> FileOutputStream(file).use { output -> stream.copyTo(output) } }
+            Uri.fromFile(file)
+        }.getOrNull()
+    }
 
     private fun toJson(status: FynxStatus) = JSONObject().apply {
-        put("id", status.id)
-        put("ownerUsername", status.ownerUsername)
-        put("ownerDisplayName", status.ownerDisplayName)
-        put("type", status.type.name)
-        put("contentUri", status.contentUri ?: "")
-        put("text", status.text ?: "")
-        put("createdAtMillis", status.createdAtMillis)
-        put("expiresAtMillis", status.expiresAtMillis)
-        put("backgroundColor", status.textStyle.backgroundColor)
-        put("foregroundColor", status.textStyle.foregroundColor)
-        put("font", status.textStyle.font.name)
-        put("alignment", status.textStyle.alignment)
-        put("privateStatus", status.privateStatus)
-        put("voiceDurationMs", status.voiceDurationMs)
-        put("muted", status.muted)
+        put("id", status.id); put("ownerUsername", status.ownerUsername); put("ownerDisplayName", status.ownerDisplayName)
+        put("type", status.type.name); put("contentUri", status.contentUri ?: ""); put("text", status.text ?: "")
+        put("createdAtMillis", status.createdAtMillis); put("expiresAtMillis", status.expiresAtMillis)
+        put("backgroundColor", status.textStyle.backgroundColor); put("foregroundColor", status.textStyle.foregroundColor)
+        put("font", status.textStyle.font.name); put("alignment", status.textStyle.alignment)
+        put("privateStatus", status.privateStatus); put("voiceDurationMs", status.voiceDurationMs); put("muted", status.muted)
     }
 }
