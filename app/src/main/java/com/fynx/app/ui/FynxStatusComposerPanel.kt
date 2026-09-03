@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.File
 import java.util.UUID
 
@@ -37,6 +38,7 @@ import java.util.UUID
 @Composable
 fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val auth = remember(context) { FynxAuthStore.load(context) }
     val username = auth.username?.removePrefix("@").orEmpty().ifBlank { "preview" }
     val displayName = username.ifBlank { "You" }
@@ -56,6 +58,7 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
     var recordingFile by remember { mutableStateOf<File?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var savedMessage by remember { mutableStateOf<String?>(null) }
+    var publishing by remember { mutableStateOf(false) }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) { mediaUri = uri; mode = FynxStatusType.PHOTO; preview = false }
@@ -79,23 +82,48 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
     DisposableEffect(Unit) { onDispose { runCatching { recorder?.stop() }; recorder?.release() } }
 
     fun publish() {
+        if (publishing) return
         error = null
         if (mode == FynxStatusType.TEXT && text.isBlank()) { error = "Write something first."; return }
-        val persisted = if (mode == FynxStatusType.TEXT) null else mediaUri?.let { FynxStatusStore.persistMedia(context, it, mode) }
-        if (mode != FynxStatusType.TEXT && persisted == null) { error = "FYNX could not save that media."; return }
-        val now = System.currentTimeMillis()
-        val status = FynxStatus(
-            id = UUID.randomUUID().toString(), ownerUsername = username, ownerDisplayName = displayName,
-            type = mode, contentUri = persisted?.toString(), text = text.trim().ifBlank { null },
-            createdAtMillis = now, expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS,
-            textStyle = FynxStatusTextStyle(background, foreground, font, alignment),
-            privateStatus = privateStatus, voiceDurationMs = if (mode == FynxStatusType.VOICE) elapsed else 0L
-        )
-        FynxStatusStore.save(context, status)
-        savedMessage = "Status shared • expires in 24 hours"
-        preview = false
-        mediaUri = null
-        text = ""
+        publishing = true
+        scope.launch {
+            try {
+                val sourceUri = mediaUri
+                val persisted = if (mode == FynxStatusType.TEXT) null else sourceUri?.let { FynxStatusStore.persistMedia(context, it, mode) }
+                if (mode != FynxStatusType.TEXT && persisted == null) { error = "FYNX could not save that media."; return@launch }
+                val now = System.currentTimeMillis()
+                val status = FynxStatus(
+                    id = UUID.randomUUID().toString(), ownerUsername = username, ownerDisplayName = displayName,
+                    type = mode, contentUri = persisted?.toString(), text = text.trim().ifBlank { null },
+                    createdAtMillis = now, expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS,
+                    textStyle = FynxStatusTextStyle(background, foreground, font, alignment),
+                    privateStatus = privateStatus, voiceDurationMs = if (mode == FynxStatusType.VOICE) elapsed else 0L
+                )
+                val mediaId = if (mode == FynxStatusType.TEXT) null else {
+                    val mime = context.contentResolver.getType(sourceUri!!) ?: when (mode) {
+                        FynxStatusType.PHOTO -> "image/jpeg"
+                        FynxStatusType.VIDEO -> "video/mp4"
+                        FynxStatusType.VOICE -> "audio/mp4"
+                        FynxStatusType.TEXT -> "application/octet-stream"
+                    }
+                    FynxStatusClient.uploadMedia(context, sourceUri, mime).getOrElse {
+                        error = it.message ?: "FYNX could not upload that media."
+                        return@launch
+                    }
+                }
+                FynxStatusClient.create(context, status, mediaId).getOrElse {
+                    error = it.message ?: "FYNX could not publish the Status."
+                    return@launch
+                }
+                FynxStatusStore.save(context, status.copy(contentUri = if (mediaId == null) status.contentUri else "/api/media/$mediaId"))
+                savedMessage = "Status shared • expires in 24 hours"
+                preview = false
+                mediaUri = null
+                text = ""
+            } finally {
+                publishing = false
+            }
+        }
     }
 
     if (preview) {
@@ -149,7 +177,7 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         savedMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-        Button(onClick = { preview = true }, enabled = !recording && (mode == FynxStatusType.TEXT && text.isNotBlank() || mode != FynxStatusType.TEXT && mediaUri != null), modifier = Modifier.fillMaxWidth()) { Text("Preview Status") }
+        Button(onClick = { preview = true }, enabled = !recording && !publishing && (mode == FynxStatusType.TEXT && text.isNotBlank() || mode != FynxStatusType.TEXT && mediaUri != null), modifier = Modifier.fillMaxWidth()) { Text(if (publishing) "Publishing…" else "Preview Status") }
     }
 }
 
@@ -165,7 +193,7 @@ private fun FynxStatusPreview(statusType: FynxStatusType, uri: Uri?, text: Strin
                 FynxStatusType.VOICE -> VoicePreview(uri, voiceDurationMs)
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) { Text("Edit") }; Button(onClick = onPublish, modifier = Modifier.weight(1f)) { Text("Share") } }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) { Text("Edit") }; Button(onClick = onPublish, enabled = true, modifier = Modifier.weight(1f)) { Text("Share") } }
     }
 }
 
