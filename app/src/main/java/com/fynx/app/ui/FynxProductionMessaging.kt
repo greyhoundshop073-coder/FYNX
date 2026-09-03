@@ -3,8 +3,14 @@ package com.fynx.app.ui
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 /** Production messaging boundary. The server is the source of truth for chat state. */
 object FynxProductionMessaging {
@@ -40,33 +46,111 @@ object FynxProductionMessaging {
                 buildList { for (index in 0 until messages.length()) add(fromJson(messages.getJSONObject(index))) }
             }
 
-    suspend fun uploadMedia(context: Context, uri: Uri, mimeTypeOverride: String? = null): Result<RemoteMedia> = runCatching {
-        val mimeType = mimeTypeOverride?.trim()?.lowercase()
-            ?: context.contentResolver.getType(uri)?.trim()?.lowercase()
-            ?: "application/octet-stream"
-        require(mimeType.startsWith("image/") || mimeType.startsWith("video/") || mimeType.startsWith("audio/")) { "Unsupported media type." }
-        val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
-            val output = java.io.ByteArrayOutputStream()
-            val buffer = ByteArray(32 * 1024)
-            var total = 0
-            while (true) {
-                val read = input.read(buffer)
-                if (read <= 0) break
-                total += read
-                require(total <= MAX_MEDIA_BYTES) { "Media is too large. Maximum size is 12 MB." }
-                output.write(buffer, 0, read)
+    suspend fun uploadMedia(context: Context, uri: Uri, mimeTypeOverride: String? = null): Result<RemoteMedia> =
+        withContext(Dispatchers.IO) {
+            try {
+                val mimeType = mimeTypeOverride?.trim()?.lowercase()
+                    ?: context.contentResolver.getType(uri)?.trim()?.lowercase()
+                    ?: "application/octet-stream"
+                require(mimeType.startsWith("image/") || mimeType.startsWith("video/") || mimeType.startsWith("audio/")) { "Unsupported media type." }
+                val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
+                    val output = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(32 * 1024)
+                    var total = 0
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read <= 0) break
+                        total += read
+                        require(total <= MAX_MEDIA_BYTES) { "Media is too large. Maximum size is 12 MB." }
+                        output.write(buffer, 0, read)
+                    }
+                    output.toByteArray()
+                } ?: throw IllegalArgumentException("Unable to read the selected media.")
+                require(bytes.isNotEmpty()) { "The selected media is empty." }
+                val body = JSONObject().apply {
+                    put("mimeType", mimeType)
+                    put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                }
+                val raw = FynxBackendClient.postJson(context, "/api/media", body.toString()).getOrThrow()
+                val item = JSONObject(raw).getJSONObject("media")
+                Result.success(RemoteMedia(item.getString("id"), item.getString("mimeType"), item.optInt("byteSize", bytes.size)))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                Result.failure(error)
             }
-            output.toByteArray()
-        } ?: throw IllegalArgumentException("Unable to read the selected media.")
-        require(bytes.isNotEmpty()) { "The selected media is empty." }
-        val body = JSONObject().apply {
-            put("mimeType", mimeType)
-            put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP))
         }
-        val raw = FynxBackendClient.postJson(context, "/api/media", body.toString()).getOrThrow()
-        val item = JSONObject(raw).getJSONObject("media")
-        RemoteMedia(item.getString("id"), item.getString("mimeType"), item.optInt("byteSize", bytes.size))
-    }
+
+    /**
+     * Downloads an authenticated remote media item into the app cache so platform
+     * players such as MediaPlayer/VideoView can read it without exposing a token
+     * in a URL. The returned file is private to this app and may be evicted safely.
+     */
+    suspend fun cacheRemoteMedia(context: Context, mediaId: String, mediaUrl: String): Result<Uri> =
+        withContext(Dispatchers.IO) {
+            try {
+                val safeId = mediaId.filter { it.isLetterOrDigit() || it == '-' || it == '_' }
+                require(safeId.isNotBlank()) { "Invalid media id." }
+                val directory = File(context.cacheDir, "fynx_media").apply { mkdirs() }
+                val existing = directory.listFiles()?.firstOrNull { it.name.startsWith("${safeId}.") && it.length() > 0L }
+                if (existing != null) return@withContext Result.success(Uri.fromFile(existing))
+
+                val absoluteUrl = if (mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://")) mediaUrl
+                else FynxBackendClient.baseUrl(context).trimEnd('/') + "/" + mediaUrl.trimStart('/')
+                val connection = (URL(absoluteUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 10_000
+                    readTimeout = 20_000
+                    useCaches = false
+                    setRequestProperty("Accept", "*/*")
+                    FynxBackendClient.accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
+                }
+                try {
+                    val status = connection.responseCode
+                    if (status == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                        FynxBackendClient.saveAccessToken(context, null)
+                        throw IllegalStateException("FYNX media session expired")
+                    }
+                    require(status in 200..299) { "FYNX media could not be loaded (HTTP $status)." }
+                    val contentLength = connection.contentLengthLong
+                    require(contentLength <= MAX_MEDIA_BYTES || contentLength < 0L) { "Remote media is too large." }
+                    val extension = when (connection.contentType.orEmpty().lowercase()) {
+                        "video/mp4" -> "mp4"
+                        "video/webm" -> "webm"
+                        "video/quicktime" -> "mov"
+                        "audio/mp4", "audio/x-m4a" -> "m4a"
+                        "audio/mpeg" -> "mp3"
+                        "audio/aac" -> "aac"
+                        "audio/wav" -> "wav"
+                        "image/png" -> "png"
+                        "image/webp" -> "webp"
+                        "image/gif" -> "gif"
+                        else -> "bin"
+                    }
+                    val target = File(directory, "$safeId.$extension")
+                    connection.inputStream.use { input ->
+                        target.outputStream().use { output ->
+                            val buffer = ByteArray(32 * 1024)
+                            var total = 0L
+                            while (true) {
+                                val read = input.read(buffer)
+                                if (read <= 0) break
+                                total += read
+                                require(total <= MAX_MEDIA_BYTES) { "Remote media is too large." }
+                                output.write(buffer, 0, read)
+                            }
+                        }
+                    }
+                    require(target.length() > 0L) { "Remote media is empty." }
+                    Result.success(Uri.fromFile(target))
+                } finally {
+                    connection.disconnect()
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                Result.failure(error)
+            }
+        }
 
     suspend fun sendText(
         context: Context,
