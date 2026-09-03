@@ -11,7 +11,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
 
 @Composable
@@ -117,12 +116,20 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         }
     }
     if (showNewChat) {
-        AlertDialog(
+        FynxPlainDialog(
             onDismissRequest = { showNewChat = false },
-            title = { Text("New chat") },
+            title = { Text("New chat", style = MaterialTheme.typography.headlineSmall) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(username, { username = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Search username") }, singleLine = true)
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Search for a real FYNX username to start a private conversation.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(
+                        value = username,
+                        onValueChange = { username = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Username") },
+                        singleLine = true,
+                        placeholder = { Text("@username") },
+                    )
                     if (searchBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
                     searchError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     searchResults.forEach { person ->
@@ -132,8 +139,8 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                             supportingContent = { Text("@$personUsername") },
                             modifier = Modifier.fillMaxWidth().clickable { selectedUser = person },
                             leadingContent = { FynxAvatar(person.displayName.ifBlank { personUsername }) },
-                            trailingContent = { if (selectedUser?.username == person.username) Text("✓") },
-                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                            trailingContent = { if (selectedUser?.username == person.username) Text("✓", color = MaterialTheme.colorScheme.primary) },
+                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         )
                         HorizontalDivider()
                     }
@@ -151,7 +158,6 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 }) { Text("Open chat") }
             },
             dismissButton = { TextButton(onClick = { showNewChat = false }) { Text("Cancel") } },
-            properties = DialogProperties(usePlatformDefaultWidth = true)
         )
     }
 }
