@@ -5,6 +5,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 /** Secure network boundary for the real FYNX backend. */
 object FynxBackendClient {
@@ -39,6 +40,9 @@ object FynxBackendClient {
     suspend fun get(context: Context, path: String): Result<String> = request(context, "GET", path, null)
     suspend fun postJson(context: Context, path: String, body: String): Result<String> = request(context, "POST", path, body)
     suspend fun delete(context: Context, path: String): Result<String> = request(context, "DELETE", path, null)
+
+    suspend fun currentUserId(context: Context): Result<String> =
+        get(context, "/api/me").mapCatching { raw -> JSONObject(raw).getJSONObject("user").getString("id") }
 
     private suspend fun request(context: Context, method: String, path: String, body: String?): Result<String> = withContext(Dispatchers.IO) {
         runCatching {

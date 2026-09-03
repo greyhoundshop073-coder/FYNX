@@ -6,7 +6,7 @@ import org.json.JSONObject
 
 /** Real account-scoped friends, search, and blocking API for FYNX. */
 object FynxSocialClient {
-    data class User(val username: String, val displayName: String, val phone: String)
+    data class User(val username: String, val displayName: String, val phone: String, val id: String = "")
     data class FriendRequest(val id: String, val username: String, val displayName: String, val status: String)
 
     suspend fun searchUsers(context: Context, query: String): Result<List<User>> =
@@ -15,7 +15,7 @@ object FynxSocialClient {
             buildList {
                 for (index in 0 until users.length()) {
                     val item = users.getJSONObject(index)
-                    add(User(item.getString("username"), item.optString("display_name"), item.optString("phone")))
+                    add(User(item.getString("username"), item.optString("display_name"), item.optString("phone"), item.optString("id")))
                 }
             }
         }
@@ -61,7 +61,7 @@ object FynxSocialClient {
     private fun parseUsers(items: JSONArray): List<User> = buildList {
         for (index in 0 until items.length()) {
             val item = items.getJSONObject(index)
-            add(User(item.getString("username"), item.optString("display_name"), item.optString("phone")))
+            add(User(item.getString("username"), item.optString("display_name"), item.optString("phone"), item.optString("id")))
         }
     }
 

@@ -23,12 +23,15 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.File
 
 @Composable
 fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (String) -> Unit = {}, onVoiceCall: () -> Unit = {}, onVideoCall: () -> Unit = {}) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
     val fallbackMessage = remember(chat.lastMessage) { chat.lastMessage.takeIf { it.isNotBlank() }?.let { ChatMessage(it, false, id = "initial", delivered = true, read = true) } }
     var text by remember(chat.username) { mutableStateOf("") }
     var messages by remember(chat.username) { mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage)) }
@@ -46,6 +49,48 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var searchOpen by remember { mutableStateOf(false) }
     var menuMessageId by remember { mutableStateOf<String?>(null) }
     var showGifts by remember { mutableStateOf(false) }
+    var currentUserId by remember { mutableStateOf<String?>(null) }
+    var recipientUserId by remember { mutableStateOf<String?>(null) }
+    var isOnline by remember(chat.username) { mutableStateOf(chat.online) }
+    var otherIsTyping by remember(chat.username) { mutableStateOf(false) }
+    var networkError by remember { mutableStateOf<String?>(null) }
+    var sending by remember { mutableStateOf(false) }
+    var typingSent by remember { mutableStateOf(false) }
+
+    val realtimeClient = remember(chat.username) {
+        FynxRealtimeClient(
+            context = context,
+            onMessage = { remote ->
+                val myId = currentUserId ?: return@FynxRealtimeClient
+                if (remote.senderId != myId && remote.recipientId != myId) return@FynxRealtimeClient
+                val converted = FynxProductionMessaging.toChatMessage(remote, myId)
+                messages = (messages.filterNot { it.id == remote.id } + converted).sortedBy { it.timestamp }
+                if (remote.recipientId == myId) {
+                    realtimeClient.acknowledgeMessage(remote.id)
+                    scope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
+                }
+            },
+            onEvent = { event ->
+                when (event) {
+                    is FynxRealtimeClient.Event.MessageStatus -> {
+                        messages = messages.map { message ->
+                            if (message.id != event.messageId) message else when (event.status) {
+                                FynxRealtimeClient.Status.READ -> message.copy(delivered = true, read = true)
+                                FynxRealtimeClient.Status.DELIVERED -> message.copy(delivered = true)
+                                FynxRealtimeClient.Status.SENT -> message
+                            }
+                        }
+                    }
+                    is FynxRealtimeClient.Event.Typing -> {
+                        if (event.userId == recipientUserId) otherIsTyping = event.isTyping
+                    }
+                    is FynxRealtimeClient.Event.Presence -> {
+                        if (event.userId == recipientUserId) isOnline = event.online
+                    }
+                }
+            }
+        )
+    }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { attachment = it }
     val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -68,14 +113,52 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         }
     }
 
-    LaunchedEffect(isRecording, recordingStartedAt) {
-        while (isRecording) {
-            recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L)
-            kotlinx.coroutines.delay(200L)
+    LaunchedEffect(chat.username) {
+        currentUserId = FynxBackendClient.currentUserId(context).getOrNull()
+        recipientUserId = FynxSocialClient.searchUsers(context, chat.username.removePrefix("@"))
+            .getOrNull()?.firstOrNull { it.username.equals(chat.username.removePrefix("@"), true) }?.id
+        FynxProductionMessaging.history(context, chat.username.removePrefix("@"))
+            .onSuccess { remoteMessages ->
+                val myId = currentUserId
+                if (myId != null) messages = remoteMessages.map { FynxProductionMessaging.toChatMessage(it, myId) }
+                val unread = remoteMessages.filter { it.recipientId == myId && !it.read }.map { it.id }
+                if (unread.isNotEmpty()) {
+                    realtimeClient.sendRead(unread)
+                    scope.launch { FynxProductionMessaging.markRead(context, unread) }
+                }
+            }
+            .onFailure { networkError = it.message ?: "Unable to load messages" }
+        realtimeClient.connect()
+    }
+
+    LaunchedEffect(text, recipientUserId) {
+        val recipient = recipientUserId ?: return@LaunchedEffect
+        if (text.isBlank()) {
+            if (typingSent) {
+                realtimeClient.sendTyping(recipient, false)
+                typingSent = false
+            }
+            return@LaunchedEffect
+        }
+        if (!typingSent) {
+            realtimeClient.sendTyping(recipient, true)
+            typingSent = true
+        }
+        delay(1800L)
+        if (typingSent) {
+            realtimeClient.sendTyping(recipient, false)
+            typingSent = false
         }
     }
 
-    LaunchedEffect(chat.username, messages) {
+    LaunchedEffect(isRecording, recordingStartedAt) {
+        while (isRecording) {
+            recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L)
+            delay(200L)
+        }
+    }
+
+    LaunchedEffect(messages) {
         FynxChatStore.save(context, chat.username, messages)
         val latest = messages.maxByOrNull { it.timestamp }
         if (latest != null) {
@@ -88,8 +171,10 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         }
     }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(realtimeClient) {
         onDispose {
+            if (typingSent) realtimeClient.sendTyping(recipientUserId ?: "", false)
+            realtimeClient.close()
             runCatching { recorder?.stop() }
             recorder?.release(); player?.release()
         }
@@ -105,7 +190,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         val duration = System.currentTimeMillis() - recordingStartedAt
         runCatching { r.stop() }; r.release(); recorder = null; isRecording = false; recordingFile = null; recordingElapsed = 0L
         if (file != null && file.exists() && file.length() > 0L && duration >= 300L) {
-            messages = messages + ChatMessage("Voice message", true, id = System.currentTimeMillis().toString(), delivered = true, voiceUri = file.absolutePath, voiceDurationMs = duration)
+            messages = messages + ChatMessage("Voice message", true, id = System.currentTimeMillis().toString(), delivered = false, voiceUri = file.absolutePath, voiceDurationMs = duration)
         } else file?.delete()
     }
     fun playVoice(message: ChatMessage) {
@@ -118,15 +203,19 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, ignoreCase = true) }
 
-    Column(Modifier.fillMaxSize().background(FynxDesign.Background)) {
-        Surface(color = FynxDesign.Surface, tonalElevation = 3.dp) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
             Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = onBack) { Text("‹", style = MaterialTheme.typography.headlineSmall) }
                     IconButton(onClick = { onOpenProfile(chat.username) }) { FynxAvatar(chat.name, modifier = Modifier.size(46.dp)) }
                     Column(Modifier.weight(1f).padding(start = 10.dp)) {
                         TextButton(onClick = { onOpenProfile(chat.username) }, contentPadding = PaddingValues(0.dp)) { Text(chat.name, style = MaterialTheme.typography.titleMedium) }
-                        Text(if (chat.online) "● Online" else chat.username, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
+                        Text(when {
+                            otherIsTyping -> "typing…"
+                            isOnline -> "● Online"
+                            else -> chat.username
+                        }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = onVoiceCall) { Icon(Icons.Default.Call, "Voice call") }
                     IconButton(onClick = onVideoCall) { Icon(Icons.Default.Videocam, "Video call") }
@@ -137,6 +226,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         }
 
         if (searchOpen) OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(10.dp), singleLine = true, placeholder = { Text("Search messages…") })
+        networkError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp)) }
 
         LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(visibleMessages, key = { it.id }) { message ->
@@ -172,7 +262,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                 }
                                 if (message.edited) Text("Edited", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 message.reaction?.let { Text(it) }
-                                if (message.fromMe) Text(if (message.read) "Read" else if (message.delivered) "Delivered" else "Sent", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (message.fromMe) Text(if (message.read) "✓✓ Read" else if (message.delivered) "✓✓ Delivered" else "✓ Sent", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -193,7 +283,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             }
         }
 
-        Surface(color = FynxDesign.Surface, tonalElevation = 3.dp, modifier = Modifier.navigationBarsPadding().imePadding()) {
+        Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp, modifier = Modifier.navigationBarsPadding().imePadding()) {
             Column(Modifier.fillMaxWidth().padding(8.dp)) {
                 if (attachment != null) {
                     Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -225,7 +315,16 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                     IconButton(onClick = { imagePicker.launch("image/*") }, enabled = !isRecording) { Icon(Icons.Default.AttachFile, "Attach") }
-                    OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), placeholder = { Text(if (editingId == null) "Message…" else "Edit message…") }, maxLines = 5, enabled = !isRecording)
+                    OutlinedTextField(value = text, onValueChange = { value ->
+                        val wasBlank = text.isBlank()
+                        text = value
+                        if (value.isBlank() && typingSent) {
+                            recipientUserId?.let { realtimeClient.sendTyping(it, false) }
+                            typingSent = false
+                        } else if (wasBlank && value.isNotBlank()) {
+                            recipientUserId?.let { realtimeClient.sendTyping(it, true); typingSent = true }
+                        }
+                    }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), placeholder = { Text(if (editingId == null) "Message…" else "Edit message…") }, maxLines = 5, enabled = !isRecording)
                     if (isRecording) {
                         IconButton(onClick = { stopRecording() }) { Icon(Icons.Default.Stop, "Stop recording") }
                         IconButton(onClick = { cancelRecording() }) { Icon(Icons.Default.Close, "Cancel recording") }
@@ -238,11 +337,28 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                 if (editingId != null) {
                                     messages = messages.map { if (it.id == editingId) it.copy(text = value, edited = true) else it }
                                 } else {
-                                    messages = messages + ChatMessage(value, true, id = System.currentTimeMillis().toString(), delivered = true, replyToId = replyToId, attachmentUri = attachment?.toString(), attachmentType = if (attachment != null) "image" else null)
+                                    val recipient = recipientUserId
+                                    if (recipient == null) {
+                                        networkError = "Unable to find this FYNX user."
+                                    } else {
+                                        sending = true
+                                        networkError = null
+                                        scope.launch {
+                                            FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
+                                                .onSuccess { remote ->
+                                                    currentUserId?.let { myId -> messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp } }
+                                                    realtimeClient.sendTyping(recipient, false)
+                                                    typingSent = false
+                                                    text = ""; editingId = null; replyToId = null; attachment = null
+                                                }
+                                                .onFailure { networkError = it.message ?: "Message could not be sent" }
+                                            sending = false
+                                        }
+                                    }
                                 }
-                                text = ""; editingId = null; replyToId = null; attachment = null
+                                if (editingId != null) { text = ""; editingId = null; replyToId = null; attachment = null }
                             }
-                        }) { Icon(if (editingId == null) Icons.Default.Send else Icons.Default.Edit, if (editingId == null) "Send" else "Save") }
+                        }, enabled = !sending) { Icon(if (editingId == null) Icons.Default.Send else Icons.Default.Edit, if (editingId == null) "Send" else "Save") }
                     }
                 }
             }

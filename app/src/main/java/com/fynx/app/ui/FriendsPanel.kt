@@ -88,9 +88,9 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
         }
     }
 
-    Column(Modifier.fillMaxSize().background(FynxDesign.Background).padding(horizontal = 12.dp, vertical = 10.dp)) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp, vertical = 10.dp)) {
         Text("Find People", style = MaterialTheme.typography.headlineSmall)
-        Text("Connect with real FYNX accounts.", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall)
+        Text("Connect with real FYNX accounts.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             FilterChip(searchMethod == FynxPeopleSearchMethod.USERNAME, { searchMethod = FynxPeopleSearchMethod.USERNAME; query = "" }, label = { Text("Username") })
@@ -103,9 +103,9 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
         if (searchMethod == FynxPeopleSearchMethod.PHONE && query.isNotBlank()) {
             val validation = FynxPeopleDiscovery.validate(FynxPeopleSearchRequest(searchMethod, normalizedQuery))
             if (validation != null) Text(validation, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
-            else Text("Phone discovery is reserved for the secured account-matching service.", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
+            else Text("Phone discovery is reserved for the secured account-matching service.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
         }
-        message?.let { Text(it, color = if (it.contains("could not", true) || it.contains("failed", true) || it.contains("error", true)) MaterialTheme.colorScheme.error else FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp)) }
+        message?.let { Text(it, color = if (it.contains("could not", true) || it.contains("failed", true) || it.contains("error", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp)) }
         Spacer(Modifier.height(10.dp))
         Text("Connections", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(5.dp))
@@ -155,15 +155,15 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
         }
     }
 
-    if (showPhonePrivacy) AlertDialog(onDismissRequest = { showPhonePrivacy = false }, title = { Text("Phone discovery privacy") }, text = { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { Text("Choose who can use your verified phone number to find your FYNX account."); FynxPhoneDiscoveryVisibility.values().forEach { option -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { RadioButton(phonePrivacy == option, { phonePrivacy = option; privacyStore.save(option) }); Text(when (option) { FynxPhoneDiscoveryVisibility.EVERYONE -> "Everyone"; FynxPhoneDiscoveryVisibility.CONTACTS_ONLY -> "Contacts only"; FynxPhoneDiscoveryVisibility.NOBODY -> "Nobody" }) } }; Text("Stored locally until account privacy sync is connected.", color = FynxDesign.TextSecondary) } }, confirmButton = { TextButton(onClick = { showPhonePrivacy = false }) { Text("Done") } })
+    if (showPhonePrivacy) AlertDialog(onDismissRequest = { showPhonePrivacy = false }, title = { Text("Phone discovery privacy") }, text = { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { Text("Choose who can use your verified phone number to find your FYNX account."); FynxPhoneDiscoveryVisibility.values().forEach { option -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { RadioButton(phonePrivacy == option, { phonePrivacy = option; privacyStore.save(option) }); Text(when (option) { FynxPhoneDiscoveryVisibility.EVERYONE -> "Everyone"; FynxPhoneDiscoveryVisibility.CONTACTS_ONLY -> "Contacts only"; FynxPhoneDiscoveryVisibility.NOBODY -> "Nobody" }) } }; Text("Stored locally until account privacy sync is connected.", color = MaterialTheme.colorScheme.onSurfaceVariant) } }, confirmButton = { TextButton(onClick = { showPhonePrivacy = false }) { Text("Done") } })
 }
 
 @Composable
 private fun RemoteFriendRow(person: FynxSocialClient.User, actionText: String, busy: Boolean, onOpenProfile: (String) -> Unit, secondaryAction: String? = null, onAction: () -> Unit, onSecondaryAction: () -> Unit = {}) {
-    Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
+    Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { onOpenProfile(person.username) }, modifier = Modifier.size(48.dp)) { FynxAvatar(person.displayName.ifBlank { person.username }, Modifier.size(42.dp)) }
-            Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.titleSmall, maxLines = 1); Text(if (person.username.startsWith("@")) person.username else "@${person.username}", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 1) }
+            Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.titleSmall, maxLines = 1); Text(if (person.username.startsWith("@")) person.username else "@${person.username}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1) }
             if (busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
             else if (secondaryAction == null) OutlinedButton(onClick = onAction, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 9.dp, vertical = 4.dp)) { Text(actionText) }
             else Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { Button(onClick = onAction, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text(actionText) }; OutlinedButton(onClick = onSecondaryAction, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text(secondaryAction) } }
@@ -171,4 +171,4 @@ private fun RemoteFriendRow(person: FynxSocialClient.User, actionText: String, b
     }
 }
 
-private fun LazyListScope.emptyState(title: String, body: String) { item { Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { Text(title, style = MaterialTheme.typography.titleMedium); Text(body, color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall) } } } }
+private fun LazyListScope.emptyState(title: String, body: String) { item { Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { Text(title, style = MaterialTheme.typography.titleMedium); Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) } } } }
