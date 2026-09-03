@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import pg from "pg";
 import { WebSocketServer } from "ws";
 import { registerSocialRoutes } from "./socialRoutes.js";
+import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";
 
 const { Pool } = pg;
 const app = express();
@@ -369,6 +370,7 @@ wss.on("connection", (socket, req) => {
 });
 
 registerSocialRoutes(app, { pool, auth, findUserByUsername });
+if (pool) registerMarketplaceTransactionRoutes({ app, pool, auth });
 
 initDatabase().catch((error) => { console.error("database initialization failed", error); process.exitCode = 1; });
 
