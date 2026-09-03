@@ -17,6 +17,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
 
   app.get("/api/friends", auth, async (req, res) => {
     try {
+      res.set("Cache-Control", "no-store");
       const result = await pool.query(
         `SELECT u.id, u.username, u.display_name, u.phone, f.created_at
          FROM friendships f JOIN users u ON u.id = CASE WHEN f.user_id = $1 THEN f.friend_id ELSE f.user_id END
