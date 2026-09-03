@@ -2,7 +2,9 @@ package com.fynx.app.ui
 
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.widget.ImageView
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -27,6 +29,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
@@ -252,8 +255,23 @@ private fun RemoteMarketMedia(context: android.content.Context, mediaId: String,
     when (kind) {
         "image" -> Image(bitmap!!.asImageBitmap(), "Product photo", modifier.clip(RoundedCornerShape(14.dp)), contentScale = ContentScale.Crop)
         "video" -> AndroidView(
-            factory = { android.widget.VideoView(it).apply { setVideoURI(Uri.parse(mediaUrl)); setOnPreparedListener { player -> player.isLooping = true; start() } } },
-            update = { view -> if (view.tag != mediaUrl) { view.tag = mediaUrl; view.setVideoURI(Uri.parse(mediaUrl)); view.start() } },
+            factory = { ctx ->
+                android.widget.VideoView(ctx).apply {
+                    setVideoURI(Uri.parse(mediaUrl))
+                    setOnPreparedListener { player ->
+                        player.isLooping = true
+                        start()
+                    }
+                }
+            },
+            update = { view ->
+                val currentUrl = view.tag as? String
+                if (currentUrl != mediaUrl) {
+                    view.tag = mediaUrl
+                    view.setVideoURI(Uri.parse(mediaUrl))
+                    view.start()
+                }
+            },
             modifier = modifier.clip(RoundedCornerShape(14.dp))
         )
         "error" -> Box(modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { Icon(Icons.Default.BrokenImage, "Media unavailable") }
@@ -292,7 +310,7 @@ private fun FynxMarketplaceSellerDialog(
                 Text("Seller: @${currentUsername.removePrefix("@")}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 Text("Product media (${media.size}/12)", style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedButton(onClick = { picker.launch(ActivityResultContracts.PickVisualMedia.ImageAndVideo) }, modifier = Modifier.weight(1f)) {
+                    OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, modifier = Modifier.weight(1f)) {
                         Icon(Icons.Default.Collections, null)
                         Spacer(Modifier.width(5.dp))
                         Text("Choose photos")
@@ -307,13 +325,17 @@ private fun FynxMarketplaceSellerDialog(
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp), contentPadding = PaddingValues(vertical = 2.dp)) {
                         items(media) { uri ->
                             Box(Modifier.width(78.dp).height(78.dp)) {
-                                val isVideo = uri.toString().lowercase().contains("video") || uri.toString().lowercase().endsWith(".mp4")
+                                val isVideo = contextIsVideo(LocalContext.current, uri)
                                 if (isVideo) {
                                     Box(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { Icon(Icons.Default.Videocam, "Video") }
                                 } else {
-                                    Image(androidx.compose.ui.graphics.ImageBitmap.imageResource(android.R.drawable.ic_menu_gallery), "Selected product", Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
+                                    AndroidView(
+                                        factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP } },
+                                        update = { imageView -> imageView.setImageURI(uri) },
+                                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
+                                    )
                                 }
-                                IconButton(onClick = { media = media.filterNot { it == uri } }, modifier = Modifier.align(Alignment.TopEnd).size(28.dp)) {
+                                IconButton(onClick = { media = media.filterNot { item -> item == uri } }, modifier = Modifier.align(Alignment.TopEnd).size(28.dp)) {
                                     Icon(Icons.Default.Close, "Remove", tint = MaterialTheme.colorScheme.error)
                                 }
                             }
@@ -371,6 +393,11 @@ private fun FynxMarketplaceSellerDialog(
             }
         }
     }
+}
+
+private fun contextIsVideo(context: android.content.Context, uri: Uri): Boolean {
+    val mime = context.contentResolver.getType(uri).orEmpty().lowercase()
+    return mime.startsWith("video/") || uri.toString().lowercase().let { it.endsWith(".mp4") || it.endsWith(".webm") || it.endsWith(".3gp") || it.endsWith(".mkv") }
 }
 
 private fun formatMoney(price: Double, currency: String): String = "${currency.uppercase()} ${String.format(java.util.Locale.US, "%,.2f", price)}"
