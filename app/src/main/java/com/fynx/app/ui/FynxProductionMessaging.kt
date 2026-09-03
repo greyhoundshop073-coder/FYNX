@@ -15,7 +15,11 @@ object FynxProductionMessaging {
     data class RemoteMessage(
         val id: String,
         val senderId: String,
+        val senderUsername: String? = null,
+        val senderDisplayName: String? = null,
         val recipientId: String,
+        val recipientUsername: String? = null,
+        val recipientDisplayName: String? = null,
         val text: String,
         val timestamp: Long,
         val delivered: Boolean,
@@ -107,13 +111,19 @@ object FynxProductionMessaging {
         attachmentUri = message.mediaUrl,
         attachmentType = message.mediaType,
         voiceUri = if (message.mediaType == "audio") message.mediaUrl else null,
-        voiceDurationMs = message.voiceDurationMs
+        voiceDurationMs = message.voiceDurationMs,
+        senderName = message.senderDisplayName,
+        senderUsername = message.senderUsername
     )
 
     fun fromJson(item: JSONObject): RemoteMessage = RemoteMessage(
         id = item.optString("id"),
         senderId = item.optString("sender_id", item.optString("senderId")),
+        senderUsername = item.optString("sender_username", item.optString("senderUsername")).takeIf { it.isNotBlank() },
+        senderDisplayName = item.optString("sender_display_name", item.optString("senderDisplayName")).takeIf { it.isNotBlank() },
         recipientId = item.optString("recipient_id", item.optString("recipientId")),
+        recipientUsername = item.optString("recipient_username", item.optString("recipientUsername")).takeIf { it.isNotBlank() },
+        recipientDisplayName = item.optString("recipient_display_name", item.optString("recipientDisplayName")).takeIf { it.isNotBlank() },
         text = item.optString("text"),
         timestamp = item.optDouble("timestamp", 0.0).toLong(),
         delivered = item.optBoolean("delivered", false),
