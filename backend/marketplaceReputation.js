@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
   let schemaPromise;
 
@@ -31,22 +33,45 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
   const reputation = async (sellerUsername) => {
     await ensureSchema();
     const result = await pool.query(`
-      SELECT
-        u.id,
-        u.username,
-        u.display_name,
-        COUNT(o.id) FILTER (WHERE o.status = 'COMPLETED')::INTEGER AS successful_orders,
-        COUNT(o.id) FILTER (WHERE o.status IN ('PAYMENT_PENDING','PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED','DISPUTED','CANCELLED','REFUNDED'))::INTEGER AS total_orders,
-        COUNT(o.id) FILTER (WHERE o.status = 'COMPLETED' AND o.completed_at >= NOW() - INTERVAL '30 days')::INTEGER AS successful_orders_30d,
-        COUNT(o.id) FILTER (WHERE o.status IN ('PAYMENT_PENDING','PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED','DISPUTED','CANCELLED','REFUNDED') AND o.created_at >= NOW() - INTERVAL '30 days')::INTEGER AS total_orders_30d,
-        COUNT(r.id)::INTEGER AS review_count,
-        COALESCE(AVG(r.rating), 0)::NUMERIC(4,2) AS average_rating,
-        COUNT(r.id) FILTER (WHERE r.rating >= 4)::INTEGER AS positive_reviews
-      FROM users u
-      LEFT JOIN marketplace_orders o ON o.seller_id = u.id
-      LEFT JOIN marketplace_seller_reviews r ON r.seller_id = u.id
-      WHERE u.username = $1
-      GROUP BY u.id, u.username, u.display_name
+      WITH order_stats AS (
+        SELECT
+          u.id AS seller_id,
+          u.username,
+          u.display_name,
+          COUNT(o.id) FILTER (WHERE o.status = 'COMPLETED')::INTEGER AS successful_orders,
+          COUNT(o.id)::INTEGER AS total_orders,
+          COUNT(o.id) FILTER (WHERE o.status = 'COMPLETED' AND o.completed_at >= NOW() - INTERVAL '30 days')::INTEGER AS successful_orders_30d,
+          COUNT(o.id) FILTER (WHERE o.created_at >= NOW() - INTERVAL '30 days')::INTEGER AS total_orders_30d
+        FROM users u
+        LEFT JOIN marketplace_orders o ON o.seller_id = u.id
+        GROUP BY u.id, u.username, u.display_name
+      ),
+      review_stats AS (
+        SELECT
+          seller_id,
+          COUNT(*)::INTEGER AS review_count,
+          COALESCE(AVG(rating), 0)::NUMERIC(4,2) AS average_rating,
+          COUNT(*) FILTER (WHERE rating >= 4)::INTEGER AS positive_reviews
+        FROM marketplace_seller_reviews
+        GROUP BY seller_id
+      ),
+      ranked AS (
+        SELECT
+          s.*,
+          COALESCE(r.review_count, 0)::INTEGER AS review_count,
+          COALESCE(r.average_rating, 0)::NUMERIC(4,2) AS average_rating,
+          COALESCE(r.positive_reviews, 0)::INTEGER AS positive_reviews,
+          RANK() OVER (
+            ORDER BY
+              s.successful_orders DESC,
+              CASE WHEN s.total_orders > 0 THEN s.successful_orders::NUMERIC / s.total_orders ELSE 0 END DESC,
+              s.seller_id ASC
+          )::INTEGER AS seller_rank,
+          COUNT(*) OVER ()::INTEGER AS seller_count
+        FROM order_stats s
+        LEFT JOIN review_stats r ON r.seller_id = s.seller_id
+      )
+      SELECT * FROM ranked WHERE username = $1
     `, [sellerUsername]);
     const row = result.rows[0];
     if (!row) return null;
@@ -62,15 +87,17 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
     const positiveRating = reviews > 0 ? (positive / reviews) * 100 : 0;
 
     let tier = 'NEW SELLER';
-    if (successful >= 500 && completionRate >= 95 && positiveRating >= 95) tier = 'ELITE SELLER';
-    else if (successful >= 100 && completionRate >= 90 && positiveRating >= 90) tier = 'TOP SELLER';
-    else if (successful >= 20 && completionRate >= 85 && positiveRating >= 85) tier = 'TRUSTED SELLER';
+    if (successful >= 500 && completionRate >= 95 && (reviews === 0 || positiveRating >= 95)) tier = 'ELITE SELLER';
+    else if (successful >= 100 && completionRate >= 90 && (reviews === 0 || positiveRating >= 90)) tier = 'TOP SELLER';
+    else if (successful >= 20 && completionRate >= 85 && (reviews === 0 || positiveRating >= 85)) tier = 'TRUSTED SELLER';
     else if (successful >= 5 && completionRate >= 80) tier = 'RISING SELLER';
 
     return {
-      sellerId: String(row.id),
+      sellerId: String(row.seller_id),
       username: row.username,
       displayName: row.display_name,
+      rank: Number(row.seller_rank),
+      sellerCount: Number(row.seller_count),
       successfulSales: successful,
       totalOrders: total,
       completionRate: Number(completionRate.toFixed(2)),
