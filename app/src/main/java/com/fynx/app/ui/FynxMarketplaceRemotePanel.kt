@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +27,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -73,7 +76,7 @@ fun FynxMarketplaceRemotePanel(currentUsername: String = "preview", onOpenProfil
         }
         OutlinedTextField(query, { value -> query = value.take(80) }, Modifier.fillMaxWidth().padding(horizontal = 12.dp), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("Search products or sellers") }, shape = FynxDesign.ControlShape)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 7.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            categories.forEach { item -> FilterChip(category == item, { selected -> category = item }, label = { Text(item) }) }
+            categories.forEach { item -> FilterChip(category == item, { category = item }, label = { Text(item) }) }
         }
         message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 12.dp)) }
         if (loading) {
@@ -100,18 +103,31 @@ fun FynxMarketplaceRemotePanel(currentUsername: String = "preview", onOpenProfil
     }
 
     if (showSell) {
-        FynxMarketplaceSellerDialog(currentUsername, onDismiss = { showSell = false }) { title, description, store, price, currency, cat, condition, quantity, location, delivery, pickup, fee, mediaUri ->
+        FynxMarketplaceSellerDialog(currentUsername, onDismiss = { showSell = false }) { title, description, store, price, currency, cat, condition, quantity, location, delivery, pickup, fee, mediaUris ->
             scope.launch {
-                val mime = context.contentResolver.getType(mediaUri).orEmpty().lowercase()
-                if (!mime.startsWith("image/") && !mime.startsWith("video/")) {
-                    message = "Please choose a product photo or video."
+                if (mediaUris.isEmpty()) {
+                    message = "Add at least one product photo or video."
                     return@launch
                 }
-                val media = FynxProductionMessaging.uploadMedia(context, mediaUri, mime).getOrElse { error ->
-                    message = error.message ?: "Media upload failed."
-                    return@launch
+                val uploadedIds = mutableListOf<String>()
+                for (uri in mediaUris.take(12)) {
+                    val mime = context.contentResolver.getType(uri).orEmpty().lowercase().ifBlank {
+                        when {
+                            uri.toString().lowercase().endsWith(".mp4") -> "video/mp4"
+                            else -> "image/jpeg"
+                        }
+                    }
+                    if (!mime.startsWith("image/") && !mime.startsWith("video/")) {
+                        message = "Unsupported product media selected."
+                        return@launch
+                    }
+                    val media = FynxProductionMessaging.uploadMedia(context, uri, mime).getOrElse { error ->
+                        message = error.message ?: "Media upload failed."
+                        return@launch
+                    }
+                    uploadedIds += media.id
                 }
-                FynxMarketplaceClient.createListing(context, title, description, store, price, currency, cat, condition, quantity, location, delivery, pickup, fee, listOf(media.id))
+                FynxMarketplaceClient.createListing(context, title, description, store, price, currency, cat, condition, quantity, location, delivery, pickup, fee, uploadedIds)
                     .onSuccess {
                         showSell = false
                         message = "Product published to Marketplace."
@@ -129,6 +145,7 @@ fun FynxMarketplaceRemotePanel(currentUsername: String = "preview", onOpenProfil
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(formatMoney(listing.price, listing.currency), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                    if (listing.mediaIds.size > 1) Text("${listing.mediaIds.size} product media items", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (listing.description.isNotBlank()) Text(listing.description)
                     Text("Seller: ${listing.sellerDisplayName.ifBlank { listing.sellerUsername }}")
                     if (listing.storeName.isNotBlank()) Text("Store: ${listing.storeName}", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -175,9 +192,12 @@ private fun RemoteMarketCard(
                 }
                 IconButton(onClick = onOpen) { Icon(Icons.Default.MoreHoriz, "Details") }
             }
-            val mediaId = listing.mediaIds.firstOrNull()
-            if (mediaId != null) {
-                RemoteMarketMedia(context, mediaId)
+            if (listing.mediaIds.isNotEmpty()) {
+                LazyRow(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(listing.mediaIds.take(12)) { mediaId ->
+                        RemoteMarketMedia(context, mediaId, Modifier.width(310.dp).height(250.dp))
+                    }
+                }
             } else {
                 Box(Modifier.fillMaxWidth().height(250.dp).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) {
                     Icon(Icons.Default.ShoppingBag, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(54.dp))
@@ -192,6 +212,7 @@ private fun RemoteMarketCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     AssistChip(onClick = onOpen, label = { Text(listing.category) })
                     Text("${listing.quantity} available", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (listing.mediaIds.size > 1) Text("${listing.mediaIds.size} media", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Row(Modifier.fillMaxWidth()) {
                     TextButton(onClick = onContact) { Icon(Icons.Default.ChatBubbleOutline, null); Spacer(Modifier.width(3.dp)); Text("Contact") }
@@ -205,27 +226,38 @@ private fun RemoteMarketCard(
 }
 
 @Composable
-private fun RemoteMarketMedia(context: android.content.Context, mediaId: String) {
+private fun RemoteMarketMedia(context: android.content.Context, mediaId: String, modifier: Modifier) {
+    var kind by remember(mediaId) { mutableStateOf("loading") }
     var bitmap by remember(mediaId) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    val mediaUrl = remember(mediaId) { FynxMarketplaceClient.mediaUrl(context, mediaId) }
     LaunchedEffect(mediaId) {
-        bitmap = withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) {
             runCatching {
-                val connection = (URL(FynxMarketplaceClient.mediaUrl(context, mediaId)).openConnection() as HttpURLConnection)
+                val connection = (URL(mediaUrl).openConnection() as HttpURLConnection)
                 connection.setRequestProperty("Authorization", "Bearer ${FynxBackendClient.accessToken(context).orEmpty()}")
                 connection.connectTimeout = 10_000
                 connection.readTimeout = 20_000
                 try {
-                    if (connection.responseCode in 200..299) connection.inputStream.use { BitmapFactory.decodeStream(it) } else null
-                } finally {
-                    connection.disconnect()
-                }
-            }.getOrNull()
+                    val contentType = connection.contentType.orEmpty().lowercase()
+                    if (connection.responseCode in 200..299 && contentType.startsWith("video/")) {
+                        kind = "video"
+                    } else if (connection.responseCode in 200..299) {
+                        bitmap = connection.inputStream.use { BitmapFactory.decodeStream(it) }
+                        kind = if (bitmap != null) "image" else "error"
+                    } else kind = "error"
+                } finally { connection.disconnect() }
+            }.onFailure { kind = "error" }
         }
     }
-    if (bitmap != null) {
-        Image(bitmap!!.asImageBitmap(), "Product photo", Modifier.fillMaxWidth().heightIn(min = 250.dp, max = 480.dp), contentScale = ContentScale.Crop)
-    } else {
-        Box(Modifier.fillMaxWidth().height(250.dp).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { CircularProgressIndicator() }
+    when (kind) {
+        "image" -> Image(bitmap!!.asImageBitmap(), "Product photo", modifier.clip(RoundedCornerShape(14.dp)), contentScale = ContentScale.Crop)
+        "video" -> AndroidView(
+            factory = { android.widget.VideoView(it).apply { setVideoURI(Uri.parse(mediaUrl)); setOnPreparedListener { player -> player.isLooping = true; start() } } },
+            update = { view -> if (view.tag != mediaUrl) { view.tag = mediaUrl; view.setVideoURI(Uri.parse(mediaUrl)); view.start() } },
+            modifier = modifier.clip(RoundedCornerShape(14.dp))
+        )
+        "error" -> Box(modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { Icon(Icons.Default.BrokenImage, "Media unavailable") }
+        else -> Box(modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { CircularProgressIndicator() }
     }
 }
 
@@ -233,7 +265,7 @@ private fun RemoteMarketMedia(context: android.content.Context, mediaId: String)
 private fun FynxMarketplaceSellerDialog(
     currentUsername: String,
     onDismiss: () -> Unit,
-    onPublish: (String, String, String, Double, String, String, String, Int, String, Boolean, Boolean, Double?, Uri) -> Unit
+    onPublish: (String, String, String, Double, String, String, String, Int, String, Boolean, Boolean, Double?, List<Uri>) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -246,8 +278,11 @@ private fun FynxMarketplaceSellerDialog(
     var delivery by remember { mutableStateOf(false) }
     var pickup by remember { mutableStateOf(true) }
     var fee by remember { mutableStateOf("") }
-    var media by remember { mutableStateOf<Uri?>(null) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> media = uri }
+    var media by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var showCamera by remember { mutableStateOf(false) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(12)) { uris ->
+        if (uris.isNotEmpty()) media = (media + uris).distinct().take(12)
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -255,10 +290,35 @@ private fun FynxMarketplaceSellerDialog(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Seller: @${currentUsername.removePrefix("@")}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                OutlinedButton(onClick = { picker.launch("image/*") }, Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.AddAPhoto, null)
-                    Spacer(Modifier.width(5.dp))
-                    Text(if (media == null) "Add product photo" else "Change product photo")
+                Text("Product media (${media.size}/12)", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = { picker.launch(ActivityResultContracts.PickVisualMedia.ImageAndVideo) }, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Default.Collections, null)
+                        Spacer(Modifier.width(5.dp))
+                        Text("Choose photos")
+                    }
+                    OutlinedButton(onClick = { showCamera = true }, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Default.PhotoCamera, null)
+                        Spacer(Modifier.width(5.dp))
+                        Text("Camera")
+                    }
+                }
+                if (media.isNotEmpty()) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp), contentPadding = PaddingValues(vertical = 2.dp)) {
+                        items(media) { uri ->
+                            Box(Modifier.width(78.dp).height(78.dp)) {
+                                val isVideo = uri.toString().lowercase().contains("video") || uri.toString().lowercase().endsWith(".mp4")
+                                if (isVideo) {
+                                    Box(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { Icon(Icons.Default.Videocam, "Video") }
+                                } else {
+                                    Image(androidx.compose.ui.graphics.ImageBitmap.imageResource(android.R.drawable.ic_menu_gallery), "Selected product", Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
+                                }
+                                IconButton(onClick = { media = media.filterNot { it == uri } }, modifier = Modifier.align(Alignment.TopEnd).size(28.dp)) {
+                                    Icon(Icons.Default.Close, "Remove", tint = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        }
+                    }
                 }
                 OutlinedTextField(title, { title = it.take(120) }, Modifier.fillMaxWidth(), label = { Text("Product name") }, singleLine = true)
                 OutlinedTextField(price, { price = it.take(20) }, Modifier.fillMaxWidth(), label = { Text("Price") }, singleLine = true)
@@ -268,16 +328,16 @@ private fun FynxMarketplaceSellerDialog(
                 OutlinedTextField(location, { location = it.take(160) }, Modifier.fillMaxWidth(), label = { Text("Location (optional)") }, singleLine = true)
                 Text("Category", style = MaterialTheme.typography.labelLarge)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services").forEach { item -> FilterChip(category == item, { selected -> category = item }, label = { Text(item) }) }
+                    listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services").forEach { item -> FilterChip(category == item, { category = item }, label = { Text(item) }) }
                 }
                 Text("Condition", style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("NEW", "USED", "REFURBISHED").forEach { item -> FilterChip(condition == item, { selected -> condition = item }, label = { Text(item) }) }
+                    listOf("NEW", "USED", "REFURBISHED").forEach { item -> FilterChip(condition == item, { condition = item }, label = { Text(item) }) }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(delivery, { checked -> delivery = checked }); Text("Delivery")
+                    Checkbox(delivery, { delivery = it }); Text("Delivery")
                     Spacer(Modifier.width(8.dp))
-                    Checkbox(pickup, { checked -> pickup = checked }); Text("Pickup")
+                    Checkbox(pickup, { pickup = it }); Text("Pickup")
                 }
                 if (delivery) OutlinedTextField(fee, { value -> fee = value.take(20) }, Modifier.fillMaxWidth(), label = { Text("Delivery fee (NGN, optional)") }, singleLine = true)
             }
@@ -287,13 +347,30 @@ private fun FynxMarketplaceSellerDialog(
                 val p = price.toDoubleOrNull()
                 val q = quantity.toIntOrNull()
                 val f = fee.toDoubleOrNull()
-                if (p != null && p > 0 && q != null && q >= 0 && title.trim().length >= 2 && description.trim().length >= 5 && media != null) {
-                    onPublish(title.trim(), description.trim(), store.trim(), p, "NGN", category, condition, q, location.trim(), delivery, pickup, f, media!!)
+                if (p != null && p > 0 && q != null && q >= 0 && title.trim().length >= 2 && description.trim().length >= 5 && media.isNotEmpty()) {
+                    onPublish(title.trim(), description.trim(), store.trim(), p, "NGN", category, condition, q, location.trim(), delivery, pickup, f, media)
                 }
             }) { Text("Publish") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+
+    if (showCamera) {
+        Dialog(
+            onDismissRequest = { showCamera = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(Modifier.fillMaxSize()) {
+                FynxCameraCapturePanel(
+                    onCaptured = { uri, _ ->
+                        if (media.size < 12) media = (media + uri).distinct()
+                        showCamera = false
+                    },
+                    onDismiss = { showCamera = false }
+                )
+            }
+        }
+    }
 }
 
 private fun formatMoney(price: Double, currency: String): String = "${currency.uppercase()} ${String.format(java.util.Locale.US, "%,.2f", price)}"
