@@ -44,6 +44,9 @@ object FynxBackendClient {
 
     fun hasAccessToken(context: Context): Boolean = accessToken(context) != null
 
+    fun isUnauthorizedFailure(error: Throwable): Boolean =
+        generateSequence(error) { it.cause }.any { it is FynxUnauthorizedException }
+
     suspend fun get(context: Context, path: String): Result<String> = request(context, "GET", path, null)
     suspend fun postJson(context: Context, path: String, body: String): Result<String> = request(context, "POST", path, body)
     suspend fun delete(context: Context, path: String): Result<String> = request(context, "DELETE", path, null)
@@ -100,8 +103,12 @@ object FynxBackendClient {
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (status == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                saveAccessToken(context, null)
+                throw FynxUnauthorizedException()
+            }
             if (status !in 200..299) {
-                throw IllegalStateException("FYNX backend returned HTTP $status${if (response.isBlank()) "" else ": $response"}")
+                throw IllegalStateException("FYNX backend returned HTTP $status")
             }
             return response
         } finally {
@@ -121,4 +128,6 @@ object FynxBackendClient {
         }
         return false
     }
+
+    private class FynxUnauthorizedException : IOException("FYNX session expired")
 }
