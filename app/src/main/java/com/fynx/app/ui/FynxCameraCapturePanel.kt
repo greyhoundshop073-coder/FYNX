@@ -150,7 +150,7 @@ fun FynxCameraCapturePanel(
         val source = uri.path?.let { File(it) } ?: return
         runCatching {
             val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo")
-            val matrix = android.graphics.ColorMatrix().apply { set(selected.saturation, selected.brightness, selected.contrast, 1f) }
+            val matrix = android.graphics.ColorMatrix().apply { setFynxFilter(selected.saturation, selected.brightness, selected.contrast, 1f) }
             val outputBitmap = android.graphics.Bitmap.createBitmap(bitmap.width, bitmap.height, android.graphics.Bitmap.Config.ARGB_8888)
             val canvas = android.graphics.Canvas(outputBitmap)
             val paint = android.graphics.Paint().apply { colorFilter = android.graphics.ColorMatrixColorFilter(matrix) }
