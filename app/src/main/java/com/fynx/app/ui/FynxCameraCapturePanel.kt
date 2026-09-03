@@ -76,6 +76,11 @@ fun FynxCameraCapturePanel(
         }
     }
 
+    fun formatCameraRecordingTime(milliseconds: Long): String {
+        val totalSeconds = milliseconds / 1000L
+        return "%02d:%02d".format(totalSeconds / 60L, totalSeconds % 60L)
+    }
+
     fun bindCamera(previewView: PreviewView) {
         val owner = activity ?: run { error = "Camera requires an Android activity"; return }
         if (!hasCamera) return
@@ -128,7 +133,7 @@ fun FynxCameraCapturePanel(
         }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp)) }
-            if (recording != null) Text("Recording ${formatRecordingTime(recordingElapsed)}", style = MaterialTheme.typography.titleMedium)
+            if (recording != null) Text("Recording ${formatCameraRecordingTime(recordingElapsed)}", style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
                 FilterChip(selected = mode == CameraMode.PHOTO, onClick = { if (recording == null) mode = CameraMode.PHOTO }, label = { Text("Photo") }, leadingIcon = { Icon(Icons.Default.PhotoCamera, null) })
                 FilledIconButton(onClick = {
