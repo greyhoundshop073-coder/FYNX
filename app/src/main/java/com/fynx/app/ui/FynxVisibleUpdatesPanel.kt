@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -31,9 +30,10 @@ import androidx.compose.ui.unit.dp
 fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, onOpenAi: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Card(onClick = onOpenAi, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .35f))) {
-            Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.width(14.dp))
                 Surface(modifier = Modifier.size(52.dp).clip(CircleShape), color = MaterialTheme.colorScheme.primaryContainer, shape = CircleShape) {
-                    Icon(Icons.Default.AutoAwesome, "FYNX AI Assistant", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(52.dp).padding(14.dp))
+                    Icon(Icons.Default.AutoAwesome, "FYNX AI Assistant", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
@@ -41,22 +41,29 @@ fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, 
                     Text("Ask, plan, learn and get help inside FYNX", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall)
                 }
                 Icon(Icons.Default.ChevronRight, "Open FYNX AI", tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(14.dp))
             }
         }
         Card(onClick = onOpenStories, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
-            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Spacer(Modifier.size(4.dp))
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Spacer(Modifier.width(14.dp))
                     Text("Status", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                     Text("See all", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                    Spacer(Modifier.width(14.dp))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Spacer(Modifier.width(14.dp))
                     FynxStatusPreviewCircle(currentUsername, "Your status", true, onOpenStories)
                     FynxStatusPreviewCircle("FYNX", "Create status", false, onOpenStories)
                     Column(Modifier.weight(1f)) {
                         Text("Your status stays here", fontWeight = FontWeight.SemiBold)
                         Text("Text, photo, video and voice", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall)
                     }
+                    Spacer(Modifier.width(14.dp))
                 }
+                Spacer(Modifier.size(4.dp))
             }
         }
     }
