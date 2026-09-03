@@ -81,11 +81,8 @@ async function initDatabase() {
       CHECK (blocker_id <> blocked_id)
     );
     CREATE INDEX IF NOT EXISTS blocks_blocked_idx ON blocks (blocked_id);
-    ALTER TABLE messages ADD CONSTRAINT messages_media_fk FOREIGN KEY (media_id) REFERENCES message_media(id) ON DELETE SET NULL;
-  `).catch(async (error) => {
-    if (error?.code === "42710") return;
-    throw error;
-  });
+  `);
+  await pool.query(`DO $$ BEGIN ALTER TABLE messages ADD CONSTRAINT messages_media_fk FOREIGN KEY (media_id) REFERENCES message_media(id) ON DELETE SET NULL; EXCEPTION WHEN duplicate_object THEN NULL; END $$;`);
 }
 
 function requireConfig(name, value) { if (!value) throw new Error(`${name} is not configured.`); }
