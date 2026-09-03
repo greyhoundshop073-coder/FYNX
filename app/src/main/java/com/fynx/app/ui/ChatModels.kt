@@ -6,7 +6,8 @@ data class ChatPreview(
     val lastMessage: String,
     val time: String,
     val unreadCount: Int = 0,
-    val online: Boolean = false
+    val online: Boolean = false,
+    val avatarUri: String? = null
 )
 
 data class ChatMessage(
@@ -22,5 +23,8 @@ data class ChatMessage(
     val attachmentUri: String? = null,
     val attachmentType: String? = null,
     val voiceUri: String? = null,
-    val voiceDurationMs: Long = 0L
+    val voiceDurationMs: Long = 0L,
+    val senderName: String? = null,
+    val senderUsername: String? = null,
+    val senderAvatarUri: String? = null
 )
