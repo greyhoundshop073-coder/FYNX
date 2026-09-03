@@ -190,7 +190,30 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         val duration = System.currentTimeMillis() - recordingStartedAt
         runCatching { r.stop() }; r.release(); recorder = null; isRecording = false; recordingFile = null; recordingElapsed = 0L
         if (file != null && file.exists() && file.length() > 0L && duration >= 300L) {
-            messages = messages + ChatMessage("Voice message", true, id = System.currentTimeMillis().toString(), delivered = false, voiceUri = file.absolutePath, voiceDurationMs = duration)
+            val pendingFile = file
+            scope.launch {
+                sending = true
+                networkError = null
+                FynxProductionMessaging.uploadMedia(context, Uri.fromFile(pendingFile), "audio/mp4")
+                    .onSuccess { media ->
+                        FynxProductionMessaging.sendText(
+                            context,
+                            chat.username.removePrefix("@"),
+                            "",
+                            replyToId = null,
+                            mediaId = media.id,
+                            mediaType = "audio",
+                            voiceDurationMs = duration
+                        ).onSuccess { remote ->
+                            currentUserId?.let { myId ->
+                                messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp }
+                            }
+                            pendingFile.delete()
+                        }.onFailure { networkError = it.message ?: "Voice message could not be sent" }
+                    }
+                    .onFailure { networkError = it.message ?: "Voice recording upload failed" }
+                sending = false
+            }
         } else file?.delete()
     }
     fun playVoice(message: ChatMessage) {
@@ -344,7 +367,23 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                         sending = true
                                         networkError = null
                                         scope.launch {
-                                            FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
+                                            val selectedAttachment = attachment
+                                            if (selectedAttachment != null) {
+                                                FynxProductionMessaging.uploadMedia(context, selectedAttachment)
+                                                    .mapCatching { media ->
+                                                        FynxProductionMessaging.sendText(
+                                                            context,
+                                                            chat.username.removePrefix("@"),
+                                                            value,
+                                                            replyToId,
+                                                            media.id,
+                                                            if (media.mimeType.startsWith("video/")) "video" else "image",
+                                                            0L
+                                                        ).getOrThrow()
+                                                    }
+                                            } else {
+                                                FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
+                                            }
                                                 .onSuccess { remote ->
                                                     currentUserId?.let { myId -> messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp } }
                                                     realtimeClient.sendTyping(recipient, false)
