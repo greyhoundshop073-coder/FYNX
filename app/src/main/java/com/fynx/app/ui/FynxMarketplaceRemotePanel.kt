@@ -71,9 +71,9 @@ fun FynxMarketplaceRemotePanel(currentUsername: String = "preview", onOpenProfil
                 Text("Sell")
             }
         }
-        OutlinedTextField(query, { query = it.take(80) }, Modifier.fillMaxWidth().padding(horizontal = 12.dp), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("Search products or sellers") }, shape = FynxDesign.ControlShape)
+        OutlinedTextField(query, { value -> query = value.take(80) }, Modifier.fillMaxWidth().padding(horizontal = 12.dp), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("Search products or sellers") }, shape = FynxDesign.ControlShape)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 7.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            categories.forEach { item -> FilterChip(category == item, { category = it }, label = { Text(item) }) }
+            categories.forEach { item -> FilterChip(category == item, { selected -> category = item }, label = { Text(item) }) }
         }
         message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 12.dp)) }
         if (loading) {
@@ -268,18 +268,18 @@ private fun FynxMarketplaceSellerDialog(
                 OutlinedTextField(location, { location = it.take(160) }, Modifier.fillMaxWidth(), label = { Text("Location (optional)") }, singleLine = true)
                 Text("Category", style = MaterialTheme.typography.labelLarge)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services").forEach { item -> FilterChip(category == item, { category = item }, label = { Text(item) }) }
+                    listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services").forEach { item -> FilterChip(category == item, { selected -> category = item }, label = { Text(item) }) }
                 }
                 Text("Condition", style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("NEW", "USED", "REFURBISHED").forEach { item -> FilterChip(condition == item, { condition = item }, label = { Text(item) }) }
+                    listOf("NEW", "USED", "REFURBISHED").forEach { item -> FilterChip(condition == item, { selected -> condition = item }, label = { Text(item) }) }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(delivery, { delivery = it }); Text("Delivery")
+                    Checkbox(delivery, { checked -> delivery = checked }); Text("Delivery")
                     Spacer(Modifier.width(8.dp))
-                    Checkbox(pickup, { pickup = it }); Text("Pickup")
+                    Checkbox(pickup, { checked -> pickup = checked }); Text("Pickup")
                 }
-                if (delivery) OutlinedTextField(fee, { fee = it.take(20) }, Modifier.fillMaxWidth(), label = { Text("Delivery fee (NGN, optional)") }, singleLine = true)
+                if (delivery) OutlinedTextField(fee, { value -> fee = value.take(20) }, Modifier.fillMaxWidth(), label = { Text("Delivery fee (NGN, optional)") }, singleLine = true)
             }
         },
         confirmButton = {
