@@ -33,17 +33,13 @@ object FynxProductionMessaging {
         FynxBackendClient.get(context, "/api/messages/${encodePathSegment(username)}")
             .mapCatching { raw ->
                 val messages = JSONObject(raw).optJSONArray("messages") ?: JSONArray()
-                buildList {
-                    for (index in 0 until messages.length()) add(fromJson(messages.getJSONObject(index)))
-                }
+                buildList { for (index in 0 until messages.length()) add(fromJson(messages.getJSONObject(index))) }
             }
 
     suspend fun uploadMedia(context: Context, uri: Uri, mimeTypeOverride: String? = null): Result<RemoteMedia> = runCatching {
         val mimeType = mimeTypeOverride?.trim()?.lowercase()
             ?: context.contentResolver.getType(uri)?.trim()?.lowercase()
-            ?: when (uri.toString().substringBefore("?").lowercase()) {
-                else -> "application/octet-stream"
-            }
+            ?: "application/octet-stream"
         require(mimeType.startsWith("image/") || mimeType.startsWith("video/") || mimeType.startsWith("audio/")) { "Unsupported media type." }
         val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
             val output = java.io.ByteArrayOutputStream()
@@ -91,9 +87,7 @@ object FynxProductionMessaging {
             put("mediaType", mediaType ?: JSONObject.NULL)
             put("voiceDurationMs", voiceDurationMs)
         }
-        return FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { raw ->
-            fromJson(JSONObject(raw).getJSONObject("message"))
-        }
+        return FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
     }
 
     suspend fun markRead(context: Context, messageIds: List<String>): Result<Int> {
@@ -110,12 +104,11 @@ object FynxProductionMessaging {
         read = message.read,
         replyToId = message.replyToId,
         edited = message.edited,
-        attachmentUri = message.mediaId?.let { FynxBackendClient.baseUrlPlaceholder(it) },
+        attachmentUri = message.mediaUrl,
         attachmentType = message.mediaType,
+        voiceUri = if (message.mediaType == "audio") message.mediaUrl else null,
         voiceDurationMs = message.voiceDurationMs
-    ).let { messageModel ->
-        if (message.mediaType == "audio") messageModel.copy(voiceUri = message.mediaUrl) else messageModel
-    }
+    )
 
     fun fromJson(item: JSONObject): RemoteMessage = RemoteMessage(
         id = item.optString("id"),
