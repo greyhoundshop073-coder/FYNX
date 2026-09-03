@@ -1,6 +1,8 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -31,9 +33,19 @@ class FynxRealtimeClient(
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .pingInterval(30, TimeUnit.SECONDS)
         .build()
+    private val reconnectHandler = Handler(Looper.getMainLooper())
     private var socket: WebSocket? = null
+    private var manuallyClosed = false
+    private var reconnectAttempt = 0
 
     fun connect() {
+        manuallyClosed = false
+        reconnectAttempt = 0
+        connectInternal()
+    }
+
+    private fun connectInternal() {
+        if (manuallyClosed) return
         val token = FynxBackendClient.accessToken(context)
         if (token.isNullOrBlank()) {
             onStateChanged(State.FAILED)
@@ -53,6 +65,7 @@ class FynxRealtimeClient(
         socket?.cancel()
         socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                reconnectAttempt = 0
                 onStateChanged(State.CONNECTED)
             }
 
@@ -77,12 +90,22 @@ class FynxRealtimeClient(
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 onStateChanged(State.DISCONNECTED)
+                if (code != 1000 && code != 1008 && code != 1003) scheduleReconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 onStateChanged(State.FAILED)
+                if (response?.code != 401 && response?.code != 403) scheduleReconnect()
             }
         })
+    }
+
+    private fun scheduleReconnect() {
+        if (manuallyClosed) return
+        reconnectHandler.removeCallbacksAndMessages(null)
+        reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(6)
+        val delayMs = (1000L shl (reconnectAttempt - 1)).coerceAtMost(30_000L)
+        reconnectHandler.postDelayed({ connectInternal() }, delayMs)
     }
 
     fun sendTyping(recipientId: String, isTyping: Boolean) {
@@ -115,10 +138,11 @@ class FynxRealtimeClient(
     }
 
     fun close() {
+        manuallyClosed = true
+        reconnectHandler.removeCallbacksAndMessages(null)
         socket?.close(1000, "FYNX conversation closed")
         socket = null
         onStateChanged(State.DISCONNECTED)
-        client.dispatcher.executorService.shutdown()
         client.connectionPool.evictAll()
     }
 }
