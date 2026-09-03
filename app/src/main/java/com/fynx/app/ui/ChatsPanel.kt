@@ -143,7 +143,10 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 TextButton(enabled = selectedUser != null, onClick = {
                     val person = selectedUser ?: return@TextButton
                     val personUsername = person.username ?: return@TextButton
-                    onOpenChat(ChatPreview(person.displayName.ifBlank { personUsername }, personUsername, "", ""))
+                    val newChat = ChatPreview(person.displayName.ifBlank { personUsername }, personUsername, "", "")
+                    FynxChatStore.savePreview(context, newChat)
+                    chats = FynxChatStore.loadPreviews(context)
+                    onOpenChat(newChat)
                     showNewChat = false
                 }) { Text("Open chat") }
             },
