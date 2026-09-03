@@ -1,9 +1,14 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import java.io.IOException
+import java.net.ConnectException
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
@@ -13,6 +18,8 @@ object FynxBackendClient {
     private const val KEY_BASE_URL = "base_url"
     private const val KEY_ACCESS_TOKEN = "access_token"
     private const val PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"
+    private const val MAX_IDEMPOTENT_RETRIES = 2
+    private const val RETRY_DELAY_MS = 500L
 
     fun availability(context: Context): FynxBackendAvailability =
         if (baseUrl(context).isBlank()) FynxBackendAvailability.DISABLED else FynxBackendAvailability.CONFIGURED
@@ -44,31 +51,72 @@ object FynxBackendClient {
     suspend fun currentUserId(context: Context): Result<String> =
         get(context, "/api/me").mapCatching { raw -> JSONObject(raw).getJSONObject("user").getString("id") }
 
-    private suspend fun request(context: Context, method: String, path: String, body: String?): Result<String> = withContext(Dispatchers.IO) {
-        runCatching {
-            val root = baseUrl(context)
-            require(root.isNotBlank()) { "FYNX backend is not configured." }
-            require(path.startsWith("/")) { "Backend path must start with /." }
-            val connection = (URL(root + path).openConnection() as HttpURLConnection).apply {
-                requestMethod = method
-                connectTimeout = 10_000
-                readTimeout = 20_000
-                useCaches = false
-                setRequestProperty("Accept", "application/json")
-                accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
-            }
-            try {
-                if (body != null) {
-                    connection.doOutput = true
-                    connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                    connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+    private suspend fun request(context: Context, method: String, path: String, body: String?): Result<String> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val root = baseUrl(context)
+                require(root.isNotBlank()) { "FYNX backend is not configured." }
+                require(path.startsWith("/")) { "Backend path must start with /." }
+
+                var attempt = 0
+                while (true) {
+                    try {
+                        return@runCatching executeRequest(context, root, method, path, body)
+                    } catch (error: Exception) {
+                        val retryable = method == "GET" || method == "DELETE"
+                        if (!retryable || !isTransientNetworkFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) {
+                            throw error
+                        }
+                        attempt++
+                        delay(RETRY_DELAY_MS * attempt)
+                    }
                 }
-                val status = connection.responseCode
-                val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-                val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                if (status !in 200..299) throw IllegalStateException("FYNX backend returned HTTP $status${if (response.isBlank()) "" else ": $response"}")
-                response
-            } finally { connection.disconnect() }
+            }
         }
+
+    private fun executeRequest(
+        context: Context,
+        root: String,
+        method: String,
+        path: String,
+        body: String?
+    ): String {
+        val connection = (URL(root + path).openConnection() as HttpURLConnection).apply {
+            requestMethod = method
+            connectTimeout = 10_000
+            readTimeout = 20_000
+            useCaches = false
+            setRequestProperty("Accept", "application/json")
+            accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
+        }
+        try {
+            if (body != null) {
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            }
+            val status = connection.responseCode
+            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+            val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (status !in 200..299) {
+                throw IllegalStateException("FYNX backend returned HTTP $status${if (response.isBlank()) "" else ": $response"}")
+            }
+            return response
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun isTransientNetworkFailure(error: Throwable): Boolean {
+        var current: Throwable? = error
+        while (current != null) {
+            if (current is SocketTimeoutException ||
+                current is ConnectException ||
+                current is UnknownHostException ||
+                current is IOException
+            ) return true
+            current = current.cause
+        }
+        return false
     }
 }
