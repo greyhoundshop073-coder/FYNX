@@ -20,7 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-private const val FYNX_PREVIEW_MODE = true
+private const val FYNX_PREVIEW_MODE = false
 private data class FynxNavItem(val key: String, val label: String, val icon: ImageVector)
 
 @Composable
@@ -149,7 +149,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     "Invite" -> FynxInvitePanel(code = inviteCode, onShare = { FynxShareActions.share(context, FynxShareActions.defaultPayload()) }, onBack = { selected = "Features" })
                     "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo)
                     "To-Do" -> TodoPanel()
-                    "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onSignOut = { authSession = if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { FynxAuthStore.clear(context); AuthSession() } })
+                    "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onSignOut = { authSession = if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { FynxAuthStore.clear(context); FynxBackendClient.saveAccessToken(context, null); AuthSession() } })
                     else -> HomePanel(currentUsername = authSession.username ?: "preview", onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" })
                 }
             }
@@ -164,12 +164,12 @@ private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
     val visible = features.filter { it.second.contains(query.trim(), true) }
     Column(Modifier.fillMaxSize()) {
         Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Access your tools in one place. Money tools are grouped together in Money Center.", color = FynxDesign.TextSecondary)
+        Text("Access your tools in one place. Money tools are grouped together in Money Center.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp)); FynxFeatureSearchField(query, { query = it }); Spacer(Modifier.height(8.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(visible, key = { it.first }) { feature ->
-                Card(onClick = { onSelect(feature.first) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .5f))) {
-                    Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) { Surface(shape = FynxDesign.ControlShape, color = FynxDesign.SelectedContainer) { Icon(feature.third, feature.second, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp).size(21.dp)) }; Spacer(Modifier.width(12.dp)); Text(feature.second, style = MaterialTheme.typography.titleMedium) }
+                Card(onClick = { onSelect(feature.first) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .5f))) {
+                    Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) { Surface(shape = FynxDesign.ControlShape, color = MaterialTheme.colorScheme.secondaryContainer) { Icon(feature.third, feature.second, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp).size(21.dp)) }; Spacer(Modifier.width(12.dp)); Text(feature.second, style = MaterialTheme.typography.titleMedium) }
                 }
             }
         }
