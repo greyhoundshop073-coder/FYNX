@@ -1,28 +1,12 @@
-name: FYNX social core build
+name: FYNX social core validation
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 permissions:
-  contents: write
+  contents: read
 jobs:
-  build-social-core:
-    if: github.actor != 'github-actions[bot]'
+  validate-social-core:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Apply completed Social Core
-        run: bash scripts/build_social_core.sh
-      - name: Validate backend syntax
-        run: node --check backend/socialRoutes.js
-      - name: Validate Android source markers
-        run: |
-          test -f app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt
-          test -f app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt
-          grep -q 'FynxRemoteHomeSocialPanel' app/src/main/java/com/fynx/app/ui/HomePanel.kt
-      - name: Commit completed Social Core
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/socialRoutes.js app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt app/src/main/java/com/fynx/app/ui/HomePanel.kt
-          git diff --cached --quiet || (git commit -m "BUILD A — complete real social feed interactions" && git push)
+      - run: node --check backend/socialRoutes.js
+      - run: test -f app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt && test -f app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt && grep -q 'FynxRemoteHomeSocialPanel' app/src/main/java/com/fynx/app/ui/HomePanel.kt
