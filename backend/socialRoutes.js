@@ -1,15 +1,33 @@
 export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   app.get("/api/users/search", auth, async (req, res) => {
     try {
-      const query = typeof req.query?.q === "string" ? req.query.q.trim().toLowerCase() : "";
-      if (query.length < 2 || query.length > 32) return res.status(400).json({ error: "search query must be 2-32 characters" });
+      const query = typeof req.query?.q === "string" ? req.query.q.trim() : "";
+      const mode = req.query?.mode === "phone" ? "phone" : "username";
+      if (query.length < 2 || query.length > 80) return res.status(400).json({ error: "search query must be 2-80 characters" });
+
+      if (mode === "phone") {
+        // Phone discovery is an exact match only. Never return the phone number itself.
+        const digits = query.replace(/[^0-9]/g, "");
+        if (digits.length < 7 || digits.length > 15) return res.status(400).json({ error: "enter a valid phone number with country code" });
+        const result = await pool.query(
+          `SELECT id, username, display_name, created_at
+           FROM users
+           WHERE regexp_replace(phone, '[^0-9]', '', 'g') = $1
+           LIMIT 5`,
+          [digits]
+        );
+        return res.json({ users: result.rows });
+      }
+
+      const normalized = query.replace(/^@+/, "").toLowerCase();
+      if (normalized.length < 2 || normalized.length > 32) return res.status(400).json({ error: "username search must be 2-32 characters" });
       const result = await pool.query(
-        `SELECT id, username, display_name, phone, created_at
+        `SELECT id, username, display_name, created_at
          FROM users
          WHERE username ILIKE $1 OR display_name ILIKE $2
-         ORDER BY CASE WHEN username = $3 THEN 0 ELSE 1 END, username
+         ORDER BY CASE WHEN lower(username) = $3 THEN 0 ELSE 1 END, username
          LIMIT 20`,
-        [`%${query}%`, `%${query}%`, query]
+        [`%${normalized}%`, `%${query.toLowerCase()}%`, normalized]
       );
       return res.json({ users: result.rows });
     } catch (error) { console.error("user search", error); return res.status(500).json({ error: "user search failed" }); }
@@ -43,7 +61,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
 
   app.post("/api/friends/request", auth, async (req, res) => {
     try {
-      const username = typeof req.body?.username === "string" ? req.body.username.trim().toLowerCase() : "";
+      const username = typeof req.body?.username === "string" ? req.body.username.trim().toLowerCase().replace(/^@+/, "") : "";
       const target = await findUserByUsername(username);
       if (!target) return res.status(404).json({ error: "user not found" });
       if (String(target.id) === String(req.user.sub)) return res.status(400).json({ error: "cannot add yourself" });
@@ -79,10 +97,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
 
   app.post("/api/friends/requests/:id/reject", auth, async (req, res) => {
     try {
-      const result = await pool.query(
-        `DELETE FROM friendships WHERE id = $1 AND friend_id = $2 AND status = 'pending' RETURNING id`,
-        [req.params.id, req.user.sub]
-      );
+      const result = await pool.query(`DELETE FROM friendships WHERE id = $1 AND friend_id = $2 AND status = 'pending' RETURNING id`, [req.params.id, req.user.sub]);
       if (!result.rows[0]) return res.status(404).json({ error: "request not found" });
       return res.json({ ok: true });
     } catch (error) { console.error("reject friend", error); return res.status(500).json({ error: "reject failed" }); }
@@ -90,10 +105,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
 
   app.delete("/api/friends/requests/:id", auth, async (req, res) => {
     try {
-      const result = await pool.query(
-        `DELETE FROM friendships WHERE id = $1 AND user_id = $2 AND status = 'pending' RETURNING id`,
-        [req.params.id, req.user.sub]
-      );
+      const result = await pool.query(`DELETE FROM friendships WHERE id = $1 AND user_id = $2 AND status = 'pending' RETURNING id`, [req.params.id, req.user.sub]);
       if (!result.rows[0]) return res.status(404).json({ error: "outgoing request not found" });
       return res.json({ ok: true });
     } catch (error) { console.error("cancel friend request", error); return res.status(500).json({ error: "cancel request failed" }); }
@@ -101,29 +113,23 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
 
   app.delete("/api/friends/:username", auth, async (req, res) => {
     try {
-      const target = await findUserByUsername(req.params.username.trim().toLowerCase());
+      const target = await findUserByUsername(req.params.username.trim().toLowerCase().replace(/^@+/, ""));
       if (!target) return res.status(404).json({ error: "user not found" });
-      await pool.query(
-        `DELETE FROM friendships WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)`,
-        [req.user.sub, target.id]
-      );
+      await pool.query(`DELETE FROM friendships WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)`, [req.user.sub, target.id]);
       return res.json({ ok: true });
     } catch (error) { console.error("remove friend", error); return res.status(500).json({ error: "remove friend failed" }); }
   });
 
   app.get("/api/blocks", auth, async (req, res) => {
     try {
-      const result = await pool.query(
-        `SELECT u.id, u.username, u.display_name, b.created_at FROM blocks b JOIN users u ON u.id = b.blocked_id WHERE b.blocker_id = $1 ORDER BY u.username`,
-        [req.user.sub]
-      );
+      const result = await pool.query(`SELECT u.id, u.username, u.display_name, b.created_at FROM blocks b JOIN users u ON u.id = b.blocked_id WHERE b.blocker_id = $1 ORDER BY u.username`, [req.user.sub]);
       return res.json({ blocks: result.rows });
     } catch (error) { console.error("blocks", error); return res.status(500).json({ error: "blocks lookup failed" }); }
   });
 
   app.post("/api/blocks/:username", auth, async (req, res) => {
     try {
-      const target = await findUserByUsername(req.params.username.trim().toLowerCase());
+      const target = await findUserByUsername(req.params.username.trim().toLowerCase().replace(/^@+/, ""));
       if (!target) return res.status(404).json({ error: "user not found" });
       if (String(target.id) === String(req.user.sub)) return res.status(400).json({ error: "cannot block yourself" });
       await pool.query("INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", [req.user.sub, target.id]);
@@ -134,7 +140,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
 
   app.delete("/api/blocks/:username", auth, async (req, res) => {
     try {
-      const target = await findUserByUsername(req.params.username.trim().toLowerCase());
+      const target = await findUserByUsername(req.params.username.trim().toLowerCase().replace(/^@+/, ""));
       if (!target) return res.status(404).json({ error: "user not found" });
       await pool.query("DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2", [req.user.sub, target.id]);
       return res.json({ ok: true });
