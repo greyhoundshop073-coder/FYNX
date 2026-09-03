@@ -75,19 +75,26 @@ object FynxMarketplaceClient {
             JSONObject(it).getJSONObject("listing").getString("id")
         }.also { result ->
             result.onSuccess { listingId ->
-                // A real listing is also published as a real social-feed product post.
-                // The advertisement intentionally starts without media because the existing
-                // listing API does not expose each media item's MIME type to this client.
-                // This avoids ever labeling a video as an image.
-                FynxRemoteSocialClient.createMarketplaceAd(
+                // Publish the real listing as a normal public social post. Use the existing
+                // createPost path here so Marketplace does not depend on a separately resolved
+                // ad helper during Kotlin compilation. No fake engagement is created.
+                val cleanTitle = title.trim().take(120)
+                val cleanDescription = description.trim().take(1000)
+                val cleanStore = storeName.trim().take(120)
+                val priceText = "${currency.trim().uppercase()} ${String.format(java.util.Locale.US, "%,.2f", price)}"
+                val adText = buildString {
+                    append("[FYNX_MARKETPLACE_AD]\n")
+                    append("🛍️ $cleanTitle\n")
+                    append("Price: $priceText\n")
+                    if (cleanStore.isNotBlank()) append("Store: $cleanStore\n")
+                    if (cleanDescription.isNotBlank()) append(cleanDescription)
+                    append("\nListing ID: $listingId")
+                }
+                FynxRemoteSocialClient.createPost(
                     context = context,
-                    listingId = listingId,
-                    title = title.trim(),
-                    description = description.trim(),
-                    storeName = storeName.trim(),
-                    price = price,
-                    currency = currency.trim().uppercase(),
-                    mediaId = null
+                    text = adText.take(4000),
+                    visibility = FynxPostVisibility.PUBLIC,
+                    uri = null
                 )
             }
         }
@@ -132,5 +139,5 @@ object FynxMarketplaceClient {
         }
     }
 
-    private fun encode(value: String): String = java.net.URLEncoder.encode(value.trim(), "UTF-8").replace("+", "%20")
+    private fun encode(value: String): String = java.net.URLEncoder.encode(value.trim(), "UTF-8")
 }
