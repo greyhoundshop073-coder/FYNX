@@ -1,0 +1,49 @@
+name: FYNX Backend CI
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fynx-backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package.json
+
+      - name: Install backend dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Check backend JavaScript
+        run: |
+          node --check server.js
+          node --check socialRoutes.js
+
+      - name: Verify backend package metadata
+        run: node -e "const p=require('./package.json'); if(!p.scripts || !p.scripts.start) process.exit(1); console.log('FYNX backend package OK')"
