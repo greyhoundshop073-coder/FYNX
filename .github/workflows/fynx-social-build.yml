@@ -11,10 +11,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Repair implementation script before execution
+        run: python3 scripts/fix_social_script.py
       - name: Apply social core source changes
         run: python3 scripts/apply_social_core.py
       - name: Validate backend syntax
         run: node --check backend/socialRoutes.js
+      - name: Validate Android source markers
+        run: |
+          test -f app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt
+          test -f app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt
+          grep -q 'FynxRemoteHomeSocialPanel' app/src/main/java/com/fynx/app/ui/HomePanel.kt
       - name: Commit social core
         run: |
           git config user.name "github-actions[bot]"
