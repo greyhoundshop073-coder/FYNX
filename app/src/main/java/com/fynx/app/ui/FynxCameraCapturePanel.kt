@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.Send
@@ -69,12 +70,18 @@ fun FynxCameraCapturePanel(
     var mode by remember { mutableStateOf(CameraMode.PHOTO) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var videoCapture by remember { mutableStateOf<VideoCapture<Recorder>?>(null) }
+    var cameraControl by remember { mutableStateOf<androidx.camera.core.CameraControl?>(null) }
+    var cameraInfo by remember { mutableStateOf<androidx.camera.core.CameraInfo?>(null) }
+    var torchEnabled by remember { mutableStateOf(false) }
+    var zoomRatio by remember { mutableFloatStateOf(1f) }
+    var exposure by remember { mutableIntStateOf(0) }
     var recording by remember { mutableStateOf<Recording?>(null) }
     var recordingStartedAt by remember { mutableLongStateOf(0L) }
     var recordingElapsed by remember { mutableLongStateOf(0L) }
     var error by remember { mutableStateOf<String?>(null) }
     var pendingUri by remember { mutableStateOf<Uri?>(null) }
     var pendingType by remember { mutableStateOf<String?>(null) }
+    var filter by remember { mutableStateOf(CameraFilter.NATURAL) }
 
     LaunchedEffect(recording != null, recordingStartedAt) {
         while (recording != null) {
@@ -103,10 +110,15 @@ fun FynxCameraCapturePanel(
                     .build()
                 val video = VideoCapture.withOutput(recorder)
                 provider.unbindAll()
-                if (mode == CameraMode.PHOTO) provider.bindToLifecycle(owner, selector, preview, capture)
+                val camera = if (mode == CameraMode.PHOTO) provider.bindToLifecycle(owner, selector, preview, capture)
                 else provider.bindToLifecycle(owner, selector, preview, video)
                 imageCapture = capture
                 videoCapture = video
+                cameraControl = camera.cameraControl
+                cameraInfo = camera.cameraInfo
+                cameraControl?.setZoomRatio(zoomRatio)
+                cameraControl?.enableTorch(torchEnabled)
+                cameraControl?.setExposureCompensationIndex(exposure)
             }.onFailure { error = it.message ?: "Camera could not start" }
         }, ContextCompat.getMainExecutor(context))
     }
@@ -130,6 +142,24 @@ fun FynxCameraCapturePanel(
             bitmap.recycle()
             rotated.recycle()
         }.onFailure { error = it.message ?: "Photo rotation failed" }
+    }
+
+    fun applyFilterToPhoto(selected: CameraFilter) {
+        val uri = pendingUri ?: return
+        if (pendingType != "image") return
+        val source = uri.path?.let { File(it) } ?: return
+        runCatching {
+            val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo")
+            val matrix = android.graphics.ColorMatrix().apply { set(selected.saturation, selected.brightness, selected.contrast, 1f) }
+            val outputBitmap = android.graphics.Bitmap.createBitmap(bitmap.width, bitmap.height, android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(outputBitmap)
+            val paint = android.graphics.Paint().apply { colorFilter = android.graphics.ColorMatrixColorFilter(matrix) }
+            canvas.drawBitmap(bitmap, 0f, 0f, paint)
+            FileOutputStream(source).use { output -> outputBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, output) }
+            bitmap.recycle()
+            outputBitmap.recycle()
+            filter = selected
+        }.onFailure { error = it.message ?: "Filter could not be applied" }
     }
 
     if (!hasCamera) {
@@ -165,11 +195,19 @@ fun FynxCameraCapturePanel(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { retake() }) { Icon(Icons.Default.Close, "Discard media") }
                     Spacer(Modifier.weight(1f))
-                    Text(if (previewType == "video") "Video preview" else "Photo preview", style = MaterialTheme.typography.titleMedium)
+                    Text(if (previewType == "video") "Video preview" else "Photo edit", style = MaterialTheme.typography.titleMedium)
                 }
             }
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(18.dp)) {
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp)) }
+                if (previewType == "image") {
+                    Text("Filters", style = MaterialTheme.typography.labelLarge)
+                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        CameraFilter.values().forEach { option ->
+                            FilterChip(selected = filter == option, onClick = { applyFilterToPhoto(option) }, label = { Text(option.label) })
+                        }
+                    }
+                }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedButton(onClick = { retake() }, modifier = Modifier.weight(1f)) { Text("Retake") }
                     if (previewType == "image") {
@@ -195,11 +233,24 @@ fun FynxCameraCapturePanel(
                 IconButton(onClick = {
                     if (recording == null) lens = if (lens == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
                 }) { Icon(Icons.Default.Cameraswitch, "Switch front/back camera") }
+                IconButton(onClick = {
+                    if (recording == null) { torchEnabled = !torchEnabled; cameraControl?.enableTorch(torchEnabled) }
+                }) { Icon(Icons.Default.FlashOn, if (torchEnabled) "Turn flash off" else "Turn flash on") }
             }
         }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp)) }
             if (recording != null) Text("Recording ${formatCameraRecordingTime(recordingElapsed)}", style = MaterialTheme.typography.titleMedium)
+            if (recording == null) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Zoom", style = MaterialTheme.typography.labelSmall)
+                    Slider(value = zoomRatio.coerceIn(1f, 4f), onValueChange = { zoomRatio = it; cameraControl?.setZoomRatio(it) }, valueRange = 1f..4f, modifier = Modifier.weight(1f))
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Exposure", style = MaterialTheme.typography.labelSmall)
+                    Slider(value = exposure.toFloat(), onValueChange = { exposure = it.toInt(); cameraControl?.setExposureCompensationIndex(exposure) }, valueRange = -2f..2f, steps = 4, modifier = Modifier.weight(1f))
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
                 FilterChip(selected = mode == CameraMode.PHOTO, onClick = { if (recording == null) mode = CameraMode.PHOTO }, label = { Text("Photo") }, leadingIcon = { Icon(Icons.Default.PhotoCamera, null) })
                 FilledIconButton(onClick = {
@@ -207,17 +258,13 @@ fun FynxCameraCapturePanel(
                         val file = File(context.cacheDir, "fynx_photo_${System.currentTimeMillis()}.jpg")
                         val output = ImageCapture.OutputFileOptions.Builder(file).build()
                         imageCapture?.takePicture(output, ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageSavedCallback {
-                            override fun onImageSaved(result: ImageCapture.OutputFileResults) {
-                                pendingUri = Uri.fromFile(file)
-                                pendingType = "image"
-                            }
+                            override fun onImageSaved(result: ImageCapture.OutputFileResults) { pendingUri = Uri.fromFile(file); pendingType = "image" }
                             override fun onError(exception: ImageCaptureException) { error = exception.message ?: "Photo capture failed" }
                         }) ?: run { error = "Camera is still starting" }
                     } else {
                         val active = recording
-                        if (active != null) {
-                            active.stop()
-                        } else {
+                        if (active != null) active.stop()
+                        else {
                             val capture = videoCapture ?: run { error = "Video camera is still starting"; return@FilledIconButton }
                             val file = File(context.cacheDir, "fynx_video_${System.currentTimeMillis()}.mp4")
                             val output = FileOutputOptions.Builder(file).build()
@@ -226,10 +273,8 @@ fun FynxCameraCapturePanel(
                             recordingStartedAt = System.currentTimeMillis()
                             recording = withAudio.start(ContextCompat.getMainExecutor(context)) { event ->
                                 if (event is VideoRecordEvent.Finalize) {
-                                    if (!event.hasError() && file.exists() && file.length() > 0L) {
-                                        pendingUri = Uri.fromFile(file)
-                                        pendingType = "video"
-                                    } else error = "Video capture failed (${event.error})"
+                                    if (!event.hasError() && file.exists() && file.length() > 0L) { pendingUri = Uri.fromFile(file); pendingType = "video" }
+                                    else error = "Video capture failed (${event.error})"
                                     recording = null
                                 }
                             }
@@ -245,3 +290,11 @@ fun FynxCameraCapturePanel(
 }
 
 enum class CameraMode { PHOTO, VIDEO }
+
+enum class CameraFilter(val label: String, val saturation: Float, val brightness: Float, val contrast: Float) {
+    NATURAL("Natural", 1f, 0f, 1f),
+    VIVID("Vivid", 1.35f, 0f, 1.08f),
+    WARM("Warm", 1.1f, 0.04f, 1.02f),
+    COOL("Cool", 0.9f, 0.02f, 1.02f),
+    BW("B&W", 0f, 0f, 1.08f)
+}
