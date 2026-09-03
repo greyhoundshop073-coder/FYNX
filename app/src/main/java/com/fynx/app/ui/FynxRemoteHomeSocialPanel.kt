@@ -40,6 +40,7 @@ private const val MARKETPLACE_AD_MARKER = "[FYNX_MARKETPLACE_AD]"
 
 @Composable
 fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}) {
+    // The Home shell keeps AI, Chat and Notifications available above the social feed.
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var posts by remember { mutableStateOf<List<FynxRemoteSocialClient.RemotePost>>(emptyList()) }
