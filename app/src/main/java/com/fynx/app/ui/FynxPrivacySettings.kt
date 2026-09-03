@@ -16,6 +16,7 @@ private const val KEY_ONLINE = "privacy_online_visibility"
 private const val KEY_POSTS = "privacy_posts_visibility"
 private const val KEY_STATUS = "privacy_status_visibility"
 private const val KEY_PROFILE_PHOTO = "privacy_profile_photo_visibility"
+private const val KEY_MESSAGES = "privacy_messages_visibility"
 
 @Composable
 fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
@@ -25,6 +26,7 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
     var posts by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, KEY_POSTS)) }
     var status by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, KEY_STATUS)) }
     var photo by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, KEY_PROFILE_PHOTO)) }
+    var messages by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, KEY_MESSAGES)) }
     var openKey by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
@@ -40,6 +42,7 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
             item { PrivacyChoiceCard("Who can see my posts", posts) { openKey = KEY_POSTS } }
             item { PrivacyChoiceCard("Who can view my Status", status) { openKey = KEY_STATUS } }
             item { PrivacyChoiceCard("Who can see my profile photo", photo) { openKey = KEY_PROFILE_PHOTO } }
+            item { PrivacyChoiceCard("Who can message me", messages) { openKey = KEY_MESSAGES } }
         }
     }
 
@@ -65,6 +68,7 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
                                     KEY_POSTS -> { posts = option; FynxPreferencesStore.saveVisibility(context, key, option) }
                                     KEY_STATUS -> { status = option; FynxPreferencesStore.saveVisibility(context, key, option) }
                                     KEY_PROFILE_PHOTO -> { photo = option; FynxPreferencesStore.saveVisibility(context, key, option) }
+                                    KEY_MESSAGES -> { messages = option; FynxPreferencesStore.saveVisibility(context, key, option) }
                                 }
                                 openKey = null
                             })
