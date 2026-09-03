@@ -44,12 +44,12 @@ fun FynxAvatar(name: String, modifier: Modifier = Modifier) {
         modifier = modifier
             .size(52.dp)
             .clip(CircleShape)
-            .background(Color(0xFF18263D)),
+            .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = initials.ifBlank { "F" },
-            color = Color(0xFF5AC8FF),
+            color = MaterialTheme.colorScheme.primary,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold
         )
