@@ -34,6 +34,8 @@ class FynxRealtimeClient(
         .pingInterval(30, TimeUnit.SECONDS)
         .build()
     private val reconnectHandler = Handler(Looper.getMainLooper())
+    private val pendingLock = Any()
+    private val pendingPayloads = ArrayDeque<String>()
     private var socket: WebSocket? = null
     private var manuallyClosed = false
     private var reconnectAttempt = 0
@@ -41,6 +43,7 @@ class FynxRealtimeClient(
     fun connect() {
         manuallyClosed = false
         reconnectAttempt = 0
+        reconnectHandler.removeCallbacksAndMessages(null)
         connectInternal()
     }
 
@@ -67,6 +70,7 @@ class FynxRealtimeClient(
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 reconnectAttempt = 0
                 onStateChanged(State.CONNECTED)
+                flushPending(webSocket)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -89,13 +93,20 @@ class FynxRealtimeClient(
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                if (socket === webSocket) socket = null
                 onStateChanged(State.DISCONNECTED)
                 if (code != 1000 && code != 1008 && code != 1003) scheduleReconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                if (socket === webSocket) socket = null
+                if (response?.code == 401 || response?.code == 403) {
+                    FynxBackendClient.saveAccessToken(context, null)
+                    onStateChanged(State.FAILED)
+                    return
+                }
                 onStateChanged(State.FAILED)
-                if (response?.code != 401 && response?.code != 403) scheduleReconnect()
+                scheduleReconnect()
             }
         })
     }
@@ -134,12 +145,33 @@ class FynxRealtimeClient(
     }
 
     private fun sendJson(payload: JSONObject) {
-        socket?.send(payload.toString())
+        val value = payload.toString()
+        val active = socket
+        if (active?.send(value) == true) return
+        synchronized(pendingLock) {
+            if (pendingPayloads.size >= 100) pendingPayloads.removeFirst()
+            pendingPayloads.addLast(value)
+        }
+    }
+
+    private fun flushPending(webSocket: WebSocket) {
+        while (true) {
+            val next = synchronized(pendingLock) {
+                if (pendingPayloads.isEmpty()) null else pendingPayloads.removeFirst()
+            } ?: break
+            if (!webSocket.send(next)) {
+                synchronized(pendingLock) {
+                    pendingPayloads.addFirst(next)
+                }
+                break
+            }
+        }
     }
 
     fun close() {
         manuallyClosed = true
         reconnectHandler.removeCallbacksAndMessages(null)
+        synchronized(pendingLock) { pendingPayloads.clear() }
         socket?.close(1000, "FYNX conversation closed")
         socket = null
         onStateChanged(State.DISCONNECTED)
