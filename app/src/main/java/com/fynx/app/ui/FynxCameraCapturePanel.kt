@@ -47,7 +47,7 @@ import java.io.FileOutputStream
 @Composable
 fun FynxCameraCapturePanel(
     onCaptured: (Uri, String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val activity = context as? ComponentActivity
