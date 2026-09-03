@@ -39,7 +39,25 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var appearance by remember { mutableStateOf(FynxPreferencesStore.loadAppearance(context)) }
     var openProfileSettings by remember { mutableStateOf(false) }
     LaunchedEffect(deepLinkDestination) { when (val destination = deepLinkDestination) { is FynxDeepLinkDestination.Invite -> { inviteCode = destination.code; selected = "Invite" }; FynxDeepLinkDestination.Home -> selected = "Home"; null -> Unit } }
-    LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context); notifications = FynxNotificationStore.load(context) }
+    LaunchedEffect(Unit) {
+        FynxNotificationFoundation.createChannels(context)
+        notifications = FynxNotificationStore.load(context)
+    }
+    LaunchedEffect(authSession.state, authSession.username) {
+        if (!FYNX_PREVIEW_MODE && authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) {
+            FynxBackendClient.currentUserId(context).onFailure { error ->
+                if (FynxBackendClient.isUnauthorizedFailure(error)) {
+                    FynxBackendClient.saveAccessToken(context, null)
+                    FynxAuthStore.clear(context)
+                    authSession = AuthSession()
+                    selected = "Home"
+                    openChat = null
+                    openGroup = null
+                    profileUser = null
+                }
+            }
+        }
+    }
     if (!FYNX_PREVIEW_MODE && authSession.state != AuthState.SIGNED_IN) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }) { FynxAuthGate { username -> FynxAuthStore.save(context, username); authSession = AuthSession(AuthState.SIGNED_IN, username) } }; return }
     val mainNav = listOf(FynxNavItem("Home", "Home", Icons.Default.Home), FynxNavItem("Chats", "Chats", Icons.Default.ChatBubbleOutline), FynxNavItem("Friends", "Friends", Icons.Default.Person), FynxNavItem("Marketplace", "Market", Icons.Default.ShoppingBag), FynxNavItem("Money Tools", "Money", Icons.Default.AccountBalanceWallet), FynxNavItem("Features", "More", Icons.Default.MoreHoriz))
     val isSecondary = selected !in mainNav.map { it.key }.toSet()
