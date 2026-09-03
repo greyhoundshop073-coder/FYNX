@@ -55,6 +55,28 @@ object FynxRemoteSocialClient {
         Unit
     }
 
+    suspend fun createMarketplaceAd(context: Context, listingId: String, title: String, description: String, storeName: String, price: Double, currency: String, mediaId: String?): Result<Unit> {
+        val cleanTitle = title.trim().take(120)
+        val cleanDescription = description.trim().take(1000)
+        val cleanStore = storeName.trim().take(120)
+        val priceText = "${currency.trim().uppercase()} ${String.format(java.util.Locale.US, "%,.2f", price)}"
+        val adText = buildString {
+            append("[FYNX_MARKETPLACE_AD]\n")
+            append("🛍️ $cleanTitle\n")
+            append("Price: $priceText\n")
+            if (cleanStore.isNotBlank()) append("Store: $cleanStore\n")
+            if (cleanDescription.isNotBlank()) append(cleanDescription)
+            append("\nListing ID: $listingId")
+        }
+        val body = JSONObject().apply {
+            put("text", adText.take(4000))
+            put("visibility", FynxPostVisibility.PUBLIC.name)
+            put("mediaId", mediaId ?: JSONObject.NULL)
+            put("mediaType", if (mediaId != null) "image" else JSONObject.NULL)
+        }
+        return FynxBackendClient.postJson(context, "/api/social/posts", body.toString()).map { Unit }
+    }
+
     suspend fun like(context: Context, id: String): Result<Pair<Boolean, Int>> {
         val postId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
         return FynxBackendClient.postJson(context, "/api/social/posts/$postId/like", "{}").mapCatching {
