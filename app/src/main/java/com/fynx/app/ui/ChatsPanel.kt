@@ -27,8 +27,6 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     var searchError by remember { mutableStateOf<String?>(null) }
     var selfUsername by remember { mutableStateOf<String?>(null) }
 
-    fun refreshChats() { chats = FynxChatStore.loadPreviews(context) }
-
     LaunchedEffect(Unit) {
         selfUsername = FynxAuthStore.load(context).username.removePrefix("@").trim().lowercase().takeIf { it.isNotBlank() }
     }
@@ -45,7 +43,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         FynxSocialClient.searchUsers(context, username.trim())
             .onSuccess {
                 searchResults = it.filterNot { person ->
-                    val candidate = person.username.removePrefix("@").trim().lowercase()
+                    val candidate = (person.username ?: "").removePrefix("@").trim().lowercase()
                     selfUsername != null && candidate == selfUsername
                 }
             }
@@ -64,7 +62,6 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             }
         }
         Spacer(Modifier.height(12.dp))
-
         if (section == "Chats") {
             OutlinedButton(onClick = { username = ""; selectedUser = null; searchResults = emptyList(); searchError = null; showNewChat = true }, shape = FynxDesign.ControlShape, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) { Text("＋ New chat") }
             Spacer(Modifier.height(14.dp))
@@ -90,27 +87,22 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                     }
                 }
             }
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(onClick = onCreateGroup, modifier = Modifier.fillMaxWidth()) { Text("＋ Create group") }
         } else {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Your groups", style = MaterialTheme.typography.titleMedium)
-                TextButton(onClick = onCreateGroup) { Text("Create group") }
-            }
-            Spacer(Modifier.height(8.dp))
+            Button(onClick = onCreateGroup) { Text("＋ New group") }
+            Spacer(Modifier.height(10.dp))
             if (groups.isEmpty()) {
-                Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
-                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("No groups yet", style = MaterialTheme.typography.titleMedium)
-                        Text("Groups will appear here after you create or join one.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+                Text("No groups yet", style = MaterialTheme.typography.titleMedium)
+                Text("Create a group to start a shared conversation.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
                     items(groups, key = { it.id }) { group ->
                         Card(onClick = { onOpenGroup(group.id) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                             ListItem(
                                 headlineContent = { Text(group.name) },
                                 leadingContent = { FynxAvatar(group.name) },
-                                supportingContent = { Text(group.members.size.toString() + " members · " + group.description, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                supportingContent = { Text("${group.memberUsernames.size} members${group.description.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
                             )
                         }
@@ -119,55 +111,40 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             }
         }
     }
-
     if (showNewChat) {
         AlertDialog(
             onDismissRequest = { showNewChat = false },
-            properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true, usePlatformDefaultWidth = true),
             title = { Text("New chat") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Search for an existing FYNX account. You cannot open a production conversation for an account that does not exist.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedTextField(value = username, onValueChange = { username = it.take(50); selectedUser = null }, label = { Text("Search username") }, prefix = { Text("@") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    searchError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                    if (searchBusy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                    else if (username.trim().length >= 2) {
-                        if (searchResults.isEmpty()) Text("No other matching FYNX accounts.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                        else LazyColumn(Modifier.heightIn(max = 220.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            items(searchResults, key = { it.id.ifBlank { it.username } }) { person ->
-                                val selected = selectedUser?.username.equals(person.username, true)
-                                OutlinedButton(onClick = { selectedUser = person }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors(containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)) {
-                                    Column(Modifier.fillMaxWidth()) {
-                                        Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.titleSmall)
-                                        Text("@${person.username.removePrefix("@")}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    selectedUser?.let { person ->
-                        Text("Selected: @${person.username.removePrefix("@").trim()}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(username, { username = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Search username") }, singleLine = true)
+                    if (searchBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    searchError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    searchResults.forEach { person ->
+                        val personUsername = person.username ?: ""
+                        ListItem(
+                            headlineContent = { Text(person.displayName.ifBlank { personUsername }) },
+                            supportingContent = { Text("@$personUsername") },
+                            modifier = Modifier.fillMaxWidth(),
+                            leadingContent = { FynxAvatar(person.displayName.ifBlank { personUsername }) },
+                            trailingContent = { if (selectedUser?.username == person.username) Text("✓") },
+                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        )
+                        HorizontalDivider()
+                        TextButton(onClick = { selectedUser = person }) { Text("Select") }
                     }
                 }
             },
             confirmButton = {
-                TextButton(enabled = selectedUser != null && selectedUser?.username?.removePrefix("@").equals(selfUsername, true).not(), onClick = {
+                TextButton(enabled = selectedUser != null, onClick = {
                     val person = selectedUser ?: return@TextButton
-                    val normalized = person.username.removePrefix("@").trim()
-                    if (selfUsername != null && normalized.equals(selfUsername, true)) {
-                        searchError = "You cannot start a chat with your own account."
-                        selectedUser = null
-                        return@TextButton
-                    }
-                    val chat = ChatPreview(person.displayName.ifBlank { normalized }, "@$normalized", "", "New")
-                    FynxChatStore.savePreview(context, chat)
-                    refreshChats()
+                    val personUsername = person.username ?: return@TextButton
+                    onOpenChat(ChatPreview(person.displayName.ifBlank { personUsername }, personUsername, "", ""))
                     showNewChat = false
-                    onOpenChat(chat)
                 }) { Text("Open chat") }
             },
-            dismissButton = { TextButton(onClick = { showNewChat = false }) { Text("Cancel") }
-            }
+            dismissButton = { TextButton(onClick = { showNewChat = false }) { Text("Cancel") } },
+            properties = DialogProperties(usePlatformDefaultWidth = true)
         )
     }
 }
