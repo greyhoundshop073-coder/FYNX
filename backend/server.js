@@ -10,7 +10,17 @@ const { Pool } = pg;
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: "/realtime" });
-app.use(express.json({ limit: "18mb" }));
+
+// Keep the API deliberately strict: large media is uploaded separately and authenticated.
+app.disable("x-powered-by");
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Frame-Options", "DENY");
+  if (process.env.NODE_ENV === "production") res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  next();
+});
+app.use(express.json({ limit: "18mb", strict: true }));
 
 const PORT = Number(process.env.PORT || 10000);
 const JWT_SECRET = process.env.JWT_SECRET || "";
@@ -220,87 +230,94 @@ app.post("/api/messages", auth, async (req, res) => {
     if (mediaId != null && (!mediaType || !/^(image|video|audio)$/.test(mediaType))) return res.status(400).json({ error: "invalid media type" });
     if (!Number.isFinite(voiceDurationMs) || voiceDurationMs < 0 || voiceDurationMs > 120000) return res.status(400).json({ error: "invalid voice duration" });
     const recipient = await findUserByUsername(recipientUsername);
-    if (!recipient) return res.status(404).json({ error: "recipient not found" });
-    if (String(recipient.id) === String(req.user.sub)) return res.status(400).json({ error: "cannot message yourself" });
+    if (!recipient || String(recipient.id) === String(req.user.sub)) return res.status(400).json({ error: "invalid recipient" });
     const blocked = await pool.query(`SELECT 1 FROM blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1`, [req.user.sub, recipient.id]);
-    if (blocked.rowCount) return res.status(403).json({ error: "messaging unavailable" });
+    if (blocked.rowCount) return res.status(403).json({ error: "conversation unavailable" });
     if (mediaId != null) {
-      const media = await pool.query("SELECT id FROM message_media WHERE id = $1 AND owner_id = $2", [mediaId, req.user.sub]);
-      if (!media.rows[0]) return res.status(404).json({ error: "media not found" });
+      const media = await pool.query("SELECT id, mime_type FROM message_media WHERE id = $1 AND owner_id = $2", [mediaId, req.user.sub]);
+      if (!media.rows[0]) return res.status(403).json({ error: "media is not owned by this account" });
     }
-    const recipientOnline = (clientsByUserId.get(String(recipient.id))?.size || 0) > 0;
-    const result = await pool.query(`INSERT INTO messages (sender_id, recipient_id, text, reply_to_id, delivered_at, media_id, media_type, voice_duration_ms) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, sender_id, recipient_id, text, EXTRACT(EPOCH FROM created_at) * 1000 AS timestamp, delivered_at, read_at, edited, deleted, reply_to_id, media_id, media_type, voice_duration_ms`, [req.user.sub, recipient.id, text, Number.isInteger(replyToId) ? replyToId : null, recipientOnline ? new Date() : null, mediaId, mediaType, Math.round(voiceDurationMs)]);
-    const message = rowToMessage(result.rows[0]);
+    if (replyToId != null) {
+      if (!Number.isInteger(replyToId) || replyToId < 1) return res.status(400).json({ error: "invalid reply id" });
+      const reply = await pool.query("SELECT id FROM messages WHERE id = $1 AND ((sender_id = $2 AND recipient_id = $3) OR (sender_id = $3 AND recipient_id = $2))", [replyToId, req.user.sub, recipient.id]);
+      if (!reply.rows[0]) return res.status(400).json({ error: "invalid reply target" });
+    }
+    const result = await pool.query("INSERT INTO messages (sender_id, recipient_id, text, reply_to_id, media_id, media_type, voice_duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, created_at", [req.user.sub, recipient.id, text, replyToId, mediaId, mediaType, voiceDurationMs]);
+    const message = { id: String(result.rows[0].id), senderId: String(req.user.sub), recipientId: String(recipient.id), text, timestamp: new Date(result.rows[0].created_at).getTime(), delivered: false, read: false, edited: false, deleted: false, replyToId: replyToId == null ? null : String(replyToId), mediaId: mediaId == null ? null : String(mediaId), mediaType, mediaUrl: mediaId == null ? null : `/api/media/${mediaId}`, voiceDurationMs };
     await broadcastMessage(message);
-    if (message.delivered) broadcastToUser(message.senderId, { type: "message_status", messageId: message.id, status: "delivered" });
     return res.status(201).json({ message });
   } catch (error) { console.error("send message", error); return res.status(500).json({ error: "message send failed" }); }
 });
 
-app.post("/api/messages/read", auth, async (req, res) => {
+app.post("/api/messages/:id/read", auth, async (req, res) => {
   try {
-    const ids = Array.isArray(req.body?.messageIds) ? req.body.messageIds.map(Number).filter(Number.isInteger).slice(0, 100) : [];
-    if (!ids.length) return res.json({ updated: 0 });
-    const result = await pool.query("UPDATE messages SET read_at = COALESCE(read_at, NOW()), delivered_at = COALESCE(delivered_at, NOW()) WHERE id = ANY($1::bigint[]) AND recipient_id = $2 RETURNING id, sender_id", [ids, req.user.sub]);
-    for (const row of result.rows) broadcastToUser(row.sender_id, { type: "message_status", messageId: String(row.id), status: "read" });
-    return res.json({ updated: result.rowCount });
-  } catch (error) { console.error("read messages", error); return res.status(500).json({ error: "read receipt failed" }); }
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid message id" });
+    const result = await pool.query("UPDATE messages SET read_at = NOW(), delivered_at = COALESCE(delivered_at, NOW()) WHERE id = $1 AND recipient_id = $2 AND deleted = FALSE RETURNING id, sender_id", [id, req.user.sub]);
+    if (!result.rows[0]) return res.status(404).json({ error: "message not found" });
+    broadcastToUser(result.rows[0].sender_id, { type: "message_status", messageId: String(id), status: "read" });
+    return res.json({ ok: true });
+  } catch (error) { console.error("message read", error); return res.status(500).json({ error: "read receipt failed" }); }
 });
 
-registerSocialRoutes({ app, pool, auth, findUserByUsername });
-
-app.post("/api/assistant", auth, async (req, res) => {
+app.post("/api/messages/:id/delivered", auth, async (req, res) => {
   try {
-    requireConfig("OPENAI_API_KEY", OPENAI_API_KEY);
-    const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
-    if (!message || message.length > 12000) return res.status(400).json({ error: "valid message is required" });
-    const response = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` }, body: JSON.stringify({ model: OPENAI_MODEL, input: message }) });
-    const data = await response.json();
-    if (!response.ok) { console.error("openai", response.status, data?.error?.message || "request failed"); return res.status(502).json({ error: "AI service request failed" }); }
-    return res.json({ reply: typeof data.output_text === "string" ? data.output_text : "" });
-  } catch (error) { console.error("assistant", error); return res.status(503).json({ error: "AI service is not configured or unavailable" }); }
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid message id" });
+    const result = await pool.query("UPDATE messages SET delivered_at = COALESCE(delivered_at, NOW()) WHERE id = $1 AND recipient_id = $2 AND deleted = FALSE RETURNING id, sender_id", [id, req.user.sub]);
+    if (!result.rows[0]) return res.status(404).json({ error: "message not found" });
+    broadcastToUser(result.rows[0].sender_id, { type: "message_status", messageId: String(id), status: "delivered" });
+    return res.json({ ok: true });
+  } catch (error) { console.error("message delivered", error); return res.status(500).json({ error: "delivery receipt failed" }); }
 });
 
-wss.on("connection", async (socket, req) => {
+app.patch("/api/messages/:id", auth, async (req, res) => {
   try {
-    const header = req.headers.authorization || "";
-    const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+    const id = Number(req.params.id);
+    const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+    if (!Number.isInteger(id) || id < 1 || !text || text.length > 4000) return res.status(400).json({ error: "valid message text is required" });
+    const result = await pool.query("UPDATE messages SET text = $1, edited = TRUE WHERE id = $2 AND sender_id = $3 AND deleted = FALSE RETURNING id, sender_id, recipient_id", [text, id, req.user.sub]);
+    if (!result.rows[0]) return res.status(404).json({ error: "message not found" });
+    const message = { id: String(id), senderId: String(result.rows[0].sender_id), recipientId: String(result.rows[0].recipient_id), text, edited: true };
+    broadcastMessage(message);
+    return res.json({ message });
+  } catch (error) { console.error("message edit", error); return res.status(500).json({ error: "message edit failed" }); }
+});
+
+app.delete("/api/messages/:id", auth, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid message id" });
+    const result = await pool.query("UPDATE messages SET deleted = TRUE, text = '' WHERE id = $1 AND sender_id = $2 AND deleted = FALSE RETURNING id, sender_id, recipient_id", [id, req.user.sub]);
+    if (!result.rows[0]) return res.status(404).json({ error: "message not found" });
+    const message = { id: String(id), senderId: String(result.rows[0].sender_id), recipientId: String(result.rows[0].recipient_id), text: "", deleted: true };
+    broadcastMessage(message);
+    return res.json({ message });
+  } catch (error) { console.error("message delete", error); return res.status(500).json({ error: "message delete failed" }); }
+});
+
+wss.on("connection", (socket, req) => {
+  try {
+    const url = new URL(req.url || "/realtime", `http://${req.headers.host || "localhost"}`);
+    const token = url.searchParams.get("token") || "";
     if (!token || !JWT_SECRET) return socket.close(1008, "authentication required");
     const user = jwt.verify(token, JWT_SECRET);
     const userId = String(user.sub);
-    const sockets = clientsByUserId.get(userId) || new Set();
-    const wasOffline = sockets.size === 0;
-    sockets.add(socket);
-    clientsByUserId.set(userId, sockets);
-    if (wasOffline) broadcastPresence(userId, true);
-    await markPendingDelivered(userId);
-    socket.on("message", async (raw) => {
-      try {
-        const event = JSON.parse(raw.toString());
-        if (event?.type === "typing") {
-          const recipientId = String(event.recipientId || "");
-          if (!/^\d+$/.test(recipientId) || recipientId === userId) return;
-          const blocked = await pool.query(`SELECT 1 FROM blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1`, [userId, recipientId]);
-          if (blocked.rowCount) return;
-          broadcastToUser(recipientId, { type: "typing", userId, isTyping: Boolean(event.isTyping) });
-        } else if (event?.type === "read") {
-          const ids = Array.isArray(event.messageIds) ? event.messageIds.map(Number).filter(Number.isInteger).slice(0, 100) : [];
-          if (!ids.length || !pool) return;
-          const result = await pool.query("UPDATE messages SET read_at = COALESCE(read_at, NOW()), delivered_at = COALESCE(delivered_at, NOW()) WHERE id = ANY($1::bigint[]) AND recipient_id = $2 RETURNING id, sender_id", [ids, userId]);
-          for (const row of result.rows) broadcastToUser(row.sender_id, { type: "message_status", messageId: String(row.id), status: "read" });
-        } else if (event?.type === "message_ack") {
-          const messageId = Number(event.messageId);
-          if (!Number.isInteger(messageId) || !pool) return;
-          const result = await pool.query("UPDATE messages SET delivered_at = COALESCE(delivered_at, NOW()) WHERE id = $1 AND recipient_id = $2 RETURNING id, sender_id", [messageId, userId]);
-          for (const row of result.rows) broadcastToUser(row.sender_id, { type: "message_status", messageId: String(row.id), status: "delivered" });
-        }
-      } catch { }
-    });
+    if (!clientsByUserId.has(userId)) clientsByUserId.set(userId, new Set());
+    clientsByUserId.get(userId).add(socket);
+    broadcastPresence(userId, true);
+    markPendingDelivered(userId).catch((error) => console.error("deliver pending", error));
     socket.on("close", () => {
+      const sockets = clientsByUserId.get(userId);
+      if (!sockets) return;
       sockets.delete(socket);
-      if (sockets.size === 0) { clientsByUserId.delete(userId); broadcastPresence(userId, false); }
+      if (!sockets.size) { clientsByUserId.delete(userId); broadcastPresence(userId, false); }
     });
   } catch { socket.close(1008, "invalid token"); }
 });
 
-initDatabase().then(() => server.listen(PORT, "0.0.0.0", () => console.log(`FYNX backend listening on ${PORT}`))).catch((error) => { console.error("database initialization failed", error); process.exit(1); });
+registerSocialRoutes(app, { pool, auth, findUserByUsername });
+
+initDatabase().catch((error) => { console.error("database initialization failed", error); process.exitCode = 1; });
+
+server.listen(PORT, "0.0.0.0", () => console.log(`FYNX backend listening on ${PORT}`));
