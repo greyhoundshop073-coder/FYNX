@@ -133,7 +133,7 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
                     Text(if (recording) "Recording ${formatStatusTime(elapsed)}" else "Voice Status • maximum 30 seconds", style = MaterialTheme.typography.titleMedium)
                     if (recording) {
                         LinearProgressIndicator(progress = { (elapsed.toFloat() / FYNX_STATUS_MAX_VOICE_DURATION_MS).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { repeat(24) { i -> Box(Modifier.width(3.dp).height((5 + ((elapsed / 80L + i * 5) % 24)).dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))) } }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { repeat(24) { i -> Box(Modifier.width(3.dp).height((5 + ((elapsed / 80L + i * 5) % 24)).toInt().dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))) } }
                         Button(onClick = { stopStatusRecording(recorder, recordingFile) { uri -> mediaUri = uri; recorder = null; recordingFile = null; recording = false } }) { Text("Stop") }
                     } else {
                         Button(onClick = { if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startStatusRecording(context) { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true } else audioPermission.launch(Manifest.permission.RECORD_AUDIO) }) { Text(if (mediaUri == null) "Record voice" else "Record again") }
