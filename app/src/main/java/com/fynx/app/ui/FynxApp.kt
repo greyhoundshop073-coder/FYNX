@@ -32,7 +32,15 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var profileUser by remember { mutableStateOf<String?>(null) }
     var callTarget by remember { mutableStateOf<String?>(null) }
     var callVideo by remember { mutableStateOf(false) }
-    var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else FynxAuthStore.load(context)) }
+    var authSession by remember {
+        mutableStateOf(
+            if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview")
+            else {
+                val stored = FynxAuthStore.load(context)
+                if (stored.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) stored else AuthSession()
+            }
+        )
+    }
     var notifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
     var inviteCode by remember { mutableStateOf<String?>(null) }
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
