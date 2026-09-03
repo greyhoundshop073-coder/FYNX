@@ -6,8 +6,12 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import java.util.Locale
+import java.util.UUID
 
 object FynxNotificationFoundation {
     const val FRIENDS_CHANNEL = "fynx_friends"
@@ -15,6 +19,8 @@ object FynxNotificationFoundation {
     const val GIFTS_CHANNEL = "fynx_gifts"
     const val MONEY_CHANNEL = "fynx_money"
     const val REMINDERS_CHANNEL = "fynx_reminders"
+    private const val PREFS = "fynx_notification_preferences"
+    private const val KEY_SPEAK = "speak_notifications"
 
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -27,6 +33,43 @@ object FynxNotificationFoundation {
             NotificationChannel(REMINDERS_CHANNEL, "Reminders", NotificationManager.IMPORTANCE_DEFAULT)
         )
         manager.createNotificationChannels(channels)
+    }
+
+    fun isSpeakNotificationsEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_SPEAK, false)
+
+    fun setSpeakNotificationsEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_SPEAK, enabled).apply()
+        if (!enabled) stopSpeaking(context)
+    }
+
+    private var activeTts: TextToSpeech? = null
+
+    private fun stopSpeaking(context: Context) {
+        activeTts?.stop()
+        activeTts?.shutdown()
+        activeTts = null
+    }
+
+    private fun speak(context: Context, title: String, message: String) {
+        if (!isSpeakNotificationsEnabled(context)) return
+        stopSpeaking(context)
+        val text = "$title. $message"
+        val utteranceId = UUID.randomUUID().toString()
+        activeTts = TextToSpeech(context.applicationContext) { status ->
+            if (status != TextToSpeech.SUCCESS) {
+                activeTts?.shutdown()
+                activeTts = null
+                return@TextToSpeech
+            }
+            activeTts?.language = Locale.getDefault()
+            activeTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) = Unit
+                override fun onError(utteranceId: String?) { stopSpeaking(context) }
+                override fun onDone(utteranceId: String?) { stopSpeaking(context) }
+            })
+            activeTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        }
     }
 
     fun show(context: Context, channelId: String, id: Int, title: String, message: String) {
@@ -52,6 +95,7 @@ object FynxNotificationFoundation {
             .setAutoCancel(true)
             .build()
         NotificationManagerCompat.from(context).notify(id, notification)
+        speak(context, title, message)
     }
 
     private fun typeForChannel(channelId: String): FynxNotificationType = when (channelId) {

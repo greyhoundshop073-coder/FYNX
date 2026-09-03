@@ -35,6 +35,7 @@ fun NotificationPanel(
     val current = if (localNotifications.isNotEmpty()) localNotifications else notifications
     var selectedType by remember { mutableStateOf<FynxNotificationType?>(null) }
     var unreadOnly by remember { mutableStateOf(false) }
+    var speakNotifications by remember { mutableStateOf(FynxNotificationFoundation.isSpeakNotificationsEnabled(context)) }
     val filtered = FynxNotificationActivityCenter.unreadOnly(
         FynxNotificationActivityCenter.filterByType(current, selectedType), unreadOnly
     )
@@ -65,6 +66,36 @@ fun NotificationPanel(
                 },
                 enabled = current.any { !it.read }
             ) { Text("Read all") }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = FynxDesign.CardShape,
+            colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+            border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.55f))
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Speak notifications", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "FYNX can read new notification alerts aloud.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = FynxDesign.TextSecondary
+                    )
+                }
+                Switch(
+                    checked = speakNotifications,
+                    onCheckedChange = {
+                        speakNotifications = it
+                        FynxNotificationFoundation.setSpeakNotificationsEnabled(context, it)
+                    }
+                )
+            }
         }
 
         Row(
