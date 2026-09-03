@@ -25,10 +25,10 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     var selectedUser by remember { mutableStateOf<FynxSocialClient.User?>(null) }
     var searchBusy by remember { mutableStateOf(false) }
     var searchError by remember { mutableStateOf<String?>(null) }
-    var selfUsername by remember { mutableStateOf<String?>(null) }
+    var selfUsername by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
-        selfUsername = FynxAuthStore.load(context).username.removePrefix("@").trim().lowercase().takeIf { it.isNotBlank() }
+        selfUsername = (FynxAuthStore.load(context).username ?: "").removePrefix("@").trim().lowercase()
     }
 
     LaunchedEffect(showNewChat, username, selfUsername) {
@@ -44,7 +44,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             .onSuccess {
                 searchResults = it.filterNot { person ->
                     val candidate = (person.username ?: "").removePrefix("@").trim().lowercase()
-                    selfUsername != null && candidate == selfUsername
+                    selfUsername.isNotBlank() && candidate == selfUsername
                 }
             }
             .onFailure { searchResults = emptyList(); searchError = it.message ?: "Could not search FYNX accounts." }
@@ -73,7 +73,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
                     items(chats.filterNot { chat ->
                         val candidate = chat.username.removePrefix("@").trim().lowercase()
-                        selfUsername != null && candidate == selfUsername
+                        selfUsername.isNotBlank() && candidate == selfUsername
                     }, key = { it.username }) { chat ->
                         Card(onClick = { onOpenChat(chat) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                             ListItem(
@@ -102,7 +102,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                             ListItem(
                                 headlineContent = { Text(group.name) },
                                 leadingContent = { FynxAvatar(group.name) },
-                                supportingContent = { Text("${group.memberUsernames.size} members${group.description.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                supportingContent = { Text("${group.members.size} members${group.description.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
                             )
                         }
