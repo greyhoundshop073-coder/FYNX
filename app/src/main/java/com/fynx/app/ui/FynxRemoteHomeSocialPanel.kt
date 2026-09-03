@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.view.ViewGroup
@@ -35,8 +36,10 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.TimeUnit
 
+private const val MARKETPLACE_AD_MARKER = "[FYNX_MARKETPLACE_AD]"
+
 @Composable
-fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> Unit) {
+fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var posts by remember { mutableStateOf<List<FynxRemoteSocialClient.RemotePost>>(emptyList()) }
@@ -90,7 +93,9 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
                 onComment = { commentsPost = post },
                 onLikes = { likesPost = post },
                 onFollow = { following -> scope.launch { FynxRemoteSocialClient.follow(context, post.authorUsername, following).onSuccess { now -> posts = posts.map { if (it.authorUsername.equals(post.authorUsername, true)) it.copy(followedByCurrentUser = now) else it } }.onFailure { error = it.message } } },
-                onDelete = { scope.launch { FynxRemoteSocialClient.deletePost(context, post.id).onSuccess { posts = posts.filterNot { it.id == post.id } }.onFailure { error = it.message } } }
+                onDelete = { scope.launch { FynxRemoteSocialClient.deletePost(context, post.id).onSuccess { posts = posts.filterNot { it.id == post.id } }.onFailure { error = it.message } } },
+                onShare = { sharePost(context, post) },
+                onOpenMarketplace = onOpenMarketplace
             )
         }
     }
@@ -130,8 +135,20 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
 }
 
 @Composable
-private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsername: String, onLike: (String) -> Unit, onComment: () -> Unit, onLikes: () -> Unit, onFollow: (Boolean) -> Unit, onDelete: () -> Unit) {
+private fun RemotePostCard(
+    post: FynxRemoteSocialClient.RemotePost,
+    currentUsername: String,
+    onLike: (String) -> Unit,
+    onComment: () -> Unit,
+    onLikes: () -> Unit,
+    onFollow: (Boolean) -> Unit,
+    onDelete: () -> Unit,
+    onShare: () -> Unit,
+    onOpenMarketplace: () -> Unit
+) {
     val mine = post.authorUsername.equals(currentUsername.removePrefix("@"), true)
+    val marketplaceAd = post.text.startsWith(MARKETPLACE_AD_MARKER)
+    val displayText = if (marketplaceAd) post.text.removePrefix(MARKETPLACE_AD_MARKER).trim() else post.text
     Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
         Column {
             Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -144,15 +161,42 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
                 if (mine) IconButton(onClick = onDelete) { Icon(Icons.Default.DeleteOutline, "Delete post") }
                 else TextButton(onClick = { onFollow(post.followedByCurrentUser) }) { Text(if (post.followedByCurrentUser) "Following" else "Follow") }
             }
-            if (post.text.isNotBlank()) Text(post.text, Modifier.padding(horizontal = 14.dp, vertical = 4.dp))
+            if (marketplaceAd) {
+                Text("MARKETPLACE", Modifier.padding(horizontal = 14.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            }
+            if (displayText.isNotBlank()) Text(displayText, Modifier.padding(horizontal = 14.dp, vertical = 4.dp))
             post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType) }
+            if (marketplaceAd) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp), horizontalArrangement = Arrangement.End) {
+                    OutlinedButton(onClick = onOpenMarketplace) {
+                        Icon(Icons.Default.ShoppingBag, null)
+                        Spacer(Modifier.width(5.dp))
+                        Text("View in Marketplace")
+                    }
+                }
+            }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { onLike(post.id) }) { Icon(if (post.likedByCurrentUser) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null); Spacer(Modifier.width(4.dp)); Text(post.likeCount.toString()) }
                 TextButton(onClick = onLikes) { Text("Likes") }
                 TextButton(onClick = onComment) { Icon(Icons.Default.ChatBubbleOutline, null); Spacer(Modifier.width(4.dp)); Text(post.commentCount.toString()) }
+                TextButton(onClick = onShare) { Icon(Icons.Default.Share, null); Spacer(Modifier.width(4.dp)); Text("Share") }
             }
         }
     }
+}
+
+private fun sharePost(context: Context, post: FynxRemoteSocialClient.RemotePost) {
+    val text = if (post.text.startsWith(MARKETPLACE_AD_MARKER)) {
+        "${post.text.removePrefix(MARKETPLACE_AD_MARKER).trim()}\n\nSee this product on FYNX Marketplace."
+    } else {
+        "${post.authorDisplayName.ifBlank { post.authorUsername }} on FYNX:\n${post.text}".trim()
+    }
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, text)
+        putExtra(Intent.EXTRA_TITLE, "Share from FYNX")
+    }
+    context.startActivity(Intent.createChooser(intent, "Share with…"))
 }
 
 @Composable
