@@ -88,14 +88,43 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
     }
 
     if (composerOpen) {
-        AlertDialog(onDismissRequest = { if (!busy) { composerOpen = false; selectedMedia = null } }, title = { Text("Create a post") }, text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(composerText, { composerText = it.take(4000) }, Modifier.fillMaxWidth(), minLines = 3, maxLines = 7, placeholder = { Text("Share something with your FYNX circle…") })
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedButton(onClick = { picker.launch("image/*") }, Modifier.weight(1f)) { Text("Photo") }; OutlinedButton(onClick = { picker.launch("video/*") }, Modifier.weight(1f)) { Text("Video") } }
-                if (selectedMedia != null) Text("Media selected", style = MaterialTheme.typography.bodySmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FilterChip(visibility == FynxPostVisibility.PUBLIC, { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") }); FilterChip(visibility == FynxPostVisibility.FRIENDS_ONLY, { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") }) }
-            }
-        }, confirmButton = { Button(enabled = !busy, onClick = { scope.launch { busy = true; FynxRemoteSocialClient.createPost(context, composerText, visibility, selectedMedia).onSuccess { composerOpen = false; composerText = ""; selectedMedia = null; reload() }.onFailure { error = it.message ?: "Post failed." }; busy = false } }) { Text(if (busy) "Publishing…" else "Post") } }, dismissButton = { TextButton(enabled = !busy, onClick = { composerOpen = false; selectedMedia = null }) { Text("Cancel") } })
+        FynxPlainDialog(
+            onDismissRequest = { if (!busy) { composerOpen = false; selectedMedia = null } },
+            title = { Text("Create a post", style = MaterialTheme.typography.headlineSmall) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = composerText,
+                        onValueChange = { composerText = it.take(4000) },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 7,
+                        placeholder = { Text("Share something with your FYNX circle…") },
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { picker.launch("image/*") }, Modifier.weight(1f)) { Text("Photo") }
+                        OutlinedButton(onClick = { picker.launch("video/*") }, Modifier.weight(1f)) { Text("Video") }
+                    }
+                    if (selectedMedia != null) Text("Media selected", style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(visibility == FynxPostVisibility.PUBLIC, { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") })
+                        FilterChip(visibility == FynxPostVisibility.FRIENDS_ONLY, { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") })
+                    }
+                }
+            },
+            confirmButton = {
+                Button(enabled = !busy, onClick = {
+                    scope.launch {
+                        busy = true
+                        FynxRemoteSocialClient.createPost(context, composerText, visibility, selectedMedia)
+                            .onSuccess { composerOpen = false; composerText = ""; selectedMedia = null; reload() }
+                            .onFailure { error = it.message ?: "Post failed." }
+                        busy = false
+                    }
+                }) { Text(if (busy) "Publishing…" else "Post") }
+            },
+            dismissButton = { TextButton(enabled = !busy, onClick = { composerOpen = false; selectedMedia = null }) { Text("Cancel") } },
+        )
     }
     commentsPost?.let { post -> CommentsDialog(post) { commentsPost = null } }
     likesPost?.let { post -> LikesDialog(post) { likesPost = null } }
