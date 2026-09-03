@@ -2,6 +2,8 @@ package com.fynx.app.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,6 +27,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.*
@@ -38,6 +42,7 @@ import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import kotlinx.coroutines.delay
 import java.io.File
+import java.io.FileOutputStream
 
 @Composable
 fun FynxCameraCapturePanel(
@@ -68,6 +73,8 @@ fun FynxCameraCapturePanel(
     var recordingStartedAt by remember { mutableLongStateOf(0L) }
     var recordingElapsed by remember { mutableLongStateOf(0L) }
     var error by remember { mutableStateOf<String?>(null) }
+    var pendingUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingType by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(recording != null, recordingStartedAt) {
         while (recording != null) {
@@ -83,7 +90,7 @@ fun FynxCameraCapturePanel(
 
     fun bindCamera(previewView: PreviewView) {
         val owner = activity ?: run { error = "Camera requires an Android activity"; return }
-        if (!hasCamera) return
+        if (!hasCamera || pendingUri != null) return
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             runCatching {
@@ -104,6 +111,27 @@ fun FynxCameraCapturePanel(
         }, ContextCompat.getMainExecutor(context))
     }
 
+    fun retake() {
+        pendingUri?.let { uri -> if (uri.scheme == "file") File(uri.path ?: "").delete() }
+        pendingUri = null
+        pendingType = null
+        error = null
+    }
+
+    fun rotatePhoto() {
+        val uri = pendingUri ?: return
+        if (pendingType != "image") return
+        val source = uri.path?.let { File(it) } ?: return
+        runCatching {
+            val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo")
+            val matrix = Matrix().apply { postRotate(90f) }
+            val rotated = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            FileOutputStream(source).use { output -> rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, output) }
+            bitmap.recycle()
+            rotated.recycle()
+        }.onFailure { error = it.message ?: "Photo rotation failed" }
+    }
+
     if (!hasCamera) {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -111,6 +139,44 @@ fun FynxCameraCapturePanel(
                 Spacer(Modifier.height(12.dp))
                 Button(onClick = { permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)) }) { Text("Allow camera") }
                 TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        }
+        return
+    }
+
+    val previewUri = pendingUri
+    val previewType = pendingType
+    if (previewUri != null && previewType != null) {
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            if (previewType == "image") {
+                AndroidView(
+                    factory = { android.widget.ImageView(it).apply { scaleType = android.widget.ImageView.ScaleType.FIT_CENTER } },
+                    update = { view -> view.setImageURI(previewUri) },
+                    modifier = Modifier.fillMaxSize().padding(18.dp)
+                )
+            } else {
+                AndroidView(
+                    factory = { android.widget.VideoView(it).apply { setVideoURI(previewUri); setOnPreparedListener { player -> player.isLooping = true; start() } } },
+                    update = { view -> if (view.tag != previewUri.toString()) { view.tag = previewUri.toString(); view.setVideoURI(previewUri); view.start() } },
+                    modifier = Modifier.fillMaxSize().padding(18.dp)
+                )
+            }
+            Column(Modifier.fillMaxWidth().statusBarsPadding().padding(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { retake() }) { Icon(Icons.Default.Close, "Discard media") }
+                    Spacer(Modifier.weight(1f))
+                    Text(if (previewType == "video") "Video preview" else "Photo preview", style = MaterialTheme.typography.titleMedium)
+                }
+            }
+            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(18.dp)) {
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp)) }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(onClick = { retake() }, modifier = Modifier.weight(1f)) { Text("Retake") }
+                    if (previewType == "image") {
+                        OutlinedButton(onClick = { rotatePhoto() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.RotateRight, null); Spacer(Modifier.width(4.dp)); Text("Rotate") }
+                    }
+                    Button(onClick = { onCaptured(previewUri, previewType) }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Send, null); Spacer(Modifier.width(4.dp)); Text("Use") }
+                }
             }
         }
         return
@@ -141,7 +207,10 @@ fun FynxCameraCapturePanel(
                         val file = File(context.cacheDir, "fynx_photo_${System.currentTimeMillis()}.jpg")
                         val output = ImageCapture.OutputFileOptions.Builder(file).build()
                         imageCapture?.takePicture(output, ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageSavedCallback {
-                            override fun onImageSaved(result: ImageCapture.OutputFileResults) { onCaptured(Uri.fromFile(file), "image") }
+                            override fun onImageSaved(result: ImageCapture.OutputFileResults) {
+                                pendingUri = Uri.fromFile(file)
+                                pendingType = "image"
+                            }
                             override fun onError(exception: ImageCaptureException) { error = exception.message ?: "Photo capture failed" }
                         }) ?: run { error = "Camera is still starting" }
                     } else {
@@ -157,8 +226,10 @@ fun FynxCameraCapturePanel(
                             recordingStartedAt = System.currentTimeMillis()
                             recording = withAudio.start(ContextCompat.getMainExecutor(context)) { event ->
                                 if (event is VideoRecordEvent.Finalize) {
-                                    if (!event.hasError() && file.exists() && file.length() > 0L) onCaptured(Uri.fromFile(file), "video")
-                                    else error = "Video capture failed (${event.error})"
+                                    if (!event.hasError() && file.exists() && file.length() > 0L) {
+                                        pendingUri = Uri.fromFile(file)
+                                        pendingType = "video"
+                                    } else error = "Video capture failed (${event.error})"
                                     recording = null
                                 }
                             }
