@@ -191,13 +191,6 @@ fun FynxCameraCapturePanel(
                     modifier = Modifier.fillMaxSize().padding(18.dp)
                 )
             }
-            Column(Modifier.fillMaxWidth().statusBarsPadding().padding(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { retake() }) { Icon(Icons.Default.Close, "Discard media") }
-                    Spacer(Modifier.weight(1f))
-                    Text(if (previewType == "video") "Video preview" else "Photo edit", style = MaterialTheme.typography.titleMedium)
-                }
-            }
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(18.dp)) {
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp)) }
                 if (previewType == "image") {
@@ -226,8 +219,8 @@ fun FynxCameraCapturePanel(
             update = { bindCamera(it) },
             modifier = Modifier.fillMaxSize()
         )
-        Column(Modifier.fillMaxWidth().statusBarsPadding().padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { if (recording == null) onDismiss() }) { Icon(Icons.Default.Close, "Close camera") }
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = {
@@ -237,8 +230,6 @@ fun FynxCameraCapturePanel(
                     if (recording == null) { torchEnabled = !torchEnabled; cameraControl?.enableTorch(torchEnabled) }
                 }) { Icon(Icons.Default.FlashOn, if (torchEnabled) "Turn flash off" else "Turn flash on") }
             }
-        }
-        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp)) }
             if (recording != null) Text("Recording ${formatCameraRecordingTime(recordingElapsed)}", style = MaterialTheme.typography.titleMedium)
             if (recording == null) {
