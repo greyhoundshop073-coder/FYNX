@@ -16,7 +16,8 @@
         android:label="FYNX"
         android:icon="@drawable/ic_fynx_logo"
         android:roundIcon="@drawable/ic_fynx_logo"
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false"
         android:supportsRtl="true">
         <activity
             android:name=".MainActivity"
