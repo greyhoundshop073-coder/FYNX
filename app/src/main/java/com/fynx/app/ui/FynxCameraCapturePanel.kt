@@ -1,10 +1,8 @@
 package com.fynx.app.ui
 
 import android.Manifest
-import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Environment
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -14,7 +12,6 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.FileOutputOptions
 import androidx.camera.video.FallbackStrategy
-import androidx.camera.video.MediaStoreOutputOptions
 import androidx.camera.video.Quality
 import androidx.camera.video.QualitySelector
 import androidx.camera.video.Recorder
@@ -38,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.activity.ComponentActivity
 import kotlinx.coroutines.delay
 import java.io.File
 
@@ -47,6 +45,7 @@ fun FynxCameraCapturePanel(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val activity = context as? ComponentActivity
     var hasCamera by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     var hasAudio by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -78,6 +77,7 @@ fun FynxCameraCapturePanel(
     }
 
     fun bindCamera(previewView: PreviewView) {
+        val owner = activity ?: run { error = "Camera requires an Android activity"; return }
         if (!hasCamera) return
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
@@ -91,8 +91,8 @@ fun FynxCameraCapturePanel(
                     .build()
                 val video = VideoCapture.withOutput(recorder)
                 provider.unbindAll()
-                if (mode == CameraMode.PHOTO) provider.bindToLifecycle(context as androidx.lifecycle.LifecycleOwner, selector, preview, capture)
-                else provider.bindToLifecycle(context as androidx.lifecycle.LifecycleOwner, selector, preview, video)
+                if (mode == CameraMode.PHOTO) provider.bindToLifecycle(owner, selector, preview, capture)
+                else provider.bindToLifecycle(owner, selector, preview, video)
                 imageCapture = capture
                 videoCapture = video
             }.onFailure { error = it.message ?: "Camera could not start" }
@@ -111,7 +111,7 @@ fun FynxCameraCapturePanel(
         return
     }
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.black)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         AndroidView(
             factory = { PreviewView(it).also { view -> bindCamera(view) } },
             update = { bindCamera(it) },
@@ -119,16 +119,16 @@ fun FynxCameraCapturePanel(
         )
         Column(Modifier.fillMaxWidth().statusBarsPadding().padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { if (recording == null) onDismiss() }) { Icon(Icons.Default.Close, "Close camera", tint = MaterialTheme.colorScheme.onSurface) }
+                IconButton(onClick = { if (recording == null) onDismiss() }) { Icon(Icons.Default.Close, "Close camera") }
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = {
                     if (recording == null) lens = if (lens == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
-                }) { Icon(Icons.Default.Cameraswitch, "Switch front/back camera", tint = MaterialTheme.colorScheme.onSurface) }
+                }) { Icon(Icons.Default.Cameraswitch, "Switch front/back camera") }
             }
         }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp)) }
-            if (recording != null) Text("Recording ${formatRecordingTime(recordingElapsed)}", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+            if (recording != null) Text("Recording ${formatRecordingTime(recordingElapsed)}", style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
                 FilterChip(selected = mode == CameraMode.PHOTO, onClick = { if (recording == null) mode = CameraMode.PHOTO }, label = { Text("Photo") }, leadingIcon = { Icon(Icons.Default.PhotoCamera, null) })
                 FilledIconButton(onClick = {
@@ -143,7 +143,6 @@ fun FynxCameraCapturePanel(
                         val active = recording
                         if (active != null) {
                             active.stop()
-                            recording = null
                         } else {
                             val capture = videoCapture ?: run { error = "Video camera is still starting"; return@FilledIconButton }
                             val file = File(context.cacheDir, "fynx_video_${System.currentTimeMillis()}.mp4")
@@ -154,7 +153,7 @@ fun FynxCameraCapturePanel(
                             recording = withAudio.start(ContextCompat.getMainExecutor(context)) { event ->
                                 if (event is VideoRecordEvent.Finalize) {
                                     if (!event.hasError() && file.exists() && file.length() > 0L) onCaptured(Uri.fromFile(file), "video")
-                                    else error = event.error.toString()
+                                    else error = "Video capture failed (${event.error})"
                                     recording = null
                                 }
                             }
