@@ -71,7 +71,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     BackHandler(enabled = profileUser != null) { profileUser = null }
     BackHandler(enabled = openChat != null) { openChat = null }
     BackHandler(enabled = openGroup != null && openChat == null) { openGroup = null }
-    BackHandler(enabled = openChat == null && openGroup == null && selected != "Home") { selected = if (isSecondary) "Home" else "Home" }
+    BackHandler(enabled = openChat == null && openGroup == null && selected != "Home") { selected = "Home" }
 
     if (profileUser != null) {
         FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }) {
@@ -99,26 +99,54 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }) {
         val mainIndex = mainNav.indexOfFirst { it.key == selected }.coerceAtLeast(0)
         val unread = notifications.unreadNotificationCount()
+        val myProfile = remember(authSession.username) { FynxPreferencesStore.loadProfile(context, authSession.username) }
+        val myPhoto = FynxPreferencesStore.loadProfilePhoto(context)
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (selected == "Friends") {
-                        val myProfile = FynxPreferencesStore.loadProfile(context, authSession.username)
-                        val myPhoto = FynxPreferencesStore.loadProfilePhoto(context)
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (selected == "Home") {
                         IconButton(onClick = { selected = "Profile"; openProfileSettings = false }) {
-                            FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
+                            FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp))
                         }
                         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                            Text("Friends", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                            Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                         }
                         IconButton(onClick = { selected = "Profile"; openProfileSettings = true }) {
                             Icon(Icons.Default.Settings, "Settings")
                         }
+                        BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
+                            IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
+                        }
+                    } else if (selected == "Friends") {
+                        IconButton(onClick = { selected = "Profile"; openProfileSettings = false }) {
+                            FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp))
+                        }
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            Text("Friends", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                        }
+                        Spacer(Modifier.size(48.dp))
                     } else {
                         if (isSecondary) IconButton(onClick = { selected = "Home" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } else Spacer(Modifier.size(48.dp))
-                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text(if (selected == "Marketplace") "Marketplace" else if (selected == "Money Tools") "Money Center" else if (selected == "Home") "FYNX" else selected, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
-                        if (selected == "Home") BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) { IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") } } else Spacer(Modifier.size(48.dp))
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            Text(
+                                when (selected) {
+                                    "Marketplace" -> "Marketplace"
+                                    "Money Tools" -> "Money Center"
+                                    else -> selected
+                                },
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                        }
+                        Spacer(Modifier.size(48.dp))
                     }
                 }
             },
