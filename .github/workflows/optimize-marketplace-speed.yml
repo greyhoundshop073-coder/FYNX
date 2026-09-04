@@ -1,0 +1,105 @@
+name: Optimize marketplace speed
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt'
+      - '.github/workflows/optimize-marketplace-speed.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch marketplace loading and media performance
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt')
+          s = p.read_text()
+          s = s.replace('import kotlinx.coroutines.launch\n', 'import kotlinx.coroutines.delay\nimport kotlinx.coroutines.launch\n')
+          s = s.replace('    var query by remember { mutableStateOf("") }\n', '    var query by remember { mutableStateOf("") }\n    var searchInput by remember { mutableStateOf("") }\n')
+          old = '''    fun reload() {
+          scope.launch {
+              loading = true
+              error = null
+              FynxRemoteSocialClient.listings(context, query, category)
+                  .onSuccess { listings = it }
+                  .onFailure { error = it.message ?: "Marketplace could not load." }
+              FynxRemoteSocialClient.orders(context).onSuccess { orders = it }
+              loading = false
+          }
+      }
+
+      LaunchedEffect(query, category) { reload() }
+'''
+          new = '''    fun reloadListings() {
+          scope.launch {
+              loading = true
+              error = null
+              FynxRemoteSocialClient.listings(context, query, category)
+                  .onSuccess { listings = it }
+                  .onFailure { error = it.message ?: "Marketplace could not load." }
+              loading = false
+          }
+      }
+
+      fun loadOrders() {
+          scope.launch {
+              FynxRemoteSocialClient.orders(context).onSuccess { orders = it }
+          }
+      }
+
+      LaunchedEffect(searchInput) {
+          delay(350)
+          query = searchInput.trim()
+      }
+
+      LaunchedEffect(query, category) { reloadListings() }
+'''
+          if old not in s:
+              raise SystemExit('Expected marketplace reload block was not found')
+          s = s.replace(old, new, 1)
+          s = s.replace('IconButton(onClick = { showOrders = true })', 'IconButton(onClick = { showOrders = true; loadOrders() })', 1)
+          s = s.replace('FynxMarketplaceSellerOrders(context, onChanged = { reload() })', 'FynxMarketplaceSellerOrders(context, onChanged = { reloadListings() })', 1)
+          s = s.replace('IconButton(onClick = { reload() })', 'IconButton(onClick = { reloadListings(); loadOrders() })', 1)
+          s = s.replace('OutlinedTextField(query, { query = it }, Modifier.weight(2f)', 'OutlinedTextField(searchInput, { searchInput = it }, Modifier.weight(2f)', 1)
+          s = s.replace('onPublished = { showSell = false; reload() }', 'onPublished = { showSell = false; reloadListings() }', 1)
+          s = s.replace('paymentOrder = null\n                reload()', 'paymentOrder = null\n                reloadListings()\n                loadOrders()', 1)
+          s = s.replace('if (showOrders) MarketplaceOrders(context, orders, onRefresh = { reload() },', 'if (showOrders) MarketplaceOrders(context, orders, onRefresh = { loadOrders() },', 1)
+          old_media = '''        if (local != null) bitmap = withContext(Dispatchers.IO) { runCatching { context.contentResolver.openInputStream(local).use { BitmapFactory.decodeStream(it) } }.getOrNull() }
+'''
+          new_media = '''        if (local != null) bitmap = withContext(Dispatchers.IO) {
+            runCatching {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                context.contentResolver.openInputStream(local).use { BitmapFactory.decodeStream(it, null, bounds) }
+                val sample = if (bounds.outWidth > 1200 || bounds.outHeight > 1200) 2 else 1
+                val options = BitmapFactory.Options().apply {
+                    inSampleSize = sample
+                    inPreferredConfig = Bitmap.Config.RGB_565
+                }
+                context.contentResolver.openInputStream(local).use { BitmapFactory.decodeStream(it, null, options) }
+            }.getOrNull()
+        }
+'''
+          if old_media not in s:
+              raise SystemExit('Expected marketplace media decode block was not found')
+          s = s.replace(old_media, new_media, 1)
+          p.write_text(s)
+          PY
+          git diff --check
+          git diff -- app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt
+      - name: Commit optimization and remove one-time workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt .github/workflows/optimize-marketplace-speed.yml
+          git commit -m 'Optimize marketplace loading and media rendering' || exit 0
+          git rm .github/workflows/optimize-marketplace-speed.yml || true
+          git commit -m 'Remove marketplace speed optimization workflow' || true
+          git push
