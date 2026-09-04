@@ -13,8 +13,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun FynxMarketplaceSellerManager(context: Context, onChanged: () -> Unit) {
-    var listings by remember { mutableStateOf<List<MarketplaceListing>>(emptyList()) }
-    var selected by remember { mutableStateOf<MarketplaceListing?>(null) }
+    var listings by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
+    var selected by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -73,18 +73,37 @@ fun FynxMarketplaceSellerManager(context: Context, onChanged: () -> Unit) {
             },
             confirmButton = {
                 Button(enabled = !busy, onClick = {
-                    busy = true; dialogError = null
+                    busy = true
+                    dialogError = null
                     scope.launch {
-                        updateMarketplaceListing(context, listing.id, title, price.toDoubleOrNull() ?: -1.0, quantity.toIntOrNull() ?: -1)
+                        updateMarketplaceListing(
+                            context,
+                            listing.id,
+                            title,
+                            price.toDoubleOrNull() ?: -1.0,
+                            quantity.toIntOrNull() ?: -1
+                        )
                             .onSuccess { selected = null; load(); onChanged() }
                             .onFailure { dialogError = it.message ?: "Listing update failed." }
                         busy = false
                     }
-                }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Save") }
+                }) {
+                    if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Save")
+                }
             },
             dismissButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(enabled = !busy, onClick = { selected = null }) { Text("Cancel") }
+                    TextButton(enabled = !busy, onClick = {
+                        busy = true
+                        dialogError = null
+                        scope.launch {
+                            FynxRemoteSocialClient.deleteMarketplaceListing(context, listing.id)
+                                .onSuccess { selected = null; load(); onChanged() }
+                                .onFailure { dialogError = it.message ?: "Listing removal failed." }
+                            busy = false
+                        }
+                    }) { Text("Remove") }
                 }
             }
         )
