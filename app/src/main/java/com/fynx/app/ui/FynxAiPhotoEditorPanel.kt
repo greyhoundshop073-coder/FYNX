@@ -92,7 +92,7 @@ fun FynxAiPhotoEditorPanel(onDone: () -> Unit = {}) {
             Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(8.dp))
             Column { Text("AI Photo Editor", style = MaterialTheme.typography.headlineSmall); Text("Edit privately on your device with optional AI guidance.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-        OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(mediaType = ActivityResultContracts.PickVisualMedia.ImageOnly)) }, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Default.PhotoLibrary, null); Spacer(Modifier.width(6.dp)); Text(if (sourceUri == null) "Choose photo" else "Choose another photo")
         }
         preview?.let { bitmap ->
