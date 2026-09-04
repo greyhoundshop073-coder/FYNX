@@ -253,10 +253,10 @@ app.get("/api/media/:id", auth, async (req, res) => {
 });
 
 function messageProjection() {
-  return `SELECT m.id, m.sender_id, sender.username AS sender_username, m.recipient_id, recipient.username AS recipient_username, m.text, EXTRACT(EPOCH FROM m.created_at) * 1000 AS timestamp, m.delivered_at IS NOT NULL AS delivered, m.read_at IS NOT NULL AS read, m.edited, m.deleted, m.reply_to_id, m.media_id, m.media_type, m.voice_duration_ms FROM messages m JOIN users sender ON sender.id = m.sender_id JOIN users recipient ON recipient.id = m.recipient_id`;
+  return `SELECT m.id, m.sender_id, sender.username AS sender_username, sender.display_name AS sender_display_name, m.recipient_id, recipient.username AS recipient_username, recipient.display_name AS recipient_display_name, m.text, EXTRACT(EPOCH FROM m.created_at) * 1000 AS timestamp, m.delivered_at IS NOT NULL AS delivered, m.read_at IS NOT NULL AS read, m.edited, m.deleted, m.reply_to_id, m.media_id, m.media_type, m.voice_duration_ms FROM messages m JOIN users sender ON sender.id = m.sender_id JOIN users recipient ON recipient.id = m.recipient_id`;
 }
 function rowToMessage(row) {
-  return { id: String(row.id), senderId: String(row.sender_id), recipientId: String(row.recipient_id), text: row.text, timestamp: Number(row.timestamp), delivered: row.delivered, read: row.read, edited: row.edited, deleted: row.deleted, replyToId: row.reply_to_id == null ? null : String(row.reply_to_id), mediaId: row.media_id == null ? null : String(row.media_id), mediaType: row.media_type || null, mediaUrl: row.media_id == null ? null : `/api/media/${row.media_id}`, voiceDurationMs: Number(row.voice_duration_ms || 0) };
+  return { id: String(row.id), senderId: String(row.sender_id), senderUsername: row.sender_username || null, senderDisplayName: row.sender_display_name || null, recipientId: String(row.recipient_id), recipientUsername: row.recipient_username || null, recipientDisplayName: row.recipient_display_name || null, text: row.text, timestamp: Number(row.timestamp), delivered: row.delivered, read: row.read, edited: row.edited, deleted: row.deleted, replyToId: row.reply_to_id == null ? null : String(row.reply_to_id), mediaId: row.media_id == null ? null : String(row.media_id), mediaType: row.media_type || null, mediaUrl: row.media_id == null ? null : `/api/media/${row.media_id}`, voiceDurationMs: Number(row.voice_duration_ms || 0) };
 }
 
 app.get("/api/messages/:username", auth, async (req, res) => {
@@ -296,7 +296,7 @@ app.post("/api/messages", auth, async (req, res) => {
       if (!reply.rows[0]) return res.status(400).json({ error: "invalid reply target" });
     }
     const result = await pool.query("INSERT INTO messages (sender_id, recipient_id, text, reply_to_id, media_id, media_type, voice_duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, created_at", [req.user.sub, recipient.id, text, replyToId, mediaId, mediaType, voiceDurationMs]);
-    const message = { id: String(result.rows[0].id), senderId: String(req.user.sub), recipientId: String(recipient.id), text, timestamp: new Date(result.rows[0].created_at).getTime(), delivered: false, read: false, edited: false, deleted: false, replyToId: replyToId == null ? null : String(replyToId), mediaId: mediaId == null ? null : String(mediaId), mediaType, mediaUrl: mediaId == null ? null : `/api/media/${mediaId}`, voiceDurationMs };
+    const message = { id: String(result.rows[0].id), senderId: String(req.user.sub), senderUsername: (await findUserByUsername((await pool.query("SELECT username FROM users WHERE id=$1", [req.user.sub])).rows[0]?.username || ""))?.username || null, recipientId: String(recipient.id), recipientUsername: recipient.username, recipientDisplayName: recipient.display_name, text, timestamp: new Date(result.rows[0].created_at).getTime(), delivered: false, read: false, edited: false, deleted: false, replyToId: replyToId == null ? null : String(replyToId), mediaId: mediaId == null ? null : String(mediaId), mediaType, mediaUrl: mediaId == null ? null : `/api/media/${mediaId}`, voiceDurationMs };
     await broadcastMessage(message);
     return res.status(201).json({ message });
   } catch (error) { console.error("send message", error); return res.status(500).json({ error: "message send failed" }); }
