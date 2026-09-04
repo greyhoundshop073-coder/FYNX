@@ -110,7 +110,7 @@ fun HomePanel(currentUsername: String = "preview", onOpenChats: () -> Unit = {},
                                         aiPrompt = ""
                                         aiLoading = true
                                         aiScope.launch {
-                                            val result = withContext(Dispatchers.IO) { AiAssistantClient.sendMessage(prompt) }
+                                            val result = withContext(Dispatchers.IO) { AiAssistantClient.sendMessage(context, prompt) }
                                             val reply = result.getOrElse { "FYNX AI is temporarily unavailable. Please try again." }
                                             aiReply = reply
                                             if (reply.isNotBlank()) tts.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "fynx-ai-reply")
