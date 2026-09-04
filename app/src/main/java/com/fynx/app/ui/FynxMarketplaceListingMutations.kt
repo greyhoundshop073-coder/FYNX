@@ -3,11 +3,8 @@ package com.fynx.app.ui
 import android.content.Context
 import org.json.JSONObject
 
-/**
- * Marketplace listing mutation helpers kept outside the remote client so the
- * existing client remains stable while seller management is completed.
- */
-suspend fun FynxRemoteSocialClient.updateMarketplaceListing(
+/** Marketplace seller listing mutation helpers. */
+suspend fun updateMarketplaceListing(
     context: Context,
     id: String,
     title: String,
