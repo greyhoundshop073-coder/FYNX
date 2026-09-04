@@ -14,8 +14,11 @@ import java.io.FileOutputStream
 /** Local, private smart photo enhancement used by the FYNX AI Creation layer. */
 object FynxAiPhotoEnhancer {
     fun enhance(context: Context, source: Uri): Result<Uri> = runCatching {
-        val decoded = context.contentResolver.openInputStream(source)?.use(BitmapFactory::decodeStream)
-            ?: error("Photo could not be opened")
+        val decoded = if (source.scheme == "file") {
+            File(source.path ?: error("Photo path missing")).inputStream().use(BitmapFactory::decodeStream)
+        } else {
+            context.contentResolver.openInputStream(source)?.use(BitmapFactory::decodeStream)
+        } ?: error("Photo could not be opened")
         val bitmap = decoded.copy(Bitmap.Config.ARGB_8888, false)
         decoded.recycle()
 
