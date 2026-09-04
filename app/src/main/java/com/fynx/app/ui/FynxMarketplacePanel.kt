@@ -343,12 +343,21 @@ private fun OrderActions(context: android.content.Context, order: FynxRemoteSoci
     var details by remember { mutableStateOf("") }
     var rating by remember { mutableIntStateOf(5) }
     var comment by remember { mutableStateOf("") }
+    var showLifecycle by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     AlertDialog(onDismissRequest = onClose, title = { Text("Order ${order.status}") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(order.productTitle)
             Text("Total: ${order.currency} ${String.format(Locale.US, "%,.2f", order.totalAmount)}")
             Text("Protected order. Complete payment through an approved payment provider before shipment.", style = MaterialTheme.typography.bodySmall)
+            if (order.status == "PAID" || order.status == "SHIPPED" || order.status == "INSPECTION") {
+                Text("Next step", style = MaterialTheme.typography.labelLarge)
+                Text(when (order.status) {
+                    "PAID" -> "Choose delivery or pickup so the seller can fulfill the order."
+                    "SHIPPED" -> "Confirm the order when you receive it."
+                    else -> "Inspect the order and complete it when everything is correct."
+                }, style = MaterialTheme.typography.bodySmall)
+            }
             if (dispute) OutlinedTextField(details, { details = it }, label = { Text("What happened?") }, minLines = 3)
             else if (order.status == "PAYMENT_PENDING") Text("You can cancel this unpaid order.")
             else if (order.status == "COMPLETED") {
@@ -361,8 +370,12 @@ private fun OrderActions(context: android.content.Context, order: FynxRemoteSoci
         when {
             dispute -> Button(onClick = { scope.launch { FynxRemoteSocialClient.disputeMarketplaceOrder(context, order.id, "OTHER", details).onSuccess { onChanged() } } }) { Text("Open dispute") }
             order.status == "PAYMENT_PENDING" -> Button(onClick = { scope.launch { FynxRemoteSocialClient.cancelMarketplaceOrder(context, order.id).onSuccess { onChanged() } } }) { Text("Cancel order") }
+            order.status == "PAID" || order.status == "SHIPPED" || order.status == "INSPECTION" -> Button(onClick = { showLifecycle = true }) { Text(when (order.status) { "PAID" -> "Choose fulfillment"; "SHIPPED" -> "Confirm received"; else -> "Complete order" }) }
             order.status == "COMPLETED" -> Button(onClick = { scope.launch { FynxRemoteSocialClient.reviewMarketplaceOrder(context, order.id, rating, comment).onSuccess { onChanged() } } }) { Text("Submit review") }
             else -> Spacer(Modifier.size(1.dp))
         }
     }, dismissButton = { TextButton(onClick = { if (!dispute && order.status != "COMPLETED") dispute = true else onClose() }) { Text(if (!dispute && order.status != "COMPLETED") "Report problem" else "Close") } })
+    if (showLifecycle) {
+        FynxMarketplaceOrderLifecycle(context, order, onChanged = { showLifecycle = false; onChanged() }, onClose = { showLifecycle = false })
+    }
 }
