@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -27,6 +28,7 @@ fun FynxAiAssistantPanel() {
     var input by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     Column(
         Modifier.fillMaxSize().padding(12.dp),
@@ -119,7 +121,7 @@ fun FynxAiAssistantPanel() {
                         loading = true
                         scope.launch {
                             val result = withContext(Dispatchers.IO) {
-                                AiAssistantClient.sendMessage(LocalContext.current, prompt)
+                                AiAssistantClient.sendMessage(context, prompt)
                             }
                             messages = messages + AiMessage(
                                 result.getOrElse { "FYNX AI is temporarily unavailable. Please try again." },
