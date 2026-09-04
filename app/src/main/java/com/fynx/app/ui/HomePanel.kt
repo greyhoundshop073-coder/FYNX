@@ -5,6 +5,14 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
+import android.speech.tts.TextToSpeech
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import java.util.Locale
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -42,6 +50,29 @@ fun HomePanel(currentUsername: String = "preview", onOpenChats: () -> Unit = {},
     var postMenuId by remember { mutableStateOf<String?>(null) }
     var commentPostId by remember { mutableStateOf<String?>(null) }
     var pickedPostPhoto by remember { mutableStateOf<Uri?>(null) }
+    var aiPrompt by remember { mutableStateOf("") }
+    var aiReply by remember { mutableStateOf<String?>(null) }
+    var aiLoading by remember { mutableStateOf(false) }
+    var speechPending by remember { mutableStateOf(false) }
+    val aiScope = rememberCoroutineScope()
+    val speechLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
+            if (spoken.isNotBlank()) aiPrompt = spoken
+        }
+        speechPending = false
+    }
+    val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            speechPending = true
+            speechLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to FYNX AI")
+            })
+        }
+    }
+    val tts = remember { TextToSpeech(context, null) }
+    DisposableEffect(tts) { onDispose { tts.stop(); tts.shutdown() } }
     val profilePhoto = FynxPreferencesStore.loadProfilePhoto(context)
     val notifications = remember { FynxNotificationStore.load(context) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) pickedPostPhoto = uri }
@@ -49,7 +80,51 @@ fun HomePanel(currentUsername: String = "preview", onOpenChats: () -> Unit = {},
 
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(bottom = 18.dp)) {
         item { FynxVisibleUpdatesPanel(currentUsername = currentUsername, onOpenStories = onOpenStories, onOpenAi = onOpenAi) }
-        item { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { FynxProfileImage(displayUsername, profilePhoto, Modifier.size(48.dp)); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text("Welcome to FYNX", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text("Your people. Your moments. Your world.", color = FynxDesign.TextSecondary) } }; Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { PulseStat("✨", "AI", "Assistant", onOpenAi, Modifier.weight(1f)); PulseStat("🔔", notifications.unreadNotificationCount().toString(), "Updates", onOpenNotifications, Modifier.weight(1f)) } } } }
+        item { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { FynxProfileImage(displayUsername, profilePhoto, Modifier.size(48.dp)); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text("Welcome to FYNX", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text("Your people. Your moments. Your world.", color = FynxDesign.TextSecondary) } }; Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            PulseStat("✨", "AI", "Assistant", onOpenAi, Modifier.weight(1f))
+                            PulseStat("🔔", notifications.unreadNotificationCount().toString(), "Updates", onOpenNotifications, Modifier.weight(1f))
+                        }
+                        OutlinedTextField(
+                            value = aiPrompt,
+                            onValueChange = { aiPrompt = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH) },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !aiLoading,
+                            singleLine = true,
+                            placeholder = { Text("Ask FYNX AI anything…") },
+                            leadingIcon = { Text("✨") },
+                            trailingIcon = {
+                                Row {
+                                    IconButton(enabled = !aiLoading && !speechPending, onClick = {
+                                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                            speechPending = true
+                                            speechLauncher.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to FYNX AI")
+                                            })
+                                        } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                                    }) { Icon(Icons.Default.Mic, if (speechPending) "Listening" else "Speak") }
+                                    IconButton(enabled = !aiLoading && aiPrompt.isNotBlank(), onClick = {
+                                        val prompt = aiPrompt.trim()
+                                        aiPrompt = ""
+                                        aiLoading = true
+                                        aiScope.launch {
+                                            val result = withContext(Dispatchers.IO) { AiAssistantClient.sendMessage(prompt) }
+                                            val reply = result.getOrElse { "FYNX AI is temporarily unavailable. Please try again." }
+                                            aiReply = reply
+                                            if (reply.isNotBlank()) tts.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "fynx-ai-reply")
+                                            aiLoading = false
+                                        }
+                                    }) { Icon(Icons.Default.Send, "Ask FYNX AI") }
+                                }
+                            }
+                        )
+                        aiReply?.let { reply ->
+                            Card(colors = CardDefaults.cardColors(containerColor = FynxDesign.SurfaceRaised)) {
+                                Text(reply, Modifier.padding(12.dp))
+                            }
+                        }
+                    } } } }
         item { Card(onClick = { showComposer = true }, Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) { Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) { FynxProfileImage(displayUsername, profilePhoto, Modifier.size(42.dp)); Spacer(Modifier.width(12.dp)); Text("What's on your mind?", Modifier.weight(1f), color = FynxDesign.TextSecondary); Icon(Icons.Default.AddAPhoto, "Add photo", tint = MaterialTheme.colorScheme.primary) } } }
         item { SectionHeader("Moments", "See all", onOpenStories); Spacer(Modifier.height(8.dp)); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { StoryCircle("＋", "Add story", true, onOpenStories); StoryCircle(displayUsername, "Your story", false, onOpenStories) } }
         item { FynxRemoteHomeSocialPanel(currentUsername = displayUsername, onOpenFindPeople = onOpenFindPeople) }
