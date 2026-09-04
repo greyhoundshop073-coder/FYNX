@@ -22,6 +22,8 @@ import kotlinx.coroutines.withContext
 @Composable
 fun FynxHomeSocialHubPanel(
     currentUsername: String,
+    initialCaption: String? = null,
+    onCaptionConsumed: () -> Unit = {},
     onOpenChats: () -> Unit = {},
     onOpenStories: () -> Unit = {},
     onOpenProfile: () -> Unit = {},
@@ -46,6 +48,16 @@ fun FynxHomeSocialHubPanel(
             capturedUri = uri
             capturedType = if (context.contentResolver.getType(uri)?.startsWith("video/") == true) "video" else "image"
             showComposer = true
+        }
+    }
+
+    LaunchedEffect(initialCaption) {
+        if (!initialCaption.isNullOrBlank()) {
+            text = initialCaption.trim().take(4000)
+            capturedUri = null
+            notice = null
+            showComposer = true
+            onCaptionConsumed()
         }
     }
 
