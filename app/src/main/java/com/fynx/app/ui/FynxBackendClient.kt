@@ -49,6 +49,7 @@ object FynxBackendClient {
 
     suspend fun get(context: Context, path: String): Result<String> = request(context, "GET", path, null)
     suspend fun postJson(context: Context, path: String, body: String): Result<String> = request(context, "POST", path, body)
+    suspend fun patchJson(context: Context, path: String, body: String): Result<String> = request(context, "PATCH", path, body)
     suspend fun delete(context: Context, path: String): Result<String> = request(context, "DELETE", path, null)
 
     suspend fun currentUserId(context: Context): Result<String> =
@@ -60,37 +61,23 @@ object FynxBackendClient {
                 val root = baseUrl(context)
                 require(root.isNotBlank()) { "FYNX backend is not configured." }
                 require(path.startsWith("/")) { "Backend path must start with /." }
-
                 var attempt = 0
                 var response: String? = null
                 while (response == null) {
-                    try {
-                        response = executeRequest(context, root, method, path, body)
-                    } catch (error: Exception) {
+                    try { response = executeRequest(context, root, method, path, body) }
+                    catch (error: Exception) {
                         val retryable = method == "GET" || method == "DELETE"
-                        if (!retryable || !isTransientNetworkFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) {
-                            throw error
-                        }
-                        attempt++
-                        delay(RETRY_DELAY_MS * attempt)
+                        if (!retryable || !isTransientNetworkFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) throw error
+                        attempt++; delay(RETRY_DELAY_MS * attempt)
                     }
                 }
                 response
             }
         }
 
-    private fun executeRequest(
-        context: Context,
-        root: String,
-        method: String,
-        path: String,
-        body: String?
-    ): String {
+    private fun executeRequest(context: Context, root: String, method: String, path: String, body: String?): String {
         val connection = (URL(root + path).openConnection() as HttpURLConnection).apply {
-            requestMethod = method
-            connectTimeout = 10_000
-            readTimeout = 20_000
-            useCaches = false
+            requestMethod = method; connectTimeout = 10_000; readTimeout = 20_000; useCaches = false
             setRequestProperty("Accept", "application/json")
             accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
         }
@@ -103,27 +90,16 @@ object FynxBackendClient {
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (status == HttpURLConnection.HTTP_UNAUTHORIZED) {
-                saveAccessToken(context, null)
-                throw FynxUnauthorizedException()
-            }
-            if (status !in 200..299) {
-                throw IllegalStateException("FYNX backend returned HTTP $status")
-            }
+            if (status == HttpURLConnection.HTTP_UNAUTHORIZED) { saveAccessToken(context, null); throw FynxUnauthorizedException() }
+            if (status !in 200..299) throw IllegalStateException("FYNX backend returned HTTP $status")
             return response
-        } finally {
-            connection.disconnect()
-        }
+        } finally { connection.disconnect() }
     }
 
     private fun isTransientNetworkFailure(error: Throwable): Boolean {
         var current: Throwable? = error
         while (current != null) {
-            if (current is SocketTimeoutException ||
-                current is ConnectException ||
-                current is UnknownHostException ||
-                current is IOException
-            ) return true
+            if (current is SocketTimeoutException || current is ConnectException || current is UnknownHostException || current is IOException) return true
             current = current.cause
         }
         return false
