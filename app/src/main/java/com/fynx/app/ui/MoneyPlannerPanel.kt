@@ -40,13 +40,12 @@ fun MoneyPlannerPanel() {
         loading = true; error = null
         FynxBackendClient.get(context, "/api/money-planner").onSuccess { raw ->
             runCatching {
-                val root=JSONObject(raw); val s=root.optJSONObject("summary")
+                val root=JSONObject(raw)
                 val tx=root.optJSONArray("transactions") ?: JSONArray(); val bs=root.optJSONArray("budgets") ?: JSONArray(); val gs=root.optJSONArray("goals") ?: JSONArray(); val rs=root.optJSONArray("recurring") ?: JSONArray()
                 transactions=buildList { for(i in 0 until tx.length()){val o=tx.getJSONObject(i);add(PlannerTransaction(o.getString("id"),o.getString("title"),o.getString("category"),o.getString("type"),o.getDouble("amount"),o.getString("currency"),o.getString("occurredOn"))) } }
                 budgets=buildList { for(i in 0 until bs.length()){val o=bs.getJSONObject(i);add(PlannerBudget(o.getString("id"),o.getString("category"),o.getDouble("amount"),o.getString("currency"),o.getString("period"))) } }
                 goals=buildList { for(i in 0 until gs.length()){val o=gs.getJSONObject(i);add(PlannerGoal(o.getString("id"),o.getString("name"),o.getDouble("targetAmount"),o.getDouble("savedAmount"),o.getString("currency"),if(o.isNull("targetDate"))null else o.getString("targetDate"))) } }
                 recurring=buildList { for(i in 0 until rs.length()){val o=rs.getJSONObject(i);add(PlannerRecurring(o.getString("id"),o.getString("name"),o.getString("category"),o.getDouble("amount"),o.getString("currency"),o.getString("frequency"),o.getString("nextDate"))) } }
-                s
             }.onFailure { error=it.message ?: "Could not read Money Planner data" }
         }.onFailure { error=it.message ?: "Money Planner is unavailable" }
         loading=false
@@ -64,7 +63,7 @@ fun MoneyPlannerPanel() {
         if(loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         when(tab){
             "Overview" -> {
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){MetricCard("Income",income,"NGN");MetricCard("Expenses",expenses,"NGN");MetricCard("Net",net,"NGN")}
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){MetricCard("Income",income,"NGN",Modifier.weight(1f));MetricCard("Expenses",expenses,"NGN",Modifier.weight(1f));MetricCard("Net",net,"NGN",Modifier.weight(1f))}
                 Card(Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(5.dp)){Text("Planner snapshot",style=MaterialTheme.typography.titleMedium);Text("${transactions.size} transactions • ${budgets.size} budgets • ${goals.size} savings goals • ${recurring.size} recurring expenses");Text("Planned recurring: ${money(recurring.sumOf{it.amount})}");Text("Budget limits: ${money(budgets.sumOf{it.amount})}")}}
                 Text("Recent activity",style=MaterialTheme.typography.titleMedium); transactions.take(5).forEach{PlannerTransactionRow(it,onDelete={scope.launch{FynxBackendClient.delete(context,"/api/money-planner/transactions/${it.id}");refresh()}})}
             }
@@ -81,6 +80,6 @@ fun MoneyPlannerPanel() {
     }
 }
 
-@Composable private fun MetricCard(label:String,value:Double,currency:String)=Card(Modifier.weight(1f)){Column(Modifier.padding(12.dp)){Text(label,color=MaterialTheme.colorScheme.onSurfaceVariant);Text(money(value),style=MaterialTheme.typography.titleLarge);Text(currency,style=MaterialTheme.typography.bodySmall)}}
+@Composable private fun MetricCard(label:String,value:Double,currency:String,modifier:Modifier=Modifier)=Card(modifier){Column(Modifier.padding(12.dp)){Text(label,color=MaterialTheme.colorScheme.onSurfaceVariant);Text(money(value),style=MaterialTheme.typography.titleLarge);Text(currency,style=MaterialTheme.typography.bodySmall)}}
 @Composable private fun PlannerTransactionRow(t:PlannerTransaction,onDelete:()->Unit)=Card(Modifier.fillMaxWidth()){ListItem(headlineContent={Text(t.title)},supportingContent={Text("${t.category} • ${t.date}")},trailingContent={Row{Text("${if(t.type=="EXPENSE")"-" else "+"}${money(t.amount)} ${t.currency}");TextButton(onClick=onDelete){Text("Delete")}}})}
 private fun money(value:Double):String=NumberFormat.getNumberInstance(Locale.US).apply{minimumFractionDigits=2;maximumFractionDigits=2}.format(value)
