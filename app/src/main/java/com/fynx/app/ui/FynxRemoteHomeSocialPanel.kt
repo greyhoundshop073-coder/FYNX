@@ -59,7 +59,7 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
     fun reload() {
         scope.launch {
             loading = true
-            FynxRemoteSocialClient.feed(context).onSuccess { posts = it; error = null }.onFailure { error = it.message ?: "Unable to load your feed." }
+            FynxRemoteSocialClient.feed(context).onSuccess { posts = it; error = null }.onFailure { error = when { it.message?.contains("HTTP 404", true) == true -> "Your FYNX feed service is temporarily unavailable. Tap refresh to try again." else -> it.message ?: "Unable to load your feed." } }
             loading = false
         }
     }
