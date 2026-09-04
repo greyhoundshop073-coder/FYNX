@@ -37,7 +37,7 @@ object FynxRemoteSocialClient {
 
     suspend fun createPost(context: Context, text: String, visibility: FynxPostVisibility, uri: Uri?): Result<Unit> = runCatching {
         val media = uri?.let {
-            val mime = context.contentResolver.getType(it)?.lowercase() ?: ""
+            val mime = mediaMimeType(context, it)
             val type = when {
                 mime.startsWith("image/") -> "image"
                 mime.startsWith("video/") -> "video"
@@ -54,6 +54,25 @@ object FynxRemoteSocialClient {
         }
         FynxBackendClient.postJson(context, "/api/social/posts", body.toString()).getOrThrow()
         Unit
+    }
+
+    private fun mediaMimeType(context: Context, uri: Uri): String {
+        context.contentResolver.getType(uri)?.lowercase()?.takeIf { it.isNotBlank() }?.let { return it }
+        val path = uri.path?.lowercase().orEmpty()
+        return when {
+            path.endsWith(".jpg") || path.endsWith(".jpeg") -> "image/jpeg"
+            path.endsWith(".png") -> "image/png"
+            path.endsWith(".webp") -> "image/webp"
+            path.endsWith(".heic") || path.endsWith(".heif") -> "image/heif"
+            path.endsWith(".mp4") -> "video/mp4"
+            path.endsWith(".3gp") -> "video/3gpp"
+            path.endsWith(".webm") -> "video/webm"
+            path.endsWith(".m4a") -> "audio/mp4"
+            path.endsWith(".aac") -> "audio/aac"
+            path.endsWith(".mp3") -> "audio/mpeg"
+            path.endsWith(".wav") -> "audio/wav"
+            else -> ""
+        }
     }
 
     suspend fun createMarketplaceAd(context: Context, listingId: String, title: String, description: String, storeName: String, price: Double, currency: String, mediaId: String?): Result<Unit> {
