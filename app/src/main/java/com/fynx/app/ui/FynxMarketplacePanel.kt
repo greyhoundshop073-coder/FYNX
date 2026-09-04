@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Refresh
@@ -48,6 +49,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var paymentOrder by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }
     var showSell by remember { mutableStateOf(false) }
     var showOrders by remember { mutableStateOf(false) }
+    var cart by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
+    var showCart by remember { mutableStateOf(false) }
     val categories = listOf("All", "Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services")
 
     fun reload() {
@@ -70,6 +73,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 Text("Marketplace", style = MaterialTheme.typography.headlineSmall)
                 Text("Buy and sell with FYNX accounts", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            BadgedBox(modifier = Modifier.padding(end = 2.dp), badge = { if (cart.isNotEmpty()) Badge { Text(cart.size.toString()) } }) { IconButton(onClick = { showCart = true }) { Icon(Icons.Default.ShoppingCart, "Cart") } }
             IconButton(onClick = { showOrders = true }) { Icon(Icons.Default.ReceiptLong, "Orders") }
             FynxMarketplaceSellerOrders(context, onChanged = { reload() })
             IconButton(onClick = { reload() }) { Icon(Icons.Default.Refresh, "Refresh") }
@@ -107,16 +111,9 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         MarketplaceDetails(
             l = listing,
             onProfile = { onOpenProfile(listing.sellerUsername); selected = null },
-            onBuy = {
-                scope.launch {
-                    FynxRemoteSocialClient.createMarketplaceOrder(context, listing.id, 1)
-                        .onSuccess { order ->
-                            orders = listOf(order) + orders
-                            selected = null
-                            paymentOrder = order
-                        }
-                        .onFailure { error = it.message ?: "Purchase could not be started." }
-                }
+            onAddToCart = {
+                if (cart.none { it.id == listing.id }) cart = cart + listing
+                selected = null
             },
             onClose = { selected = null }
         )
@@ -132,6 +129,24 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             onClose = { paymentOrder = null }
         )
     }
+    if (showCart) MarketplaceCartDialog(
+        context = context,
+        items = cart,
+        onRemove = { item -> cart = cart.filterNot { it.id == item.id } },
+        onCheckout = { listing ->
+            scope.launch {
+                FynxRemoteSocialClient.createMarketplaceOrder(context, listing.id, 1)
+                    .onSuccess { order ->
+                        orders = listOf(order) + orders
+                        cart = cart.filterNot { it.id == listing.id }
+                        showCart = false
+                        paymentOrder = order
+                    }
+                    .onFailure { error = it.message ?: "Checkout could not be started." }
+            }
+        },
+        onClose = { showCart = false }
+    )
     if (showOrders) MarketplaceOrders(context, orders, onRefresh = { reload() }, onClose = { showOrders = false })
 }
 
@@ -179,7 +194,7 @@ private fun RemoteMarketMedia(mediaId: String) {
 }
 
 @Composable
-private fun MarketplaceDetails(l: FynxRemoteSocialClient.MarketplaceListing, onProfile: () -> Unit, onBuy: () -> Unit, onClose: () -> Unit) {
+private fun MarketplaceDetails(l: FynxRemoteSocialClient.MarketplaceListing, onProfile: () -> Unit, onAddToCart: () -> Unit, onClose: () -> Unit) {
     AlertDialog(onDismissRequest = onClose, title = { Text(l.title) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (l.mediaIds.isNotEmpty()) RemoteMarketMedia(l.mediaIds.first())
@@ -190,7 +205,7 @@ private fun MarketplaceDetails(l: FynxRemoteSocialClient.MarketplaceListing, onP
             if (l.location.isNotBlank()) Text("Location: ${l.location}")
             if (l.deliveryAvailable) Text("Delivery available${l.deliveryFee?.let { " • ${l.currency} ${String.format(Locale.US, "%,.2f", it)} fee" } ?: ""}")
         }
-    }, confirmButton = { Button(onClick = onBuy, enabled = l.quantity > 0) { Text("Buy now") } }, dismissButton = { TextButton(onClick = onProfile) { Text("View seller") } })
+    }, confirmButton = { Button(onClick = onAddToCart, enabled = l.quantity > 0) { Icon(Icons.Default.ShoppingCart, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text("Add to cart") } }, dismissButton = { TextButton(onClick = onProfile) { Text("View seller") } })
 }
 
 @Composable
@@ -315,6 +330,46 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
             }
         }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Publish") }
     }, dismissButton = { TextButton(onClick = onCancel, enabled = !busy) { Text("Cancel") } })
+}
+
+@Composable
+private fun MarketplaceCartDialog(
+    context: android.content.Context,
+    items: List<FynxRemoteSocialClient.MarketplaceListing>,
+    onRemove: (FynxRemoteSocialClient.MarketplaceListing) -> Unit,
+    onCheckout: (FynxRemoteSocialClient.MarketplaceListing) -> Unit,
+    onClose: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Shopping cart") },
+        text = {
+            if (items.isEmpty()) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.ShoppingCart, null, Modifier.size(48.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Text("Your cart is empty.")
+                    Text("Add products from the marketplace to start checkout.", style = MaterialTheme.typography.bodySmall)
+                }
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(items, key = { it.id }) { item ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(item.title, style = MaterialTheme.typography.titleMedium)
+                                    Text("${item.currency} ${String.format(Locale.US, "%,.2f", item.price)} • ${item.quantity} available", style = MaterialTheme.typography.bodySmall)
+                                }
+                                TextButton(onClick = { onCheckout(item) }, enabled = item.quantity > 0) { Text("Checkout") }
+                                TextButton(onClick = { onRemove(item) }) { Text("Remove") }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Close") } }
+    )
 }
 
 @Composable
