@@ -71,6 +71,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 Text("Buy and sell with FYNX accounts", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = { showOrders = true }) { Icon(Icons.Default.ReceiptLong, "Orders") }
+            FynxMarketplaceSellerOrders(context, onChanged = { reload() })
             IconButton(onClick = { reload() }) { Icon(Icons.Default.Refresh, "Refresh") }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
