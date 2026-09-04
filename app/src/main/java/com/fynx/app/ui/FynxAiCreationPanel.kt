@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,13 +19,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * FYNX AI Creation Layer. Text creation uses the existing authenticated FYNX AI
- * backend; no provider key or private FYNX data is exposed to the Android app.
- */
+/** FYNX AI Creation Layer. Text creation uses the existing authenticated backend. */
 @Composable
 fun FynxAiCreationPanel(
-    onUseCaptionForPost: (String) -> Unit = {}
+    onUseCaptionForPost: (String) -> Unit = {},
+    onOpenPhotoEditor: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -34,14 +33,7 @@ fun FynxAiCreationPanel(
     var result by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-
-    val modes = listOf(
-        "caption" to "Create caption",
-        "rewrite" to "Improve caption",
-        "ideas" to "Post ideas",
-        "creative" to "Creative brief",
-        "product" to "Product description"
-    )
+    val modes = listOf("caption" to "Create caption", "rewrite" to "Improve caption", "ideas" to "Post ideas", "creative" to "Creative brief", "product" to "Product description")
 
     fun requestCreation() {
         val promptInput = input.trim()
@@ -53,124 +45,41 @@ fun FynxAiCreationPanel(
             "product" -> "Write a clear, persuasive marketplace product description from these seller notes. Do not invent specifications, guarantees, prices or facts. Return only the finished description.\n\nSeller notes:\n$promptInput"
             else -> "Create a natural, engaging FYNX social-media caption from this idea. Do not invent personal facts. Return only the finished caption.\n\nIdea:\n$promptInput"
         }
-        val capability = if (mode == "product") {
-            FynxAiCapability.MARKETPLACE_ASSIST
-        } else {
-            FynxAiCapability.MEDIA_ASSIST
-        }
+        val capability = if (mode == "product") FynxAiCapability.MARKETPLACE_ASSIST else FynxAiCapability.MEDIA_ASSIST
         val decision = FynxFutureIntelligencePolicy.authorize(
-            permissions = listOf(
-                FynxAiPermission(
-                    capability = capability,
-                    allowedScopes = setOf(FynxAiDataScope.NONE),
-                    enabled = true
-                )
-            ),
-            request = FynxAiRequest(
-                capability = capability,
-                prompt = instruction,
-                requestedScopes = setOf(FynxAiDataScope.NONE)
-            )
+            permissions = listOf(FynxAiPermission(capability, setOf(FynxAiDataScope.NONE), true)),
+            request = FynxAiRequest(capability, instruction, setOf(FynxAiDataScope.NONE))
         )
-        if (!decision.allowed) {
-            error = "I couldn't process that creation request safely."
-            return
-        }
+        if (!decision.allowed) { error = "I couldn't process that creation request safely."; return }
         loading = true
         error = null
         scope.launch {
-            val response = withContext(Dispatchers.IO) {
-                AiAssistantClient.sendMessage(context, instruction)
-            }
-            response.onSuccess { result = it.trim() }
-                .onFailure { error = "FYNX AI is temporarily unavailable. Please try again." }
+            val response = withContext(Dispatchers.IO) { AiAssistantClient.sendMessage(context, instruction) }
+            response.onSuccess { result = it.trim() }.onFailure { error = "FYNX AI is temporarily unavailable. Please try again." }
             loading = false
         }
     }
 
-    Column(
-        Modifier.fillMaxSize().padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
+    Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Column {
-                Text("AI Creation", style = MaterialTheme.typography.headlineSmall)
-                Text("Create with FYNX AI without leaving FYNX.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
+            Column { Text("AI Creation", style = MaterialTheme.typography.headlineSmall); Text("Create with FYNX AI without leaving FYNX.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(vertical = 2.dp)
-        ) {
-            item {
+        OutlinedButton(onClick = onOpenPhotoEditor, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.PhotoLibrary, null); Spacer(Modifier.width(6.dp)); Text("AI Photo Editor")
+        }
+        LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 2.dp)) {
+            item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { modes.forEach { (key, label) -> FilterChip(selected = mode == key, onClick = { mode = key; result = ""; error = null }, label = { Text(label) }, enabled = !loading) } } }
+        }
+        OutlinedTextField(value = input, onValueChange = { input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH) }, modifier = Modifier.fillMaxWidth(), minLines = 4, maxLines = 8, enabled = !loading, shape = FynxDesign.ControlShape, placeholder = { Text(when (mode) { "rewrite" -> "Paste the caption you want improved…"; "ideas" -> "What do you want to post about?"; "creative" -> "Describe the content idea you want to develop…"; "product" -> "Enter your real product details…"; else -> "Describe the post you want to create…" }) })
+        Button(onClick = ::requestCreation, enabled = !loading && input.trim().isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.AutoAwesome, null); Spacer(Modifier.width(6.dp)); Text(if (loading) "Creating…" else "Create with AI") }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        if (result.isNotBlank()) Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .45f))) {
+            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(result)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    modes.forEach { (key, label) ->
-                        FilterChip(
-                            selected = mode == key,
-                            onClick = { mode = key; result = ""; error = null },
-                            label = { Text(label) },
-                            enabled = !loading
-                        )
-                    }
-                }
-            }
-        }
-
-        OutlinedTextField(
-            value = input,
-            onValueChange = { input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH) },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 4,
-            maxLines = 8,
-            enabled = !loading,
-            shape = FynxDesign.ControlShape,
-            placeholder = { Text(when (mode) {
-                "rewrite" -> "Paste the caption you want improved…"
-                "ideas" -> "What do you want to post about?"
-                "creative" -> "Describe the content idea you want to develop…"
-                "product" -> "Enter your real product details…"
-                else -> "Describe the post you want to create…"
-            }) }
-        )
-
-        Button(
-            onClick = ::requestCreation,
-            enabled = !loading && input.trim().isNotEmpty(),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Default.AutoAwesome, contentDescription = null)
-            Spacer(Modifier.width(6.dp))
-            Text(if (loading) "Creating…" else "Create with AI")
-        }
-
-        error?.let {
-            Text(it, color = MaterialTheme.colorScheme.error)
-        }
-
-        if (result.isNotBlank()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = FynxDesign.CardShape,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .45f))
-            ) {
-                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(result)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { clipboard.setText(AnnotatedString(result)) }) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = null)
-                            Spacer(Modifier.width(4.dp))
-                            Text("Copy")
-                        }
-                        if (mode == "caption" || mode == "rewrite") {
-                            Button(onClick = { onUseCaptionForPost(result) }) {
-                                Icon(Icons.Default.Send, contentDescription = null)
-                                Spacer(Modifier.width(4.dp))
-                                Text("Use in post")
-                            }
-                        }
-                    }
+                    OutlinedButton(onClick = { clipboard.setText(AnnotatedString(result)) }) { Icon(Icons.Default.ContentCopy, null); Spacer(Modifier.width(4.dp)); Text("Copy") }
+                    if (mode == "caption" || mode == "rewrite") Button(onClick = { onUseCaptionForPost(result) }) { Icon(Icons.Default.Send, null); Spacer(Modifier.width(4.dp)); Text("Use in post") }
                 }
             }
         }
