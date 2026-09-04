@@ -42,13 +42,13 @@ private const val MAX_SOCIAL_MEDIA_BYTES = 12 * 1024 * 1024
 
 @Composable
 fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}) {
-    // The Home shell keeps AI, Chat and Notifications available above the social feed.
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var posts by remember { mutableStateOf<List<FynxRemoteSocialClient.RemotePost>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var composerOpen by remember { mutableStateOf(false) }
+    var voiceRecorderOpen by remember { mutableStateOf(false) }
     var selectedMedia by remember { mutableStateOf<Uri?>(null) }
     var selectedMediaType by remember { mutableStateOf<String?>(null) }
     var composerText by remember { mutableStateOf("") }
@@ -95,20 +95,13 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
             title = { Text("Create a post", style = MaterialTheme.typography.headlineSmall) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = composerText,
-                        onValueChange = { composerText = it.take(4000) },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 3,
-                        maxLines = 7,
-                        placeholder = { Text("Share something with your FYNX circle…") },
-                    )
+                    OutlinedTextField(value = composerText, onValueChange = { composerText = it.take(4000) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 7, placeholder = { Text("Share something with your FYNX circle…") })
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { picker.launch("image/*") }, Modifier.weight(1f)) { Text("Photo") }
                         OutlinedButton(onClick = { picker.launch("video/*") }, Modifier.weight(1f)) { Text("Video") }
-                        OutlinedButton(onClick = { picker.launch("audio/*") }, Modifier.weight(1f)) { Text("Voice") }
+                        OutlinedButton(onClick = { voiceRecorderOpen = true }, Modifier.weight(1f)) { Text("Voice") }
                     }
-                    if (selectedMedia != null) Text(if (selectedMediaType == "audio") "Voice post selected" else "Media selected", style = MaterialTheme.typography.bodySmall)
+                    if (selectedMedia != null) Text(if (selectedMediaType == "audio") "Voice recording ready" else "Media selected", style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(visibility == FynxPostVisibility.PUBLIC, { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") })
                         FilterChip(visibility == FynxPostVisibility.FRIENDS_ONLY, { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") })
@@ -120,13 +113,19 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
                     scope.launch {
                         busy = true
                         FynxRemoteSocialClient.createPost(context, composerText, visibility, selectedMedia)
-                            .onSuccess { composerOpen = false; composerText = ""; selectedMedia = null; reload() }
+                            .onSuccess { composerOpen = false; composerText = ""; selectedMedia = null; selectedMediaType = null; reload() }
                             .onFailure { error = it.message ?: "Post failed." }
                         busy = false
                     }
                 }) { Text(if (busy) "Publishing…" else "Post") }
             },
-            dismissButton = { TextButton(enabled = !busy, onClick = { composerOpen = false; selectedMedia = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(enabled = !busy, onClick = { composerOpen = false; selectedMedia = null; selectedMediaType = null }) { Text("Cancel") } },
+        )
+    }
+    if (voiceRecorderOpen) {
+        FynxVoicePostRecorder(
+            onRecorded = { uri -> selectedMedia = uri; selectedMediaType = "audio"; voiceRecorderOpen = false },
+            onDismiss = { voiceRecorderOpen = false }
         )
     }
     commentsPost?.let { post -> CommentsDialog(post) { commentsPost = null } }
@@ -175,7 +174,8 @@ private fun download(context: Context, path: String, type: String?): File? = run
     val connection = (URL(FynxBackendClient.baseUrl(context) + path).openConnection() as HttpURLConnection).apply { connectTimeout = 10000; readTimeout = 20000; setRequestProperty("Authorization", "Bearer ${FynxBackendClient.accessToken(context) ?: ""}") }
     try {
         if (connection.responseCode !in 200..299) return null
-        val file = File.createTempFile("fynx_social_", if (type == "video") ".mp4" else ".jpg", context.cacheDir)
+        val extension = when (type) { "video" -> ".mp4"; "audio" -> ".m4a"; else -> ".jpg" }
+        val file = File.createTempFile("fynx_social_", extension, context.cacheDir)
         var total = 0
         val buffer = ByteArray(32 * 1024)
         connection.inputStream.use { input -> FileOutputStream(file).use { output -> while (true) { val read = input.read(buffer); if (read < 0) break; total += read; if (total > MAX_SOCIAL_MEDIA_BYTES) { file.delete(); return null }; output.write(buffer, 0, read) } } }
@@ -197,9 +197,7 @@ private fun AudioPostPlayer(file: File) {
     var playing by remember(file) { mutableStateOf(false) }
     DisposableEffect(player) { onDispose { player.release() } }
     Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Button(onClick = { if (player.isPlaying) { player.pause(); playing = false } else { player.start(); playing = true } }) {
-            Text(if (playing) "Pause" else "Play voice")
-        }
+        Button(onClick = { if (player.isPlaying) { player.pause(); playing = false } else { player.start(); playing = true } }) { Text(if (playing) "Pause" else "Play voice") }
         Spacer(Modifier.width(10.dp))
         Text("${(player.duration / 1000).coerceAtLeast(0)}s")
     }
