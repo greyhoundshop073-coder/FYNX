@@ -87,7 +87,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "To-Do" -> TodoPanel()
             "Privacy" -> FynxPrivacySettingsPanel(onBack = { selected = "Profile" })
             "Seller Center" -> FynxMarketplaceSellerCenterPanel()
-            "AI" -> FynxAiAssistantPanel()
+            "AI" -> FynxAiAssistantPanel(onOpenDestination = { destination -> selected = destination })
             "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" })
             else -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" })
         } } }
