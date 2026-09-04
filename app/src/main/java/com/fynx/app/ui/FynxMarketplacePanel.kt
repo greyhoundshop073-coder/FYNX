@@ -76,6 +76,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             BadgedBox(modifier = Modifier.padding(end = 2.dp), badge = { if (cart.isNotEmpty()) Badge { Text(cart.size.toString()) } }) { IconButton(onClick = { showCart = true }) { Icon(Icons.Default.ShoppingCart, "Cart") } }
             IconButton(onClick = { showOrders = true }) { Icon(Icons.Default.ReceiptLong, "Orders") }
             FynxMarketplaceSellerOrders(context, onChanged = { reload() })
+            FynxMarketplaceReviews(context, orders, onChanged = { reload() })
             IconButton(onClick = { reload() }) { Icon(Icons.Default.Refresh, "Refresh") }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
