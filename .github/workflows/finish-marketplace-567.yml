@@ -1,0 +1,129 @@
+name: Finish marketplace product detail reviews security
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finish-marketplace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Apply marketplace 5-7 completion patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          panel = Path('app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt')
+          text = panel.read_text()
+          old = '''@Composable
+          private fun MarketplaceDetails(l: FynxRemoteSocialClient.MarketplaceListing, onProfile: () -> Unit, onAddToCart: () -> Unit, onClose: () -> Unit) {
+              AlertDialog(onDismissRequest = onClose, title = { Text(l.title) }, text = {
+                  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                      if (l.mediaIds.isNotEmpty()) RemoteMarketMedia(l.mediaIds.first())
+                      Text("${l.currency} ${String.format(Locale.US, "%,.2f", l.price)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                      Text(l.description)
+                      Text("Seller: ${l.sellerDisplayName.ifBlank { l.sellerUsername }}")
+                      Text("${l.quantity} available • ${l.condition}")
+                      if (l.location.isNotBlank()) Text("Location: ${l.location}")
+                      if (l.deliveryAvailable) Text("Delivery available${l.deliveryFee?.let { " • ${l.currency} ${String.format(Locale.US, "%,.2f", it)} fee" } ?: ""}")
+                  }
+              }, confirmButton = { Button(onClick = onAddToCart, enabled = l.quantity > 0) { Icon(Icons.Default.ShoppingCart, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text("Add to cart") } }, dismissButton = { TextButton(onClick = onProfile) { Text("View seller") } })
+          }
+          '''
+          new = '''@Composable
+          private fun MarketplaceDetails(l: FynxRemoteSocialClient.MarketplaceListing, onProfile: () -> Unit, onAddToCart: () -> Unit, onClose: () -> Unit) {
+              var reputation by remember(l.sellerUsername) { mutableStateOf<FynxMarketplaceClient.SellerReputation?>(null) }
+              var loadingReputation by remember(l.sellerUsername) { mutableStateOf(true) }
+              val context = LocalContext.current
+              LaunchedEffect(l.sellerUsername) {
+                  loadingReputation = true
+                  FynxMarketplaceClient.sellerReputation(context, l.sellerUsername)
+                      .onSuccess { reputation = it }
+                  loadingReputation = false
+              }
+              val safety = FynxMarketplaceSafety.analyze(l.title, l.description, l.storeName, l.location)
+              AlertDialog(onDismissRequest = onClose, title = { Text(l.title) }, text = {
+                  Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+                      if (l.mediaIds.isNotEmpty()) RemoteMarketMedia(l.mediaIds.first())
+                      Text("${l.currency} ${String.format(Locale.US, "%,.2f", l.price)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                      Text(l.description)
+                      Text("Seller: ${l.sellerDisplayName.ifBlank { l.sellerUsername }}")
+                      if (l.storeName.isNotBlank()) Text("Store: ${l.storeName}")
+                      Text("${l.quantity} available • ${l.condition}")
+                      if (l.location.isNotBlank()) Text("Location: ${l.location}")
+                      if (l.deliveryAvailable) Text("Delivery available${l.deliveryFee?.let { " • ${l.currency} ${String.format(Locale.US, "%,.2f", it)} fee" } ?: ""}")
+                      if (l.pickupAvailable) Text("Pickup available")
+                      Card(Modifier.fillMaxWidth()) {
+                          Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                              Text("Seller reputation", style = MaterialTheme.typography.titleSmall)
+                              if (loadingReputation) CircularProgressIndicator(Modifier.size(18.dp))
+                              else if (reputation != null) {
+                                  Text("★ ${String.format(Locale.US, "%.1f", reputation!!.averageRating)} • ${reputation!!.reviewCount} reviews")
+                                  Text("${reputation!!.tier} • ${String.format(Locale.US, "%.0f", reputation!!.completionRate)}% order completion", style = MaterialTheme.typography.bodySmall)
+                              } else Text("Seller reputation is unavailable right now.", style = MaterialTheme.typography.bodySmall)
+                          }
+                      }
+                      if (safety.level != FynxMarketplaceRiskLevel.LOW) {
+                          val label = if (safety.isBlocking) "Safety warning" else "Safety notice"
+                          Card(Modifier.fillMaxWidth()) {
+                              Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                  Text("$label • ${safety.score}/100", style = MaterialTheme.typography.titleSmall)
+                                  safety.signals.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+                              }
+                          }
+                      }
+                  }
+              }, confirmButton = { Button(onClick = onAddToCart, enabled = l.quantity > 0 && !safety.isBlocking) { Icon(Icons.Default.ShoppingCart, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text(if (safety.isBlocking) "Blocked for safety" else "Add to cart") } }, dismissButton = { TextButton(onClick = onProfile) { Text("View seller") } })
+          }
+          '''
+          if old not in text:
+              raise SystemExit('expected MarketplaceDetails block was not found')
+          panel.write_text(text.replace(old, new, 1))
+
+          reputation = Path('backend/marketplaceReputation.js')
+          rtext = reputation.read_text()
+          needle = '''  app.post('/api/marketplace/orders/:id/review', auth, async (req, res) => {
+    try {
+      await ensureSchema();
+'''
+          replacement = '''  app.post('/api/marketplace/orders/:id/review', auth, async (req, res) => {
+    const orderId = parseOrderId(req.params.id);
+    if (!orderId) return res.status(400).json({ error: 'invalid order id' });
+    try {
+      await ensureSchema();
+'''
+          if needle not in rtext:
+              raise SystemExit('expected review route anchor was not found')
+          rtext = rtext.replace(needle, replacement, 1)
+          rtext = rtext.replace('WHERE id = $1`, [req.params.id]);', 'WHERE id = $1`, [orderId]);', 1)
+          reputation.write_text(rtext)
+      - name: Verify backend syntax
+        run: |
+          node --check backend/server.js
+          node --check backend/marketplaceTransactions.js
+          node --check backend/marketplaceReputation.js
+      - name: Verify Android
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:compileDebugKotlin --no-daemon
+          ./gradlew lintDebug testDebugUnitTest assembleDebug --no-daemon
+      - name: Commit marketplace completion
+        run: |
+          git config user.name 'FYNX Builder'
+          git config user.email 'fynx-builder@users.noreply.github.com'
+          git add app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt backend/marketplaceReputation.js
+          git diff --cached --quiet && { echo 'No marketplace changes to commit'; exit 0; }
+          git commit -m 'Complete marketplace product detail reviews and security'
+          git push origin main
