@@ -1,0 +1,52 @@
+name: Repair FYNX Marketplace Kotlin
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Repair missing Compose Row brace
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt')
+          s = p.read_text()
+          old = 'Row { (1..5).forEach { star -> TextButton(onClick = { rating = star }) { Text(if (star <= rating) "★" else "☆") } }\n                OutlinedTextField'
+          new = 'Row { (1..5).forEach { star -> TextButton(onClick = { rating = star }) { Text(if (star <= rating) "★" else "☆") } } }\n                OutlinedTextField'
+          if old not in s:
+              print('Marketplace Kotlin brace already repaired or pattern not present.')
+          else:
+              p.write_text(s.replace(old, new, 1))
+              print('Repaired missing closing brace for review-star Row.')
+          PY
+
+      - name: Commit repair
+        run: |
+          if git diff --quiet -- app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt; then
+            echo 'No repair commit needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt
+          git commit -m 'Fix marketplace payment Kotlin syntax'
+          git push
+
+      - name: Remove one-time repair workflow
+        if: success()
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/repair-marketplace-kotlin.yml
+          git commit -m 'Remove temporary marketplace repair workflow'
+          git push
