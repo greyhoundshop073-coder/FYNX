@@ -74,7 +74,11 @@ object FynxRemoteSocialClient {
         val productTitle: String,
         val sellerUsername: String?,
         val status: String,
-        val trackingReference: String?
+        val trackingReference: String?,
+        val fulfillmentMethod: String,
+        val shippingAddress: JSONObject?,
+        val buyerNote: String,
+        val inspectionDeadline: String?
     )
 
     suspend fun feed(context: Context): Result<List<RemotePost>> =
@@ -284,14 +288,13 @@ object FynxRemoteSocialClient {
         FynxBackendClient.get(context, "/api/marketplace/orders").mapCatching { raw ->
             val array = JSONObject(raw).optJSONArray("orders") ?: JSONArray()
             buildList {
-                for (i in 0 until array.length()) {
-                    add(parseOrder(array.getJSONObject(i)))
-                }
+                for (i in 0 until array.length()) add(parseOrder(array.getJSONObject(i)))
             }
         }
 
     private fun parseOrder(o: JSONObject): MarketplaceOrder {
         val product = o.optJSONObject("product")
+        val address = o.optJSONObject("shippingAddress")
         return MarketplaceOrder(
             id = o.optString("id"),
             buyerId = o.optString("buyerId"),
@@ -302,23 +305,63 @@ object FynxRemoteSocialClient {
             deliveryFee = o.optDouble("deliveryFee"),
             totalAmount = o.optDouble("totalAmount"),
             currency = o.optString("currency", "NGN"),
-            productTitle = product?.optString("title").orEmpty().ifBlank {
-                o.optString("productTitle")
-            },
+            productTitle = product?.optString("title").orEmpty().ifBlank { o.optString("productTitle") },
             sellerUsername = o.optString("sellerUsername").takeIf { it.isNotBlank() }
                 ?: product?.optString("sellerUsername")?.takeIf { it.isNotBlank() },
             status = o.optString("status"),
-            trackingReference = o.optString("trackingReference")
-                .takeIf { it.isNotBlank() }
+            trackingReference = o.optString("trackingReference").takeIf { it.isNotBlank() },
+            fulfillmentMethod = o.optString("fulfillmentMethod", "DELIVERY"),
+            shippingAddress = address,
+            buyerNote = o.optString("buyerNote"),
+            inspectionDeadline = o.optString("inspectionDeadline").takeIf { it.isNotBlank() }
         )
     }
 
-    suspend fun cancelMarketplaceOrder(context: Context, id: String): Result<Unit> =
+    suspend fun setMarketplaceFulfillment(
+        context: Context,
+        id: String,
+        method: String,
+        name: String = "",
+        phone: String = "",
+        address: String = "",
+        city: String = "",
+        state: String = "",
+        country: String = "",
+        buyerNote: String = ""
+    ): Result<Unit> {
+        val safeMethod = method.trim().uppercase()
+        require(safeMethod == "DELIVERY" || safeMethod == "PICKUP") { "Choose delivery or pickup." }
+        if (safeMethod == "DELIVERY") {
+            require(name.trim().isNotBlank() && phone.trim().isNotBlank() && address.trim().isNotBlank()) {
+                "Name, phone and delivery address are required."
+            }
+        }
+        val shipping = if (safeMethod == "DELIVERY") JSONObject().apply {
+            put("name", name.trim().take(120)); put("phone", phone.trim().take(40)); put("address", address.trim().take(500))
+            put("city", city.trim().take(100)); put("state", state.trim().take(100)); put("country", country.trim().take(100))
+        } else JSONObject.NULL
+        return FynxBackendClient.postJson(
+            context,
+            "/api/marketplace/orders/$id/fulfillment",
+            JSONObject().apply { put("method", safeMethod); put("shippingAddress", shipping); put("buyerNote", buyerNote.trim().take(1000)) }.toString()
+        ).map { Unit }
+    }
+
+    suspend fun shipMarketplaceOrder(context: Context, id: String, trackingReference: String): Result<Unit> =
         FynxBackendClient.postJson(
             context,
-            "/api/marketplace/orders/$id/cancel",
-            "{}"
+            "/api/marketplace/orders/$id/ship",
+            JSONObject().put("trackingReference", trackingReference.trim().take(160)).toString()
         ).map { Unit }
+
+    suspend fun confirmMarketplaceDelivery(context: Context, id: String): Result<Unit> =
+        FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/confirm-delivery", "{}").map { Unit }
+
+    suspend fun completeMarketplaceOrder(context: Context, id: String): Result<Unit> =
+        FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/complete", "{}").map { Unit }
+
+    suspend fun cancelMarketplaceOrder(context: Context, id: String): Result<Unit> =
+        FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/cancel", "{}").map { Unit }
 
     suspend fun disputeMarketplaceOrder(
         context: Context,
@@ -327,23 +370,12 @@ object FynxRemoteSocialClient {
         details: String
     ): Result<Unit> {
         val safeReason = reason.trim().uppercase().takeIf {
-            it in setOf(
-                "ITEM_NOT_RECEIVED",
-                "WRONG_ITEM",
-                "DAMAGED",
-                "NOT_AS_DESCRIBED",
-                "SUSPECTED_SCAM",
-                "OTHER"
-            )
+            it in setOf("ITEM_NOT_RECEIVED", "WRONG_ITEM", "DAMAGED", "NOT_AS_DESCRIBED", "SUSPECTED_SCAM", "OTHER")
         } ?: "OTHER"
-
         return FynxBackendClient.postJson(
             context,
             "/api/marketplace/orders/$id/disputes",
-            JSONObject().apply {
-                put("reason", safeReason)
-                put("details", details.trim().take(4000))
-            }.toString()
+            JSONObject().apply { put("reason", safeReason); put("details", details.trim().take(4000)) }.toString()
         ).map { Unit }
     }
 
@@ -357,122 +389,59 @@ object FynxRemoteSocialClient {
         return FynxBackendClient.postJson(
             context,
             "/api/marketplace/orders/$id/review",
-            JSONObject().apply {
-                put("rating", rating)
-                put("comment", comment.trim().take(1000))
-            }.toString()
+            JSONObject().apply { put("rating", rating); put("comment", comment.trim().take(1000)) }.toString()
         ).map { Unit }
     }
 
     suspend fun like(context: Context, id: String): Result<Pair<Boolean, Int>> {
-        val numericId = id.toLongOrNull()
-            ?: return Result.failure(IllegalArgumentException("invalid post id"))
-        return FynxBackendClient.postJson(
-            context,
-            "/api/social/posts/$numericId/like",
-            "{}"
-        ).mapCatching { raw ->
-            val o = JSONObject(raw)
-            o.optBoolean("liked") to o.optInt("likeCount")
+        val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        return FynxBackendClient.postJson(context, "/api/social/posts/$numericId/like", "{}").mapCatching { raw ->
+            val o = JSONObject(raw); o.optBoolean("liked") to o.optInt("likeCount")
         }
     }
 
     suspend fun comments(context: Context, id: String): Result<List<RemoteComment>> {
-        val numericId = id.toLongOrNull()
-            ?: return Result.failure(IllegalArgumentException("invalid post id"))
-        return FynxBackendClient.get(
-            context,
-            "/api/social/posts/$numericId/comments"
-        ).mapCatching { raw ->
+        val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        return FynxBackendClient.get(context, "/api/social/posts/$numericId/comments").mapCatching { raw ->
             val array = JSONObject(raw).optJSONArray("comments") ?: JSONArray()
             buildList {
                 for (i in 0 until array.length()) {
                     val o = array.getJSONObject(i)
-                    add(
-                        RemoteComment(
-                            id = o.optString("id"),
-                            text = o.optString("text"),
-                            timestamp = o.optDouble("timestamp").toLong(),
-                            authorId = o.optString("authorId"),
-                            authorUsername = o.optString("authorUsername"),
-                            authorDisplayName = o.optString("authorDisplayName")
-                        )
-                    )
+                    add(RemoteComment(o.optString("id"), o.optString("text"), o.optDouble("timestamp").toLong(), o.optString("authorId"), o.optString("authorUsername"), o.optString("authorDisplayName")))
                 }
             }
         }
     }
 
-    suspend fun addComment(
-        context: Context,
-        id: String,
-        text: String
-    ): Result<RemoteComment> {
-        val numericId = id.toLongOrNull()
-            ?: return Result.failure(IllegalArgumentException("invalid post id"))
-        return FynxBackendClient.postJson(
-            context,
-            "/api/social/posts/$numericId/comments",
-            JSONObject().put("text", text.trim()).toString()
-        ).mapCatching { raw ->
+    suspend fun addComment(context: Context, id: String, text: String): Result<RemoteComment> {
+        val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        return FynxBackendClient.postJson(context, "/api/social/posts/$numericId/comments", JSONObject().put("text", text.trim()).toString()).mapCatching { raw ->
             val o = JSONObject(raw).getJSONObject("comment")
-            RemoteComment(
-                id = o.optString("id"),
-                text = o.optString("text"),
-                timestamp = o.optDouble("timestamp").toLong(),
-                authorId = o.optString("authorId"),
-                authorUsername = o.optString("authorUsername"),
-                authorDisplayName = o.optString("authorDisplayName")
-            )
+            RemoteComment(o.optString("id"), o.optString("text"), o.optDouble("timestamp").toLong(), o.optString("authorId"), o.optString("authorUsername"), o.optString("authorDisplayName"))
         }
     }
 
     suspend fun likes(context: Context, id: String): Result<List<RemoteUser>> {
-        val numericId = id.toLongOrNull()
-            ?: return Result.failure(IllegalArgumentException("invalid post id"))
-        return FynxBackendClient.get(
-            context,
-            "/api/social/posts/$numericId/likes"
-        ).mapCatching { raw ->
+        val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        return FynxBackendClient.get(context, "/api/social/posts/$numericId/likes").mapCatching { raw ->
             val array = JSONObject(raw).optJSONArray("users") ?: JSONArray()
             buildList {
                 for (i in 0 until array.length()) {
-                    val o = array.getJSONObject(i)
-                    add(
-                        RemoteUser(
-                            id = o.optString("id"),
-                            username = o.optString("username"),
-                            displayName = o.optString("displayName")
-                        )
-                    )
+                    val o = array.getJSONObject(i); add(RemoteUser(o.optString("id"), o.optString("username"), o.optString("displayName")))
                 }
             }
         }
     }
 
-    suspend fun follow(
-        context: Context,
-        username: String,
-        following: Boolean
-    ): Result<Boolean> {
-        val encoded = URLEncoder.encode(
-            username.trim().removePrefix("@"),
-            "UTF-8"
-        )
-        return if (following) {
-            FynxBackendClient.delete(context, "/api/social/follow/$encoded").map { false }
-        } else {
-            FynxBackendClient.postJson(context, "/api/social/follow/$encoded", "{}").map { true }
-        }
+    suspend fun follow(context: Context, username: String, following: Boolean): Result<Boolean> {
+        val encoded = URLEncoder.encode(username.trim().removePrefix("@"), "UTF-8")
+        return if (following) FynxBackendClient.delete(context, "/api/social/follow/$encoded").map { false }
+        else FynxBackendClient.postJson(context, "/api/social/follow/$encoded", "{}").map { true }
     }
 
     suspend fun deletePost(context: Context, id: String): Result<Unit> {
-        val numericId = id.toLongOrNull()
-            ?: return Result.failure(IllegalArgumentException("invalid post id"))
-        return FynxBackendClient.delete(
-            context,
-            "/api/social/posts/$numericId"
-        ).map { Unit }
+        val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        return FynxBackendClient.delete(context, "/api/social/posts/$numericId").map { Unit }
     }
 
     private fun parseListings(raw: String): List<MarketplaceListing> {
@@ -481,33 +450,15 @@ object FynxRemoteSocialClient {
             for (i in 0 until array.length()) {
                 val o = array.getJSONObject(i)
                 val mediaArray = o.optJSONArray("media_ids") ?: JSONArray()
-                val mediaIds = buildList {
-                    for (j in 0 until mediaArray.length()) {
-                        add(mediaArray.get(j).toString())
-                    }
-                }
-                add(
-                    MarketplaceListing(
-                        id = o.optString("id"),
-                        sellerId = o.optString("seller_id"),
-                        sellerUsername = o.optString("seller_username"),
-                        sellerDisplayName = o.optString("seller_display_name"),
-                        storeName = o.optString("store_name"),
-                        title = o.optString("title"),
-                        description = o.optString("description"),
-                        price = o.optDouble("price"),
-                        currency = o.optString("currency", "NGN"),
-                        category = o.optString("category"),
-                        condition = o.optString("condition", "NEW"),
-                        quantity = o.optInt("quantity"),
-                        location = o.optString("location"),
-                        deliveryAvailable = o.optBoolean("delivery_available"),
-                        pickupAvailable = o.optBoolean("pickup_available", true),
-                        deliveryFee = if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"),
-                        mediaIds = mediaIds,
-                        active = o.optBoolean("active", true)
-                    )
-                )
+                val mediaIds = buildList { for (j in 0 until mediaArray.length()) add(mediaArray.get(j).toString()) }
+                add(MarketplaceListing(
+                    id = o.optString("id"), sellerId = o.optString("seller_id"), sellerUsername = o.optString("seller_username"),
+                    sellerDisplayName = o.optString("seller_display_name"), storeName = o.optString("store_name"), title = o.optString("title"),
+                    description = o.optString("description"), price = o.optDouble("price"), currency = o.optString("currency", "NGN"),
+                    category = o.optString("category"), condition = o.optString("condition", "NEW"), quantity = o.optInt("quantity"),
+                    location = o.optString("location"), deliveryAvailable = o.optBoolean("delivery_available"), pickupAvailable = o.optBoolean("pickup_available", true),
+                    deliveryFee = if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"), mediaIds = mediaIds, active = o.optBoolean("active", true)
+                ))
             }
         }
     }
