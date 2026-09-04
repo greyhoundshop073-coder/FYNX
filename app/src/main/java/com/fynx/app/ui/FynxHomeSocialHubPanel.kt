@@ -24,7 +24,8 @@ fun FynxHomeSocialHubPanel(
     onOpenProfile: () -> Unit = {},
     onOpenMarketplace: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
-    onOpenFindPeople: () -> Unit = {}
+    onOpenFindPeople: () -> Unit = {},
+    onOpenAi: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var showComposer by remember { mutableStateOf(false) }
@@ -44,11 +45,6 @@ fun FynxHomeSocialHubPanel(
     }
 
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        FynxVisibleUpdatesPanel(
-            currentUsername = currentUsername,
-            onOpenStories = onOpenStories,
-            onOpenAi = {}
-        )
         Box(Modifier.weight(1f).fillMaxWidth()) {
             HomePanel(
                 currentUsername = currentUsername,
@@ -57,7 +53,8 @@ fun FynxHomeSocialHubPanel(
                 onOpenProfile = onOpenProfile,
                 onOpenMarketplace = onOpenMarketplace,
                 onOpenNotifications = onOpenNotifications,
-                onOpenFindPeople = onOpenFindPeople
+                onOpenFindPeople = onOpenFindPeople,
+                onOpenAi = onOpenAi
             )
             FloatingActionButton(
                 onClick = { showComposer = true; capturedUri = null; text = ""; notice = null },
