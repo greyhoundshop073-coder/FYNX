@@ -3,7 +3,6 @@ package com.fynx.app.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ContentCopy
@@ -12,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +26,7 @@ import kotlinx.coroutines.withContext
 fun FynxAiCreationPanel(
     onUseCaptionForPost: (String) -> Unit = {}
 ) {
+    val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var mode by remember { mutableStateOf("caption") }
@@ -72,7 +73,7 @@ fun FynxAiCreationPanel(
         error = null
         scope.launch {
             val response = withContext(Dispatchers.IO) {
-                AiAssistantClient.sendMessage(LocalContextHolder.current, instruction)
+                AiAssistantClient.sendMessage(context, instruction)
             }
             response.onSuccess { result = it.trim() }
                 .onFailure { error = "FYNX AI is temporarily unavailable. Please try again." }
@@ -80,88 +81,85 @@ fun FynxAiCreationPanel(
         }
     }
 
-    CompositionLocalProvider(LocalContextHolder provides androidx.compose.ui.platform.LocalContext.current) {
-        Column(
-            Modifier.fillMaxSize().padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Column {
-                    Text("AI Creation", style = MaterialTheme.typography.headlineSmall)
-                    Text("Create with FYNX AI without leaving FYNX.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+    Column(
+        Modifier.fillMaxSize().padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Column {
+                Text("AI Creation", style = MaterialTheme.typography.headlineSmall)
+                Text("Create with FYNX AI without leaving FYNX.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(vertical = 2.dp)
-            ) {
-                item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        modes.forEach { (key, label) ->
-                            FilterChip(
-                                selected = mode == key,
-                                onClick = { mode = key; result = ""; error = null },
-                                label = { Text(label) },
-                                enabled = !loading
-                            )
-                        }
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(vertical = 2.dp)
+        ) {
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    modes.forEach { (key, label) ->
+                        FilterChip(
+                            selected = mode == key,
+                            onClick = { mode = key; result = ""; error = null },
+                            label = { Text(label) },
+                            enabled = !loading
+                        )
                     }
                 }
             }
+        }
 
-            OutlinedTextField(
-                value = input,
-                onValueChange = { input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH) },
+        OutlinedTextField(
+            value = input,
+            onValueChange = { input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH) },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 4,
+            maxLines = 8,
+            enabled = !loading,
+            shape = FynxDesign.ControlShape,
+            placeholder = { Text(when (mode) {
+                "rewrite" -> "Paste the caption you want improved…"
+                "ideas" -> "What do you want to post about?"
+                "product" -> "Enter your real product details…"
+                else -> "Describe the post you want to create…"
+            }) }
+        )
+
+        Button(
+            onClick = ::requestCreation,
+            enabled = !loading && input.trim().isNotEmpty(),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.AutoAwesome, contentDescription = null)
+            Spacer(Modifier.width(6.dp))
+            Text(if (loading) "Creating…" else "Create with AI")
+        }
+
+        error?.let {
+            Text(it, color = MaterialTheme.colorScheme.error)
+        }
+
+        if (result.isNotBlank()) {
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                minLines = 4,
-                maxLines = 8,
-                enabled = !loading,
-                shape = FynxDesign.ControlShape,
-                placeholder = { Text(when (mode) {
-                    "rewrite" -> "Paste the caption you want improved…"
-                    "ideas" -> "What do you want to post about?"
-                    "product" -> "Enter your real product details…"
-                    else -> "Describe the post you want to create…"
-                }) }
-            )
-
-            Button(
-                onClick = ::requestCreation,
-                enabled = !loading && input.trim().isNotEmpty(),
-                modifier = Modifier.fillMaxWidth()
+                shape = FynxDesign.CardShape,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .45f))
             ) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text(if (loading) "Creating…" else "Create with AI")
-            }
-
-            error?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
-            }
-
-            if (result.isNotBlank()) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = FynxDesign.CardShape,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .45f))
-                ) {
-                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(result)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { clipboard.setText(AnnotatedString(result)) }) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = null)
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(result)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { clipboard.setText(AnnotatedString(result)) }) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Copy")
+                        }
+                        if (mode == "caption" || mode == "rewrite") {
+                            Button(onClick = { onUseCaptionForPost(result) }) {
+                                Icon(Icons.Default.Send, contentDescription = null)
                                 Spacer(Modifier.width(4.dp))
-                                Text("Copy")
-                            }
-                            if (mode == "caption" || mode == "rewrite") {
-                                Button(onClick = { onUseCaptionForPost(result) }) {
-                                    Icon(Icons.Default.Send, contentDescription = null)
-                                    Spacer(Modifier.width(4.dp))
-                                    Text("Use in post")
-                                }
+                                Text("Use in post")
                             }
                         }
                     }
@@ -169,8 +167,4 @@ fun FynxAiCreationPanel(
             }
         }
     }
-}
-
-private val LocalContextHolder = staticCompositionLocalOf<android.content.Context> {
-    error("FYNX AI creation context not provided")
 }
