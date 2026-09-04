@@ -41,7 +41,8 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
             "Calendar" to "Calendar",
             "Money Tools" to "Money Planner",
             "Marketplace" to "Marketplace",
-            "Chats" to "Messages"
+            "Chats" to "Messages",
+            "AI Creation" to "AI Creation"
         )
     }
 
