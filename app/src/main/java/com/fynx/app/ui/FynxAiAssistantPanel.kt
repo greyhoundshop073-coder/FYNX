@@ -1,18 +1,25 @@
 package com.fynx.app.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -20,15 +27,25 @@ import kotlinx.coroutines.withContext
 /** User-facing FYNX AI assistant. Sensitive FYNX data is not exposed by this panel. */
 @Composable
 fun FynxAiAssistantPanel() {
-    var messages by remember {
-        mutableStateOf(
-            listOf(AiMessage("Hi, I'm FYNX AI. Ask me a question and I'll help you.", false))
-        )
-    }
+    val welcome = remember { AiMessage("Hi, I'm FYNX AI. Ask me a question and I'll help you.", false) }
+    var messages by remember { mutableStateOf(listOf(welcome)) }
     var input by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    fun copyText(text: String) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("FYNX AI", text))
+    }
+
+    fun shareText(text: String) {
+        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+        }, "Share FYNX AI response"))
+    }
 
     Column(
         Modifier.fillMaxSize().padding(12.dp),
@@ -47,11 +64,30 @@ fun FynxAiAssistantPanel() {
                 )
             }
             Spacer(Modifier.width(10.dp))
-            Column {
+            Column(Modifier.weight(1f)) {
                 Text("FYNX AI", style = MaterialTheme.typography.headlineSmall)
                 Text(
                     "Private-by-default assistant",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(
+                enabled = !loading && messages.size > 1,
+                onClick = { messages = listOf(welcome); errorMessage = null }
+            ) {
+                Icon(Icons.Default.DeleteSweep, contentDescription = "Clear chat")
+            }
+        }
+
+        if (errorMessage != null) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            ) {
+                Text(
+                    errorMessage!!,
+                    modifier = Modifier.padding(12.dp),
+                    color = MaterialTheme.colorScheme.onErrorContainer
                 )
             }
         }
@@ -73,7 +109,19 @@ fun FynxAiAssistantPanel() {
                     ),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .45f))
                 ) {
-                    Text(message.text, Modifier.padding(14.dp))
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Text(message.text, Modifier.padding(2.dp))
+                        if (!message.fromUser) {
+                            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                                IconButton(onClick = { copyText(message.text) }) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy response")
+                                }
+                                IconButton(onClick = { shareText(message.text) }) {
+                                    Icon(Icons.Default.Share, contentDescription = "Share response")
+                                }
+                            }
+                        }
+                    }
                 }
             }
             if (loading) {
@@ -83,7 +131,10 @@ fun FynxAiAssistantPanel() {
 
         OutlinedTextField(
             value = input,
-            onValueChange = { input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH) },
+            onValueChange = {
+                input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH)
+                errorMessage = null
+            },
             modifier = Modifier.fillMaxWidth(),
             enabled = !loading,
             minLines = 2,
@@ -112,21 +163,23 @@ fun FynxAiAssistantPanel() {
                             )
                         )
                         if (!decision.allowed) {
-                            messages = messages + AiMessage("I couldn't process that request safely.", false)
+                            errorMessage = "I couldn't process that request safely."
                             return@IconButton
                         }
 
                         messages = messages + AiMessage(prompt, true)
                         input = ""
                         loading = true
+                        errorMessage = null
                         scope.launch {
                             val result = withContext(Dispatchers.IO) {
                                 AiAssistantClient.sendMessage(context, prompt)
                             }
-                            messages = messages + AiMessage(
-                                result.getOrElse { "FYNX AI is temporarily unavailable. Please try again." },
-                                false
-                            )
+                            result.onSuccess { reply ->
+                                messages = messages + AiMessage(reply, false)
+                            }.onFailure {
+                                errorMessage = "FYNX AI is temporarily unavailable. Please try again."
+                            }
                             loading = false
                         }
                     }
