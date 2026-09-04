@@ -43,7 +43,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
@@ -55,6 +58,7 @@ fun FynxCameraCapturePanel(
     val context = LocalContext.current
     val activity = context as? ComponentActivity
     val previewView = remember { PreviewView(context) }
+    val scope = rememberCoroutineScope()
     var hasCamera by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     var hasAudio by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -88,6 +92,7 @@ fun FynxCameraCapturePanel(
     var pendingOriginalUri by remember { mutableStateOf<Uri?>(null) }
     var pendingType by remember { mutableStateOf<String?>(null) }
     var filter by remember { mutableStateOf(CameraFilter.NATURAL) }
+    var enhancing by remember { mutableStateOf(false) }
 
     LaunchedEffect(recording != null, recordingStartedAt) {
         while (recording != null) {
@@ -176,6 +181,7 @@ fun FynxCameraCapturePanel(
         pendingOriginalUri = null
         pendingType = null
         filter = CameraFilter.NATURAL
+        enhancing = false
         error = null
     }
 
@@ -214,6 +220,27 @@ fun FynxCameraCapturePanel(
         }.onFailure { error = it.message ?: "Filter could not be applied" }
     }
 
+    fun enhancePhoto() {
+        val source = pendingUri ?: return
+        if (pendingType != "image" || enhancing) return
+        enhancing = true
+        error = null
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                FynxAiPhotoEnhancer.enhance(context, source)
+            }
+            result.onSuccess { enhancedUri ->
+                deleteUri(source)
+                pendingUri = enhancedUri
+                filter = CameraFilter.NATURAL
+                error = null
+            }.onFailure { throwable ->
+                error = throwable.message ?: "AI photo enhancement failed"
+            }
+            enhancing = false
+        }
+    }
+
     if (!hasCamera) {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -249,20 +276,27 @@ fun FynxCameraCapturePanel(
                     Text("Edit photo", style = MaterialTheme.typography.labelLarge)
                     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         CameraFilter.values().forEach { option ->
-                            FilterChip(selected = filter == option, onClick = { applyFilterToPhoto(option) }, label = { Text(option.label) })
+                            FilterChip(selected = filter == option, enabled = !enhancing, onClick = { applyFilterToPhoto(option) }, label = { Text(option.label) })
                         }
+                    }
+                    OutlinedButton(
+                        onClick = { enhancePhoto() },
+                        enabled = !enhancing,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    ) {
+                        Text(if (enhancing) "Enhancing…" else "✨ AI Enhance")
                     }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = { retake() }, modifier = Modifier.weight(1f)) { Text("Retake") }
+                    OutlinedButton(onClick = { if (!enhancing) retake() }, enabled = !enhancing, modifier = Modifier.weight(1f)) { Text("Retake") }
                     if (previewType == "image") {
-                        OutlinedButton(onClick = { rotatePhoto() }, modifier = Modifier.weight(1f)) {
+                        OutlinedButton(onClick = { if (!enhancing) rotatePhoto() }, enabled = !enhancing, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Default.RotateRight, null)
                             Spacer(Modifier.width(4.dp))
                             Text("Rotate")
                         }
                     }
-                    Button(onClick = { onCaptured(previewUri, previewType) }, modifier = Modifier.weight(1f)) {
+                    Button(onClick = { if (!enhancing) onCaptured(previewUri, previewType) }, enabled = !enhancing, modifier = Modifier.weight(1f)) {
                         Icon(Icons.Default.Send, null)
                         Spacer(Modifier.width(4.dp))
                         Text("Use")
