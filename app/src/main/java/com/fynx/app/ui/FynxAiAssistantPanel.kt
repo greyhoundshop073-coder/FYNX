@@ -119,7 +119,7 @@ fun FynxAiAssistantPanel() {
                         loading = true
                         scope.launch {
                             val result = withContext(Dispatchers.IO) {
-                                AiAssistantClient.sendMessage(prompt)
+                                AiAssistantClient.sendMessage(LocalContext.current, prompt)
                             }
                             messages = messages + AiMessage(
                                 result.getOrElse { "FYNX AI is temporarily unavailable. Please try again." },
