@@ -15,6 +15,7 @@ private data class MoneySection(val key: String, val title: String, val descript
 fun MoneyCenterPanel() {
     var selectedTool by remember { mutableStateOf<String?>(null) }
     val sections = listOf(
+        MoneySection("Planner", "Money Planner", "Track income and expenses, set budgets, save toward goals and plan recurring costs", "🗓️"),
         MoneySection("Dashboard", "Money Dashboard", "Balances, income, expenses and your overall money picture", "💰"),
         MoneySection("Transfer", "Send & Transfer Money", "Money transfers and payment movement", "↔️"),
         MoneySection("Bills", "Bills & Payments", "Bills, payment reminders and due amounts", "🧾"),
@@ -35,6 +36,7 @@ fun MoneyCenterPanel() {
         Column(Modifier.fillMaxSize()) {
             TextButton(onClick = { selectedTool = null }) { Text("← Money Center") }
             when (selectedTool) {
+                "Planner" -> MoneyPlannerPanel()
                 "Dashboard" -> MoneyToolsPanel()
                 "Transfer" -> FynxMoneyTransferPanel()
                 "Bills" -> BillsPaymentPanel()
@@ -64,8 +66,8 @@ fun MoneyCenterPanel() {
             Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("One place for your money", style = MaterialTheme.typography.titleLarge)
-                    Text("Accounts • transfers • bills • transactions • budgets • savings • subscriptions • insights", color = FynxDesign.TextSecondary)
-                    Text("Real bank and payment connections will be added later; current tracking tools remain local.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
+                    Text("Planner • accounts • transfers • bills • transactions • budgets • savings • subscriptions • insights", color = FynxDesign.TextSecondary)
+                    Text("Money Planner syncs your personal planning records to the authenticated FYNX backend; existing tracking tools remain available.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
                 }
             }
         }
