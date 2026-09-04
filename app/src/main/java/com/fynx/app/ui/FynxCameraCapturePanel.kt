@@ -44,7 +44,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.guava.await
 import java.io.File
 import java.io.FileOutputStream
 
@@ -77,6 +76,7 @@ fun FynxCameraCapturePanel(
     var cameraControl by remember { mutableStateOf<androidx.camera.core.CameraControl?>(null) }
     var cameraInfo by remember { mutableStateOf<androidx.camera.core.CameraInfo?>(null) }
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    var bindGeneration by remember { mutableIntStateOf(0) }
     var torchEnabled by remember { mutableStateOf(false) }
     var zoomRatio by remember { mutableFloatStateOf(1f) }
     var exposure by remember { mutableIntStateOf(0) }
@@ -96,15 +96,9 @@ fun FynxCameraCapturePanel(
         }
     }
 
-    fun formatCameraRecordingTime(milliseconds: Long): String {
-        val totalSeconds = milliseconds / 1000L
-        return "%02d:%02d".format(totalSeconds / 60L, totalSeconds % 60L)
-    }
-
-    // CameraX binding is driven by lens + mode, not by every Compose recomposition.
-    // This prevents competing async bind calls from making the preview freeze or
-    // leaving the front camera on the wrong use case after switching.
     LaunchedEffect(hasCamera, lens, mode, pendingUri, activity) {
+        val generation = bindGeneration + 1
+        bindGeneration = generation
         if (!hasCamera || activity == null || pendingUri != null) {
             cameraProvider?.unbindAll()
             imageCapture = null
@@ -114,49 +108,54 @@ fun FynxCameraCapturePanel(
             return@LaunchedEffect
         }
 
-        runCatching {
-            val provider = ProcessCameraProvider.getInstance(context).await()
-            cameraProvider = provider
-            val selector = CameraSelector.Builder().requireLensFacing(lens).build()
-            if (!provider.hasCamera(selector)) {
-                error = if (lens == CameraSelector.LENS_FACING_FRONT) "Front camera is not available on this device." else "Back camera is not available on this device."
-                if (lens == CameraSelector.LENS_FACING_FRONT) lens = CameraSelector.LENS_FACING_BACK
-                return@runCatching
-            }
+        val future = ProcessCameraProvider.getInstance(context)
+        future.addListener({
+            if (generation != bindGeneration || !hasCamera || pendingUri != null) return@addListener
+            runCatching {
+                val provider = future.get()
+                val selector = CameraSelector.Builder().requireLensFacing(lens).build()
+                if (!provider.hasCamera(selector)) {
+                    error = if (lens == CameraSelector.LENS_FACING_FRONT) "Front camera is not available on this device." else "Back camera is not available on this device."
+                    if (lens == CameraSelector.LENS_FACING_FRONT) lens = CameraSelector.LENS_FACING_BACK
+                    return@runCatching
+                }
 
-            val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
-            val capture = ImageCapture.Builder()
-                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                .build()
-            val recorder = Recorder.Builder()
-                .setQualitySelector(QualitySelector.from(Quality.HD, FallbackStrategy.lowerQualityOrHigherThan(Quality.SD)))
-                .build()
-            val video = VideoCapture.withOutput(recorder)
+                val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
+                val capture = ImageCapture.Builder()
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .build()
+                val recorder = Recorder.Builder()
+                    .setQualitySelector(QualitySelector.from(Quality.HD, FallbackStrategy.lowerQualityOrHigherThan(Quality.SD)))
+                    .build()
+                val video = VideoCapture.withOutput(recorder)
 
-            provider.unbindAll()
-            val camera = if (mode == CameraMode.PHOTO) {
-                provider.bindToLifecycle(activity, selector, preview, capture)
-            } else {
-                provider.bindToLifecycle(activity, selector, preview, video)
-            }
+                provider.unbindAll()
+                if (generation != bindGeneration || pendingUri != null) return@runCatching
+                val camera = if (mode == CameraMode.PHOTO) {
+                    provider.bindToLifecycle(activity, selector, preview, capture)
+                } else {
+                    provider.bindToLifecycle(activity, selector, preview, video)
+                }
 
-            imageCapture = capture
-            videoCapture = video
-            cameraControl = camera.cameraControl
-            cameraInfo = camera.cameraInfo
-            cameraControl?.setZoomRatio(zoomRatio.coerceIn(1f, 4f))
-            val range = cameraInfo?.exposureState?.exposureCompensationRange
-            exposure = exposure.coerceIn(range?.lower ?: -2, range?.upper ?: 2)
-            cameraControl?.setExposureCompensationIndex(exposure)
-            if (torchEnabled && cameraInfo?.hasFlashUnit() == true) {
-                cameraControl?.enableTorch(true)
-            } else if (torchEnabled) {
-                torchEnabled = false
+                cameraProvider = provider
+                imageCapture = capture
+                videoCapture = video
+                cameraControl = camera.cameraControl
+                cameraInfo = camera.cameraInfo
+                cameraControl?.setZoomRatio(zoomRatio.coerceIn(1f, 4f))
+                val range = cameraInfo?.exposureState?.exposureCompensationRange
+                exposure = exposure.coerceIn(range?.lower ?: -2, range?.upper ?: 2)
+                cameraControl?.setExposureCompensationIndex(exposure)
+                if (torchEnabled && cameraInfo?.hasFlashUnit() == true) {
+                    cameraControl?.enableTorch(true)
+                } else if (torchEnabled) {
+                    torchEnabled = false
+                }
+                error = null
+            }.onFailure {
+                if (generation == bindGeneration) error = it.message ?: "Camera could not start"
             }
-            error = null
-        }.onFailure {
-            error = it.message ?: "Camera could not start"
-        }
+        }, ContextCompat.getMainExecutor(context))
     }
 
     DisposableEffect(Unit) {
@@ -188,9 +187,7 @@ fun FynxCameraCapturePanel(
             val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo")
             val matrix = Matrix().apply { postRotate(90f) }
             val rotated = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-            FileOutputStream(source).use { output ->
-                check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, output)) { "Unable to save rotated photo" }
-            }
+            FileOutputStream(source).use { output -> check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, output)) { "Unable to save rotated photo" } }
             bitmap.recycle()
             rotated.recycle()
         }.onFailure { error = it.message ?: "Photo rotation failed" }
@@ -209,9 +206,7 @@ fun FynxCameraCapturePanel(
             val canvas = android.graphics.Canvas(outputBitmap)
             val paint = android.graphics.Paint().apply { colorFilter = ColorMatrixColorFilter(matrix) }
             canvas.drawBitmap(bitmap, 0f, 0f, paint)
-            FileOutputStream(target).use { output ->
-                check(outputBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, output)) { "Unable to save filtered photo" }
-            }
+            FileOutputStream(target).use { output -> check(outputBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, output)) { "Unable to save filtered photo" } }
             bitmap.recycle()
             outputBitmap.recycle()
             filter = selected
@@ -279,10 +274,7 @@ fun FynxCameraCapturePanel(
     }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        AndroidView(
-            factory = { previewView },
-            modifier = Modifier.fillMaxSize()
-        )
+        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { if (recording == null) onDismiss() }) { Icon(Icons.Default.Close, "Close camera") }
@@ -298,9 +290,7 @@ fun FynxCameraCapturePanel(
                         if (cameraInfo?.hasFlashUnit() == true) {
                             torchEnabled = !torchEnabled
                             cameraControl?.enableTorch(torchEnabled)
-                        } else {
-                            error = "Flash is not available on this camera."
-                        }
+                        } else error = "Flash is not available on this camera."
                     }
                 }) { Icon(Icons.Default.FlashOn, if (torchEnabled) "Turn flash off" else "Turn flash on") }
             }
@@ -329,27 +319,23 @@ fun FynxCameraCapturePanel(
                         val output = ImageCapture.OutputFileOptions.Builder(file).build()
                         capture.takePicture(output, ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageSavedCallback {
                             override fun onImageSaved(result: ImageCapture.OutputFileResults) {
-                                runCatching { file.copyTo(original, overwrite = true) }
-                                    .onSuccess {
-                                        pendingUri = Uri.fromFile(file)
-                                        pendingOriginalUri = Uri.fromFile(original)
-                                        pendingType = "image"
-                                        filter = CameraFilter.NATURAL
-                                        error = null
-                                    }
-                                    .onFailure {
-                                        file.delete()
-                                        original.delete()
-                                        error = it.message ?: "Photo could not be prepared"
-                                    }
+                                runCatching { file.copyTo(original, overwrite = true) }.onSuccess {
+                                    pendingUri = Uri.fromFile(file)
+                                    pendingOriginalUri = Uri.fromFile(original)
+                                    pendingType = "image"
+                                    filter = CameraFilter.NATURAL
+                                    error = null
+                                }.onFailure {
+                                    file.delete()
+                                    original.delete()
+                                    error = it.message ?: "Photo could not be prepared"
+                                }
                             }
                             override fun onError(exception: ImageCaptureException) { error = exception.message ?: "Photo capture failed" }
                         })
                     } else {
                         val active = recording
-                        if (active != null) {
-                            active.stop()
-                        } else {
+                        if (active != null) active.stop() else {
                             val capture = videoCapture ?: run { error = "Video camera is still starting"; return@FilledIconButton }
                             val file = File(context.cacheDir, "fynx_video_${System.currentTimeMillis()}.mp4")
                             val output = FileOutputOptions.Builder(file).build()
@@ -380,6 +366,11 @@ fun FynxCameraCapturePanel(
     }
 }
 
+private fun formatCameraRecordingTime(milliseconds: Long): String {
+    val totalSeconds = milliseconds / 1000L
+    return "%02d:%02d".format(totalSeconds / 60L, totalSeconds % 60L)
+}
+
 enum class CameraMode { PHOTO, VIDEO }
 
 enum class CameraFilter(val label: String, val saturation: Float, val brightness: Float, val contrast: Float) {
@@ -388,4 +379,16 @@ enum class CameraFilter(val label: String, val saturation: Float, val brightness
     WARM("Warm", 1.1f, 0.04f, 1.02f),
     COOL("Cool", 0.9f, 0.02f, 1.02f),
     BW("B&W", 0f, 0f, 1.08f)
+}
+
+private fun ColorMatrix.setFynxFilter(saturation: Float, brightness: Float, contrast: Float, alpha: Float) {
+    setSaturation(saturation)
+    val scale = contrast
+    val translate = brightness * 255f
+    postConcat(ColorMatrix(floatArrayOf(
+        scale, 0f, 0f, 0f, translate,
+        0f, scale, 0f, 0f, translate,
+        0f, 0f, scale, 0f, translate,
+        0f, 0f, 0f, alpha, 0f
+    )))
 }
