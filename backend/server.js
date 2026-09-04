@@ -175,6 +175,46 @@ app.get("/api/me", auth, async (req, res) => {
   } catch (error) { console.error("me", error); return res.status(500).json({ error: "request failed" }); }
 });
 
+
+app.post("/api/assistant", auth, async (req, res) => {
+  try {
+    requireConfig("OPENAI_API_KEY", OPENAI_API_KEY);
+    const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+    if (!message) return res.status(400).json({ error: "message is required" });
+    if (message.length > 4000) return res.status(413).json({ error: "message is too long" });
+
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        instructions: "You are FYNX AI, a helpful assistant inside the FYNX social, communication, marketplace, planning and safety app. Be clear, concise and friendly. Do not claim to have performed FYNX actions unless an approved backend function actually performed them. Never request or expose secrets. For financial matters, provide guidance only and require explicit confirmation before any real transaction.",
+        input: message,
+        store: false
+      })
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      console.error("assistant provider", response.status, data?.error?.message || "request failed");
+      return res.status(502).json({ error: "AI provider request failed" });
+    }
+
+    const reply = typeof data?.output_text === "string"
+      ? data.output_text.trim()
+      : (Array.isArray(data?.output) ? data.output.flatMap(item => Array.isArray(item?.content) ? item.content : []).filter(part => part?.type === "output_text").map(part => part.text).join("\n").trim() : "");
+
+    if (!reply) return res.status(502).json({ error: "AI provider returned an empty response" });
+    return res.json({ reply });
+  } catch (error) {
+    console.error("assistant", error);
+    return res.status(500).json({ error: "assistant request failed" });
+  }
+});
+
 app.post("/api/media", auth, async (req, res) => {
   try {
     requireConfig("DATABASE_URL", DATABASE_URL);
