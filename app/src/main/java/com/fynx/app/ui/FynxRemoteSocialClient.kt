@@ -41,7 +41,7 @@ object FynxRemoteSocialClient {
             val type = when {
                 mime.startsWith("image/") -> "image"
                 mime.startsWith("video/") -> "video"
-                else if (mime.startsWith("audio/")) -> "audio"
+                mime.startsWith("audio/") -> "audio"
                 else -> throw IllegalArgumentException("Select an image, video or audio.")
             }
             FynxProductionMessaging.uploadMedia(context, it, mime).getOrThrow() to type
