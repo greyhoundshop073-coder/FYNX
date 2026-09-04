@@ -352,7 +352,7 @@ private fun OrderActions(context: android.content.Context, order: FynxRemoteSoci
             else if (order.status == "PAYMENT_PENDING") Text("You can cancel this unpaid order.")
             else if (order.status == "COMPLETED") {
                 Text("Rate seller")
-                Row { (1..5).forEach { star -> TextButton(onClick = { rating = star }) { Text(if (star <= rating) "★" else "☆") } }
+                Row { (1..5).forEach { star -> TextButton(onClick = { rating = star }) { Text(if (star <= rating) "★" else "☆") } } }
                 OutlinedTextField(comment, { comment = it }, label = { Text("Review") }, minLines = 2)
             }
         }
