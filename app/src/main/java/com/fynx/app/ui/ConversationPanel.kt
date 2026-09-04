@@ -202,9 +202,48 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         } else file?.delete()
     }
     fun playVoice(message: ChatMessage) {
+        val voiceUrl = message.voiceUri ?: return
         player?.release()
-        player = runCatching { MediaPlayer().apply { setDataSource(message.voiceUri); prepare(); setOnCompletionListener { playingVoiceId = null }; start() } }.getOrNull()
-        playingVoiceId = if (player != null) message.id else null
+        player = null
+        playingVoiceId = null
+        scope.launch {
+            val localUri = if (voiceUrl.startsWith("http://") || voiceUrl.startsWith("https://") || voiceUrl.startsWith("/api/")) {
+                val mediaId = message.mediaId ?: voiceUrl.substringAfterLast('/').takeIf { it.isNotBlank() }
+                if (mediaId == null) {
+                    networkError = "Voice message media is unavailable"
+                    return@launch
+                }
+                FynxProductionMessaging.cacheRemoteMedia(context, mediaId, voiceUrl).getOrElse {
+                    networkError = it.message ?: "Voice message could not be loaded"
+                    return@launch
+                }
+            } else Uri.parse(voiceUrl)
+            val preparedPlayer = runCatching {
+                MediaPlayer().apply {
+                    setDataSource(context, localUri)
+                    setOnCompletionListener {
+                        playingVoiceId = null
+                        release()
+                        player = null
+                    }
+                    setOnErrorListener { _, _, _ ->
+                        playingVoiceId = null
+                        release()
+                        player = null
+                        true
+                    }
+                    prepare()
+                    start()
+                }
+            }.getOrElse {
+                networkError = it.message ?: "Voice message could not be played"
+                null
+            }
+            if (preparedPlayer != null) {
+                player = preparedPlayer
+                playingVoiceId = message.id
+            }
+        }
     }
 
     val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, ignoreCase = true) }
