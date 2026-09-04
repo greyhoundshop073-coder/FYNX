@@ -149,4 +149,126 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
       return res.status(500).json({ error: 'seller review failed' });
     }
   });
+
+  const paystackSecret = () => process.env.PAYSTACK_SECRET_KEY || '';
+
+  const paystackRequest = async (path, options = {}) => {
+    const secret = paystackSecret();
+    if (!secret) throw Object.assign(new Error('PAYSTACK_SECRET_KEY is not configured'), { code: 'PAYSTACK_NOT_CONFIGURED' });
+    const response = await fetch(`https://api.paystack.co${path}`, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
+      }
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data?.status !== true) {
+      const message = data?.message || `Paystack request failed (${response.status})`;
+      throw Object.assign(new Error(message), { code: 'PAYSTACK_REQUEST_FAILED', status: response.status });
+    }
+    return data;
+  };
+
+  const parseOrderId = (value) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value.trim()) ? value.trim() : null;
+
+  const amountSubunit = (amount, currency) => {
+    const normalized = String(currency || '').trim().toUpperCase();
+    if (!['NGN', 'USD'].includes(normalized)) return null;
+    const value = Number(amount);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return Math.round(value * 100);
+  };
+
+  app.post('/api/marketplace/orders/:id/payment', auth, async (req, res) => {
+    const orderId = parseOrderId(req.params.id);
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (!orderId || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'valid order id and customer email are required' });
+    try {
+      const orderResult = await pool.query(`SELECT id,buyer_id,total_amount,currency,status,payment_reference FROM marketplace_orders WHERE id=$1`, [orderId]);
+      const order = orderResult.rows[0];
+      if (!order) return res.status(404).json({ error: 'order not found' });
+      if (String(order.buyer_id) !== String(req.user.sub)) return res.status(403).json({ error: 'only the buyer can pay this order' });
+      if (order.status !== 'PAYMENT_PENDING') return res.status(409).json({ error: 'this order is not awaiting payment' });
+      const amount = amountSubunit(order.total_amount, order.currency);
+      if (!amount) return res.status(400).json({ error: 'unsupported marketplace payment currency or amount' });
+
+      const reference = `FYNX-${order.id}-${Date.now()}`;
+      const payload = {
+        email,
+        amount: String(amount),
+        currency: String(order.currency).toUpperCase(),
+        reference,
+        metadata: {
+          orderId: String(order.id),
+          buyerId: String(order.buyer_id),
+          purpose: 'FYNX_MARKETPLACE_ORDER'
+        }
+      };
+      if (process.env.PAYSTACK_CALLBACK_URL) payload.callback_url = process.env.PAYSTACK_CALLBACK_URL;
+
+      const data = await paystackRequest('/transaction/initialize', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      await pool.query('UPDATE marketplace_orders SET payment_reference=$1,updated_at=NOW() WHERE id=$2 AND buyer_id=$3 AND status=\'PAYMENT_PENDING\'', [reference, order.id, req.user.sub]);
+      return res.status(201).json({
+        orderId: String(order.id),
+        reference,
+        authorizationUrl: data.data.authorization_url,
+        accessCode: data.data.access_code,
+        amountSubunit: amount,
+        currency: String(order.currency).toUpperCase()
+      });
+    } catch (error) {
+      if (error?.code === 'PAYSTACK_NOT_CONFIGURED') return res.status(503).json({ error: 'marketplace payments are not configured yet' });
+      console.error('marketplace payment initialize', error);
+      return res.status(502).json({ error: 'payment initialization failed' });
+    }
+  });
+
+  app.get('/api/marketplace/payments/verify/:reference', auth, async (req, res) => {
+    const reference = typeof req.params.reference === 'string' ? req.params.reference.trim() : '';
+    if (!/^[A-Za-z0-9_.=-]{8,100}$/.test(reference)) return res.status(400).json({ error: 'invalid payment reference' });
+    try {
+      const orderResult = await pool.query(`SELECT id,buyer_id,listing_id,quantity,total_amount,currency,status,payment_reference FROM marketplace_orders WHERE payment_reference=$1`, [reference]);
+      const order = orderResult.rows[0];
+      if (!order) return res.status(404).json({ error: 'payment order not found' });
+      if (String(order.buyer_id) !== String(req.user.sub)) return res.status(403).json({ error: 'payment unavailable' });
+
+      const data = await paystackRequest(`/transaction/verify/${encodeURIComponent(reference)}`);
+      const transaction = data.data || {};
+      const expectedAmount = amountSubunit(order.total_amount, order.currency);
+      const paidAmount = Number(transaction.amount);
+      const paidCurrency = String(transaction.currency || '').toUpperCase();
+      const metadataOrderId = String(transaction.metadata?.orderId || transaction.metadata?.order_id || '');
+      const valid = transaction.status === 'success' && expectedAmount === paidAmount && paidCurrency === String(order.currency).toUpperCase() && metadataOrderId === String(order.id);
+      if (!valid) return res.status(409).json({ error: 'payment could not be verified', status: transaction.status || 'unknown' });
+
+      if (order.status === 'PAYMENT_PENDING') {
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          const locked = (await client.query('SELECT * FROM marketplace_orders WHERE id=$1 FOR UPDATE', [order.id])).rows[0];
+          if (!locked) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
+          if (String(locked.buyer_id) !== String(req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'payment unavailable' }); }
+          if (locked.status === 'PAYMENT_PENDING') {
+            await client.query(`UPDATE marketplace_orders SET status='PAID',updated_at=NOW() WHERE id=$1`, [order.id]);
+            await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'PAYMENT_CONFIRMED',$3,'PAID',$4::jsonb)`, [order.id, req.user.sub, locked.status, JSON.stringify({ reference, provider: 'paystack', amount: paidAmount, currency: paidCurrency })]);
+          }
+          await client.query('COMMIT');
+        } catch (error) {
+          try { await client.query('ROLLBACK'); } catch {}
+          throw error;
+        } finally { client.release(); }
+      }
+      const updated = (await pool.query('SELECT * FROM marketplace_orders WHERE id=$1', [order.id])).rows[0];
+      return res.json({ verified: true, order: { id: String(updated.id), status: updated.status, paymentReference: updated.payment_reference, totalAmount: Number(updated.total_amount), currency: updated.currency } });
+    } catch (error) {
+      if (error?.code === 'PAYSTACK_NOT_CONFIGURED') return res.status(503).json({ error: 'marketplace payments are not configured yet' });
+      console.error('marketplace payment verify', error);
+      return res.status(502).json({ error: 'payment verification failed' });
+    }
+  });
 }
