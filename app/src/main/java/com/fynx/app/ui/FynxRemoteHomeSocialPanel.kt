@@ -2,6 +2,7 @@ package com.fynx.app.ui
 
 import android.content.Context
 import android.content.Intent
+import android.media.MediaPlayer
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.view.ViewGroup
@@ -49,12 +50,13 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
     var error by remember { mutableStateOf<String?>(null) }
     var composerOpen by remember { mutableStateOf(false) }
     var selectedMedia by remember { mutableStateOf<Uri?>(null) }
+    var selectedMediaType by remember { mutableStateOf<String?>(null) }
     var composerText by remember { mutableStateOf("") }
     var visibility by remember { mutableStateOf(FynxPostVisibility.PUBLIC) }
     var busy by remember { mutableStateOf(false) }
     var commentsPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
     var likesPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { selectedMedia = it }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> selectedMedia = uri; selectedMediaType = uri?.let { context.contentResolver.getType(it)?.substringBefore("/") } }
 
     fun reload() {
         scope.launch {
@@ -104,8 +106,9 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { picker.launch("image/*") }, Modifier.weight(1f)) { Text("Photo") }
                         OutlinedButton(onClick = { picker.launch("video/*") }, Modifier.weight(1f)) { Text("Video") }
+                        OutlinedButton(onClick = { picker.launch("audio/*") }, Modifier.weight(1f)) { Text("Voice") }
                     }
-                    if (selectedMedia != null) Text("Media selected", style = MaterialTheme.typography.bodySmall)
+                    if (selectedMedia != null) Text(if (selectedMediaType == "audio") "Voice post selected" else "Media selected", style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(visibility == FynxPostVisibility.PUBLIC, { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") })
                         FilterChip(visibility == FynxPostVisibility.FRIENDS_ONLY, { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") })
@@ -159,6 +162,7 @@ private fun RemoteSocialMedia(path: String, type: String?) {
     var file by remember(path) { mutableStateOf<File?>(null) }
     LaunchedEffect(path) { file = withContext(Dispatchers.IO) { download(context, path, type) } }
     if (file == null) Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+    else if (type == "audio") AudioPostPlayer(file!!)
     else if (type == "video") AndroidView(factory = { ctx -> VideoView(ctx).apply { layoutParams = ViewGroup.LayoutParams(-1, 640); setMediaController(MediaController(ctx)); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxWidth().height(320.dp))
     else {
         var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
@@ -186,3 +190,17 @@ private fun CommentsDialog(post: FynxRemoteSocialClient.RemotePost, onClose: () 
 private fun LikesDialog(post: FynxRemoteSocialClient.RemotePost, onClose: () -> Unit) { val context = LocalContext.current; var list by remember(post.id) { mutableStateOf<List<FynxRemoteSocialClient.RemoteUser>>(emptyList()) }; LaunchedEffect(post.id) { FynxRemoteSocialClient.likes(context, post.id).onSuccess { list = it } }; AlertDialog(onDismissRequest = onClose, title = { Text("People who liked this") }, text = { LazyColumn { items(list) { user -> Row(Modifier.fillMaxWidth().padding(7.dp), verticalAlignment = Alignment.CenterVertically) { FynxAvatar(user.username, Modifier.size(38.dp)); Spacer(Modifier.width(10.dp)); Column { Text(user.displayName.ifBlank { user.username }); Text("@${user.username.removePrefix("@")}", style = MaterialTheme.typography.labelSmall) } } } } }, confirmButton = { TextButton(onClick = onClose) { Text("Close") } }) }
 
 private fun relative(timestamp: Long): String { val minutes = TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L)); return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" } }
+
+@Composable
+private fun AudioPostPlayer(file: File) {
+    val player = remember(file) { MediaPlayer().apply { setDataSource(file.absolutePath); prepare() } }
+    var playing by remember(file) { mutableStateOf(false) }
+    DisposableEffect(player) { onDispose { player.release() } }
+    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Button(onClick = { if (player.isPlaying) { player.pause(); playing = false } else { player.start(); playing = true } }) {
+            Text(if (playing) "Pause" else "Play voice")
+        }
+        Spacer(Modifier.width(10.dp))
+        Text("${(player.duration / 1000).coerceAtLeast(0)}s")
+    }
+}
