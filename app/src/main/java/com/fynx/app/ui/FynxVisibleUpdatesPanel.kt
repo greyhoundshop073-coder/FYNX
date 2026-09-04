@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, onOpenAi: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Card(onClick = onOpenAi, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .35f))) {
+        Card(onClick = onOpenAi, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .35f))) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Spacer(Modifier.width(14.dp))
                 Surface(modifier = Modifier.size(52.dp).clip(CircleShape), color = MaterialTheme.colorScheme.primaryContainer, shape = CircleShape) {
@@ -44,7 +44,7 @@ fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, 
                 Spacer(Modifier.width(14.dp))
             }
         }
-        Card(onClick = onOpenStories, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
+        Card(onClick = onOpenStories, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Spacer(Modifier.size(4.dp))
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -58,8 +58,8 @@ fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, 
                     FynxStatusPreviewCircle(currentUsername, "Your status", true, onOpenStories)
                     FynxStatusPreviewCircle("FYNX", "Create status", false, onOpenStories)
                     Column(Modifier.weight(1f)) {
-                        Text("Your status stays here", fontWeight = FontWeight.SemiBold)
-                        Text("Text, photo, video and voice", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall)
+                        Text("Your status", fontWeight = FontWeight.SemiBold)
+                        Text("Text, photo, video and voice", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     }
                     Spacer(Modifier.width(14.dp))
                 }
