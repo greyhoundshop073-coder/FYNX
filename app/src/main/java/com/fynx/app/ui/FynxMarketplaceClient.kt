@@ -29,6 +29,14 @@ object FynxMarketplaceClient {
     suspend fun listings(context: Context, query: String = "", category: String = ""): Result<List<Listing>> =
         FynxBackendClient.get(context, "/api/marketplace/listings?q=${encode(query)}&category=${encode(category)}").mapCatching(::parseListings)
 
+    data class SellerReputation(val rank: Int, val sellerCount: Int, val successfulSales: Int, val totalOrders: Int, val completionRate: Double, val averageRating: Double, val reviewCount: Int, val tier: String)
+
+    suspend fun sellerReputation(context: Context, username: String): Result<SellerReputation> =
+        FynxBackendClient.get(context, "/api/marketplace/sellers/${encode(username)}/reputation").mapCatching { raw ->
+            val o = JSONObject(raw).getJSONObject("reputation")
+            SellerReputation(o.optInt("rank", 0), o.optInt("sellerCount", 0), o.optInt("successfulSales", 0), o.optInt("totalOrders", 0), o.optDouble("completionRate", 0.0), o.optDouble("averageRating", 0.0), o.optInt("reviewCount", 0), o.optString("tier", "NEW SELLER"))
+        }
+
     suspend fun myListings(context: Context): Result<List<Listing>> =
         FynxBackendClient.get(context, "/api/marketplace/my-listings").mapCatching(::parseListings)
 
