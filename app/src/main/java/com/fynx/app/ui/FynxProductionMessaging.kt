@@ -17,7 +17,6 @@ object FynxProductionMessaging {
     private const val MAX_MEDIA_BYTES = 12 * 1024 * 1024
 
     data class RemoteMedia(val id: String, val mimeType: String, val byteSize: Int)
-
     data class RemoteMessage(
         val id: String,
         val senderId: String,
@@ -51,14 +50,23 @@ object FynxProductionMessaging {
             try {
                 val mimeType = mimeTypeOverride?.trim()?.lowercase()
                     ?: context.contentResolver.getType(uri)?.trim()?.lowercase()
-                    ?: "application/octet-stream"
+                    ?: when (uri.scheme?.lowercase()) {
+                        "file" -> when (uri.path?.substringAfterLast('.', "")?.lowercase()) {
+                            "m4a", "mp4", "aac" -> "audio/mp4"
+                            "mp3" -> "audio/mpeg"
+                            "wav" -> "audio/wav"
+                            else -> "application/octet-stream"
+                        }
+                        else -> "application/octet-stream"
+                    }
                 require(mimeType.startsWith("image/") || mimeType.startsWith("video/") || mimeType.startsWith("audio/")) { "Unsupported media type." }
-                val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
+                val input = if (uri.scheme.equals("file", true)) uri.path?.let { File(it).inputStream() } else context.contentResolver.openInputStream(uri)
+                val bytes = input?.use { stream ->
                     val output = java.io.ByteArrayOutputStream()
                     val buffer = ByteArray(32 * 1024)
                     var total = 0
                     while (true) {
-                        val read = input.read(buffer)
+                        val read = stream.read(buffer)
                         if (read <= 0) break
                         total += read
                         require(total <= MAX_MEDIA_BYTES) { "Media is too large. Maximum size is 12 MB." }
@@ -81,11 +89,6 @@ object FynxProductionMessaging {
             }
         }
 
-    /**
-     * Downloads an authenticated remote media item into the app cache so platform
-     * players such as MediaPlayer/VideoView can read it without exposing a token
-     * in a URL. The returned file is private to this app and may be evicted safely.
-     */
     suspend fun cacheRemoteMedia(context: Context, mediaId: String, mediaUrl: String): Result<Uri> =
         withContext(Dispatchers.IO) {
             try {
@@ -94,132 +97,50 @@ object FynxProductionMessaging {
                 val directory = File(context.cacheDir, "fynx_media").apply { mkdirs() }
                 val existing = directory.listFiles()?.firstOrNull { it.name.startsWith("${safeId}.") && it.length() > 0L }
                 if (existing != null) return@withContext Result.success(Uri.fromFile(existing))
-
-                val absoluteUrl = if (mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://")) mediaUrl
-                else FynxBackendClient.baseUrl(context).trimEnd('/') + "/" + mediaUrl.trimStart('/')
+                val absoluteUrl = if (mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://")) mediaUrl else FynxBackendClient.baseUrl(context).trimEnd('/') + "/" + mediaUrl.trimStart('/')
                 val connection = (URL(absoluteUrl).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 10_000
-                    readTimeout = 20_000
-                    useCaches = false
-                    setRequestProperty("Accept", "*/*")
+                    connectTimeout = 10_000; readTimeout = 20_000; useCaches = false; setRequestProperty("Accept", "*/*")
                     FynxBackendClient.accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
                 }
                 try {
                     val status = connection.responseCode
-                    if (status == HttpURLConnection.HTTP_UNAUTHORIZED) {
-                        FynxBackendClient.saveAccessToken(context, null)
-                        throw IllegalStateException("FYNX media session expired")
-                    }
+                    if (status == HttpURLConnection.HTTP_UNAUTHORIZED) { FynxBackendClient.saveAccessToken(context, null); throw IllegalStateException("FYNX media session expired") }
                     require(status in 200..299) { "FYNX media could not be loaded (HTTP $status)." }
                     val contentLength = connection.contentLengthLong
                     require(contentLength <= MAX_MEDIA_BYTES || contentLength < 0L) { "Remote media is too large." }
                     val extension = when (connection.contentType.orEmpty().lowercase()) {
-                        "video/mp4" -> "mp4"
-                        "video/webm" -> "webm"
-                        "video/quicktime" -> "mov"
-                        "audio/mp4", "audio/x-m4a" -> "m4a"
-                        "audio/mpeg" -> "mp3"
-                        "audio/aac" -> "aac"
-                        "audio/wav" -> "wav"
-                        "image/png" -> "png"
-                        "image/webp" -> "webp"
-                        "image/gif" -> "gif"
-                        else -> "bin"
+                        "video/mp4" -> "mp4"; "video/webm" -> "webm"; "video/quicktime" -> "mov"
+                        "audio/mp4", "audio/x-m4a" -> "m4a"; "audio/mpeg" -> "mp3"; "audio/aac" -> "aac"; "audio/wav" -> "wav"
+                        "image/png" -> "png"; "image/webp" -> "webp"; "image/gif" -> "gif"; else -> "bin"
                     }
                     val target = File(directory, "$safeId.$extension")
-                    connection.inputStream.use { input ->
-                        target.outputStream().use { output ->
-                            val buffer = ByteArray(32 * 1024)
-                            var total = 0L
-                            while (true) {
-                                val read = input.read(buffer)
-                                if (read <= 0) break
-                                total += read
-                                require(total <= MAX_MEDIA_BYTES) { "Remote media is too large." }
-                                output.write(buffer, 0, read)
-                            }
-                        }
-                    }
+                    connection.inputStream.use { input -> target.outputStream().use { output ->
+                        val buffer = ByteArray(32 * 1024); var total = 0L
+                        while (true) { val read = input.read(buffer); if (read <= 0) break; total += read; require(total <= MAX_MEDIA_BYTES) { "Remote media is too large." }; output.write(buffer, 0, read) }
+                    } }
                     require(target.length() > 0L) { "Remote media is empty." }
                     Result.success(Uri.fromFile(target))
-                } finally {
-                    connection.disconnect()
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Throwable) {
-                Result.failure(error)
-            }
+                } finally { connection.disconnect() }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Throwable) { Result.failure(error) }
         }
 
-    suspend fun sendText(
-        context: Context,
-        recipientUsername: String,
-        text: String,
-        replyToId: String? = null,
-        mediaId: String? = null,
-        mediaType: String? = null,
-        voiceDurationMs: Long = 0L
-    ): Result<RemoteMessage> {
+    suspend fun sendText(context: Context, recipientUsername: String, text: String, replyToId: String? = null, mediaId: String? = null, mediaType: String? = null, voiceDurationMs: Long = 0L): Result<RemoteMessage> {
         val normalizedRecipient = recipientUsername.trim().removePrefix("@").lowercase()
         val currentUsername = (FynxAuthStore.load(context).username ?: "").trim().removePrefix("@").lowercase()
         if (normalizedRecipient.isBlank()) return Result.failure(IllegalArgumentException("A recipient is required."))
         if (currentUsername.isNotBlank() && normalizedRecipient == currentUsername) return Result.failure(IllegalArgumentException("You cannot send a message to your own account."))
         val cleanText = text.trim()
         if (cleanText.isBlank() && mediaId == null) return Result.failure(IllegalArgumentException("Message content is required."))
-        val body = JSONObject().apply {
-            put("recipientUsername", normalizedRecipient)
-            put("text", cleanText)
-            put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL)
-            put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL)
-            put("mediaType", mediaType ?: JSONObject.NULL)
-            put("voiceDurationMs", voiceDurationMs)
-        }
+        val body = JSONObject().apply { put("recipientUsername", normalizedRecipient); put("text", cleanText); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("voiceDurationMs", voiceDurationMs) }
         return FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
     }
 
-    suspend fun markRead(context: Context, messageIds: List<String>): Result<Int> {
-        val body = JSONObject().apply { put("messageIds", JSONArray(messageIds.mapNotNull { it.toLongOrNull() })) }
-        return FynxBackendClient.postJson(context, "/api/messages/read", body.toString()).mapCatching { raw -> JSONObject(raw).optInt("updated", 0) }
-    }
+    suspend fun markRead(context: Context, messageIds: List<String>): Result<Int> { val body = JSONObject().apply { put("messageIds", JSONArray(messageIds.mapNotNull { it.toLongOrNull() })) }; return FynxBackendClient.postJson(context, "/api/messages/read", body.toString()).mapCatching { raw -> JSONObject(raw).optInt("updated", 0) } }
 
-    fun toChatMessage(message: RemoteMessage, currentUserId: String): ChatMessage = ChatMessage(
-        text = if (message.deleted) "Message deleted" else message.text,
-        fromMe = message.senderId == currentUserId,
-        id = message.id,
-        timestamp = message.timestamp,
-        delivered = message.delivered,
-        read = message.read,
-        replyToId = message.replyToId,
-        edited = message.edited,
-        attachmentUri = message.mediaUrl,
-        attachmentType = message.mediaType,
-        voiceUri = if (message.mediaType == "audio") message.mediaUrl else null,
-        voiceDurationMs = message.voiceDurationMs,
-        senderName = message.senderDisplayName,
-        senderUsername = message.senderUsername
-    )
+    fun toChatMessage(message: RemoteMessage, currentUserId: String): ChatMessage = ChatMessage(text = if (message.deleted) "Message deleted" else message.text, fromMe = message.senderId == currentUserId, id = message.id, timestamp = message.timestamp, delivered = message.delivered, read = message.read, replyToId = message.replyToId, edited = message.edited, attachmentUri = message.mediaUrl, attachmentType = message.mediaType, voiceUri = if (message.mediaType == "audio") message.mediaUrl else null, voiceDurationMs = message.voiceDurationMs, senderName = message.senderDisplayName, senderUsername = message.senderUsername)
 
-    fun fromJson(item: JSONObject): RemoteMessage = RemoteMessage(
-        id = item.optString("id"),
-        senderId = item.optString("sender_id", item.optString("senderId")),
-        senderUsername = item.optString("sender_username", item.optString("senderUsername")).takeIf { it.isNotBlank() },
-        senderDisplayName = item.optString("sender_display_name", item.optString("senderDisplayName")).takeIf { it.isNotBlank() },
-        recipientId = item.optString("recipient_id", item.optString("recipientId")),
-        recipientUsername = item.optString("recipient_username", item.optString("recipientUsername")).takeIf { it.isNotBlank() },
-        recipientDisplayName = item.optString("recipient_display_name", item.optString("recipientDisplayName")).takeIf { it.isNotBlank() },
-        text = item.optString("text"),
-        timestamp = item.optDouble("timestamp", 0.0).toLong(),
-        delivered = item.optBoolean("delivered", false),
-        read = item.optBoolean("read", false),
-        edited = item.optBoolean("edited", false),
-        deleted = item.optBoolean("deleted", false),
-        replyToId = if (item.isNull("reply_to_id") && item.isNull("replyToId")) null else item.optString("reply_to_id", item.optString("replyToId")).takeIf { it.isNotBlank() },
-        mediaId = if (item.isNull("media_id") && item.isNull("mediaId")) null else item.optString("media_id", item.optString("mediaId")).takeIf { it.isNotBlank() },
-        mediaType = item.optString("media_type", item.optString("mediaType")).takeIf { it.isNotBlank() },
-        mediaUrl = item.optString("mediaUrl").takeIf { it.isNotBlank() },
-        voiceDurationMs = item.optLong("voiceDurationMs", 0L)
-    )
+    fun fromJson(item: JSONObject): RemoteMessage = RemoteMessage(id = item.optString("id"), senderId = item.optString("sender_id", item.optString("senderId")), senderUsername = item.optString("sender_username", item.optString("senderUsername")).takeIf { it.isNotBlank() }, senderDisplayName = item.optString("sender_display_name", item.optString("senderDisplayName")).takeIf { it.isNotBlank() }, recipientId = item.optString("recipient_id", item.optString("recipientId")), recipientUsername = item.optString("recipient_username", item.optString("recipientUsername")).takeIf { it.isNotBlank() }, recipientDisplayName = item.optString("recipient_display_name", item.optString("recipientDisplayName")).takeIf { it.isNotBlank() }, text = item.optString("text"), timestamp = item.optDouble("timestamp", 0.0).toLong(), delivered = item.optBoolean("delivered", false), read = item.optBoolean("read", false), edited = item.optBoolean("edited", false), deleted = item.optBoolean("deleted", false), replyToId = if (item.isNull("reply_to_id") && item.isNull("replyToId")) null else item.optString("reply_to_id", item.optString("replyToId")).takeIf { it.isNotBlank() }, mediaId = if (item.isNull("media_id") && item.isNull("mediaId")) null else item.optString("media_id", item.optString("mediaId")).takeIf { it.isNotBlank() }, mediaType = item.optString("media_type", item.optString("mediaType")).takeIf { it.isNotBlank() }, mediaUrl = item.optString("mediaUrl").takeIf { it.isNotBlank() }, voiceDurationMs = item.optLong("voiceDurationMs", 0L))
 
     private fun encodePathSegment(value: String): String = java.net.URLEncoder.encode(value.trim().removePrefix("@"), "UTF-8")
 }
