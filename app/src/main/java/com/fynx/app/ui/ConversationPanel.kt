@@ -70,6 +70,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 val converted = FynxProductionMessaging.toChatMessage(remote, myId)
                 messages = (messages.filterNot { it.id == remote.id } + converted).sortedBy { it.timestamp }
                 if (remote.recipientId == myId) {
+                    FynxInChatSound.play(context)
                     realtimeClient.acknowledgeMessage(remote.id)
                     scope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
                 }
