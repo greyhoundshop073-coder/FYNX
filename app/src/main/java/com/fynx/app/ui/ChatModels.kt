@@ -24,6 +24,7 @@ data class ChatMessage(
     val attachmentType: String? = null,
     val voiceUri: String? = null,
     val voiceDurationMs: Long = 0L,
+    val mediaId: String? = null,
     val senderName: String? = null,
     val senderUsername: String? = null,
     val senderAvatarUri: String? = null
