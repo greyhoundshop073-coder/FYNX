@@ -39,6 +39,7 @@ fun FynxAiCreationPanel(
         "caption" to "Create caption",
         "rewrite" to "Improve caption",
         "ideas" to "Post ideas",
+        "creative" to "Creative brief",
         "product" to "Product description"
     )
 
@@ -48,6 +49,7 @@ fun FynxAiCreationPanel(
         val instruction = when (mode) {
             "rewrite" -> "Improve this FYNX social-media caption. Keep the original meaning, make it natural, engaging and concise. Return only the finished caption.\n\nCaption:\n$promptInput"
             "ideas" -> "Give 5 safe, original FYNX post ideas based on this topic. Keep each idea short and practical.\n\nTopic:\n$promptInput"
+            "creative" -> "Create a practical creative brief for a FYNX social post from this idea. Include: a short hook, visual concept, caption direction, suggested call-to-action, and 3 safe content variations. Do not invent personal facts. Keep it concise and ready to use.\n\nIdea:\n$promptInput"
             "product" -> "Write a clear, persuasive marketplace product description from these seller notes. Do not invent specifications, guarantees, prices or facts. Return only the finished description.\n\nSeller notes:\n$promptInput"
             else -> "Create a natural, engaging FYNX social-media caption from this idea. Do not invent personal facts. Return only the finished caption.\n\nIdea:\n$promptInput"
         }
@@ -127,6 +129,7 @@ fun FynxAiCreationPanel(
             placeholder = { Text(when (mode) {
                 "rewrite" -> "Paste the caption you want improved…"
                 "ideas" -> "What do you want to post about?"
+                "creative" -> "Describe the content idea you want to develop…"
                 "product" -> "Enter your real product details…"
                 else -> "Describe the post you want to create…"
             }) }
