@@ -45,6 +45,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
+    var paymentOrder by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }
     var showSell by remember { mutableStateOf(false) }
     var showOrders by remember { mutableStateOf(false) }
     val categories = listOf("All", "Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services")
@@ -108,11 +109,26 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             onBuy = {
                 scope.launch {
                     FynxRemoteSocialClient.createMarketplaceOrder(context, listing.id, 1)
-                        .onSuccess { order -> orders = listOf(order) + orders; selected = null }
+                        .onSuccess { order ->
+                            orders = listOf(order) + orders
+                            selected = null
+                            paymentOrder = order
+                        }
                         .onFailure { error = it.message ?: "Purchase could not be started." }
                 }
             },
             onClose = { selected = null }
+        )
+    }
+    paymentOrder?.let { order ->
+        MarketplacePaymentDialog(
+            context = context,
+            order = order,
+            onPaid = {
+                paymentOrder = null
+                reload()
+            },
+            onClose = { paymentOrder = null }
         )
     }
     if (showOrders) MarketplaceOrders(context, orders, onRefresh = { reload() }, onClose = { showOrders = false })
@@ -174,6 +190,85 @@ private fun MarketplaceDetails(l: FynxRemoteSocialClient.MarketplaceListing, onP
             if (l.deliveryAvailable) Text("Delivery available${l.deliveryFee?.let { " • ${l.currency} ${String.format(Locale.US, "%,.2f", it)} fee" } ?: ""}")
         }
     }, confirmButton = { Button(onClick = onBuy, enabled = l.quantity > 0) { Text("Buy now") } }, dismissButton = { TextButton(onClick = onProfile) { Text("View seller") } })
+}
+
+@Composable
+private fun MarketplacePaymentDialog(
+    context: android.content.Context,
+    order: FynxRemoteSocialClient.MarketplaceOrder,
+    onPaid: () -> Unit,
+    onClose: () -> Unit
+) {
+    var email by remember { mutableStateOf("") }
+    var payment by remember { mutableStateOf<FynxMarketplacePayment?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var verifying by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    AlertDialog(
+        onDismissRequest = { if (!busy && !verifying) onClose() },
+        title = { Text("Secure checkout") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Text(order.productTitle.ifBlank { "FYNX order" }, style = MaterialTheme.typography.titleMedium)
+                Text("${order.currency} ${String.format(Locale.US, "%,.2f", order.totalAmount)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                if (payment == null) {
+                    Text("Enter the email you want to use for payment. Your FYNX password or Paystack secret key is never requested here.", style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = { Text("Payment email") },
+                        singleLine = true,
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    Text("Checkout was opened in your browser. After completing payment, return to FYNX and tap Verify payment.", style = MaterialTheme.typography.bodySmall)
+                    Text("Reference: ${payment!!.reference}", style = MaterialTheme.typography.labelSmall)
+                }
+                message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            when {
+                payment == null -> Button(
+                    enabled = !busy,
+                    onClick = {
+                        busy = true
+                        message = null
+                        scope.launch {
+                            initializeMarketplacePayment(context, order.id, email)
+                                .onSuccess { checkout ->
+                                    payment = checkout
+                                    openMarketplaceCheckout(context, checkout.authorizationUrl)
+                                        .onFailure {
+                                            payment = null
+                                            message = it.message ?: "Could not open payment checkout."
+                                        }
+                                }
+                                .onFailure { message = it.message ?: "Could not start payment." }
+                            busy = false
+                        }
+                    }
+                ) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Continue to payment") }
+                else -> Button(
+                    enabled = !verifying,
+                    onClick = {
+                        verifying = true
+                        message = null
+                        scope.launch {
+                            verifyMarketplacePayment(context, payment!!.reference)
+                                .onSuccess { onPaid() }
+                                .onFailure { message = it.message ?: "Payment is not verified yet. Complete checkout first." }
+                            verifying = false
+                        }
+                    }
+                ) { if (verifying) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Verify payment") }
+            }
+        },
+        dismissButton = { TextButton(onClick = onClose, enabled = !busy && !verifying) { Text("Close") } }
+    )
 }
 
 @Composable
@@ -257,7 +352,7 @@ private fun OrderActions(context: android.content.Context, order: FynxRemoteSoci
             else if (order.status == "PAYMENT_PENDING") Text("You can cancel this unpaid order.")
             else if (order.status == "COMPLETED") {
                 Text("Rate seller")
-                Row { (1..5).forEach { star -> TextButton(onClick = { rating = star }) { Text(if (star <= rating) "★" else "☆") } } }
+                Row { (1..5).forEach { star -> TextButton(onClick = { rating = star }) { Text(if (star <= rating) "★" else "☆") } }
                 OutlinedTextField(comment, { comment = it }, label = { Text("Review") }, minLines = 2)
             }
         }
