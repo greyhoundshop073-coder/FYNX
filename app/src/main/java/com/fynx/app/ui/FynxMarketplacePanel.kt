@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Storefront
-import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -156,8 +155,6 @@ private fun RemoteMarketMedia(mediaId: String) {
     }
     if (bitmap != null) {
         Image(bitmap = bitmap!!.asImageBitmap(), contentDescription = "Product", modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 360.dp), contentScale = ContentScale.Crop)
-    } else if (uri?.path?.endsWith(".mp4") == true || uri?.path?.endsWith(".webm") == true) {
-        Box(Modifier.fillMaxWidth().height(220.dp), Alignment.Center) { Icon(Icons.Default.PlayCircle, "Play product video", Modifier.size(64.dp)) }
     } else {
         Box(Modifier.fillMaxWidth().height(220.dp), Alignment.Center) { CircularProgressIndicator() }
     }
@@ -268,6 +265,7 @@ private fun OrderActions(context: android.content.Context, order: FynxRemoteSoci
             dispute -> Button(onClick = { scope.launch { FynxRemoteSocialClient.disputeMarketplaceOrder(context, order.id, "ORDER_PROBLEM", details).onSuccess { onChanged() } } }) { Text("Open dispute") }
             order.status == "PAYMENT_PENDING" -> Button(onClick = { scope.launch { FynxRemoteSocialClient.cancelMarketplaceOrder(context, order.id).onSuccess { onChanged() } } }) { Text("Cancel order") }
             order.status == "COMPLETED" -> Button(onClick = { scope.launch { FynxRemoteSocialClient.reviewMarketplaceOrder(context, order.id, rating, comment).onSuccess { onChanged() } } }) { Text("Submit review") }
+            else -> Spacer(Modifier.size(1.dp))
         }
     }, dismissButton = { TextButton(onClick = { if (!dispute && order.status != "COMPLETED") dispute = true else onClose() }) { Text(if (!dispute && order.status != "COMPLETED") "Report problem" else "Close") } })
 }
