@@ -159,7 +159,7 @@ object FynxProductionMessaging {
         timestamp = message.timestamp, delivered = message.delivered, read = message.read, replyToId = message.replyToId,
         edited = message.edited, attachmentUri = message.mediaUrl, attachmentType = message.mediaType,
         voiceUri = if (message.mediaType == "audio") message.mediaUrl else null, voiceDurationMs = message.voiceDurationMs,
-        senderName = message.senderDisplayName, senderUsername = message.senderUsername
+        mediaId = message.mediaId, senderName = message.senderDisplayName, senderUsername = message.senderUsername
     )
 
     fun fromJson(item: JSONObject): RemoteMessage = RemoteMessage(
