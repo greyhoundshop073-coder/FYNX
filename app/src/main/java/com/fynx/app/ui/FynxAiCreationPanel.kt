@@ -51,16 +51,21 @@ fun FynxAiCreationPanel(
             "product" -> "Write a clear, persuasive marketplace product description from these seller notes. Do not invent specifications, guarantees, prices or facts. Return only the finished description.\n\nSeller notes:\n$promptInput"
             else -> "Create a natural, engaging FYNX social-media caption from this idea. Do not invent personal facts. Return only the finished caption.\n\nIdea:\n$promptInput"
         }
+        val capability = if (mode == "product") {
+            FynxAiCapability.MARKETPLACE_ASSIST
+        } else {
+            FynxAiCapability.MEDIA_ASSIST
+        }
         val decision = FynxFutureIntelligencePolicy.authorize(
             permissions = listOf(
                 FynxAiPermission(
-                    capability = FynxAiCapability.MEDIA_ASSIST,
+                    capability = capability,
                     allowedScopes = setOf(FynxAiDataScope.NONE),
                     enabled = true
                 )
             ),
             request = FynxAiRequest(
-                capability = FynxAiCapability.MEDIA_ASSIST,
+                capability = capability,
                 prompt = instruction,
                 requestedScopes = setOf(FynxAiDataScope.NONE)
             )
