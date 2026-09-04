@@ -22,6 +22,45 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
   const isSeller = (order, userId) => String(order.seller_id) === String(userId);
   const isBuyer = (order, userId) => String(order.buyer_id) === String(userId);
 
+  app.get('/api/marketplace/media/:id', auth, async (req, res) => {
+    try {
+      const mediaId = Number(req.params.id);
+      if (!Number.isInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: 'invalid media id' });
+      const result = await pool.query(`
+        SELECT mm.mime_type, mm.data
+        FROM message_media mm
+        WHERE mm.id = $1
+          AND (
+            EXISTS (
+              SELECT 1 FROM marketplace_listings ml
+              WHERE ml.active = TRUE
+                AND EXISTS (
+                  SELECT 1
+                  FROM regexp_split_to_table(regexp_replace(CAST(ml.media_ids AS TEXT), '[^0-9]+', ',', 'g'), ',') AS listing_media_id
+                  WHERE listing_media_id = CAST(mm.id AS TEXT)
+                )
+            )
+            OR EXISTS (
+              SELECT 1 FROM marketplace_orders mo
+              WHERE (mo.buyer_id = $2 OR mo.seller_id = $2)
+                AND EXISTS (
+                  SELECT 1
+                  FROM jsonb_array_elements_text(COALESCE(mo.product_snapshot->'mediaIds', '[]'::jsonb)) AS order_media_id
+                  WHERE order_media_id = CAST(mm.id AS TEXT)
+                )
+            )
+          )
+        LIMIT 1`, [mediaId, req.user.sub]);
+      if (!result.rows[0]) return res.status(404).json({ error: 'marketplace media not found' });
+      res.set('Cache-Control', 'private, max-age=3600');
+      res.type(result.rows[0].mime_type);
+      return res.send(result.rows[0].data);
+    } catch (error) {
+      console.error('marketplace media fetch', error);
+      return res.status(500).json({ error: 'marketplace media fetch failed' });
+    }
+  });
+
   app.get('/api/marketplace/seller/orders', auth, async (req, res) => {
     try {
       await ensureSchema();
@@ -30,11 +69,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       const params = [req.user.sub];
       let where = 'o.seller_id = $1';
       if (status && allowed.has(status)) { params.push(status); where += ` AND o.status = $${params.length}`; }
-      const result = await pool.query(`
-        SELECT o.*, u.username AS buyer_username, u.display_name AS buyer_display_name
-        FROM marketplace_orders o JOIN users u ON u.id = o.buyer_id
-        WHERE ${where} ORDER BY o.created_at DESC LIMIT 100
-      `, params);
+      const result = await pool.query(`SELECT o.*, u.username AS buyer_username, u.display_name AS buyer_display_name FROM marketplace_orders o JOIN users u ON u.id = o.buyer_id WHERE ${where} ORDER BY o.created_at DESC LIMIT 100`, params);
       return res.json({ orders: result.rows.map((row) => ({
         id: String(row.id), buyerId: String(row.buyer_id), buyerUsername: row.buyer_username, buyerDisplayName: row.buyer_display_name,
         listingId: String(row.listing_id), quantity: Number(row.quantity), unitPrice: Number(row.unit_price), deliveryFee: Number(row.delivery_fee),
@@ -53,39 +88,24 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
     const address = req.body?.shippingAddress && typeof req.body.shippingAddress === 'object' && !Array.isArray(req.body.shippingAddress) ? req.body.shippingAddress : null;
     const note = typeof req.body?.buyerNote === 'string' ? req.body.buyerNote.trim().slice(0, 1000) : '';
     if (!id || !['DELIVERY','PICKUP'].includes(method)) return res.status(400).json({ error: 'valid order id and fulfillment method are required' });
-    if (method === 'DELIVERY' && (!address || typeof address.name !== 'string' || typeof address.phone !== 'string' || typeof address.address !== 'string' || !address.address.trim())) {
-      return res.status(400).json({ error: 'delivery requires name, phone and address' });
-    }
-
+    if (method === 'DELIVERY' && (!address || typeof address.name !== 'string' || typeof address.phone !== 'string' || typeof address.address !== 'string' || !address.address.trim())) return res.status(400).json({ error: 'delivery requires name, phone and address' });
     const client = await pool.connect();
     try {
-      await ensureSchema();
-      await client.query('BEGIN');
+      await ensureSchema(); await client.query('BEGIN');
       const order = (await client.query('SELECT * FROM marketplace_orders WHERE id=$1 FOR UPDATE', [id])).rows[0];
       if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
       if (!isBuyer(order, req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the buyer can choose fulfillment' }); }
       if (!['PAYMENT_PENDING','PAID'].includes(order.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'fulfillment can only be selected before shipping' }); }
-
       const snapshot = order.product_snapshot && typeof order.product_snapshot === 'object' ? order.product_snapshot : {};
-      const deliveryAvailable = Boolean(snapshot.deliveryAvailable);
-      const pickupAvailable = Boolean(snapshot.pickupAvailable);
-      if (method === 'DELIVERY' && !deliveryAvailable) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery is not available for this listing' }); }
-      if (method === 'PICKUP' && !pickupAvailable) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'pickup is not available for this listing' }); }
-
-      const safeAddress = method === 'DELIVERY' ? {
-        name: String(address.name).trim().slice(0, 120), phone: String(address.phone).trim().slice(0, 40), address: String(address.address).trim().slice(0, 500),
-        city: typeof address.city === 'string' ? address.city.trim().slice(0, 100) : '', state: typeof address.state === 'string' ? address.state.trim().slice(0, 100) : '',
-        country: typeof address.country === 'string' ? address.country.trim().slice(0, 100) : ''
-      } : null;
+      if (method === 'DELIVERY' && !Boolean(snapshot.deliveryAvailable)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery is not available for this listing' }); }
+      if (method === 'PICKUP' && !Boolean(snapshot.pickupAvailable)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'pickup is not available for this listing' }); }
+      const safeAddress = method === 'DELIVERY' ? { name: String(address.name).trim().slice(0, 120), phone: String(address.phone).trim().slice(0, 40), address: String(address.address).trim().slice(0, 500), city: typeof address.city === 'string' ? address.city.trim().slice(0, 100) : '', state: typeof address.state === 'string' ? address.state.trim().slice(0, 100) : '', country: typeof address.country === 'string' ? address.country.trim().slice(0, 100) : '' } : null;
       const updated = await client.query(`UPDATE marketplace_orders SET fulfillment_method=$1,shipping_address=$2::jsonb,buyer_note=$3,updated_at=NOW() WHERE id=$4 RETURNING *`, [method, safeAddress ? JSON.stringify(safeAddress) : null, note, id]);
       await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'FULFILLMENT_SELECTED',$3,$3,$4::jsonb)`, [id, req.user.sub, order.status, JSON.stringify({ method })]);
       await client.query('COMMIT');
       return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, fulfillmentMethod: updated.rows[0].fulfillment_method } });
-    } catch (error) {
-      try { await client.query('ROLLBACK'); } catch {}
-      console.error('marketplace fulfillment', error);
-      return res.status(500).json({ error: 'fulfillment selection failed' });
-    } finally { client.release(); }
+    } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace fulfillment', error); return res.status(500).json({ error: 'fulfillment selection failed' }); }
+    finally { client.release(); }
   });
 
   app.post('/api/marketplace/orders/:id/ship', auth, async (req, res) => {
@@ -117,7 +137,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
       if (!isBuyer(order, req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the buyer can confirm delivery' }); }
       if (!['SHIPPED','DELIVERED'].includes(order.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order is not ready for delivery confirmation' }); }
-      const now = new Date(); const deadline = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+      const deadline = new Date(Date.now() + 48 * 60 * 60 * 1000);
       const updated = await client.query(`UPDATE marketplace_orders SET status='INSPECTION',delivered_at=COALESCE(delivered_at,NOW()),inspection_deadline=$1,updated_at=NOW() WHERE id=$2 RETURNING *`, [deadline.toISOString(), id]);
       await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'DELIVERY_CONFIRMED',$3,'INSPECTION',$4::jsonb)`, [id, req.user.sub, order.status, JSON.stringify({ inspectionHours: 48 })]);
       await client.query('COMMIT');
