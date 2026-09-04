@@ -14,8 +14,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-/** Keeps the existing Home feed intact and makes the completed AI/Status capabilities visible from Home. */
+/** Keeps the existing Home experience intact while routing captured media into the real FYNX social backend. */
 @Composable
 fun FynxHomeSocialHubPanel(
     currentUsername: String,
@@ -28,6 +31,7 @@ fun FynxHomeSocialHubPanel(
     onOpenAi: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var showComposer by remember { mutableStateOf(false) }
     var showCamera by remember { mutableStateOf(false) }
     var capturedUri by remember { mutableStateOf<Uri?>(null) }
@@ -35,6 +39,7 @@ fun FynxHomeSocialHubPanel(
     var text by remember { mutableStateOf("") }
     var visibility by remember { mutableStateOf(FynxPostVisibility.PUBLIC) }
     var notice by remember { mutableStateOf<String?>(null) }
+    var posting by remember { mutableStateOf(false) }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching { context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -65,36 +70,42 @@ fun FynxHomeSocialHubPanel(
 
     if (showComposer) {
         FynxPlainDialog(
-            onDismissRequest = { showComposer = false; capturedUri = null },
+            onDismissRequest = { if (!posting) { showComposer = false; capturedUri = null } },
             title = { Text("Create a FYNX post") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(value = text, onValueChange = { text = it.take(4000) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 7, placeholder = { Text("Share something with your FYNX circle…") })
+                    OutlinedTextField(value = text, onValueChange = { text = it.take(4000) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 7, placeholder = { Text("Share something with your FYNX circle…") }, enabled = !posting)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { showComposer = false; showCamera = true }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.CameraAlt, null); Spacer(Modifier.width(4.dp)); Text("Camera") }
-                        OutlinedButton(onClick = { gallery.launch(arrayOf("image/*", "video/*")) }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.VideoLibrary, null); Spacer(Modifier.width(4.dp)); Text("Gallery") }
+                        OutlinedButton(onClick = { showComposer = false; showCamera = true }, modifier = Modifier.weight(1f), enabled = !posting) { Icon(Icons.Default.CameraAlt, null); Spacer(Modifier.width(4.dp)); Text("Camera") }
+                        OutlinedButton(onClick = { gallery.launch(arrayOf("image/*", "video/*")) }, modifier = Modifier.weight(1f), enabled = !posting) { Icon(Icons.Default.VideoLibrary, null); Spacer(Modifier.width(4.dp)); Text("Gallery") }
                     }
-                    capturedUri?.let { uri ->
+                    capturedUri?.let {
                         Text(if (capturedType == "video") "Video captured and ready" else "Photo captured and ready", color = MaterialTheme.colorScheme.primary)
-                        Text(uri.toString(), style = MaterialTheme.typography.labelSmall, maxLines = 2)
                     }
                     Text("Who can see this?", style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(visibility == FynxPostVisibility.PUBLIC, { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") })
-                        FilterChip(visibility == FynxPostVisibility.FRIENDS_ONLY, { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") })
+                        FilterChip(visibility == FynxPostVisibility.PUBLIC, { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") }, enabled = !posting)
+                        FilterChip(visibility == FynxPostVisibility.FRIENDS_ONLY, { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") }, enabled = !posting)
                     }
                     notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    val result = FynxHomePostStore.create(context, text, visibility, capturedUri?.toString())
-                    if (result != null) {
-                        notice = null; showComposer = false; capturedUri = null; text = ""
-                    } else notice = "Add text or capture/select a photo or video before posting."
-                }) { Text("Post") }
+                Button(enabled = !posting && (text.isNotBlank() || capturedUri != null), onClick = {
+                    posting = true
+                    notice = null
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) { FynxRemoteSocialClient.createPost(context, text, visibility, capturedUri) }
+                        result.onSuccess {
+                            showComposer = false
+                            capturedUri = null
+                            text = ""
+                        }.onFailure { notice = it.message ?: "Post could not be published." }
+                        posting = false
+                    }
+                }) { Text(if (posting) "Publishing…" else "Post") }
             },
-            dismissButton = { TextButton(onClick = { showComposer = false; capturedUri = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { if (!posting) { showComposer = false; capturedUri = null } }, enabled = !posting) { Text("Cancel") } }
         )
     }
 
@@ -102,7 +113,7 @@ fun FynxHomeSocialHubPanel(
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             FynxCameraCapturePanel(
                 onCaptured = { uri, type -> capturedUri = uri; capturedType = type; showCamera = false; showComposer = true },
-                onDismiss = { showCamera = false }
+                onDismiss = { showCamera = false; showComposer = true }
             )
         }
     }
