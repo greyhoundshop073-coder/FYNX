@@ -7,6 +7,7 @@ import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -26,7 +27,7 @@ import kotlinx.coroutines.withContext
 
 /** User-facing FYNX AI assistant. Sensitive FYNX data is not exposed by this panel. */
 @Composable
-fun FynxAiAssistantPanel() {
+fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
     val welcome = remember { AiMessage("Hi, I'm FYNX AI. Ask me a question and I'll help you.", false) }
     var messages by remember { mutableStateOf(listOf(welcome)) }
     var input by remember { mutableStateOf("") }
@@ -34,6 +35,15 @@ fun FynxAiAssistantPanel() {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val toolLinks = remember {
+        listOf(
+            "To-Do" to "Daily Planning",
+            "Calendar" to "Calendar",
+            "Money Tools" to "Money Planner",
+            "Marketplace" to "Marketplace",
+            "Chats" to "Messages"
+        )
+    }
 
     fun copyText(text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -67,7 +77,7 @@ fun FynxAiAssistantPanel() {
             Column(Modifier.weight(1f)) {
                 Text("FYNX AI", style = MaterialTheme.typography.headlineSmall)
                 Text(
-                    "Private-by-default assistant",
+                    "Connected to your FYNX tools",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -76,6 +86,19 @@ fun FynxAiAssistantPanel() {
                 onClick = { messages = listOf(welcome); errorMessage = null }
             ) {
                 Icon(Icons.Default.DeleteSweep, contentDescription = "Clear chat")
+            }
+        }
+
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(toolLinks) { (destination, label) ->
+                AssistChip(
+                    onClick = { onOpenDestination(destination) },
+                    label = { Text(label) },
+                    leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) }
+                )
             }
         }
 
