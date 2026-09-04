@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddAPhoto
@@ -28,8 +29,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
@@ -93,7 +94,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             }
             else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(listings, key = { it.id }) { listing ->
-                    MarketplaceCard(listing, onProfile = { onOpenProfile(listing.sellerUsername) }, onOpen = { selected = listing })
+                    MarketplaceCard(l = listing, onProfile = { onOpenProfile(listing.sellerUsername) }, onOpen = { selected = listing })
                 }
             }
         }
@@ -102,7 +103,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     if (showSell) MarketplaceSellDialog(context, onPublished = { showSell = false; reload() }, onCancel = { showSell = false })
     selected?.let { listing ->
         MarketplaceDetails(
-            listing = listing,
+            l = listing,
             onProfile = { onOpenProfile(listing.sellerUsername); selected = null },
             onBuy = {
                 scope.launch {
@@ -262,7 +263,7 @@ private fun OrderActions(context: android.content.Context, order: FynxRemoteSoci
         }
     }, confirmButton = {
         when {
-            dispute -> Button(onClick = { scope.launch { FynxRemoteSocialClient.disputeMarketplaceOrder(context, order.id, "ORDER_PROBLEM", details).onSuccess { onChanged() } } }) { Text("Open dispute") }
+            dispute -> Button(onClick = { scope.launch { FynxRemoteSocialClient.disputeMarketplaceOrder(context, order.id, "OTHER", details).onSuccess { onChanged() } } }) { Text("Open dispute") }
             order.status == "PAYMENT_PENDING" -> Button(onClick = { scope.launch { FynxRemoteSocialClient.cancelMarketplaceOrder(context, order.id).onSuccess { onChanged() } } }) { Text("Cancel order") }
             order.status == "COMPLETED" -> Button(onClick = { scope.launch { FynxRemoteSocialClient.reviewMarketplaceOrder(context, order.id, rating, comment).onSuccess { onChanged() } } }) { Text("Submit review") }
             else -> Spacer(Modifier.size(1.dp))
