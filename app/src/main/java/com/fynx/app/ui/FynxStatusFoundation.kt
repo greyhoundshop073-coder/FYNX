@@ -10,36 +10,11 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 
-/**
- * FYNX Status foundation. Statuses expire after 24 hours and support text,
- * photo, video and voice media. This layer deliberately keeps media in private
- * app storage so picker URIs do not disappear after the picker lifecycle.
- */
 enum class FynxStatusType { TEXT, PHOTO, VIDEO, VOICE }
-
 enum class FynxStatusTextFont { CLASSIC, CLEAN, BOLD, SERIF, TYPEWRITER }
 
-data class FynxStatusTextStyle(
-    val backgroundColor: Long = 0xFF111111,
-    val foregroundColor: Long = 0xFFFFFFFF,
-    val font: FynxStatusTextFont = FynxStatusTextFont.CLASSIC,
-    val alignment: Int = 1
-)
-
-data class FynxStatus(
-    val id: String,
-    val ownerUsername: String,
-    val ownerDisplayName: String,
-    val type: FynxStatusType,
-    val contentUri: String? = null,
-    val text: String? = null,
-    val createdAtMillis: Long = System.currentTimeMillis(),
-    val expiresAtMillis: Long = createdAtMillis + FYNX_STATUS_EXPIRY_MS,
-    val textStyle: FynxStatusTextStyle = FynxStatusTextStyle(),
-    val privateStatus: Boolean = false,
-    val voiceDurationMs: Long = 0L,
-    val muted: Boolean = false
-) {
+data class FynxStatusTextStyle(val backgroundColor: Long = 0xFF111111, val foregroundColor: Long = 0xFFFFFFFF, val font: FynxStatusTextFont = FynxStatusTextFont.CLASSIC, val alignment: Int = 1)
+data class FynxStatus(val id: String, val ownerUsername: String, val ownerDisplayName: String, val type: FynxStatusType, val contentUri: String? = null, val text: String? = null, val createdAtMillis: Long = System.currentTimeMillis(), val expiresAtMillis: Long = createdAtMillis + FYNX_STATUS_EXPIRY_MS, val textStyle: FynxStatusTextStyle = FynxStatusTextStyle(), val privateStatus: Boolean = false, val voiceDurationMs: Long = 0L, val muted: Boolean = false) {
     fun isExpired(nowMillis: Long = System.currentTimeMillis()): Boolean = nowMillis >= expiresAtMillis
 }
 
@@ -61,13 +36,7 @@ object FynxStatusStore {
                     val o = array.optJSONObject(i) ?: continue
                     val type = runCatching { FynxStatusType.valueOf(o.optString("type")) }.getOrNull() ?: continue
                     val font = runCatching { FynxStatusTextFont.valueOf(o.optString("font", FynxStatusTextFont.CLASSIC.name)) }.getOrDefault(FynxStatusTextFont.CLASSIC)
-                    val status = FynxStatus(
-                        id = o.optString("id"), ownerUsername = o.optString("ownerUsername"), ownerDisplayName = o.optString("ownerDisplayName"),
-                        type = type, contentUri = o.optString("contentUri").ifBlank { null }, text = o.optString("text").ifBlank { null },
-                        createdAtMillis = o.optLong("createdAtMillis"), expiresAtMillis = o.optLong("expiresAtMillis"),
-                        textStyle = FynxStatusTextStyle(o.optLong("backgroundColor", 0xFF111111), o.optLong("foregroundColor", 0xFFFFFFFF), font, o.optInt("alignment", 1)),
-                        privateStatus = o.optBoolean("privateStatus"), voiceDurationMs = o.optLong("voiceDurationMs", 0L), muted = o.optBoolean("muted")
-                    )
+                    val status = FynxStatus(o.optString("id"), o.optString("ownerUsername"), o.optString("ownerDisplayName"), type, o.optString("contentUri").ifBlank { null }, o.optString("text").ifBlank { null }, o.optLong("createdAtMillis"), o.optLong("expiresAtMillis"), FynxStatusTextStyle(o.optLong("backgroundColor", 0xFF111111), o.optLong("foregroundColor", 0xFFFFFFFF), font, o.optInt("alignment", 1)), o.optBoolean("privateStatus"), o.optLong("voiceDurationMs", 0L), o.optBoolean("muted"))
                     if (status.id.isNotBlank() && status.ownerUsername.isNotBlank() && !status.isExpired()) add(status)
                 }
             }.sortedByDescending { it.createdAtMillis }
@@ -83,17 +52,20 @@ object FynxStatusStore {
 
     fun delete(context: Context, statusId: String) {
         val status = load(context).firstOrNull { it.id == statusId }
-        val remaining = load(context).filterNot { it.id == statusId }
         val array = JSONArray()
-        remaining.forEach { array.put(toJson(it)) }
+        load(context).filterNot { it.id == statusId }.forEach { array.put(toJson(it)) }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_STATUSES, array.toString()).apply()
         status?.contentUri?.let { path -> runCatching { File(Uri.parse(path).path ?: "").delete() } }
     }
 
     suspend fun persistMedia(context: Context, sourceUri: Uri, type: FynxStatusType): Uri? = withContext(Dispatchers.IO) {
         runCatching {
-            val input = if (sourceUri.scheme.equals("file", true)) sourceUri.path?.let { File(it).inputStream() } else context.contentResolver.openInputStream(sourceUri)
-                ?: return@runCatching null
+            val inputStream = if (sourceUri.scheme.equals("file", true)) {
+                sourceUri.path?.let { File(it).inputStream() }
+            } else {
+                context.contentResolver.openInputStream(sourceUri)
+            }
+            val input = inputStream ?: return@runCatching null
             val extension = when (type) {
                 FynxStatusType.PHOTO -> ".jpg"
                 FynxStatusType.VIDEO -> ".mp4"
@@ -101,27 +73,24 @@ object FynxStatusStore {
                 FynxStatusType.TEXT -> return@runCatching null
             }
             val file = File(context.filesDir, "fynx_status_${UUID.randomUUID()}$extension")
-            input.use { stream -> FileOutputStream(file).use { output ->
-                val buffer = ByteArray(32 * 1024)
-                var total = 0L
-                while (true) {
-                    val read = stream.read(buffer)
-                    if (read <= 0) break
-                    total += read
-                    if (total > 12 * 1024 * 1024) error("Status media is too large. Maximum size is 12 MB.")
-                    output.write(buffer, 0, read)
+            input.use { stream ->
+                FileOutputStream(file).use { output ->
+                    val buffer = ByteArray(32 * 1024)
+                    var total = 0L
+                    while (true) {
+                        val read = stream.read(buffer)
+                        if (read <= 0) break
+                        total += read
+                        if (total > 12 * 1024 * 1024) error("Status media is too large. Maximum size is 12 MB.")
+                        output.write(buffer, 0, read)
+                    }
                 }
-            } }
+            }
             Uri.fromFile(file)
         }.getOrNull()
     }
 
     private fun toJson(status: FynxStatus) = JSONObject().apply {
-        put("id", status.id); put("ownerUsername", status.ownerUsername); put("ownerDisplayName", status.ownerDisplayName)
-        put("type", status.type.name); put("contentUri", status.contentUri ?: ""); put("text", status.text ?: "")
-        put("createdAtMillis", status.createdAtMillis); put("expiresAtMillis", status.expiresAtMillis)
-        put("backgroundColor", status.textStyle.backgroundColor); put("foregroundColor", status.textStyle.foregroundColor)
-        put("font", status.textStyle.font.name); put("alignment", status.textStyle.alignment)
-        put("privateStatus", status.privateStatus); put("voiceDurationMs", status.voiceDurationMs); put("muted", status.muted)
+        put("id", status.id); put("ownerUsername", status.ownerUsername); put("ownerDisplayName", status.ownerDisplayName); put("type", status.type.name); put("contentUri", status.contentUri ?: ""); put("text", status.text ?: ""); put("createdAtMillis", status.createdAtMillis); put("expiresAtMillis", status.expiresAtMillis); put("backgroundColor", status.textStyle.backgroundColor); put("foregroundColor", status.textStyle.foregroundColor); put("font", status.textStyle.font.name); put("alignment", status.textStyle.alignment); put("privateStatus", status.privateStatus); put("voiceDurationMs", status.voiceDurationMs); put("muted", status.muted)
     }
 }
