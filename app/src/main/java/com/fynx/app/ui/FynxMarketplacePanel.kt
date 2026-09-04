@@ -167,7 +167,7 @@ private fun RemoteMarketMedia(mediaId: String) {
     var uri by remember(mediaId) { mutableStateOf<Uri?>(null) }
     var bitmap by remember(mediaId) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(mediaId) {
-        uri = FynxProductionMessaging.cacheRemoteMedia(context, mediaId, "/api/media/$mediaId").getOrNull()
+        uri = FynxProductionMessaging.cacheRemoteMedia(context, mediaId, "/api/marketplace/media/$mediaId").getOrNull()
         val local = uri
         if (local != null) bitmap = withContext(Dispatchers.IO) { runCatching { context.contentResolver.openInputStream(local).use { BitmapFactory.decodeStream(it) } }.getOrNull() }
     }
