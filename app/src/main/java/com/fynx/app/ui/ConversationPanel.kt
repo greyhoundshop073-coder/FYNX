@@ -42,6 +42,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var attachmentType by remember { mutableStateOf<String?>(null) }
     var showCamera by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
+    var isRecordingPaused by remember { mutableStateOf(false) }
     var recordingElapsed by remember { mutableLongStateOf(0L) }
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var recordingFile by remember { mutableStateOf<File?>(null) }
@@ -109,6 +110,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     recordingFile = file
                     recordingStartedAt = System.currentTimeMillis()
                     recordingElapsed = 0L
+                    isRecordingPaused = false
                     isRecording = true
                 }
             }.onFailure { networkError = it.message ?: "Unable to start recording" }
@@ -146,7 +148,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     LaunchedEffect(isRecording, recordingStartedAt) {
         while (isRecording) {
-            recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L)
+            if (!isRecordingPaused) recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L)
             delay(200L)
         }
     }
@@ -181,7 +183,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         val r = recorder ?: return
         val file = recordingFile
         val duration = System.currentTimeMillis() - recordingStartedAt
-        runCatching { r.stop() }; r.release(); recorder = null; isRecording = false; recordingFile = null; recordingElapsed = 0L
+        runCatching { r.stop() }; r.release(); recorder = null; isRecordingPaused = false; isRecording = false; recordingFile = null; recordingElapsed = 0L
         if (file != null && file.exists() && file.length() > 0L && duration >= 300L) {
             val pendingFile = file
             scope.launch {
@@ -312,7 +314,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(9.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)))
-                            Spacer(Modifier.width(8.dp)); Text("Recording", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                            Spacer(Modifier.width(8.dp)); Text(if (isRecordingPaused) "Paused" else "Recording", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
                             Spacer(Modifier.width(8.dp)); Text(formatRecordingTime(recordingElapsed), style = MaterialTheme.typography.labelLarge)
                             Spacer(Modifier.width(10.dp))
                             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -333,6 +335,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         else if (wasBlank && value.isNotBlank()) recipientUserId?.let { realtimeClient.sendTyping(it, true); typingSent = true }
                     }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), placeholder = { Text(if (editingId == null) "Message…" else "Edit message…") }, maxLines = 5, enabled = !isRecording)
                     if (isRecording) {
+                        IconButton(onClick = { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) runCatching { if (isRecordingPaused) { recorder?.resume(); isRecordingPaused = false } else { recorder?.pause(); isRecordingPaused = true } } }) { Icon(if (isRecordingPaused) Icons.Default.PlayArrow else Icons.Default.Pause, if (isRecordingPaused) "Resume recording" else "Pause recording") }
                         IconButton(onClick = { stopRecording() }) { Icon(Icons.Default.Stop, "Stop recording") }
                         IconButton(onClick = { cancelRecording() }) { Icon(Icons.Default.Close, "Cancel recording") }
                     } else if (text.isBlank() && attachment == null) {
