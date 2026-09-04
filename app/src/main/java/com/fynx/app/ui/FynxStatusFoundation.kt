@@ -14,7 +14,6 @@ import java.util.UUID
  * FYNX Status foundation. Statuses expire after 24 hours and support text,
  * photo, video and voice media. This layer deliberately keeps media in private
  * app storage so picker URIs do not disappear after the picker lifecycle.
- * Backend delivery will use this stable model/storage contract next.
  */
 enum class FynxStatusType { TEXT, PHOTO, VIDEO, VOICE }
 
@@ -93,7 +92,8 @@ object FynxStatusStore {
 
     suspend fun persistMedia(context: Context, sourceUri: Uri, type: FynxStatusType): Uri? = withContext(Dispatchers.IO) {
         runCatching {
-            val input = context.contentResolver.openInputStream(sourceUri) ?: return@runCatching null
+            val input = if (sourceUri.scheme.equals("file", true)) sourceUri.path?.let { File(it).inputStream() } else context.contentResolver.openInputStream(sourceUri)
+                ?: return@runCatching null
             val extension = when (type) {
                 FynxStatusType.PHOTO -> ".jpg"
                 FynxStatusType.VIDEO -> ".mp4"
@@ -101,7 +101,17 @@ object FynxStatusStore {
                 FynxStatusType.TEXT -> return@runCatching null
             }
             val file = File(context.filesDir, "fynx_status_${UUID.randomUUID()}$extension")
-            input.use { stream -> FileOutputStream(file).use { output -> stream.copyTo(output) } }
+            input.use { stream -> FileOutputStream(file).use { output ->
+                val buffer = ByteArray(32 * 1024)
+                var total = 0L
+                while (true) {
+                    val read = stream.read(buffer)
+                    if (read <= 0) break
+                    total += read
+                    if (total > 12 * 1024 * 1024) error("Status media is too large. Maximum size is 12 MB.")
+                    output.write(buffer, 0, read)
+                }
+            } }
             Uri.fromFile(file)
         }.getOrNull()
     }

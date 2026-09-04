@@ -4,22 +4,29 @@ import android.content.Context
 import android.net.Uri
 import android.util.Base64
 import org.json.JSONObject
+import java.io.File
 
 /** Account-scoped Status API. Local StatusStore remains as a cache/fallback. */
 object FynxStatusClient {
     suspend fun uploadMedia(context: Context, uri: Uri, mimeType: String): Result<String> = runCatching {
-        val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
+        val input = if (uri.scheme.equals("file", true)) uri.path?.let { File(it).inputStream() } else context.contentResolver.openInputStream(uri)
+        val bytes = input?.use { stream ->
             val out = java.io.ByteArrayOutputStream()
-            val buffer = ByteArray(8192)
+            val buffer = ByteArray(32 * 1024)
+            var total = 0
             while (true) {
-                val read = input.read(buffer)
-                if (read < 0) break
+                val read = stream.read(buffer)
+                if (read <= 0) break
+                total += read
+                if (total > 12 * 1024 * 1024) error("Selected media is too large. Maximum size is 12 MB.")
                 out.write(buffer, 0, read)
-                if (out.size() > 50 * 1024 * 1024) error("Selected media is too large.")
             }
             out.toByteArray()
         } ?: error("Could not read selected media.")
-        val body = JSONObject().put("mimeType", mimeType).put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP)).toString()
+        if (bytes.isEmpty()) error("Selected media is empty.")
+        val normalizedMime = mimeType.trim().lowercase()
+        if (!normalizedMime.startsWith("image/") && !normalizedMime.startsWith("video/") && !normalizedMime.startsWith("audio/")) error("Unsupported Status media type.")
+        val body = JSONObject().put("mimeType", normalizedMime).put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP)).toString()
         val raw = FynxBackendClient.postJson(context, "/api/media", body).getOrThrow()
         JSONObject(raw).getJSONObject("media").getString("id")
     }
