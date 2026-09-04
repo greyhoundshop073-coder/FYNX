@@ -51,6 +51,8 @@ fun FynxMarketplaceRemotePanel(currentUsername: String = "preview", onOpenProfil
     var showSell by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<FynxMarketplaceClient.Listing?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    var reputation by remember { mutableStateOf<FynxMarketplaceClient.SellerReputation?>(null) }
+    var reputationLoading by remember { mutableStateOf(false) }
 
     fun refresh() {
         scope.launch {
@@ -161,6 +163,16 @@ fun FynxMarketplaceRemotePanel(currentUsername: String = "preview", onOpenProfil
                     if (listing.mediaIds.size > 1) Text("${listing.mediaIds.size} product media items", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (listing.description.isNotBlank()) Text(listing.description)
                     Text("Seller: ${listing.sellerDisplayName.ifBlank { listing.sellerUsername }}")
+                    LaunchedEffect(listing.sellerUsername) {
+                        reputationLoading = true
+                        reputation = FynxMarketplaceClient.sellerReputation(context, listing.sellerUsername).getOrNull()
+                        reputationLoading = false
+                    }
+                    if (reputationLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    reputation?.let { r ->
+                        Text("Rank #${r.rank}${if (r.sellerCount > 0) " of ${r.sellerCount}" else ""} • ${r.successfulSales} successful sales", fontWeight = FontWeight.SemiBold)
+                        Text("${r.tier} • ${r.completionRate}% completion${if (r.reviewCount > 0) " • ${String.format(java.util.Locale.US, "%.1f", r.averageRating)}/5 rating" else ""}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    }
                     if (listing.storeName.isNotBlank()) Text("Store: ${listing.storeName}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (listing.location.isNotBlank()) Text("Location: ${listing.location}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(if (listing.deliveryAvailable) "Delivery available" else if (listing.pickupAvailable) "Pickup available" else "Contact seller for fulfillment", color = MaterialTheme.colorScheme.onSurfaceVariant)
