@@ -130,10 +130,20 @@ fun FynxMarketplaceRemotePanel(currentUsername: String = "preview", onOpenProfil
                     }
                     uploadedIds += media.id
                 }
+                val safety = FynxMarketplaceSafety.analyze(title, description, store, location)
+                if (safety.isBlocking) {
+                    message = "FYNX Safety Shield blocked this listing: " + safety.signals.joinToString(", ")
+                    return@launch
+                }
+                if (safety.level == FynxMarketplaceRiskLevel.MEDIUM) {
+                    message = "Safety check: " + safety.signals.joinToString(", ") + ". Keep payment and delivery inside FYNX."
+                }
                 FynxMarketplaceClient.createListing(context, title, description, store, price, currency, cat, condition, quantity, location, delivery, pickup, fee, uploadedIds)
                     .onSuccess {
                         showSell = false
-                        message = "Product published to Marketplace."
+                        message = if (safety.level == FynxMarketplaceRiskLevel.MEDIUM)
+                            "Product published with a safety reminder. Keep payment and delivery inside FYNX."
+                        else "Safety checked. Product published to Marketplace."
                         refresh()
                     }
                     .onFailure { error -> message = error.message ?: "Listing could not be published." }
