@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -73,10 +75,18 @@ fun FynxHomeSocialHubPanel(
                 onOpenFindPeople = onOpenFindPeople,
                 onOpenAi = onOpenAi
             )
-            FloatingActionButton(
-                onClick = { showComposer = true; capturedUri = null; text = ""; notice = null },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(18.dp)
-            ) { Icon(Icons.Default.AddAPhoto, "Create post") }
+            Row(
+                modifier = Modifier.align(Alignment.BottomEnd).padding(18.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SmallFloatingActionButton(
+                    onClick = { context.startActivity(Intent(context, FynxContactsActivity::class.java)) }
+                ) { Icon(Icons.Default.People, "Phone contacts") }
+                FloatingActionButton(
+                    onClick = { showComposer = true; capturedUri = null; text = ""; notice = null }
+                ) { Icon(Icons.Default.AddAPhoto, "Create post") }
+            }
         }
     }
 
