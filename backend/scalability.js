@@ -2,6 +2,7 @@ import http from "node:http";
 import { installFailureRecovery, createIdempotencyStore } from "./reliability.js";
 import { registerMarketplaceSettlementRoutes } from "./marketplaceSettlement.js";
 import { registerMarketplaceProtectionRoutes } from "./marketplaceProtection.js";
+import { installSecurityHardening } from "./securityHardening.js";
 
 // Apply safe HTTP connection limits before the existing FYNX server is created.
 // Marketplace settlement and protection routes are registered here because server.js is loaded
@@ -12,6 +13,7 @@ http.createServer = function fynxCreateServer(...args) {
   const app = args[0];
   if (app && typeof app.use === "function") {
     setImmediate(() => {
+      installSecurityHardening({ app });
       registerMarketplaceSettlementRoutes({ app });
       registerMarketplaceProtectionRoutes({ app });
     });
