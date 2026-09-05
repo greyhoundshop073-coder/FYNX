@@ -9,7 +9,7 @@ const checks = [
   ['settlement tables', 'marketplace_escrows', 'marketplace_ledger_entries', 'marketplace_financial_operations'],
   ['payout accounts', 'marketplace_payout_accounts', 'recipient_code', 'account_last4'],
   ['escrow protection states', "'HELD','RELEASE_ELIGIBLE','RELEASE_PENDING','RELEASED','REFUND_PENDING','REFUNDED','DISPUTED','CANCELLED'"],
-  ['payment-to-escrow trigger', 'fynx_marketplace_sync_escrow', 'marketplace_order_escrow_sync', 'PAYMENT_CONFIRMED'],
+  ['payment-to-escrow trigger', 'fynx_marketplace_sync_escrow', 'marketplace_order_escrow_sync', 'payment_confirmation'],
   ['dispute payout blocking', "order.status === 'DISPUTED'", "escrow.status === 'DISPUTED'"],
   ['completion payout gate', "order.status !== 'COMPLETED'", "escrow.status !== 'RELEASE_ELIGIBLE'"],
   ['payout idempotency', 'PAYOUT-', 'idempotency_key', 'ON CONFLICT'],
@@ -18,9 +18,7 @@ const checks = [
 ];
 
 for (const [name, ...markers] of checks) {
-  const source = name === 'settlement tables' || name === 'payout accounts' || name === 'escrow protection states' || name === 'payment-to-escrow trigger' || name === 'dispute payout blocking' || name === 'completion payout gate' || name === 'payout idempotency' || name === 'bank account verification'
-    ? files.settlement
-    : files.scalability;
+  const source = name === 'settlement route wiring' ? files.scalability : files.settlement;
   for (const marker of markers) {
     if (!source.includes(marker)) throw new Error(`Stage 15 verification failed: ${name} missing ${marker}`);
   }
