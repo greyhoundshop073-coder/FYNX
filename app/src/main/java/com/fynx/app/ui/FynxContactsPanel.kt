@@ -8,18 +8,21 @@ import android.provider.ContactsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.input.KeyboardType
 import kotlinx.coroutines.launch
 
 private data class DeviceContact(val name: String, val phone: String)
@@ -34,6 +37,7 @@ fun FynxContactsPanel(onBack: () -> Unit = {}) {
     var loading by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         permission = granted
@@ -45,9 +49,10 @@ fun FynxContactsPanel(onBack: () -> Unit = {}) {
             loading = true
             notice = null
             val local = readDeviceContacts(context)
-            contacts = local
+            val sim = readSimContacts(context)
+            contacts = mergeContacts(local, sim)
             val found = mutableMapOf<String, FynxSocialClient.User>()
-            local.take(150).forEach { contact ->
+            contacts.take(150).forEach { contact ->
                 FynxSocialClient.searchUsers(context, FynxPeopleDiscovery.normalizePhone(contact.phone), phoneSearch = true)
                     .getOrNull()?.firstOrNull()?.let { found[contact.phone] = it }
             }
@@ -83,8 +88,10 @@ fun FynxContactsPanel(onBack: () -> Unit = {}) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else {
             Text("${contacts.size} contacts", style = MaterialTheme.typography.titleMedium)
+            OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }, placeholder = { Text("Search contacts") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text))
+            val visibleContacts = remember(contacts, searchQuery) { val q = searchQuery.trim().lowercase(); if (q.isBlank()) contacts else contacts.filter { it.name.lowercase().contains(q) || it.phone.contains(q) } }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
-                items(contacts, key = { "${it.name}_${it.phone}" }) { contact ->
+                items(visibleContacts, key = { "${it.name}_${it.phone}" }) { contact ->
                     val user = matched[contact.phone]
                     Card(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -120,6 +127,33 @@ fun FynxContactsPanel(onBack: () -> Unit = {}) {
     }
 }
 
+private fun mergeContacts(primary: List<DeviceContact>, sim: List<DeviceContact>): List<DeviceContact> {
+    val merged = linkedMapOf<String, DeviceContact>()
+    (primary + sim).forEach { contact ->
+        val key = FynxPeopleDiscovery.normalizePhone(contact.phone)
+        if (key.length >= 7 && !merged.containsKey(key)) merged[key] = contact
+    }
+    return merged.values.sortedBy { it.name.lowercase() }
+}
+
+private fun readSimContacts(context: Context): List<DeviceContact> {
+    if (context.checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return emptyList()
+    val output = linkedMapOf<String, DeviceContact>()
+    val projection = arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER, ContactsContract.CommonDataKinds.Phone.ACCOUNT_TYPE)
+    runCatching {
+        context.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, projection, "${ContactsContract.CommonDataKinds.Phone.ACCOUNT_TYPE} LIKE ?", arrayOf("%SIM%"), ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC")?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+            val phoneIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+            while (cursor.moveToNext()) {
+                val name = if (nameIndex >= 0) cursor.getString(nameIndex).orEmpty() else ""
+                val phone = if (phoneIndex >= 0) cursor.getString(phoneIndex).orEmpty() else ""
+                val normalized = FynxPeopleDiscovery.normalizePhone(phone)
+                if (normalized.length >= 7) output[normalized] = DeviceContact(name, normalized)
+            }
+        }
+    }
+    return output.values.toList()
+}
 private fun readDeviceContacts(context: Context): List<DeviceContact> {
     val output = linkedMapOf<String, DeviceContact>()
     val projection = arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER)
