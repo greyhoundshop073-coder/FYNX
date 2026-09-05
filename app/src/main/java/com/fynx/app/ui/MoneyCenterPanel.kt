@@ -29,7 +29,8 @@ fun MoneyCenterPanel() {
         MoneySection("Spending Insights", "Spending Insights", "Where your money is going", "📈"),
         MoneySection("Alerts", "Money Alerts", "Important money warnings and reminders", "🔔"),
         MoneySection("Vault", "Secure Money Vault", "Protected money information", "🔐"),
-        MoneySection("Currency", "Currency Converter", "Convert between currencies", "💱")
+        MoneySection("Currency", "Currency Converter", "Convert between currencies", "💱"),
+        MoneySection("AICoach", "AI Money Coach", "Get planning and budgeting guidance from the existing FYNX AI", "✨")
     )
 
     if (selectedTool != null) {
@@ -51,6 +52,7 @@ fun MoneyCenterPanel() {
                 "Alerts" -> MoneyAlertsPanel()
                 "Vault" -> SecureMoneyVaultPanel()
                 "Currency" -> CurrencyConverterPanel()
+                "AICoach" -> FynxMoneyAiCoachPanel(onBack = { selectedTool = null })
             }
         }
         return
