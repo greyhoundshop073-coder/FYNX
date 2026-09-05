@@ -10,9 +10,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun FynxConversationBackground(content: @Composable () -> Unit) {
+fun FynxConversationBackground(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val scheme = androidx.compose.material3.MaterialTheme.colorScheme
-    Box(Modifier.fillMaxSize()) {
+    Box(modifier.fillMaxSize()) {
         Canvas(Modifier.fillMaxSize()) {
             val step = 86.dp.toPx()
             val radius = 13.dp.toPx()
