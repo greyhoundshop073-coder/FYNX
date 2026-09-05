@@ -27,6 +27,9 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Verify Stage 16 camera and media integration
+        run: python3 scripts/verify_stage16_camera.py
+
       - name: Build, test and lint
         run: |
           gradle wrapper --gradle-version 8.9
