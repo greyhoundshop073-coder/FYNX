@@ -51,8 +51,11 @@ jobs:
           node --check marketplaceAdvertising.js
           node --check scalability.js
           node --check reliability.js
+          node --check backgroundJobs.js
           node --check securityHardening.js
           node --check verify-stage15f-security.mjs
+          node --check verify-stage15d-advanced.mjs
+          node --check verify-stage15d-jobs.mjs
 
       - name: Run consolidated Stage 14 verification
         run: node verify-stage14.mjs
@@ -80,6 +83,12 @@ jobs:
 
       - name: Run Stage 15D reliability verification
         run: node verify-stage15d-reliability.mjs
+
+      - name: Run Stage 15D advanced reliability verification
+        run: node verify-stage15d-advanced.mjs
+
+      - name: Run Stage 15D background jobs verification
+        run: node verify-stage15d-jobs.mjs
 
       - name: Run Stage 15F security hardening verification
         run: node verify-stage15f-security.mjs
