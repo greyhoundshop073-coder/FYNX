@@ -41,7 +41,17 @@ const DATABASE_URL = process.env.DATABASE_URL || "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
 const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
-const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL, ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false }) : null;
+const pool = DATABASE_URL ? new Pool({
+  connectionString: DATABASE_URL,
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  max: Number(process.env.DB_POOL_MAX || 20),
+  min: Number(process.env.DB_POOL_MIN || 2),
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
+  statement_timeout: 15_000,
+  query_timeout: 20_000,
+  keepAlive: true
+}) : null;
 const clientsByUserId = new Map();
 
 // Lightweight per-process abuse protection. Production deployments should also enforce
@@ -166,6 +176,12 @@ async function markPendingDelivered(userId) {
   const result = await pool.query(`UPDATE messages SET delivered_at = NOW() WHERE recipient_id = $1 AND delivered_at IS NULL AND deleted = FALSE RETURNING id, sender_id, recipient_id`, [userId]);
   for (const row of result.rows) broadcastToUser(row.sender_id, { type: "message_status", messageId: String(row.id), status: "delivered" });
 }
+
+app.get("/ready", async (_req, res) => {
+  if (!pool) return res.status(503).json({ ok: false, service: "fynx-backend", database: "not-configured" });
+  try { await pool.query("SELECT 1"); return res.status(200).json({ ok: true, service: "fynx-backend", database: "ready" }); }
+  catch { return res.status(503).json({ ok: false, service: "fynx-backend", database: "unavailable" }); }
+});
 
 app.get("/health", async (_req, res) => {
   let database = "not-configured";
@@ -484,5 +500,13 @@ if (pool) registerMoneyPlannerRoutes({ app, pool, auth });
 if (pool) registerMarketplaceAdvertisingRoutes({ app, pool, auth });
 
 initDatabase().catch((error) => { console.error("database initialization failed", error); process.exitCode = 1; });
+
+const shutdown = async (signal) => {
+  console.log(`[fynx-shutdown] ${signal}`);
+  server.close(async () => { if (pool) await pool.end().catch(() => {}); process.exit(0); });
+  setTimeout(() => process.exit(1), 10_000).unref();
+};
+process.once("SIGTERM", () => shutdown("SIGTERM"));
+process.once("SIGINT", () => shutdown("SIGINT"));
 
 server.listen(PORT, "0.0.0.0", () => console.log(`FYNX backend listening on ${PORT}`));
