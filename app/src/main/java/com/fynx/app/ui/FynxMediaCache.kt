@@ -1,15 +1,18 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 
-private const val FYNX_MEDIA_CACHE_DIR = "fynx_media_cache_v1"
+private const val FYNX_MEDIA_CACHE_DIR = "fynx_media_cache_v2"
 private const val MAX_FYNX_MEDIA_CACHE_BYTES = 100L * 1024L * 1024L
 private const val MAX_FYNX_MEDIA_FILE_BYTES = 12 * 1024 * 1024
+private const val MAX_IMAGE_DIMENSION = 1600
 
 internal object FynxMediaCache {
     fun getOrDownload(context: Context, path: String, type: String?): File? {
@@ -54,10 +57,41 @@ internal object FynxMediaCache {
                 }
             }
             if (total <= 0) { temporary.delete(); return null }
-            if (!temporary.renameTo(destination)) { temporary.delete(); return null }
+            optimizeImageIfNeeded(temporary, destination)
+            if (!destination.exists()) {
+                if (!temporary.renameTo(destination)) { temporary.delete(); return null }
+            } else {
+                temporary.delete()
+            }
+            if (destination.length() !in 1..MAX_FYNX_MEDIA_FILE_BYTES) {
+                destination.delete()
+                return null
+            }
             destination
         } finally { connection.disconnect() }
     }.getOrNull()
+
+    private fun optimizeImageIfNeeded(source: File, destination: File) {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(source.absolutePath, options)
+        val width = options.outWidth
+        val height = options.outHeight
+        if (width <= 0 || height <= 0) return
+        if (width <= MAX_IMAGE_DIMENSION && height <= MAX_IMAGE_DIMENSION) return
+
+        var sample = 1
+        while (width / sample > MAX_IMAGE_DIMENSION || height / sample > MAX_IMAGE_DIMENSION) sample *= 2
+        val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.RGB_565 }
+        val bitmap = BitmapFactory.decodeFile(source.absolutePath, decodeOptions) ?: return
+        try {
+            FileOutputStream(destination).use { output ->
+                if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 88, output)) destination.delete()
+            }
+        } finally {
+            bitmap.recycle()
+        }
+        if (destination.exists()) source.delete()
+    }
 
     private fun trim(directory: File, newest: File) {
         val files = directory.listFiles()?.filter { it.isFile && !it.name.endsWith(".part") } ?: return
@@ -65,7 +99,10 @@ internal object FynxMediaCache {
         if (total <= MAX_FYNX_MEDIA_CACHE_BYTES) return
         files.sortedBy { if (it == newest) Long.MAX_VALUE else it.lastModified() }.forEach { file ->
             if (total <= MAX_FYNX_MEDIA_CACHE_BYTES) return@forEach
-            if (file != newest && file.delete()) total -= file.length()
+            if (file != newest) {
+                val size = file.length()
+                if (file.delete()) total -= size
+            }
         }
     }
 
