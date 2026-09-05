@@ -1,6 +1,8 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import java.io.IOException
 import java.net.ConnectException
 import java.net.HttpURLConnection
@@ -65,6 +67,7 @@ object FynxBackendClient {
             runCatching {
                 val root = baseUrl(context)
                 require(root.isNotBlank()) { "FYNX backend is not configured." }
+                require(hasNetwork(context)) { "No network connection available." }
                 require(path.startsWith("/")) { "Backend path must start with /." }
                 var attempt = 0
                 var response: String? = null
@@ -99,6 +102,13 @@ object FynxBackendClient {
             if (status !in 200..299) throw IllegalStateException("FYNX backend returned HTTP $status")
             return response
         } finally { connection.disconnect() }
+    }
+
+    private fun hasNetwork(context: Context): Boolean {
+        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
+        val network = manager.activeNetwork ?: return false
+        val capabilities = manager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
     private fun isTransientNetworkFailure(error: Throwable): Boolean {
