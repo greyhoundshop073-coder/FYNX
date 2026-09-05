@@ -139,7 +139,7 @@ private fun mergeContacts(primary: List<DeviceContact>, sim: List<DeviceContact>
 private fun readSimContacts(context: Context): List<DeviceContact> {
     if (context.checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return emptyList()
     val output = linkedMapOf<String, DeviceContact>()
-    val projection = arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER, ContactsContract.CommonDataKinds.Phone.ACCOUNT_TYPE)
+    val projection = arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER, ContactsContract.RawContacts.ACCOUNT_TYPE)
     runCatching {
         context.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, projection, "${ContactsContract.CommonDataKinds.Phone.ACCOUNT_TYPE} LIKE ?", arrayOf("%SIM%"), ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC")?.use { cursor ->
             val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
