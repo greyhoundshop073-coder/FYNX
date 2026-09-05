@@ -15,6 +15,7 @@ http.createServer = function fynxCreateServer(...args) {
     setImmediate(() => {
       installSecurityHardening({ app });
       registerMarketplaceSettlementRoutes({ app });
+      // protected settlement and buyer/seller protection routes enabled
       registerMarketplaceProtectionRoutes({ app });
     });
   }
