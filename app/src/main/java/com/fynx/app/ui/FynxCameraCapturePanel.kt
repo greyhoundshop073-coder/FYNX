@@ -39,10 +39,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.activity.ComponentActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -56,8 +56,11 @@ fun FynxCameraCapturePanel(
     onDismiss: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val activity = context as? ComponentActivity
-    val previewView = remember { PreviewView(context) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val previewView = remember { PreviewView(context).apply {
+        implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+        scaleType = PreviewView.ScaleType.FILL_CENTER
+    } }
     val scope = rememberCoroutineScope()
     var hasCamera by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     var hasAudio by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) }
@@ -101,10 +104,10 @@ fun FynxCameraCapturePanel(
         }
     }
 
-    LaunchedEffect(hasCamera, lens, mode, pendingUri, activity) {
+    LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner) {
         val generation = bindGeneration + 1
         bindGeneration = generation
-        if (!hasCamera || activity == null || pendingUri != null) {
+        if (!hasCamera || pendingUri != null) {
             cameraProvider?.unbindAll()
             imageCapture = null
             videoCapture = null
@@ -125,7 +128,9 @@ fun FynxCameraCapturePanel(
                     return@runCatching
                 }
 
-                val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
+                val preview = Preview.Builder().build().also { useCase ->
+                    previewView.post { useCase.surfaceProvider = previewView.surfaceProvider }
+                }
                 val capture = ImageCapture.Builder()
                     .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                     .build()
@@ -137,9 +142,9 @@ fun FynxCameraCapturePanel(
                 provider.unbindAll()
                 if (generation != bindGeneration || pendingUri != null) return@runCatching
                 val camera = if (mode == CameraMode.PHOTO) {
-                    provider.bindToLifecycle(activity, selector, preview, capture)
+                    provider.bindToLifecycle(lifecycleOwner, selector, preview, capture)
                 } else {
-                    provider.bindToLifecycle(activity, selector, preview, video)
+                    provider.bindToLifecycle(lifecycleOwner, selector, preview, video)
                 }
 
                 cameraProvider = provider
