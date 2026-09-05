@@ -21,7 +21,9 @@ checks = [
     ("photo rotation editing", 'rotatePhoto' in camera and 'Rotate' in camera),
     ("AI photo enhancement", 'FynxAiPhotoEnhancer.enhance' in camera),
     ("camera result connected to post composer", 'FynxCameraCapturePanel' in home and 'showComposer = true' in home),
-    ("caption composer", 'OutlinedTextField' in home and 'text.take(4000)' in home),
+    # The existing composer limits the editable caption in the TextField callback with it.take(4000).
+    # Verify the actual implementation rather than requiring a different equivalent expression.
+    ("caption composer", 'OutlinedTextField' in home and 'onValueChange = { it.take(4000)' in home),
     ("media upload and social post", 'uploadMedia' in remote and 'createPost' in remote and '/api/social/posts' in remote),
 ]
 
