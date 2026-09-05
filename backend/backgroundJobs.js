@@ -1,6 +1,3 @@
-import pg from "pg";
-
-const { Pool } = pg;
 const DEFAULT_MAX_ATTEMPTS = 5;
 const DEFAULT_LEASE_MS = 30_000;
 const DEFAULT_POLL_MS = 1_000;
@@ -16,18 +13,34 @@ function makeJobId() {
 }
 
 export function createBackgroundJobQueue({ connectionString = process.env.DATABASE_URL, logger = console, pollMs = DEFAULT_POLL_MS, leaseMs = DEFAULT_LEASE_MS } = {}) {
-  if (!connectionString) return { enabled: false, enqueue: async () => { throw new Error("DATABASE_URL is not configured"); }, start: async () => {}, stop: async () => {}, snapshot: () => ({ enabled: false }) };
+  // Keep pg lazy: verification, health checks, and local startup must work when the
+  // optional database-backed worker is disabled or its dependency is not installed.
+  if (!connectionString) {
+    return {
+      enabled: false,
+      enqueue: async () => { throw new Error("DATABASE_URL is not configured"); },
+      start: async () => {},
+      stop: async () => {},
+      snapshot: () => ({ enabled: false })
+    };
+  }
 
-  const pool = new Pool({
-    connectionString,
-    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-    max: Number(process.env.JOB_DB_POOL_MAX || 5),
-    idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 5_000,
-    statement_timeout: 15_000,
-    query_timeout: 20_000,
-    keepAlive: true
-  });
+  let poolPromise = null;
+  async function getPool() {
+    if (!poolPromise) {
+      poolPromise = import("pg").then(({ default: pg }) => new pg.Pool({
+        connectionString,
+        ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+        max: Number(process.env.JOB_DB_POOL_MAX || 5),
+        idleTimeoutMillis: 30_000,
+        connectionTimeoutMillis: 5_000,
+        statement_timeout: 15_000,
+        query_timeout: 20_000,
+        keepAlive: true
+      }));
+    }
+    return poolPromise;
+  }
 
   let timer = null;
   let running = false;
@@ -35,6 +48,7 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
   const metrics = { claimed: 0, completed: 0, retried: 0, deadLettered: 0, recovered: 0, failures: 0 };
 
   async function ensureSchema() {
+    const pool = await getPool();
     await pool.query(`
       CREATE TABLE IF NOT EXISTS fynx_background_jobs (
         id TEXT PRIMARY KEY,
@@ -58,6 +72,7 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
   }
 
   async function enqueue(type, payload = {}, options = {}) {
+    const pool = await getPool();
     const id = makeJobId();
     const maxAttempts = Math.max(1, Number(options.maxAttempts || DEFAULT_MAX_ATTEMPTS));
     const delayMs = Math.max(0, Number(options.delayMs || 0));
@@ -73,6 +88,7 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
   }
 
   async function reclaimExpired() {
+    const pool = await getPool();
     const result = await pool.query(
       `UPDATE fynx_background_jobs
        SET status = 'queued', available_at = NOW(), lease_expires_at = NULL, updated_at = NOW()
@@ -83,6 +99,7 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
   }
 
   async function claimOne() {
+    const pool = await getPool();
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -108,12 +125,11 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
       throw error;
-    } finally {
-      client.release();
-    }
+    } finally { client.release(); }
   }
 
   async function finish(job, error = null) {
+    const pool = await getPool();
     if (!error) {
       await pool.query(`UPDATE fynx_background_jobs SET status = 'completed', lease_expires_at = NULL, completed_at = NOW(), updated_at = NOW() WHERE id = $1`, [job.id]);
       metrics.completed += 1;
@@ -166,14 +182,9 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
   async function stop() {
     stopped = true;
     if (timer) clearInterval(timer);
-    await pool.end();
+    const pool = poolPromise ? await poolPromise.catch(() => null) : null;
+    if (pool) await pool.end();
   }
 
-  return {
-    enabled: true,
-    enqueue,
-    start,
-    stop,
-    snapshot: () => ({ enabled: true, running, stopped, ...metrics })
-  };
+  return { enabled: true, enqueue, start, stop, snapshot: () => ({ enabled: true, running, stopped, ...metrics }) };
 }
