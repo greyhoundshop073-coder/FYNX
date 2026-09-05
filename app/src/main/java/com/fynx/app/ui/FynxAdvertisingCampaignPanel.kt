@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
@@ -14,6 +15,7 @@ import org.json.JSONObject
 @Composable
 fun FynxAdvertisingCampaignPanel(currentUsername: String) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
     var headline by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
@@ -62,7 +64,7 @@ fun FynxAdvertisingCampaignPanel(currentUsername: String) {
                 put("targeting", targeting); put("dailyBudgetKobo", daily); put("totalBudgetKobo", total)
                 put("idempotencyKey", "android-" + System.currentTimeMillis())
             }
-            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+            scope.launch {
                 val result = FynxBackendClient.postJson(context, "/api/advertising/campaigns", bodyJson.toString())
                 loading = false
                 message = result.fold({ "Advert saved for review." }, { it.message ?: "Unable to create advert." })
