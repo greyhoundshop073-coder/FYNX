@@ -55,7 +55,7 @@ jobs:
         run: |
           gradle wrapper --gradle-version 8.9
           chmod +x gradlew
-          ./gradlew lintDebug testDebugUnitTest assembleDebug --no-daemon
+          ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -63,6 +63,14 @@ jobs:
         with:
           name: FYNX-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: ignore
+
+      - name: Upload instrumentation test APK
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: FYNX-debug-androidTest-apk
+          path: app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
           if-no-files-found: ignore
 
       - name: Upload lint report
