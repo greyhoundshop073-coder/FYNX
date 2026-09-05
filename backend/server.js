@@ -59,9 +59,15 @@ const clientsByUserId = new Map();
 const rateBuckets = new Map();
 const RATE_WINDOW_MS = 60_000;
 const RATE_LIMITS = { auth: 20, assistant: 20, media: 30, messages: 120, general: 240 };
+const MAX_RATE_BUCKETS = 20_000;
+const responseCache = new Map();
+const CACHE_TTL_MS = 15_000;
+function cacheGet(key) { const hit = responseCache.get(key); if (!hit || hit.expiresAt <= Date.now()) { responseCache.delete(key); return null; } return hit.value; }
+function cacheSet(key, value, ttl = CACHE_TTL_MS) { if (responseCache.size >= 1_000) { const first = responseCache.keys().next().value; if (first) responseCache.delete(first); } responseCache.set(key, { value, expiresAt: Date.now() + ttl }); }
 function rateLimit(bucket, limit) {
   return (req, res, next) => {
     const key = `${bucket}:${req.ip || req.socket.remoteAddress || "unknown"}:${req.user?.sub || "anonymous"}`;
+    if (!rateBuckets.has(key) && rateBuckets.size >= MAX_RATE_BUCKETS) return res.status(503).json({ error: "server is temporarily protecting capacity" });
     const now = Date.now();
     const current = rateBuckets.get(key);
     if (!current || now - current.startedAt >= RATE_WINDOW_MS) {
@@ -80,6 +86,7 @@ setInterval(() => {
   const cutoff = Date.now() - RATE_WINDOW_MS;
   for (const [key, value] of rateBuckets) if (value.startedAt < cutoff) rateBuckets.delete(key);
 }, RATE_WINDOW_MS).unref();
+setInterval(() => { const now = Date.now(); for (const [key, value] of responseCache) if (value.expiresAt <= now) responseCache.delete(key); }, CACHE_TTL_MS).unref();
 
 async function initDatabase() {
   if (!pool) return;
