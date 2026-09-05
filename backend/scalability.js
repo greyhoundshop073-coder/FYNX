@@ -1,6 +1,7 @@
 import http from "node:http";
 import { registerMarketplaceSettlementRoutes } from "./marketplaceSettlement.js";
 import { registerMarketplaceProtectionRoutes } from "./marketplaceProtection.js";
+import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";
 
 // Apply safe HTTP connection limits before the existing FYNX server is created.
 // This improves connection reuse and protects the process under load without changing API routes.
@@ -39,14 +40,15 @@ http.createServer = function fynxCreateServer(...args) {
     console.error("[fynx-http] server error", error);
   });
 
-  // Keep settlement/protection routes behind the same Express app and server bootstrap.
+  // Keep marketplace settlement, protection, and advertising behind the same Express app/server bootstrap.
   setImmediate(() => {
     try {
       registerMarketplaceSettlementRoutes({ app: args[0] });
       registerMarketplaceProtectionRoutes({ app: args[0] });
-      console.log("[fynx-marketplace] protected settlement and buyer/seller protection routes enabled");
+      registerMarketplaceAdvertisingRoutes({ app: args[0] });
+      console.log("[fynx-marketplace] protected settlement, buyer/seller protection, and advertising routes enabled");
     } catch (error) {
-      console.error("[fynx-marketplace] protected route registration failed", error);
+      console.error("[fynx-marketplace] route registration failed", error);
     }
   });
 
