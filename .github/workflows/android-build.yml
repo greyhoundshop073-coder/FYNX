@@ -9,10 +9,16 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: fynx-android-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  GOOGLE_CLOUD_PROJECT: fynx-f0868
+  FYNX_WIF_PROVIDER: projects/742276831502/locations/global/workloadIdentityPools/fynx-github-actions/providers/fynx-github
+  FYNX_GCP_SERVICE_ACCOUNT: fynx-github-actions@fynx-f0868.iam.gserviceaccount.com
 
 jobs:
   build:
@@ -26,6 +32,21 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+
+      - name: Authenticate to Google Cloud with Workload Identity Federation
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: fynx-f0868
+          workload_identity_provider: ${{ env.FYNX_WIF_PROVIDER }}
+          service_account: ${{ env.FYNX_GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Verify Google Cloud authentication
+        run: |
+          gcloud auth list --filter=status:ACTIVE --format="value(account)"
+          gcloud config get-value project
 
       - name: Verify Stage 16 camera and media integration
         run: python3 scripts/verify_stage16_camera.py
