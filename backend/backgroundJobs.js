@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isTransientDatabaseError, retryWithBackoff } from "./reliability.js";
 
 const DEFAULT_MAX_ATTEMPTS = 5;
 const DEFAULT_LEASE_MS = 30_000;
@@ -146,32 +147,39 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
 
   async function claimOne() {
     const pool = await getPool();
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      const result = await client.query(
-        `SELECT id, type, payload, attempts, max_attempts
-         FROM fynx_background_jobs
-         WHERE status = 'queued' AND available_at <= NOW()
-         ORDER BY available_at ASC, created_at ASC
-         FOR UPDATE SKIP LOCKED LIMIT 1`
-      );
-      if (!result.rows[0]) { await client.query("COMMIT"); return null; }
-      const row = result.rows[0];
-      const nextAttempt = row.attempts + 1;
-      await client.query(
-        `UPDATE fynx_background_jobs
-         SET status = 'running', attempts = $2, lease_expires_at = NOW() + ($3::text || ' milliseconds')::interval, updated_at = NOW()
-         WHERE id = $1`,
-        [row.id, nextAttempt, leaseMs]
-      );
-      await client.query("COMMIT");
-      metrics.claimed += 1;
-      return { ...row, attempts: nextAttempt };
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => {});
-      throw error;
-    } finally { client.release(); }
+    return retryWithBackoff(async () => {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const result = await client.query(
+          `SELECT id, type, payload, attempts, max_attempts
+           FROM fynx_background_jobs
+           WHERE status = 'queued' AND available_at <= NOW()
+           ORDER BY available_at ASC, created_at ASC
+           FOR UPDATE SKIP LOCKED LIMIT 1`
+        );
+        if (!result.rows[0]) { await client.query("COMMIT"); return null; }
+        const row = result.rows[0];
+        const nextAttempt = row.attempts + 1;
+        await client.query(
+          `UPDATE fynx_background_jobs
+           SET status = 'running', attempts = $2, lease_expires_at = NOW() + ($3::text || ' milliseconds')::interval, updated_at = NOW()
+           WHERE id = $1`,
+          [row.id, nextAttempt, leaseMs]
+        );
+        await client.query("COMMIT");
+        metrics.claimed += 1;
+        return { ...row, attempts: nextAttempt };
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw error;
+      } finally { client.release(); }
+    }, {
+      maxAttempts: 3,
+      baseDelayMs: 100,
+      maxDelayMs: 1_000,
+      shouldRetry: isTransientDatabaseError
+    });
   }
 
   async function finish(job, error = null) {
