@@ -118,3 +118,15 @@ AI image generation and AI video generation are NOT part of the FYNX project roa
 - [ ] Chat profile information: improve the existing conversation header/profile details, including country/region where legitimately available
 - [ ] Full media display: remove unnecessary black/empty side areas around videos and stories while preserving aspect ratio and important content
 - [ ] Apply the media-display correction consistently across status/stories, social posts and other existing media presentation surfaces
+
+
+## Chat & Group Chat UX requirement — screenshot-inspired, FYNX-native
+- Use the user's supplied chat screenshots as UX reference for familiar conversation structure and discoverability, without copying another service's branding/assets.
+- Apply one consistent FYNX conversation design language to both private chats and group chats.
+- Conversation list: recognizable avatar, name, latest-message preview, time, unread state and clear online/activity state where available.
+- Conversation screen: polished header, profile/avatar access, online/typing state, voice/video actions where supported, message search and useful conversation actions.
+- Composer: text, media/photo/video, camera, voice message and send actions connected to the existing FYNX messaging/media pipeline.
+- Message interactions: replies, reactions, edit/delete where already supported, delivery/read state, media previews and voice playback.
+- Group conversation: same visual language as private chat, plus member identity, group info/members, admin controls and group-specific actions.
+- Keep chat and group chat responsive, accessible, familiar and uncluttered; do not create a second messaging system.
+- Add a subtle original FYNX conversation background/wallpaper to the actual conversation surfaces, including group conversations, while preserving readability and accessibility.
