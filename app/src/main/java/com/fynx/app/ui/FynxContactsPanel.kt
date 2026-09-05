@@ -102,8 +102,12 @@ fun FynxContactsPanel(onBack: () -> Unit = {}) {
                                 }) { Icon(Icons.Default.ChatBubbleOutline, null); Spacer(Modifier.width(3.dp)); Text("Chat") }
                             } else {
                                 TextButton(onClick = {
-                                    val message = "🚀 I'm on FYNX! Join me so we can chat, connect, share moments, discover businesses, and find products—all in one place. 🤝💬🛍️\n\nJoin FYNX and let's connect there!"
-                                    val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, message) }
+                                    val payload = FynxShareActions.invitePayload(contact.name.ifBlank { "A friend" })
+                                    val intent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TITLE, payload.title)
+                                        putExtra(Intent.EXTRA_TEXT, payload.text)
+                                    }
                                     context.startActivity(Intent.createChooser(intent, "Invite ${contact.name}"))
                                 }) { Icon(Icons.Default.PersonAdd, null); Spacer(Modifier.width(3.dp)); Text("Invite") }
                             }
