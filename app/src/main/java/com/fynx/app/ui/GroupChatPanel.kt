@@ -47,6 +47,7 @@ fun GroupChatPanel(
     var messages by remember(group.name) { mutableStateOf(loadGroupMessages(context, group.id)) }
     var attachment by remember { mutableStateOf<Uri?>(null) }
     var attachmentType by remember { mutableStateOf("image") }
+    var showFynxCamera by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var recordingFile by remember { mutableStateOf<File?>(null) }
@@ -76,6 +77,8 @@ fun GroupChatPanel(
     val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) { attachment = uri; attachmentType = "video" }
     }
+    // Keep legacy capture contracts available, but use the shared FYNX camera for the
+    // group-chat experience so preview, front/back switching and editing are consistent.
     val cameraPhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         if (ok && attachment != null) attachmentType = "image" else if (!ok) attachment = null
     }
@@ -203,13 +206,31 @@ fun GroupChatPanel(
                 } else {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { imagePicker.launch("image/*") }) { Icon(Icons.Default.PhotoLibrary, "Choose photo") }
-                        IconButton(onClick = { cameraPermission.launch(Manifest.permission.CAMERA) }) { Icon(Icons.Default.PhotoCamera, "Take photo") }
+                        IconButton(onClick = { showFynxCamera = true }) { Icon(Icons.Default.PhotoCamera, "Open FYNX camera") }
                         IconButton(onClick = { videoPicker.launch("video/*") }) { Icon(Icons.Default.VideoLibrary, "Choose video") }
                         IconButton(onClick = { videoCameraPermission.launch(Manifest.permission.CAMERA) }) { Icon(Icons.Default.Videocam, "Record video") }
                         OutlinedTextField(text, { text = it.take(4000) }, Modifier.weight(1f), placeholder = { Text("Message group…") }, singleLine = true)
                         IconButton(onClick = { microphonePermission.launch(Manifest.permission.RECORD_AUDIO) }) { Icon(Icons.Default.Mic, "Record voice") }
                         IconButton(onClick = { send() }, enabled = text.isNotBlank() || attachment != null) { Icon(Icons.Default.Send, "Send") }
                     }
+                }
+            }
+        }
+
+        if (showFynxCamera) {
+            Dialog(
+                onDismissRequest = { showFynxCamera = false },
+                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    FynxCameraCapturePanel(
+                        onCaptured = { uri, type ->
+                            attachment = uri
+                            attachmentType = type
+                            showFynxCamera = false
+                        },
+                        onDismiss = { showFynxCamera = false }
+                    )
                 }
             }
         }
