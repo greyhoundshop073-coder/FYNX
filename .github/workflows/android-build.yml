@@ -33,6 +33,13 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: backend/package.json
+
       - name: Authenticate to Google Cloud with Workload Identity Federation
         uses: google-github-actions/auth@v3
         with:
@@ -47,6 +54,11 @@ jobs:
         run: |
           gcloud auth list --filter=status:ACTIVE --format="value(account)"
           gcloud config get-value project
+
+      - name: Verify Stage 15D reliability foundations
+        run: |
+          node backend/verify-stage15d-reliability.mjs
+          node backend/verify-stage15d-advanced.mjs
 
       - name: Verify Stage 16 camera and media integration
         run: python3 scripts/verify_stage16_camera.py
