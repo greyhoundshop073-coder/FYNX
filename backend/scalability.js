@@ -1,11 +1,17 @@
 import http from "node:http";
 import { installFailureRecovery, createIdempotencyStore } from "./reliability.js";
+import { registerMarketplaceSettlementRoutes } from "./marketplaceSettlement.js";
 
 // Apply safe HTTP connection limits before the existing FYNX server is created.
-// Keep this module limited to transport/capacity concerns; route registration belongs to server.js.
+// Keep transport/capacity concerns here; settlement wiring is registered once through the existing
+// server app callback because the settlement module owns its protected financial endpoints.
 const originalCreateServer = http.createServer;
 http.createServer = function fynxCreateServer(...args) {
   const server = originalCreateServer.apply(this, args);
+  const app = args[0];
+  if (app && typeof app.use === "function") {
+    setImmediate(() => registerMarketplaceSettlementRoutes({ app }));
+  }
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 70_000;
   server.requestTimeout = 30_000;
