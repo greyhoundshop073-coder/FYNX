@@ -1,6 +1,8 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
 import kotlinx.coroutines.CancellationException
@@ -8,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -15,6 +18,9 @@ import java.net.URL
 /** Production messaging boundary. The server is the source of truth for chat state. */
 object FynxProductionMessaging {
     private const val MAX_MEDIA_BYTES = 12 * 1024 * 1024
+    private const val MAX_IMAGE_DIMENSION = 1600
+    private const val IMAGE_RECOMPRESS_THRESHOLD = 2 * 1024 * 1024
+    private const val IMAGE_QUALITY = 85
 
     data class RemoteMedia(val id: String, val mimeType: String, val byteSize: Int)
     data class RemoteMessage(
@@ -46,7 +52,7 @@ object FynxProductionMessaging {
 
     suspend fun uploadMedia(context: Context, uri: Uri, mimeTypeOverride: String? = null): Result<RemoteMedia> = withContext(Dispatchers.IO) {
         try {
-            val mimeType = mimeTypeOverride?.trim()?.lowercase()
+            val detectedMimeType = mimeTypeOverride?.trim()?.lowercase()
                 ?: context.contentResolver.getType(uri)?.trim()?.lowercase()
                 ?: when (uri.scheme?.lowercase()) {
                     "file" -> when (uri.path?.substringAfterLast('.', "")?.lowercase()) {
@@ -57,29 +63,90 @@ object FynxProductionMessaging {
                     }
                     else -> "application/octet-stream"
                 }
-            require(mimeType.startsWith("image/") || mimeType.startsWith("video/") || mimeType.startsWith("audio/")) { "Unsupported media type." }
-            val input = if (uri.scheme.equals("file", true)) uri.path?.let { File(it).inputStream() } else context.contentResolver.openInputStream(uri)
-            val bytes = input?.use { stream ->
-                val output = java.io.ByteArrayOutputStream()
-                val buffer = ByteArray(32 * 1024)
-                var total = 0
-                while (true) {
-                    val read = stream.read(buffer)
-                    if (read <= 0) break
-                    total += read
-                    require(total <= MAX_MEDIA_BYTES) { "Media is too large. Maximum size is 12 MB." }
-                    output.write(buffer, 0, read)
-                }
-                output.toByteArray()
-            } ?: throw IllegalArgumentException("Unable to read the selected media.")
+            require(detectedMimeType.startsWith("image/") || detectedMimeType.startsWith("video/") || detectedMimeType.startsWith("audio/")) { "Unsupported media type." }
+
+            val prepared = if (detectedMimeType.startsWith("image/")) {
+                prepareImageUpload(context, uri, detectedMimeType)
+            } else {
+                readMediaBytes(context, uri)
+            }
+            val bytes = prepared.first
+            val effectiveMimeType = prepared.second
             require(bytes.isNotEmpty()) { "The selected media is empty." }
-            val body = JSONObject().apply { put("mimeType", mimeType); put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP)) }
+            require(bytes.size <= MAX_MEDIA_BYTES) { "Media is too large. Maximum size is 12 MB." }
+
+            val body = JSONObject().apply {
+                put("mimeType", effectiveMimeType)
+                put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+            }
             val raw = FynxBackendClient.postJson(context, "/api/media", body.toString()).getOrThrow()
             val item = JSONObject(raw).getJSONObject("media")
             Result.success(RemoteMedia(item.getString("id"), item.getString("mimeType"), item.optInt("byteSize", bytes.size)))
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (error: Throwable) { Result.failure(error) }
     }
+
+    private fun readMediaBytes(context: Context, uri: Uri): ByteArray {
+        val input = if (uri.scheme.equals("file", true)) uri.path?.let { File(it).inputStream() } else context.contentResolver.openInputStream(uri)
+        return input?.use { stream ->
+            val output = ByteArrayOutputStream()
+            val buffer = ByteArray(32 * 1024)
+            var total = 0
+            while (true) {
+                val read = stream.read(buffer)
+                if (read <= 0) break
+                total += read
+                require(total <= MAX_MEDIA_BYTES) { "Media is too large. Maximum size is 12 MB." }
+                output.write(buffer, 0, read)
+            }
+            output.toByteArray()
+        } ?: throw IllegalArgumentException("Unable to read the selected media.")
+    }
+
+    private fun prepareImageUpload(context: Context, uri: Uri, mimeType: String): Pair<ByteArray, String> {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        openMediaInput(context, uri).use { input -> BitmapFactory.decodeStream(input, null, bounds) }
+        val width = bounds.outWidth
+        val height = bounds.outHeight
+        require(width > 0 && height > 0) { "Unable to read the selected image." }
+
+        val original = readMediaBytes(context, uri)
+        val needsResize = width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION
+        if (!needsResize && original.size <= IMAGE_RECOMPRESS_THRESHOLD) return original to mimeType
+
+        var sample = 1
+        while (width / sample > MAX_IMAGE_DIMENSION * 2 || height / sample > MAX_IMAGE_DIMENSION * 2) sample *= 2
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.RGB_565
+        }
+        val bitmap = openMediaInput(context, uri).use { input -> BitmapFactory.decodeStream(input, null, options) }
+            ?: throw IllegalArgumentException("Unable to decode the selected image.")
+        return try {
+            val scale = maxOf(bitmap.width, bitmap.height).toFloat() / MAX_IMAGE_DIMENSION
+            val outputBitmap = if (scale > 1f) {
+                val targetWidth = (bitmap.width / scale).toInt().coerceAtLeast(1)
+                val targetHeight = (bitmap.height / scale).toInt().coerceAtLeast(1)
+                Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true).also { if (it !== bitmap) bitmap.recycle() }
+            } else bitmap
+            try {
+                val output = ByteArrayOutputStream()
+                require(outputBitmap.compress(Bitmap.CompressFormat.JPEG, IMAGE_QUALITY, output)) { "Unable to optimize the selected image." }
+                output.toByteArray() to "image/jpeg"
+            } finally {
+                if (!outputBitmap.isRecycled) outputBitmap.recycle()
+            }
+        } catch (error: Throwable) {
+            if (!bitmap.isRecycled) bitmap.recycle()
+            if (original.size <= MAX_MEDIA_BYTES) original to mimeType else throw error
+        }
+    }
+
+    private fun openMediaInput(context: Context, uri: Uri): java.io.InputStream =
+        if (uri.scheme.equals("file", true)) uri.path?.let { File(it).inputStream() }
+            ?: throw IllegalArgumentException("Unable to open the selected media.")
+        else context.contentResolver.openInputStream(uri)
+            ?: throw IllegalArgumentException("Unable to open the selected media.")
 
     suspend fun cacheRemoteMedia(context: Context, mediaId: String, mediaUrl: String): Result<Uri> = withContext(Dispatchers.IO) {
         try {
