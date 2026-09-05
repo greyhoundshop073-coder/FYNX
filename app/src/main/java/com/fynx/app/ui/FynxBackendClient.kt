@@ -46,7 +46,6 @@ object FynxBackendClient {
     }
 
     fun saveAccessToken(context: Context, token: String?) = FynxSecureTokenStore.save(context, token)
-
     fun accessToken(context: Context): String? = FynxSecureTokenStore.load(context) ?: migrateLegacyAccessToken(context)
 
     private fun migrateLegacyAccessToken(context: Context): String? {
@@ -60,9 +59,8 @@ object FynxBackendClient {
     }
 
     fun hasAccessToken(context: Context): Boolean = accessToken(context) != null
-
-    fun isUnauthorizedFailure(error: Throwable): Boolean =
-        generateSequence(error) { it.cause }.any { it is FynxUnauthorizedException }
+    fun isNetworkAvailable(context: Context): Boolean = hasNetwork(context)
+    fun isUnauthorizedFailure(error: Throwable): Boolean = generateSequence(error) { it.cause }.any { it is FynxUnauthorizedException }
 
     suspend fun get(context: Context, path: String): Result<String> = request(context, "GET", path, null)
     suspend fun postJson(context: Context, path: String, body: String): Result<String> = request(context, "POST", path, body)
@@ -77,15 +75,13 @@ object FynxBackendClient {
             runCatching {
                 val root = baseUrl(context)
                 require(root.isNotBlank()) { "FYNX backend is not configured." }
-                require(hasNetwork(context)) { "No network connection available." }
+                require(hasNetwork(context)) { "No network connection available. FYNX will work again when you reconnect." }
                 require(path.startsWith("/")) { "Backend path must start with /." }
                 var attempt = 0
                 var response: String? = null
                 while (response == null) {
                     try {
-                        response = requestSemaphore.withPermit {
-                            executeRequest(context, root, method, path, body)
-                        }
+                        response = requestSemaphore.withPermit { executeRequest(context, root, method, path, body) }
                     } catch (error: Exception) {
                         val retryable = method == "GET" || method == "DELETE"
                         if (!retryable || !isTransientNetworkFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) throw error
