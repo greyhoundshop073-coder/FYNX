@@ -19,9 +19,12 @@ object FynxBackendClient {
     private const val PREFS = "fynx_backend"
     private const val KEY_BASE_URL = "base_url"
     private const val LEGACY_ACCESS_TOKEN = "access_token"
-        private const val PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"
+    private const val PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"
     private const val MAX_IDEMPOTENT_RETRIES = 2
     private const val RETRY_DELAY_MS = 500L
+    private const val CONNECT_TIMEOUT_MS = 8_000
+    private const val READ_TIMEOUT_MS = 15_000
+    private const val MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 
     fun availability(context: Context): FynxBackendAvailability =
         if (baseUrl(context).isBlank()) FynxBackendAvailability.DISABLED else FynxBackendAvailability.CONFIGURED
@@ -76,7 +79,8 @@ object FynxBackendClient {
                     catch (error: Exception) {
                         val retryable = method == "GET" || method == "DELETE"
                         if (!retryable || !isTransientNetworkFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) throw error
-                        attempt++; delay(RETRY_DELAY_MS * attempt)
+                        attempt++
+                        delay(RETRY_DELAY_MS * attempt)
                     }
                 }
                 response
@@ -85,8 +89,12 @@ object FynxBackendClient {
 
     private fun executeRequest(context: Context, root: String, method: String, path: String, body: String?): String {
         val connection = (URL(root + path).openConnection() as HttpURLConnection).apply {
-            requestMethod = method; connectTimeout = 10_000; readTimeout = 20_000; useCaches = false
+            requestMethod = method
+            connectTimeout = CONNECT_TIMEOUT_MS
+            readTimeout = READ_TIMEOUT_MS
+            useCaches = false
             setRequestProperty("Accept", "application/json")
+            setRequestProperty("Connection", "keep-alive")
             accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
         }
         try {
@@ -97,7 +105,19 @@ object FynxBackendClient {
             }
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            val response = stream?.use { input ->
+                val output = StringBuilder()
+                val buffer = ByteArray(16 * 1024)
+                var total = 0
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    total += count
+                    if (total > MAX_RESPONSE_BYTES) throw IOException("FYNX backend response is too large")
+                    output.append(String(buffer, 0, count, Charsets.UTF_8))
+                }
+                output.toString()
+            }.orEmpty()
             if (status == HttpURLConnection.HTTP_UNAUTHORIZED) { saveAccessToken(context, null); throw FynxUnauthorizedException() }
             if (status !in 200..299) throw IllegalStateException("FYNX backend returned HTTP $status")
             return response
