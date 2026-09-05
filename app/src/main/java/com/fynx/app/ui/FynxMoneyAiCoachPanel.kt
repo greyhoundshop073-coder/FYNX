@@ -37,11 +37,6 @@ fun FynxMoneyAiCoachPanel(onBack: () -> Unit = {}) {
             User question:
             $question
         """.trimIndent()
-        val decision = FynxFutureIntelligencePolicy.authorize(
-            permissions = listOf(FynxAiPermission(FynxAiCapability.ASSISTANT, setOf(FynxAiDataScope.NONE), true)),
-            request = FynxAiRequest(FynxAiCapability.ASSISTANT, prompt, setOf(FynxAiDataScope.NONE))
-        )
-        if (!decision.allowed) { error = "FYNX AI could not process that request safely."; return }
         loading = true
         error = null
         scope.launch {
