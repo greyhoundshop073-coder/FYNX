@@ -16,7 +16,7 @@ const checks = [
   ['Android media cache', 'app/src/main/java/com/fynx/app/ui/FynxMediaCache.kt', [
     'fynx_media_cache_v2',
     'MAX_IMAGE_DIMENSION',
-    'MAX_CACHE_BYTES',
+    'MAX_FYNX_MEDIA_CACHE_BYTES',
     'getOrDownload'
   ]],
   ['Android media upload optimization', 'app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt', [
@@ -39,7 +39,7 @@ const checks = [
     'marketplace_orders_payment_reference_idx',
     'idempotent',
     'FOR UPDATE',
-    'PAYSTACK_MARKETPLACE_ORDER'
+    'FYNX_MARKETPLACE_ORDER'
   ]]
 ];
 
