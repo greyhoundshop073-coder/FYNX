@@ -25,6 +25,8 @@ object FynxRemoteSocialClient {
         val followedByCurrentUser: Boolean
     )
 
+    data class FeedPage(val posts: List<RemotePost>, val hasMore: Boolean)
+
     data class RemoteComment(
         val id: String,
         val text: String,
@@ -83,33 +85,81 @@ object FynxRemoteSocialClient {
         val pickupAvailable: Boolean
     )
 
+    private const val FEED_PAGE_SIZE = 20
+    private const val FEED_CACHE_TTL_MS = 120_000L
+    private const val FEED_CACHE_KEY = "fynx_feed_cache_v1"
+    private const val FEED_CACHE_TIME_KEY = "fynx_feed_cache_time_v1"
+
     suspend fun feed(context: Context): Result<List<RemotePost>> =
-        FynxBackendClient.get(context, "/api/social/feed?limit=100").mapCatching { raw ->
-            val array = JSONObject(raw).optJSONArray("posts") ?: JSONArray()
-            buildList {
-                for (i in 0 until array.length()) {
-                    val o = array.getJSONObject(i)
-                    add(
-                        RemotePost(
-                            o.optString("id"),
-                            o.optString("authorId"),
-                            o.optString("authorUsername"),
-                            o.optString("authorDisplayName"),
-                            o.optString("text"),
-                            o.optString("visibility"),
-                            o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" },
-                            o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" },
-                            o.optString("mediaUrl").takeIf { it.isNotBlank() },
-                            o.optDouble("timestamp", 0.0).toLong(),
-                            o.optInt("likeCount"),
-                            o.optInt("commentCount"),
-                            o.optBoolean("likedByCurrentUser"),
-                            o.optBoolean("followedByCurrentUser")
-                        )
+        feedPage(context, FEED_PAGE_SIZE, 0, useCache = true).map { it.posts }
+
+    suspend fun feedPage(
+        context: Context,
+        limit: Int = FEED_PAGE_SIZE,
+        offset: Int = 0,
+        useCache: Boolean = false
+    ): Result<FeedPage> {
+        val safeLimit = limit.coerceIn(1, FEED_PAGE_SIZE)
+        val safeOffset = offset.coerceAtLeast(0)
+        if (useCache && safeOffset == 0) {
+            readCachedFeed(context)?.let { return Result.success(it) }
+        }
+        return FynxBackendClient.get(
+            context,
+            "/api/social/feed?limit=$safeLimit&offset=$safeOffset"
+        ).mapCatching { raw ->
+            val page = parseFeedPage(raw)
+            if (safeOffset == 0) writeCachedFeed(context, raw)
+            page
+        }
+    }
+
+    private fun parseFeedPage(raw: String): FeedPage {
+        val root = JSONObject(raw)
+        val array = root.optJSONArray("posts") ?: JSONArray()
+        val posts = buildList {
+            for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                add(
+                    RemotePost(
+                        o.optString("id"),
+                        o.optString("authorId"),
+                        o.optString("authorUsername"),
+                        o.optString("authorDisplayName"),
+                        o.optString("text"),
+                        o.optString("visibility"),
+                        o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" },
+                        o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" },
+                        o.optString("mediaUrl").takeIf { it.isNotBlank() },
+                        o.optDouble("timestamp", 0.0).toLong(),
+                        o.optInt("likeCount"),
+                        o.optInt("commentCount"),
+                        o.optBoolean("likedByCurrentUser"),
+                        o.optBoolean("followedByCurrentUser")
                     )
-                }
+                )
             }
         }
+        return FeedPage(posts, root.optBoolean("hasMore", posts.size >= FEED_PAGE_SIZE))
+    }
+
+    private fun readCachedFeed(context: Context): FeedPage? = runCatching {
+        val prefs = context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE)
+        val savedAt = prefs.getLong(FEED_CACHE_TIME_KEY, 0L)
+        val raw = prefs.getString(FEED_CACHE_KEY, null) ?: return null
+        if (System.currentTimeMillis() - savedAt > FEED_CACHE_TTL_MS) return null
+        parseFeedPage(raw)
+    }.getOrNull()
+
+    private fun writeCachedFeed(context: Context, raw: String) {
+        runCatching {
+            context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE)
+                .edit()
+                .putString(FEED_CACHE_KEY, raw)
+                .putLong(FEED_CACHE_TIME_KEY, System.currentTimeMillis())
+                .apply()
+        }
+    }
 
     suspend fun createPost(
         context: Context,
