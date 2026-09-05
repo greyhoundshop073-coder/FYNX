@@ -32,13 +32,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.TimeUnit
 
 private const val MARKETPLACE_AD_MARKER = "[FYNX_MARKETPLACE_AD]"
-private const val MAX_SOCIAL_MEDIA_BYTES = 12 * 1024 * 1024
 
 @Composable
 fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}) {
@@ -109,11 +105,7 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
                 onShare = { sharePost(context, post) }, onOpenMarketplace = onOpenMarketplace)
         }
         if (!loading && hasMore) {
-            OutlinedButton(
-                onClick = { loadMore() },
-                enabled = !loadingMore,
-                modifier = Modifier.fillMaxWidth()
-            ) { Text(if (loadingMore) "Loading more posts…" else "Load more posts") }
+            OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore, modifier = Modifier.fillMaxWidth()) { Text(if (loadingMore) "Loading more posts…" else "Load more posts") }
         }
     }
 
@@ -187,7 +179,7 @@ private fun sharePost(context: Context, post: FynxRemoteSocialClient.RemotePost)
 private fun RemoteSocialMedia(path: String, type: String?) {
     val context = LocalContext.current
     var file by remember(path) { mutableStateOf<File?>(null) }
-    LaunchedEffect(path) { file = withContext(Dispatchers.IO) { download(context, path, type) } }
+    LaunchedEffect(path) { file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, path, type) } }
     if (file == null) Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     else if (type == "audio") AudioPostPlayer(file!!)
     else if (type == "video") AndroidView(factory = { ctx -> VideoView(ctx).apply { layoutParams = ViewGroup.LayoutParams(-1, 640); setMediaController(MediaController(ctx)); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxWidth().height(320.dp))
@@ -197,19 +189,6 @@ private fun RemoteSocialMedia(path: String, type: String?) {
         bitmap?.let { Image(it.asImageBitmap(), "Post media", Modifier.fillMaxWidth().heightIn(min = 240.dp, max = 520.dp), contentScale = ContentScale.Crop) }
     }
 }
-
-private fun download(context: Context, path: String, type: String?): File? = runCatching {
-    val connection = (URL(FynxBackendClient.baseUrl(context) + path).openConnection() as HttpURLConnection).apply { connectTimeout = 10000; readTimeout = 20000; setRequestProperty("Authorization", "Bearer ${FynxBackendClient.accessToken(context) ?: ""}") }
-    try {
-        if (connection.responseCode !in 200..299) return null
-        val extension = when (type) { "video" -> ".mp4"; "audio" -> ".m4a"; else -> ".jpg" }
-        val file = File.createTempFile("fynx_social_", extension, context.cacheDir)
-        var total = 0
-        val buffer = ByteArray(32 * 1024)
-        connection.inputStream.use { input -> FileOutputStream(file).use { output -> while (true) { val read = input.read(buffer); if (read < 0) break; total += read; if (total > MAX_SOCIAL_MEDIA_BYTES) { file.delete(); return null }; output.write(buffer, 0, read) } } }
-        file
-    } finally { connection.disconnect() }
-}.getOrNull()
 
 @Composable
 private fun CommentsDialog(post: FynxRemoteSocialClient.RemotePost, onClose: () -> Unit) { val context = LocalContext.current; val scope = rememberCoroutineScope(); var list by remember(post.id) { mutableStateOf<List<FynxRemoteSocialClient.RemoteComment>>(emptyList()) }; var text by remember { mutableStateOf("") }; LaunchedEffect(post.id) { FynxRemoteSocialClient.comments(context, post.id).onSuccess { list = it } }; AlertDialog(onDismissRequest = onClose, title = { Text("Comments") }, text = { Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { list.forEach { comment -> Column { Text(comment.authorDisplayName.ifBlank { comment.authorUsername }); Text(comment.text); Text(relative(comment.timestamp), style = MaterialTheme.typography.labelSmall) } }; if (list.isEmpty()) Text("No comments yet."); OutlinedTextField(text, { text = it.take(1000) }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Write a comment…") }) } }, confirmButton = { TextButton(onClick = { if (text.isNotBlank()) scope.launch { FynxRemoteSocialClient.addComment(context, post.id, text).onSuccess { list = list + it; text = "" } } }) { Text("Comment") } }, dismissButton = { TextButton(onClick = onClose) { Text("Close") } }) }
