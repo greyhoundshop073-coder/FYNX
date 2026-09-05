@@ -25,6 +25,14 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: "18mb", strict: true }));
+app.use((req, res, next) => {
+  if (req.method !== "GET" && req.method !== "HEAD") res.setHeader("Cache-Control", "no-store");
+  next();
+});
+app.use("/api/auth", rateLimit("auth", RATE_LIMITS.auth));
+app.use("/api/assistant", rateLimit("assistant", RATE_LIMITS.assistant));
+app.use("/api/media", rateLimit("media", RATE_LIMITS.media));
+app.use("/api/messages", rateLimit("messages", RATE_LIMITS.messages));
 
 const PORT = Number(process.env.PORT || 10000);
 const JWT_SECRET = process.env.JWT_SECRET || "";
@@ -34,6 +42,33 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
 const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
 const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL, ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false }) : null;
 const clientsByUserId = new Map();
+
+// Lightweight per-process abuse protection. Production deployments should also enforce
+// rate limits at the edge/load-balancer so limits remain effective across instances.
+const rateBuckets = new Map();
+const RATE_WINDOW_MS = 60_000;
+const RATE_LIMITS = { auth: 20, assistant: 20, media: 30, messages: 120, general: 240 };
+function rateLimit(bucket, limit) {
+  return (req, res, next) => {
+    const key = `${bucket}:${req.ip || req.socket.remoteAddress || "unknown"}:${req.user?.sub || "anonymous"}`;
+    const now = Date.now();
+    const current = rateBuckets.get(key);
+    if (!current || now - current.startedAt >= RATE_WINDOW_MS) {
+      rateBuckets.set(key, { startedAt: now, count: 1 });
+      return next();
+    }
+    current.count += 1;
+    if (current.count > limit) {
+      res.setHeader("Retry-After", "60");
+      return res.status(429).json({ error: "too many requests" });
+    }
+    return next();
+  };
+}
+setInterval(() => {
+  const cutoff = Date.now() - RATE_WINDOW_MS;
+  for (const [key, value] of rateBuckets) if (value.startedAt < cutoff) rateBuckets.delete(key);
+}, RATE_WINDOW_MS).unref();
 
 async function initDatabase() {
   if (!pool) return;
@@ -145,7 +180,7 @@ app.post("/api/auth/register", async (req, res) => {
     const displayName = typeof req.body?.displayName === "string" ? req.body.displayName.trim().slice(0, 80) : "";
     const phone = typeof req.body?.phone === "string" ? req.body.phone.trim().slice(0, 30) : "";
     if (!/^[a-z0-9_]{3,32}$/.test(username)) return res.status(400).json({ error: "username must be 3-32 characters using letters, numbers, or underscore" });
-    if (password.length < 8) return res.status(400).json({ error: "password must be at least 8 characters" });
+    if (password.length < 8 || password.length > 128) return res.status(400).json({ error: "password must be 8-128 characters" });
     if (displayName.length < 2) return res.status(400).json({ error: "display name is required" });
     const passwordHash = await bcrypt.hash(password, 12);
     const result = await pool.query("INSERT INTO users (username, password_hash, display_name, phone) VALUES ($1, $2, $3, $4) RETURNING id, username, display_name, phone, created_at", [username, passwordHash, displayName, phone]);
@@ -162,6 +197,7 @@ app.post("/api/auth/login", async (req, res) => {
     requireConfig("DATABASE_URL", DATABASE_URL); requireConfig("JWT_SECRET", JWT_SECRET);
     const username = typeof req.body?.username === "string" ? req.body.username.trim().toLowerCase() : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";
+    if (password.length > 128) return res.status(400).json({ error: "invalid username or password" });
     const result = await pool.query("SELECT id, username, password_hash, display_name, phone, created_at FROM users WHERE username = $1", [username]);
     const user = result.rows[0];
     if (!user || !(await bcrypt.compare(password, user.password_hash))) return res.status(401).json({ error: "invalid username or password" });
