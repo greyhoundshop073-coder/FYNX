@@ -2,6 +2,7 @@ import fs from "node:fs";
 
 const advertising = fs.readFileSync(new URL("./marketplaceAdvertising.js", import.meta.url), "utf8");
 const scalability = fs.readFileSync(new URL("./scalability.js", import.meta.url), "utf8");
+const server = fs.readFileSync(new URL("./server.js", import.meta.url), "utf8");
 
 const checks = [
   ["campaign schema", advertising.includes("CREATE TABLE IF NOT EXISTS marketplace_ad_campaigns")],
@@ -13,7 +14,9 @@ const checks = [
   ["activation approval gate", advertising.includes("campaign approval required before activation")],
   ["status controls", advertising.includes("STATUS_CHANGE")],
   ["https destination protection", advertising.includes("destination must use HTTPS")],
-  ["advertising route wiring", scalability.includes("registerMarketplaceAdvertisingRoutes")],
+  // Advertising routes are registered by the existing server architecture. Do not duplicate
+  // registration in scalability.js just to satisfy this verifier.
+  ["advertising route wiring", server.includes("registerMarketplaceAdvertisingRoutes") || scalability.includes("registerMarketplaceAdvertisingRoutes")],
 ];
 
 for (const [name, ok] of checks) {
