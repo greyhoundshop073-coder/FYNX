@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -9,6 +10,13 @@ camera = read("app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt")
 home = read("app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt")
 remote = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
 manifest = read("app/src/main/AndroidManifest.xml")
+
+# Keep verification implementation-oriented rather than formatting-oriented. Compose/Kotlin
+# permits equivalent callback formatting, so do not require one exact source-string layout.
+caption_limit = (
+    re.search(r"OutlinedTextField[\s\S]*?onValueChange\s*=\s*\{[^}]*\.take\(4000\)", home) is not None
+    or re.search(r"onValueChange\s*=\s*\{[^}]*text\s*=\s*it\.take\(4000\)", home) is not None
+)
 
 checks = [
     ("camera permission", 'Manifest.permission.CAMERA' in camera and 'android.permission.CAMERA' in manifest),
@@ -21,9 +29,7 @@ checks = [
     ("photo rotation editing", 'rotatePhoto' in camera and 'Rotate' in camera),
     ("AI photo enhancement", 'FynxAiPhotoEnhancer.enhance' in camera),
     ("camera result connected to post composer", 'FynxCameraCapturePanel' in home and 'showComposer = true' in home),
-    # The existing composer limits the editable caption in the TextField callback with it.take(4000).
-    # Verify the actual implementation rather than requiring a different equivalent expression.
-    ("caption composer", 'OutlinedTextField' in home and 'onValueChange = { it.take(4000)' in home),
+    ("caption composer", 'OutlinedTextField' in home and caption_limit),
     ("media upload and social post", 'uploadMedia' in remote and 'createPost' in remote and '/api/social/posts' in remote),
 ]
 
