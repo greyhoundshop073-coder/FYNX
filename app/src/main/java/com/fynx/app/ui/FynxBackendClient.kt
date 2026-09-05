@@ -16,6 +16,7 @@ import org.json.JSONObject
 object FynxBackendClient {
     private const val PREFS = "fynx_backend"
     private const val KEY_BASE_URL = "base_url"
+    private const val LEGACY_ACCESS_TOKEN = "access_token"
         private const val PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"
     private const val MAX_IDEMPOTENT_RETRIES = 2
     private const val RETRY_DELAY_MS = 500L
@@ -34,7 +35,17 @@ object FynxBackendClient {
 
     fun saveAccessToken(context: Context, token: String?) = FynxSecureTokenStore.save(context, token)
 
-    fun accessToken(context: Context): String? = FynxSecureTokenStore.load(context)
+    fun accessToken(context: Context): String? = FynxSecureTokenStore.load(context) ?: migrateLegacyAccessToken(context)
+
+    private fun migrateLegacyAccessToken(context: Context): String? {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val legacy = prefs.getString(LEGACY_ACCESS_TOKEN, null)?.takeIf { it.isNotBlank() } ?: return null
+        return runCatching {
+            FynxSecureTokenStore.save(context, legacy)
+            prefs.edit().remove(LEGACY_ACCESS_TOKEN).apply()
+            legacy
+        }.getOrNull()
+    }
 
     fun hasAccessToken(context: Context): Boolean = accessToken(context) != null
 
