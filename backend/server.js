@@ -9,6 +9,7 @@ import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.
 import { registerMarketplaceReputationRoutes } from "./marketplaceReputation.js";
 import { registerMarketplaceCompletionRoutes } from "./marketplaceCompletion.js";
 import { registerMoneyPlannerRoutes } from "./moneyPlanner.js";
+import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";
 
 const { Pool } = pg;
 const app = express();
@@ -213,6 +214,32 @@ app.get("/api/me", auth, async (req, res) => {
   } catch (error) { console.error("me", error); return res.status(500).json({ error: "request failed" }); }
 });
 
+
+app.post("/api/advertising/ai-advice", auth, async (req, res) => {
+  try {
+    requireConfig("OPENAI_API_KEY", OPENAI_API_KEY);
+    const request = typeof req.body?.request === "string" ? req.body.request.trim() : "";
+    if (!request || request.length > 3000) return res.status(400).json({ error: "valid advertising request is required" });
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        instructions: "You are FYNX AI Advertising Coach. Help a business write clear, honest adverts and choose sensible audience and budget options. Never promise guaranteed results. Never invent FYNX campaign data. Do not expose private user data or secrets. Never perform or claim to perform payments, campaign activation, refunds, or other account actions.",
+        input: request,
+        store: false
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return res.status(502).json({ error: "AI advertising advice unavailable" });
+    const reply = typeof data?.output_text === "string" ? data.output_text.trim() : "";
+    if (!reply) return res.status(502).json({ error: "AI returned an empty response" });
+    return res.json({ reply });
+  } catch (error) {
+    console.error("advertising ai", error);
+    return res.status(500).json({ error: "advertising AI request failed" });
+  }
+});
 
 app.post("/api/assistant", auth, async (req, res) => {
   try {
@@ -454,6 +481,7 @@ if (pool) registerMarketplaceTransactionRoutes({ app, pool, auth });
 registerMarketplaceReputationRoutes({ app, pool, auth });
 registerMarketplaceCompletionRoutes({ app, pool, auth });
 if (pool) registerMoneyPlannerRoutes({ app, pool, auth });
+if (pool) registerMarketplaceAdvertisingRoutes({ app, pool, auth });
 
 initDatabase().catch((error) => { console.error("database initialization failed", error); process.exitCode = 1; });
 
