@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 const DEFAULT_MAX_ATTEMPTS = 5;
 const DEFAULT_LEASE_MS = 30_000;
 const DEFAULT_POLL_MS = 1_000;
@@ -10,6 +12,20 @@ function backoffMs(attempt, baseDelayMs = DEFAULT_BASE_DELAY_MS) {
 
 function makeJobId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function stableSerialize(value) {
+  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableSerialize(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function idempotencyFingerprint(type, payload) {
+  return createHash("sha256")
+    .update(stableSerialize({ type: String(type), payload: payload ?? {} }))
+    .digest("hex");
 }
 
 export function createBackgroundJobQueue({ connectionString = process.env.DATABASE_URL, logger = console, pollMs = DEFAULT_POLL_MS, leaseMs = DEFAULT_LEASE_MS } = {}) {
@@ -61,10 +77,13 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
         lease_expires_at TIMESTAMPTZ,
         last_error TEXT,
         idempotency_key TEXT,
+        idempotency_fingerprint TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         completed_at TIMESTAMPTZ
       );
+      ALTER TABLE fynx_background_jobs
+        ADD COLUMN IF NOT EXISTS idempotency_fingerprint TEXT;
       CREATE INDEX IF NOT EXISTS fynx_background_jobs_ready_idx ON fynx_background_jobs (status, available_at);
       CREATE INDEX IF NOT EXISTS fynx_background_jobs_lease_idx ON fynx_background_jobs (status, lease_expires_at);
       CREATE UNIQUE INDEX IF NOT EXISTS fynx_background_jobs_idempotency_idx ON fynx_background_jobs (idempotency_key) WHERE idempotency_key IS NOT NULL;
@@ -74,17 +93,44 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
   async function enqueue(type, payload = {}, options = {}) {
     const pool = await getPool();
     const id = makeJobId();
+    const normalizedType = String(type);
+    const normalizedPayload = payload ?? {};
     const maxAttempts = Math.max(1, Number(options.maxAttempts || DEFAULT_MAX_ATTEMPTS));
     const delayMs = Math.max(0, Number(options.delayMs || 0));
     const idempotencyKey = options.idempotencyKey ? String(options.idempotencyKey).slice(0, 200) : null;
+    const fingerprint = idempotencyFingerprint(normalizedType, normalizedPayload);
+
     const result = await pool.query(
-      `INSERT INTO fynx_background_jobs (id, type, payload, max_attempts, available_at, idempotency_key)
-       VALUES ($1, $2, $3::jsonb, $4, NOW() + ($5::text || ' milliseconds')::interval, $6)
-       ON CONFLICT (idempotency_key) DO UPDATE SET updated_at = fynx_background_jobs.updated_at
-       RETURNING id, type, status, attempts, max_attempts, available_at, idempotency_key`,
-      [id, String(type), JSON.stringify(payload ?? {}), maxAttempts, delayMs, idempotencyKey]
+      `INSERT INTO fynx_background_jobs (id, type, payload, max_attempts, available_at, idempotency_key, idempotency_fingerprint)
+       VALUES ($1, $2, $3::jsonb, $4, NOW() + ($5::text || ' milliseconds')::interval, $6, $7)
+       ON CONFLICT (idempotency_key) DO NOTHING
+       RETURNING id, type, status, attempts, max_attempts, available_at, idempotency_key, idempotency_fingerprint`,
+      [id, normalizedType, JSON.stringify(normalizedPayload), maxAttempts, delayMs, idempotencyKey, fingerprint]
     );
-    return result.rows[0];
+
+    if (result.rows[0]) return result.rows[0];
+    if (!idempotencyKey) throw new Error("Background job insert returned no row");
+
+    // A reused idempotency key is only a duplicate when the operation fingerprint
+    // matches. A different payload/type must never silently reuse the old job.
+    const existing = await pool.query(
+      `SELECT id, type, payload, status, attempts, max_attempts, available_at, idempotency_key, idempotency_fingerprint
+       FROM fynx_background_jobs
+       WHERE idempotency_key = $1`,
+      [idempotencyKey]
+    );
+    if (!existing.rows[0]) {
+      throw new Error("Background job idempotency race; retry enqueue");
+    }
+
+    const row = existing.rows[0];
+    const existingFingerprint = row.idempotency_fingerprint || idempotencyFingerprint(row.type, row.payload);
+    if (existingFingerprint !== fingerprint) {
+      const error = new Error("IDEMPOTENCY_KEY_CONFLICT: idempotency key was already used with a different operation payload");
+      error.code = "IDEMPOTENCY_KEY_CONFLICT";
+      throw error;
+    }
+    return row;
   }
 
   async function reclaimExpired() {
