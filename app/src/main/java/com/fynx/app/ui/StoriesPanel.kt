@@ -323,64 +323,67 @@ private fun StoryViewer(
     }
 
     BackHandler(onBack = onDismiss)
-    AlertDialog(
+    androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Column {
-                Text(if (isOwner) "Your story" else story.ownerName)
-                Text("${story.ownerUsername} • ${storyTypeLabel(story.type)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 240.dp, max = 430.dp)
-                        .pointerInput(story.id) {
-                            detectTapGestures { offset ->
-                                if (offset.x < size.width / 2f) movePrevious() else moveNext()
-                            }
-                        }
-                ) {
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FynxAvatar(if (isOwner) "You" else story.ownerName, Modifier.size(40.dp))
+                    Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                        Text(if (isOwner) "Your story" else story.ownerName, style = MaterialTheme.typography.titleMedium)
+                        Text("${story.ownerUsername} • ${storyTypeLabel(story.type)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(formatRemaining(story.createdAtMillis, nowMillis), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = onDismiss) { Text("Done") }
+                }
+                Box(Modifier.weight(1f).fillMaxWidth().background(MaterialTheme.colorScheme.surface).pointerInput(story.id) {
+                    detectTapGestures { offset -> if (offset.x < size.width / 2f) movePrevious() else moveNext() }
+                }) {
                     when (story.type) {
-                        FynxStoryType.TEXT -> Box(Modifier.fillMaxSize().background(FynxDesign.Surface, RoundedCornerShape(18.dp)).padding(20.dp), contentAlignment = Alignment.Center) {
-                            Text(story.text.orEmpty(), style = MaterialTheme.typography.headlineSmall)
+                        FynxStoryType.TEXT -> Box(Modifier.fillMaxSize().background(FynxDesign.Surface), contentAlignment = Alignment.Center) {
+                            Text(story.text.orEmpty(), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(28.dp))
                         }
                         FynxStoryType.PHOTO -> StoryPhotoContent(story.contentUri)
                         FynxStoryType.VIDEO -> StoryVideoContent(story.contentUri)
                     }
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (index == 0) "Latest" else "Story ${index + 1} of ${stories.size}", style = MaterialTheme.typography.labelSmall)
-                    Text("${formatRemaining(story.createdAtMillis, nowMillis)} remaining", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (stories.size > 1) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Row(Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        stories.forEachIndexed { storyIndex, _ ->
+                            LinearProgressIndicator(progress = { if (storyIndex < index) 1f else if (storyIndex == index) 0.55f else 0f }, modifier = Modifier.weight(1f).height(3.dp))
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                         TextButton(onClick = { movePrevious() }, enabled = index > 0) { Text("Previous") }
                         TextButton(onClick = { moveNext() }) { Text(if (index < stories.lastIndex) "Next" else "Done") }
                     }
                 }
                 if (!isOwner) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("❤️", "😂", "😮", "😢").forEach { emoji ->
-                            FilterChip(selected = story.reaction == emoji, onClick = { onReact(story, emoji) }, label = { Text(emoji) })
+                    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
+                        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf("❤️", "😂", "😮", "😢").forEach { emoji ->
+                                    FilterChip(selected = story.reaction == emoji, onClick = { onReact(story, emoji) }, label = { Text(emoji) })
+                                }
+                            }
+                            if (story.reply != null) Text("Your reply: ${story.reply}", style = MaterialTheme.typography.bodySmall)
+                            if (showReply) {
+                                OutlinedTextField(value = replyText, onValueChange = onReplyTextChange, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Reply to this story…") }, singleLine = true)
+                                Button(onClick = { onReply(story); showReply = false }, enabled = replyText.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Send reply") }
+                            } else {
+                                OutlinedButton(onClick = { showReply = true }, modifier = Modifier.fillMaxWidth()) { Text("Reply to this story…") }
+                            }
                         }
                     }
-                    if (story.reply != null) Text("Your reply: ${story.reply}", style = MaterialTheme.typography.bodySmall)
-                    if (showReply) {
-                        OutlinedTextField(value = replyText, onValueChange = onReplyTextChange, modifier = Modifier.fillMaxWidth(), placeholder = { Text("Reply to this story…") })
-                        Button(onClick = { onReply(story); showReply = false }, enabled = replyText.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Send reply") }
-                    } else {
-                        TextButton(onClick = { showReply = true }) { Text("Reply") }
-                    }
                 } else {
-                    Text("You are viewing your own Story.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("You are viewing your own Story.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(10.dp))
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
-    )
+        }
+    }
 }
 
 @Composable
