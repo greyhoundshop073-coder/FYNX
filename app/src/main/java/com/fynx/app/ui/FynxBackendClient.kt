@@ -12,6 +12,10 @@ import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
 import org.json.JSONObject
 
 /** Secure network boundary for the real FYNX backend. */
@@ -25,6 +29,9 @@ object FynxBackendClient {
     private const val CONNECT_TIMEOUT_MS = 8_000
     private const val READ_TIMEOUT_MS = 15_000
     private const val MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+    private const val MAX_CONCURRENT_REQUESTS = 6
+
+    private val requestSemaphore = Semaphore(MAX_CONCURRENT_REQUESTS)
 
     fun availability(context: Context): FynxBackendAvailability =
         if (baseUrl(context).isBlank()) FynxBackendAvailability.DISABLED else FynxBackendAvailability.CONFIGURED
@@ -75,8 +82,11 @@ object FynxBackendClient {
                 var attempt = 0
                 var response: String? = null
                 while (response == null) {
-                    try { response = executeRequest(context, root, method, path, body) }
-                    catch (error: Exception) {
+                    try {
+                        response = requestSemaphore.withPermit {
+                            executeRequest(context, root, method, path, body)
+                        }
+                    } catch (error: Exception) {
                         val retryable = method == "GET" || method == "DELETE"
                         if (!retryable || !isTransientNetworkFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) throw error
                         attempt++
@@ -87,7 +97,7 @@ object FynxBackendClient {
             }
         }
 
-    private fun executeRequest(context: Context, root: String, method: String, path: String, body: String?): String {
+    private suspend fun executeRequest(context: Context, root: String, method: String, path: String, body: String?): String {
         val connection = (URL(root + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = CONNECT_TIMEOUT_MS
@@ -97,6 +107,7 @@ object FynxBackendClient {
             setRequestProperty("Connection", "keep-alive")
             accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
         }
+        val cancellationHandle = currentCoroutineContext().job.invokeOnCompletion { connection.disconnect() }
         try {
             if (body != null) {
                 connection.doOutput = true
@@ -121,7 +132,10 @@ object FynxBackendClient {
             if (status == HttpURLConnection.HTTP_UNAUTHORIZED) { saveAccessToken(context, null); throw FynxUnauthorizedException() }
             if (status !in 200..299) throw IllegalStateException("FYNX backend returned HTTP $status")
             return response
-        } finally { connection.disconnect() }
+        } finally {
+            cancellationHandle.dispose()
+            connection.disconnect()
+        }
     }
 
     private fun hasNetwork(context: Context): Boolean {
