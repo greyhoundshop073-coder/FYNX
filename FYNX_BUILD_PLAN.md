@@ -107,3 +107,14 @@ Profile and settings currently remain local foundations. Production account reco
 
 ## Removed permanently
 AI image generation and AI video generation are NOT part of the FYNX project roadmap. Do not add them back.
+
+
+## Stage 12 — AI Creation Layer follow-up backlog
+- [ ] AI Creation remains connected to the existing FYNX media and posting pipeline; no duplicate posting system
+- [ ] AI-assisted captions, rewrites, ideas and marketplace descriptions use the existing authenticated FYNX AI backend
+- [ ] AI Photo Editor remains integrated with the existing media flow
+- [ ] AI Money Coach in Money Center uses the same FYNX AI system and must never execute transactions
+- [ ] Chat conversation wallpaper: add an original, subtle FYNX patterned background to the existing chat conversation screen
+- [ ] Chat profile information: improve the existing conversation header/profile details, including country/region where legitimately available
+- [ ] Full media display: remove unnecessary black/empty side areas around videos and stories while preserving aspect ratio and important content
+- [ ] Apply the media-display correction consistently across status/stories, social posts and other existing media presentation surfaces
