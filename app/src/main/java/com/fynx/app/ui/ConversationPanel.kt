@@ -373,7 +373,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         val wasBlank = text.isBlank(); text = value
                         if (value.isBlank() && typingSent) { recipientUserId?.let { realtimeClient.sendTyping(it, false) }; typingSent = false }
                         else if (wasBlank && value.isNotBlank()) recipientUserId?.let { realtimeClient.sendTyping(it, true); typingSent = true }
-                    }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), placeholder = { Text(if (editingId == null) "Message…" else "Edit message…") }, maxLines = 5, enabled = !isRecording)
+                    }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), placeholder = { Text(if (editingId == null) "Message" else "Edit message…") }, maxLines = 5, enabled = !isRecording)
                     if (isRecording) {
                         IconButton(onClick = { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) runCatching { if (isRecordingPaused) { recorder?.resume(); isRecordingPaused = false } else { recorder?.pause(); isRecordingPaused = true } } }) { Icon(if (isRecordingPaused) Icons.Default.PlayArrow else Icons.Default.Pause, if (isRecordingPaused) "Resume recording" else "Pause recording") }
                         IconButton(onClick = { stopRecording() }) { Icon(Icons.Default.Stop, "Stop recording") }
@@ -418,7 +418,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     }
 
     if (showCamera) {
-        Dialog(onDismissRequest = { showCamera = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Dialog(onDismissRequest = { showCamera = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
             Surface(Modifier.fillMaxSize()) {
                 FynxCameraCapturePanel(onCaptured = { uri, type -> attachment = uri; attachmentType = type; showCamera = false })
             }
