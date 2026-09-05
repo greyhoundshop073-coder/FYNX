@@ -86,6 +86,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "AI Creation" -> FynxAiCreationPanel(onUseCaptionForPost = { caption -> aiCaptionDraft = caption; selected = "Home" }, onOpenPhotoEditor = { selected = "AI Photo Editor" })
             "AI Photo Editor" -> FynxAiPhotoEditorPanel(onDone = { selected = "AI Creation" })
             "Advertising" -> FynxAdvertisingCampaignPanel(currentUsername = authSession.username ?: "preview")
+            "Advertising Dashboard" -> FynxAdvertisingDashboardPanel()
             "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" })
             else -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview")
         } } }

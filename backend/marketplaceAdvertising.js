@@ -58,6 +58,89 @@ async function ensureAdvertisingSchema() {
     );
     CREATE INDEX IF NOT EXISTS marketplace_ad_operations_campaign_idx ON marketplace_ad_operations(campaign_id, created_at DESC);
   `);
+  app.post("/api/advertising/campaigns/:id/submit-review", async (req, res) => {
+    const auth = authenticate(req, res); if (!auth) return;
+    const id = positiveInt(req.params.id); if (!id) return res.status(400).json({ error: "invalid campaign" });
+    try {
+      const result = await pool.query("UPDATE marketplace_ad_campaigns SET status='pending_review', review_note=NULL, updated_at=NOW() WHERE id=$1 AND owner_id=$2 AND status IN ('draft','rejected') RETURNING *", [id, auth.userId]);
+      if (!result.rowCount) return res.status(409).json({ error: "campaign is not eligible for review" });
+      return res.json({ campaign: result.rows[0] });
+    } catch { return res.status(500).json({ error: "unable to submit campaign for review" }); }
+  });
+
+  app.post("/api/advertising/campaigns/:id/approve", async (req, res) => {
+    const adminIds = String(process.env.FYNX_AD_ADMIN_IDS || "").split(",").map(v => v.trim()).filter(Boolean);
+    const auth = authenticate(req, res); if (!auth) return;
+    if (!adminIds.includes(String(auth.userId))) return res.status(403).json({ error: "advertising review access denied" });
+    const id = positiveInt(req.params.id); if (!id) return res.status(400).json({ error: "invalid campaign" });
+    const approved = req.body?.approved !== false;
+    try {
+      const result = await pool.query("UPDATE marketplace_ad_campaigns SET status=$1, approved_at=$2, review_note=$3, updated_at=NOW() WHERE id=$4 AND status='pending_review' RETURNING *",
+        [approved ? "paused" : "rejected", approved ? new Date() : null, typeof req.body?.note === "string" ? req.body.note.slice(0,500) : null, id]);
+      if (!result.rowCount) return res.status(409).json({ error: "campaign is not awaiting review" });
+      return res.json({ campaign: result.rows[0] });
+    } catch { return res.status(500).json({ error: "unable to review campaign" }); }
+  });
+
+  app.post("/api/advertising/campaigns/:id/payment/initialize", async (req, res) => {
+    const auth = authenticate(req, res); if (!auth) return;
+    const id = positiveInt(req.params.id); if (!id) return res.status(400).json({ error: "invalid campaign" });
+    const secret = process.env.PAYSTACK_SECRET_KEY || "";
+    if (!secret) return res.status(503).json({ error: "advertising payment provider is not configured yet" });
+    try {
+      const campaign = (await pool.query("SELECT * FROM marketplace_ad_campaigns WHERE id=$1 AND owner_id=$2", [id, auth.userId])).rows[0];
+      if (!campaign) return res.status(404).json({ error: "campaign not found" });
+      if (!campaign.approved_at) return res.status(409).json({ error: "campaign must be approved before payment" });
+      const emailRow = (await pool.query("SELECT email FROM users WHERE id=$1", [auth.userId])).rows[0];
+      const email = String(req.body?.email || emailRow?.email || "").trim();
+      if (!/^[^@s]+@[^@s]+.[^@s]+$/.test(email)) return res.status(400).json({ error: "valid payment email is required" });
+      const reference = "FYNX-AD-" + id + "-" + crypto.randomUUID();
+      const response = await fetch("https://api.paystack.co/transaction/initialize", {
+        method: "POST", headers: { Authorization: "Bearer " + secret, "Content-Type": "application/json" },
+        body: JSON.stringify({ email, amount: campaign.total_budget_kobo, currency: "NGN", reference, metadata: { type: "FYNX_AD_CAMPAIGN", campaignId: String(id), ownerId: String(auth.userId) } })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.status !== true || !data?.data?.authorization_url) return res.status(502).json({ error: "advertising payment initialization failed" });
+      await pool.query("UPDATE marketplace_ad_campaigns SET payment_status='pending', payment_reference=$1, payment_amount_kobo=$2, updated_at=NOW() WHERE id=$3 AND owner_id=$4", [reference, campaign.total_budget_kobo, id, auth.userId]);
+      return res.json({ authorizationUrl: data.data.authorization_url, reference, amountKobo: campaign.total_budget_kobo, currency: "NGN" });
+    } catch { return res.status(502).json({ error: "advertising payment initialization failed" }); }
+  });
+
+  app.post("/api/advertising/campaigns/:id/payment/verify", async (req, res) => {
+    const auth = authenticate(req, res); if (!auth) return;
+    const id = positiveInt(req.params.id); const reference = String(req.body?.reference || "").trim();
+    if (!id || !reference) return res.status(400).json({ error: "campaign and payment reference are required" });
+    const secret = process.env.PAYSTACK_SECRET_KEY || "";
+    if (!secret) return res.status(503).json({ error: "advertising payment provider is not configured yet" });
+    try {
+      const campaign = (await pool.query("SELECT * FROM marketplace_ad_campaigns WHERE id=$1 AND owner_id=$2", [id, auth.userId])).rows[0];
+      if (!campaign || campaign.payment_reference !== reference) return res.status(404).json({ error: "payment not found" });
+      const response = await fetch("https://api.paystack.co/transaction/verify/" + encodeURIComponent(reference), { headers: { Authorization: "Bearer " + secret } });
+      const data = await response.json().catch(() => ({}));
+      const paid = response.ok && data?.status === true && data?.data?.status === "success" && Number(data.data.amount) === Number(campaign.total_budget_kobo) && String(data.data.currency).toUpperCase() === "NGN";
+      if (!paid) return res.status(409).json({ error: "payment has not been verified" });
+      await pool.query("UPDATE marketplace_ad_campaigns SET payment_status='paid', updated_at=NOW() WHERE id=$1 AND owner_id=$2", [id, auth.userId]);
+      return res.json({ paid: true, campaignId: String(id) });
+    } catch { return res.status(502).json({ error: "advertising payment verification failed" }); }
+  });
+
+  app.get("/api/advertising/dashboard", async (req, res) => {
+    const auth = authenticate(req, res); if (!auth) return;
+    try {
+      const result = await pool.query(`SELECT
+        COUNT(*)::int AS campaigns,
+        COUNT(*) FILTER (WHERE status='active')::int AS active_campaigns,
+        COALESCE(SUM(spent_kobo),0)::bigint AS spent_kobo,
+        COALESCE(SUM(total_budget_kobo),0)::bigint AS budget_kobo,
+        COALESCE(SUM(m.impressions),0)::bigint AS impressions,
+        COALESCE(SUM(m.clicks),0)::bigint AS clicks,
+        COALESCE(SUM(m.engagements),0)::bigint AS engagements,
+        COALESCE(SUM(m.conversions),0)::bigint AS conversions
+        FROM marketplace_ad_campaigns c JOIN marketplace_ad_metrics m ON m.campaign_id=c.id WHERE c.owner_id=$1`, [auth.userId]);
+      return res.json({ dashboard: result.rows[0] });
+    } catch { return res.status(500).json({ error: "advertising dashboard unavailable" }); }
+  });
+
 }
 
 let schemaReady = null;
@@ -187,7 +270,11 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     const status = req.body?.status;
     const idempotencyKey = req.body?.idempotencyKey || "";
     if (!id || !CAMPAIGN_STATUSES.has(status) || (idempotencyKey && (typeof idempotencyKey !== "string" || idempotencyKey.length > 120))) return res.status(400).json({ error: "invalid status request" });
-    if (status === "active") return res.status(409).json({ error: "campaign approval required before activation" });
+    if (status === "active") {
+      const gate = await pool.query("SELECT approved_at,payment_status FROM marketplace_ad_campaigns WHERE id=$1 AND owner_id=$2", [id, auth.userId]);
+      if (!gate.rowCount || !gate.rows[0].approved_at) return res.status(409).json({ error: "campaign approval required before activation" });
+      if (gate.rows[0].payment_status !== "paid") return res.status(409).json({ error: "advertising payment required before activation" });
+    }
     const client = await pool.connect();
     try {
       await client.query("BEGIN");

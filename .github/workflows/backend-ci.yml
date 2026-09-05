@@ -63,5 +63,8 @@ jobs:
       - name: Run Stage 15C advertising foundation verification
         run: node verify-stage15c.mjs
 
+      - name: Run Stage 15C advertiser payment and dashboard verification
+        run: node verify-stage15c-batch2.mjs
+
       - name: Verify backend package metadata
         run: node -e "const p=require('./package.json'); if(!p.scripts || !p.scripts.start) process.exit(1); console.log('FYNX backend package OK')"
