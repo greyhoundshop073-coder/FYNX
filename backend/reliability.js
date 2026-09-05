@@ -80,7 +80,10 @@ export function createIdempotencyStore({ maxEntries = 10_000, ttlMs = 24 * 60 * 
       const existing = entries.get(key);
       if (existing) {
         if (existing.fingerprint !== fingerprint) return { conflict: true };
-        return { duplicate: true, response: existing.response, pending: Boolean(existing.promise) };
+        // Preserve the established response shape for this primitive. Pending execution
+        // coordination belongs to createIdempotentExecutor, which already returns/waits
+        // on the original operation rather than exposing an implementation detail here.
+        return { duplicate: true, response: existing.response };
       }
       entries.set(key, { fingerprint, createdAt: Date.now(), response: null, promise: null });
       return { duplicate: false };
