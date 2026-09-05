@@ -46,6 +46,8 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
     val scope = rememberCoroutineScope()
     var posts by remember { mutableStateOf<List<FynxRemoteSocialClient.RemotePost>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
+    var loadingMore by remember { mutableStateOf(false) }
+    var hasMore by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var composerOpen by remember { mutableStateOf(false) }
     var voiceRecorderOpen by remember { mutableStateOf(false) }
@@ -58,19 +60,38 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
     var likesPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> selectedMedia = uri; selectedMediaType = uri?.let { context.contentResolver.getType(it)?.substringBefore("/") } }
 
-    fun reload() {
+    fun reload(forceRefresh: Boolean = false) {
         scope.launch {
             loading = true
-            FynxRemoteSocialClient.feed(context).onSuccess { posts = it; error = null }.onFailure { error = when { it.message?.contains("HTTP 404", true) == true -> "Your FYNX feed service is temporarily unavailable. Tap refresh to try again." else -> it.message ?: "Unable to load your feed." } }
+            FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
+                .onSuccess { page -> posts = page.posts; hasMore = page.hasMore; error = null }
+                .onFailure { error = when { it.message?.contains("HTTP 404", true) == true -> "Your FYNX feed service is temporarily unavailable. Tap refresh to try again." else -> it.message ?: "Unable to load your feed." } }
             loading = false
         }
     }
+
+    fun loadMore() {
+        if (loading || loadingMore || !hasMore) return
+        scope.launch {
+            loadingMore = true
+            FynxRemoteSocialClient.feedPage(context, limit = 20, offset = posts.size, useCache = false)
+                .onSuccess { page ->
+                    val existing = posts.map { it.id }.toSet()
+                    posts = posts + page.posts.filterNot { it.id in existing }
+                    hasMore = page.hasMore
+                    error = null
+                }
+                .onFailure { error = it.message ?: "Unable to load more posts." }
+            loadingMore = false
+        }
+    }
+
     LaunchedEffect(Unit) { reload() }
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column { Text("Your feed", style = MaterialTheme.typography.titleMedium); Text("Real posts from your FYNX network", style = MaterialTheme.typography.bodySmall) }
-            Row { IconButton(onClick = { reload() }) { Icon(Icons.Default.Refresh, "Refresh feed") }; IconButton(onClick = { composerOpen = true }) { Icon(Icons.Default.Add, "Create post") } }
+            Row { IconButton(onClick = { reload(true) }) { Icon(Icons.Default.Refresh, "Refresh feed") }; IconButton(onClick = { composerOpen = true }) { Icon(Icons.Default.Add, "Create post") } }
         }
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -86,6 +107,13 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
                 onFollow = { following -> scope.launch { FynxRemoteSocialClient.follow(context, post.authorUsername, following).onSuccess { now -> posts = posts.map { if (it.authorUsername.equals(post.authorUsername, true)) it.copy(followedByCurrentUser = now) else it } }.onFailure { error = it.message } } },
                 onDelete = { scope.launch { FynxRemoteSocialClient.deletePost(context, post.id).onSuccess { posts = posts.filterNot { it.id == post.id } }.onFailure { error = it.message } } },
                 onShare = { sharePost(context, post) }, onOpenMarketplace = onOpenMarketplace)
+        }
+        if (!loading && hasMore) {
+            OutlinedButton(
+                onClick = { loadMore() },
+                enabled = !loadingMore,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(if (loadingMore) "Loading more posts…" else "Load more posts") }
         }
     }
 
@@ -113,7 +141,7 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
                     scope.launch {
                         busy = true
                         FynxRemoteSocialClient.createPost(context, composerText, visibility, selectedMedia)
-                            .onSuccess { composerOpen = false; composerText = ""; selectedMedia = null; selectedMediaType = null; reload() }
+                            .onSuccess { composerOpen = false; composerText = ""; selectedMedia = null; selectedMediaType = null; reload(true) }
                             .onFailure { error = it.message ?: "Post failed." }
                         busy = false
                     }
