@@ -2,10 +2,9 @@ import http from "node:http";
 import { registerMarketplaceSettlementRoutes } from "./marketplaceSettlement.js";
 import { registerMarketplaceProtectionRoutes } from "./marketplaceProtection.js";
 import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";
-import { installFailureRecovery } from "./reliability.js";
+import { installFailureRecovery, createIdempotencyStore } from "./reliability.js";
 
 // Apply safe HTTP connection limits before the existing FYNX server is created.
-// This improves connection reuse and protects the process under load without changing API routes.
 const originalCreateServer = http.createServer;
 http.createServer = function fynxCreateServer(...args) {
   const server = originalCreateServer.apply(this, args);
@@ -41,12 +40,12 @@ http.createServer = function fynxCreateServer(...args) {
     console.error("[fynx-http] server error", error);
   });
 
-  // Install bounded retry/failure-recovery primitives without changing existing routes.
-  // Database-aware retry helpers are exposed for subsequent non-payment operations.
+  // Bounded retry/failure recovery and a bounded idempotency store are shared by
+  // non-payment backend operations without replacing any existing route implementation.
   const recovery = installFailureRecovery({ server, pool: null, logger: console });
   globalThis.__fynxRecovery = recovery;
+  globalThis.__fynxIdempotency = createIdempotencyStore({ maxEntries: 10_000, ttlMs: 24 * 60 * 60 * 1000 });
 
-  // Keep settlement, protection, and advertising routes behind the same Express app/server bootstrap.
   setImmediate(() => {
     try {
       registerMarketplaceSettlementRoutes({ app: args[0] });
