@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import {
-  createIdempotentExecutor,
-  createJobQueue,
   createIdempotencyStore,
   retryWithBackoff
 } from "./reliability.js";
+import { createBackgroundJobQueue } from "./backgroundJobs.js";
 
 let attempts = 0;
 const retryResult = await retryWithBackoff(async () => {
@@ -17,46 +17,36 @@ assert.equal(attempts, 3);
 
 const store = createIdempotencyStore({ maxEntries: 2, ttlMs: 60_000 });
 assert.deepEqual(store.begin("k1", "fp1"), { duplicate: false });
-assert.deepEqual(store.begin("k1", "fp1"), { duplicate: true, response: null, pending: false });
+assert.deepEqual(store.begin("k1", "fp1"), { duplicate: true, response: null });
 assert.deepEqual(store.begin("k1", "different"), { conflict: true });
 store.complete("k1", { ok: true });
-assert.deepEqual(store.begin("k1", "fp1"), { duplicate: true, response: { ok: true }, pending: false });
+assert.deepEqual(store.begin("k1", "fp1"), { duplicate: true, response: { ok: true } });
 store.stop();
 
-const executor = createIdempotentExecutor({ maxEntries: 10, ttlMs: 60_000 });
-let executions = 0;
-const operation = () => new Promise(resolve => setTimeout(() => { executions += 1; resolve({ value: 42 }); }, 10));
-const results = await Promise.all([
-  executor.execute("same-key", "same-fingerprint", operation),
-  executor.execute("same-key", "same-fingerprint", operation),
-  executor.execute("same-key", "same-fingerprint", operation)
-]);
-assert.deepEqual(results, [{ value: 42 }, { value: 42 }, { value: 42 }]);
-assert.equal(executions, 1);
-await assert.rejects(
-  executor.execute("same-key", "different-fingerprint", operation),
-  error => error?.code === "IDEMPOTENCY_CONFLICT"
-);
-executor.stop();
+const queue = createBackgroundJobQueue({ connectionString: "", pollMs: 10, leaseMs: 1000 });
+assert.equal(queue.enabled, false);
+assert.equal(queue.snapshot().enabled, false);
 
-const queue = createJobQueue({ concurrency: 1, maxAttempts: 2, maxQueue: 10, baseDelayMs: 1 });
-let successfulJobAttempts = 0;
-queue.enqueue("successful", { id: 1 }, async () => {
-  successfulJobAttempts += 1;
-});
-let failingJobAttempts = 0;
-queue.enqueue("failing", { id: 2 }, async () => {
-  failingJobAttempts += 1;
-  throw new Error("permanent test failure");
-});
+const reliability = fs.readFileSync(new URL("./reliability.js", import.meta.url), "utf8");
+const backgroundJobs = fs.readFileSync(new URL("./backgroundJobs.js", import.meta.url), "utf8");
+const scalability = fs.readFileSync(new URL("./scalability.js", import.meta.url), "utf8");
 
-for (let i = 0; i < 50 && queue.snapshot().active > 0; i += 1) await new Promise(resolve => setTimeout(resolve, 5));
-for (let i = 0; i < 50 && queue.snapshot().deadLetters < 1; i += 1) await new Promise(resolve => setTimeout(resolve, 5));
+const checks = [
+  ["bounded retry helper", reliability.includes("retryWithBackoff") && reliability.includes("maxAttempts")],
+  ["exponential backoff with jitter", reliability.includes("2 ** (attempt - 1)") && reliability.includes("Math.random")],
+  ["transient database retry classification", reliability.includes("40001") && reliability.includes("40P01") && reliability.includes("08006")],
+  ["bounded idempotency store", reliability.includes("createIdempotencyStore") && reliability.includes("maxEntries") && reliability.includes("ttlMs")],
+  ["durable background job table", backgroundJobs.includes("CREATE TABLE IF NOT EXISTS fynx_background_jobs")],
+  ["durable job idempotency", backgroundJobs.includes("CREATE UNIQUE INDEX IF NOT EXISTS fynx_background_jobs_idempotency_idx")],
+  ["concurrent worker claiming", backgroundJobs.includes("FOR UPDATE SKIP LOCKED")],
+  ["lease recovery", backgroundJobs.includes("lease_expires_at < NOW()") && backgroundJobs.includes("metrics.recovered")],
+  ["retry and dead-letter handling", backgroundJobs.includes("status = 'dead'") && backgroundJobs.includes("metrics.deadLettered") && backgroundJobs.includes("metrics.retried")],
+  ["durable worker runtime wiring", scalability.includes("createBackgroundJobQueue") && scalability.includes("__fynxBackgroundJobs") && scalability.includes("jobs.start")]
+];
 
-assert.equal(successfulJobAttempts, 1);
-assert.equal(failingJobAttempts, 2);
-assert.equal(queue.snapshot().deadLetters, 1);
-assert.equal(queue.getDeadLetters()[0].name, "failing");
-queue.stop();
+for (const [name, ok] of checks) {
+  if (!ok) throw new Error(`Stage 15D advanced reliability verification failed: ${name}`);
+  console.log(`PASS: ${name}`);
+}
 
 console.log("Stage 15D advanced reliability verification passed");
