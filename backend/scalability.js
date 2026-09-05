@@ -40,15 +40,16 @@ http.createServer = function fynxCreateServer(...args) {
     console.error("[fynx-http] server error", error);
   });
 
-  // Keep marketplace settlement, protection, and advertising behind the same Express app/server bootstrap.
+  // Keep settlement, protection, and advertising routes behind the same Express app/server bootstrap.
   setImmediate(() => {
     try {
       registerMarketplaceSettlementRoutes({ app: args[0] });
       registerMarketplaceProtectionRoutes({ app: args[0] });
       registerMarketplaceAdvertisingRoutes({ app: args[0] });
-      console.log("[fynx-marketplace] protected settlement, buyer/seller protection, and advertising routes enabled");
+      console.log("[fynx-marketplace] protected settlement and buyer/seller protection routes enabled");
+      console.log("[fynx-advertising] advertising routes enabled");
     } catch (error) {
-      console.error("[fynx-marketplace] route registration failed", error);
+      console.error("[fynx-marketplace] protected/advertising route registration failed", error);
     }
   });
 
