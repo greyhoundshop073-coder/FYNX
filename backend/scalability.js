@@ -12,6 +12,7 @@ import { installSocialHardening } from "./socialHardening.js";
 import { installPrivateCachePolicy } from "./privateCachePolicy.js";
 import { installMarketplaceMediaPrivacyGuard } from "./marketplaceMediaPrivacy.js";
 import { installRequestResourceGuard } from "./requestResourceGuard.js";
+import { installApiAbuseGuard } from "./apiAbuseGuard.js";
 
 installPresencePrivacyGuard();
 
@@ -23,6 +24,7 @@ http.createServer = function fynxCreateServer(...args) {
     setImmediate(() => {
       installSecurityHardening({ app });
       installRequestResourceGuard(app);
+      installApiAbuseGuard(app);
       registerMarketplaceSettlementRoutes({ app });
       // protected settlement and buyer/seller protection routes enabled
       registerMarketplaceProtectionRoutes({ app });
