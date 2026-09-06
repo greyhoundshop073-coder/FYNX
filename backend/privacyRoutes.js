@@ -105,7 +105,7 @@ export function registerPrivacyRoutes({ app }) {
     }
   });
 
-  app.put("/api/privacy", auth, async (req, res) => {
+  app.patch("/api/privacy", auth, async (req, res) => {
     try {
       await ensureSchema();
       const input = req.body?.settings && typeof req.body.settings === "object" ? req.body.settings : req.body;
