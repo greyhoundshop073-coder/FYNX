@@ -25,7 +25,7 @@ object FynxPrivacyRemoteClient {
     suspend fun update(context: Context, key: String, value: String): Result<Settings> {
         require(key in keys) { "Unknown privacy setting" }
         require(value == "Everyone" || value == "My friends" || value == "Nobody") { "Invalid privacy value" }
-        return FynxBackendClient.putJson(
+        return FynxBackendClient.patchJson(
             context,
             "/api/privacy",
             JSONObject().put(key, value).toString()
