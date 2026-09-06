@@ -8,48 +8,49 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 /**
  * Shared other-user profile surface used by people search, friends, chat and marketplace.
- * It resolves the requested identity from the authenticated backend search contract first,
- * then uses the local relationship store for richer locally-known profile fields.
+ * The selected backend identity is authoritative; the device-local relationship store is not
+ * treated as another user's profile or privacy configuration.
  */
 @Composable
 fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (String) -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var person by remember(username) {
-        mutableStateOf(FynxFriendsStore(context).load().firstOrNull { it.username.equals(username, true) })
-    }
+    val context = LocalContext.current
+    var person by remember(username) { mutableStateOf<FriendProfile?>(null) }
     var loading by remember(username) { mutableStateOf(true) }
     var error by remember(username) { mutableStateOf<String?>(null) }
 
-    val localPerson = person
-    val photoVisibility = FynxPreferencesStore.loadVisibility(context, "photo_visibility")
-    val bioVisibility = FynxPreferencesStore.loadVisibility(context, "bio_visibility")
-    val descriptionVisibility = FynxPreferencesStore.loadVisibility(context, "description_visibility")
-    val show = { setting: String ->
-        setting == "Everyone" || (setting == "Friends" && (localPerson?.isFriend == true))
-    }
-
-    LaunchedEffect(username) {
+    suspend fun loadProfile() {
         loading = true
         error = null
         FynxSocialClient.searchUsers(context, username.removePrefix("@"))
             .onSuccess { users ->
-                users.firstOrNull { it.username.equals(username.removePrefix("@"), true) }?.let { remote ->
-                    val known = FynxFriendsStore(context).load()
-                        .firstOrNull { it.username.equals(remote.username, true) }
-                    person = known ?: FriendProfile(
+                users.firstOrNull {
+                    it.username.removePrefix("@").trim().equals(username.removePrefix("@").trim(), true)
+                }?.let { remote ->
+                    // Search identity is authoritative for this surface. Do not copy a locally
+                    // cached bio/photo/privacy setting from another device/account context.
+                    person = FriendProfile(
                         username = "@${remote.username.removePrefix("@").trim()}",
-                        displayName = remote.displayName.ifBlank { remote.username },
+                        displayName = remote.displayName.ifBlank { remote.username.removePrefix("@").trim() },
                         bio = ""
                     )
-                } ?: run { error = "User not found" }
+                } ?: run {
+                    person = null
+                    error = "User not found"
+                }
             }
-            .onFailure { error = "Unable to load this profile. Check your connection and try again." }
+            .onFailure {
+                person = null
+                error = "Unable to load this profile. Check your connection and try again."
+            }
         loading = false
     }
+
+    LaunchedEffect(username) { loadProfile() }
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -68,31 +69,29 @@ fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (Stri
         }
 
         if (person == null) {
-            Text(error ?: "User not found", Modifier.padding(24.dp))
+            Column(
+                Modifier.fillMaxWidth().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(error ?: "User not found", color = FynxDesign.TextSecondary)
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(onClick = { LaunchedEffectScopeMarker.requestReload = true }) {
+                    Text("Retry")
+                }
+            }
             return@Column
         }
 
         val profile = person!!
         Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            if (show(photoVisibility)) {
-                FynxAvatar(profile.displayName, Modifier.size(104.dp))
-            } else {
-                Text("Photo hidden", color = FynxDesign.TextSecondary)
-            }
+            FynxAvatar(profile.displayName, Modifier.size(104.dp))
             Spacer(Modifier.height(14.dp))
             Text(profile.displayName.ifBlank { profile.username }, style = MaterialTheme.typography.headlineSmall)
             Text("@${profile.username.removePrefix("@").trim()}", color = FynxDesign.TextSecondary)
 
-            if (show(bioVisibility)) {
-                Spacer(Modifier.height(12.dp))
-                Text("Bio", style = MaterialTheme.typography.labelLarge)
-                Text(profile.bio.ifBlank { "No bio added yet." }, color = FynxDesign.TextSecondary)
-            }
-            if (show(descriptionVisibility)) {
-                Spacer(Modifier.height(12.dp))
-                Text("About", style = MaterialTheme.typography.labelLarge)
-                Text("More public profile information will appear here when available.", color = FynxDesign.TextSecondary)
-            }
+            // Bio/about are intentionally not synthesized from the viewer's local preferences.
+            // They will be rendered here when the authenticated profile-detail contract supplies
+            // an authorized value for the requested user.
 
             Spacer(Modifier.height(20.dp))
             Button(onClick = { onMessage(profile.username) }) {
@@ -102,4 +101,8 @@ fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (Stri
             }
         }
     }
+}
+
+private object LaunchedEffectScopeMarker {
+    var requestReload by mutableStateOf(false)
 }
