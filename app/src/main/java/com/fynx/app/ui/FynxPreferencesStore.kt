@@ -25,6 +25,8 @@ object FynxPreferencesStore {
     private const val KEY_APPEARANCE = "appearance"
     private const val KEY_ASSET = "selected_asset_uri"
 
+    private const val DEFAULT_VISIBILITY = "My friends"
+
     fun loadProfile(context: Context, fallbackUsername: String?): FynxProfile {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val username = prefs.getString(KEY_USERNAME, null) ?: fallbackUsername?.removePrefix("@") ?: "username"
@@ -47,7 +49,7 @@ object FynxPreferencesStore {
         )
     }
     fun saveSettings(context: Context, settings: FynxSettings) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_NOTIFICATIONS, settings.notifications).putBoolean(KEY_PRIVATE_PROFILE, settings.privateProfile).putBoolean(KEY_READ_RECEIPTS, settings.readReceipts).putBoolean(KEY_STORY_REPLIES, settings.storyReplies).apply() }
-    fun loadVisibility(context: Context, key: String, default: String = "Everyone"): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(key, default) ?: default
+    fun loadVisibility(context: Context, key: String, default: String = DEFAULT_VISIBILITY): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(key, default) ?: default
     fun saveVisibility(context: Context, key: String, value: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(key, value).apply() }
     fun loadAccent(context: Context): FynxAccent { val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_ACCENT, FynxAccent.Blue.name); return runCatching { FynxAccent.valueOf(stored ?: FynxAccent.Blue.name) }.getOrDefault(FynxAccent.Blue) }
     fun saveAccent(context: Context, accent: FynxAccent) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_ACCENT, accent.name).apply() }
