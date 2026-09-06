@@ -3,19 +3,38 @@ name: FYNX Android Build
 on:
   push:
     branches: ["main"]
+    paths:
+      - "app/**"
+      - "gradle/**"
+      - "*.gradle.kts"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
+      - "scripts/**"
+      - ".github/workflows/android-build.yml"
   pull_request:
     branches: ["main"]
+    paths:
+      - "app/**"
+      - "gradle/**"
+      - "*.gradle.kts"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
+      - "scripts/**"
+      - ".github/workflows/android-build.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
   id-token: write
 
-# Keep verification runs alive so rapid development pushes do not cancel an
-# otherwise healthy build/test run and leave a misleading cancelled result.
+# Prefer the newest source during rapid development instead of keeping a long
+# queue of obsolete Android builds. A new commit cancels an older queued/running
+# Android verification run so CI feedback stays focused on the current tree.
 concurrency:
   group: fynx-android-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   GOOGLE_CLOUD_PROJECT: fynx-f0868
@@ -34,6 +53,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+
+      - name: Set up Gradle with CI caching
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
@@ -64,10 +88,7 @@ jobs:
         run: python3 scripts/verify_stage16_camera.py
 
       - name: Build, test and lint
-        run: |
-          gradle wrapper --gradle-version 8.9
-          chmod +x gradlew
-          ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon
+        run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
