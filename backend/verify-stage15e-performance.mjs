@@ -10,8 +10,12 @@ const checks = [
   ['marketplace seller status index exists', /marketplace_orders_seller_status_idx/, orders],
   ['marketplace buyer order list is independently limited', /SELECT o\.\* FROM marketplace_orders o WHERE o\.buyer_id = \$1[\s\S]*LIMIT 100/, orders],
   ['marketplace seller order list is independently limited', /SELECT o\.\* FROM marketplace_orders o WHERE o\.seller_id = \$1[\s\S]*LIMIT 100/, orders],
-  ['HTTP connection controls are configurable', /FYNX_KEEP_ALIVE_TIMEOUT_MS[\s\S]*FYNX_MAX_CONNECTIONS/, scale],
-  ['metrics sampling is configurable', /FYNX_METRICS_SAMPLE_RATE/, scale]
+  ['HTTP keep-alive timeout is bounded', /server\.keepAliveTimeout = 65_000/, scale],
+  ['HTTP headers timeout is bounded', /server\.headersTimeout = 70_000/, scale],
+  ['HTTP request timeout is bounded', /server\.requestTimeout = 30_000/, scale],
+  ['HTTP per-socket request cap is bounded', /server\.maxRequestsPerSocket = 1_000/, scale],
+  ['HTTP connection cap is bounded', /server\.maxConnections = 500/, scale],
+  ['production request metrics are recorded', /server\.on\("request"[\s\S]*fynx-metrics.*avgLatencyMs/, scale]
 ];
 
 for (const [name, pattern, source] of checks) {
