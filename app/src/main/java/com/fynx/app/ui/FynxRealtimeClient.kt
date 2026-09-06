@@ -10,9 +10,10 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
+import org.webrtc.IceCandidate
 import java.util.concurrent.TimeUnit
 
-/** Authenticated realtime transport for messages and ephemeral chat signals. */
+/** Authenticated realtime transport for messages and ephemeral chat/call signals. */
 class FynxRealtimeClient(
     private val context: Context,
     private val onMessage: (FynxProductionMessaging.RemoteMessage) -> Unit,
@@ -25,6 +26,26 @@ class FynxRealtimeClient(
         data class MessageStatus(val messageId: String, val status: Status) : Event
         data class Typing(val userId: String, val isTyping: Boolean) : Event
         data class Presence(val userId: String, val online: Boolean) : Event
+        data class Call(
+            val callId: String,
+            val callType: String,
+            val fromUserId: String,
+            val toUserId: String,
+            val signalType: String,
+            val sdp: String? = null,
+            val candidate: IceCandidatePayload? = null,
+            val fromUsername: String? = null,
+            val error: String? = null
+        ) : Event
+    }
+
+    data class IceCandidatePayload(
+        val candidate: String,
+        val sdpMid: String?,
+        val sdpMLineIndex: Int?,
+        val usernameFragment: String?
+    ) {
+        fun toWebRtcCandidate(): IceCandidate = IceCandidate(sdpMid, sdpMLineIndex ?: 0, candidate)
     }
 
     enum class Status { SENT, DELIVERED, READ }
@@ -59,15 +80,10 @@ class FynxRealtimeClient(
             onStateChanged(State.FAILED)
             return
         }
-        // The existing backend realtime endpoint authenticates the WebSocket
-        // during the upgrade from the token query parameter. Keep the normal
-        // API bearer token out of any additional payloads after connection.
         val encodedToken = java.net.URLEncoder.encode(token, Charsets.UTF_8.name())
         val wsUrl = "wss://${httpBase.removePrefix("https://")}/realtime?token=$encodedToken"
         onStateChanged(State.CONNECTING)
-        val request = Request.Builder()
-            .url(wsUrl)
-            .build()
+        val request = Request.Builder().url(wsUrl).build()
         socket?.cancel()
         socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -91,6 +107,7 @@ class FynxRealtimeClient(
                         }
                         "typing" -> onEvent(Event.Typing(root.optString("userId"), root.optBoolean("isTyping")))
                         "presence" -> onEvent(Event.Presence(root.optString("userId"), root.optBoolean("online")))
+                        "call" -> onEvent(parseCallEvent(root))
                     }
                 }
             }
@@ -114,12 +131,74 @@ class FynxRealtimeClient(
         })
     }
 
-    private fun scheduleReconnect() {
-        if (manuallyClosed) return
-        reconnectHandler.removeCallbacksAndMessages(null)
-        reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(6)
-        val delayMs = (1000L shl (reconnectAttempt - 1)).coerceAtMost(30_000L)
-        reconnectHandler.postDelayed({ connectInternal() }, delayMs)
+    private fun parseCallEvent(root: JSONObject): Event.Call {
+        val candidateJson = root.optJSONObject("candidate")
+        val candidate = candidateJson?.let {
+            IceCandidatePayload(
+                candidate = it.optString("candidate"),
+                sdpMid = if (it.isNull("sdpMid")) null else it.optString("sdpMid"),
+                sdpMLineIndex = if (it.isNull("sdpMLineIndex")) null else it.optInt("sdpMLineIndex"),
+                usernameFragment = if (it.isNull("usernameFragment")) null else it.optString("usernameFragment")
+            )
+        }
+        return Event.Call(
+            callId = root.optString("callId"),
+            callType = root.optString("callType", "voice"),
+            fromUserId = root.optString("fromUserId"),
+            toUserId = root.optString("toUserId"),
+            signalType = root.optString("signalType"),
+            sdp = root.optString("sdp").takeIf { it.isNotBlank() },
+            candidate = candidate,
+            fromUsername = root.optString("fromUsername").takeIf { it.isNotBlank() },
+            error = root.optString("error").takeIf { it.isNotBlank() }
+        )
+    }
+
+    fun sendCallInvite(callId: String, targetUserId: String, video: Boolean) {
+        sendCall(callId, targetUserId, if (video) "video" else "voice", "invite")
+    }
+
+    fun sendCallAccept(callId: String, targetUserId: String, video: Boolean) {
+        sendCall(callId, targetUserId, if (video) "video" else "voice", "accept")
+    }
+
+    fun sendCallReject(callId: String, targetUserId: String, video: Boolean) {
+        sendCall(callId, targetUserId, if (video) "video" else "voice", "reject")
+    }
+
+    fun sendCallEnd(callId: String, targetUserId: String, video: Boolean) {
+        sendCall(callId, targetUserId, if (video) "video" else "voice", "end")
+    }
+
+    fun sendCallOffer(callId: String, targetUserId: String, sdp: String, video: Boolean) {
+        sendCall(callId, targetUserId, if (video) "video" else "voice", "offer", JSONObject().put("sdp", sdp))
+    }
+
+    fun sendCallAnswer(callId: String, targetUserId: String, sdp: String, video: Boolean) {
+        sendCall(callId, targetUserId, if (video) "video" else "voice", "answer", JSONObject().put("sdp", sdp))
+    }
+
+    fun sendCallIce(callId: String, targetUserId: String, candidate: IceCandidate, video: Boolean) {
+        val payload = JSONObject().apply {
+            put("candidate", JSONObject().apply {
+                put("candidate", candidate.sdp)
+                put("sdpMid", candidate.sdpMid)
+                put("sdpMLineIndex", candidate.sdpMLineIndex)
+            })
+        }
+        sendCall(callId, targetUserId, if (video) "video" else "voice", "ice", payload)
+    }
+
+    private fun sendCall(callId: String, targetUserId: String, callType: String, signalType: String, extra: JSONObject? = null) {
+        val payload = JSONObject().apply {
+            put("type", "call")
+            put("callId", callId)
+            put("toUserId", targetUserId)
+            put("callType", callType)
+            put("signalType", signalType)
+            extra?.keys()?.forEach { key -> put(key, extra.get(key)) }
+        }
+        sendJson(payload)
     }
 
     fun sendTyping(recipientId: String, isTyping: Boolean) {
@@ -163,9 +242,7 @@ class FynxRealtimeClient(
                 if (pendingPayloads.isEmpty()) null else pendingPayloads.removeFirst()
             } ?: break
             if (!webSocket.send(next)) {
-                synchronized(pendingLock) {
-                    pendingPayloads.addFirst(next)
-                }
+                synchronized(pendingLock) { pendingPayloads.addFirst(next) }
                 break
             }
         }
