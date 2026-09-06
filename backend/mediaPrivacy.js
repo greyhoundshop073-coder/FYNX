@@ -23,11 +23,58 @@ function viewerId(req) {
   try { return String(jwt.verify(token, JWT_SECRET).sub); } catch { return null; }
 }
 
+async function isBlocked(userId, otherId) {
+  if (!userId || !otherId || String(userId) === String(otherId)) return false;
+  const result = await pool.query(`
+    SELECT 1 FROM blocks
+    WHERE (blocker_id = $1 AND blocked_id = $2)
+       OR (blocker_id = $2 AND blocked_id = $1)
+    LIMIT 1`, [userId, otherId]);
+  return result.rowCount > 0;
+}
+
+async function areFriends(userId, otherId) {
+  if (!userId || !otherId || String(userId) === String(otherId)) return false;
+  const result = await pool.query(`
+    SELECT 1 FROM friendships
+    WHERE ((user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1))
+      AND status = 'accepted'
+    LIMIT 1`, [userId, otherId]);
+  return result.rowCount > 0;
+}
+
+async function profileVisibilityAllows(userId, targetId) {
+  if (String(userId) === String(targetId)) return true;
+  if (await isBlocked(userId, targetId)) return false;
+  const result = await pool.query(`
+    SELECT COALESCE(profile_visibility, 'My friends') AS visibility
+    FROM privacy_settings
+    WHERE user_id = $1
+    LIMIT 1`, [targetId]);
+  const visibility = result.rows[0]?.visibility || "My friends";
+  if (visibility === "Everyone") return true;
+  if (visibility === "Nobody") return false;
+  return areFriends(userId, targetId);
+}
+
+function wrapJsonFiltering(res, filter) {
+  if (res.__fynxPrivacyJsonWrapped) return;
+  const originalJson = res.json.bind(res);
+  res.__fynxPrivacyJsonWrapped = true;
+  res.json = (payload) => {
+    Promise.resolve(filter(payload)).then((filtered) => originalJson(filtered)).catch((error) => {
+      console.error("privacy response filter", error);
+      if (!res.headersSent) originalJson({ error: "privacy filtering failed" });
+    });
+    return res;
+  };
+}
+
 export function installMediaPrivacyGuard(app) {
   if (!app?._router?.stack || !pool) return;
   if (app._router.stack.some((layer) => layer.fynxMediaPrivacyGuard)) return;
 
-  const guard = async (req, res, next) => {
+  const mediaGuard = async (req, res, next) => {
     if (req.method !== "GET") return next();
     const match = /^\/api\/media\/(\d+)$/.exec(req.path || "");
     if (!match) return next();
@@ -67,14 +114,61 @@ export function installMediaPrivacyGuard(app) {
     }
   };
 
-  app.use("/api/media", guard);
-  const addedIndex = app._router.stack.length - 1;
-  const added = app._router.stack[addedIndex];
-  if (!added) return;
-  added.fynxMediaPrivacyGuard = true;
-  const targetIndex = app._router.stack.findIndex((layer) => layer.route?.path === "/api/media/:id" && layer.route?.methods?.get);
-  if (targetIndex >= 0) {
-    app._router.stack.splice(addedIndex, 1);
-    app._router.stack.splice(targetIndex, 0, added);
+  const discoveryGuard = async (req, res, next) => {
+    const userId = viewerId(req);
+    if (!userId) return next();
+
+    if (req.method === "GET" && req.path === "/api/users/search") {
+      wrapJsonFiltering(res, async (payload) => {
+        if (!Array.isArray(payload?.users)) return payload;
+        const users = [];
+        for (const user of payload.users) {
+          if (user?.id != null && await profileVisibilityAllows(userId, String(user.id))) users.push(user);
+        }
+        return { ...payload, users };
+      });
+    }
+
+    if (req.method === "GET" && req.path === "/api/marketplace/listings") {
+      wrapJsonFiltering(res, async (payload) => {
+        if (!Array.isArray(payload?.listings)) return payload;
+        const listings = [];
+        for (const listing of payload.listings) {
+          const sellerId = listing?.seller_id == null ? "" : String(listing.seller_id);
+          if (sellerId && !(await isBlocked(userId, sellerId))) listings.push(listing);
+        }
+        return { ...payload, listings };
+      });
+    }
+
+    return next();
+  };
+
+  app.use("/api/media", mediaGuard);
+  const mediaIndex = app._router.stack.length - 1;
+  const mediaLayer = app._router.stack[mediaIndex];
+  if (mediaLayer) {
+    mediaLayer.fynxMediaPrivacyGuard = true;
+    const targetIndex = app._router.stack.findIndex((layer) => layer.route?.path === "/api/media/:id" && layer.route?.methods?.get);
+    if (targetIndex >= 0) {
+      app._router.stack.splice(mediaIndex, 1);
+      app._router.stack.splice(targetIndex, 0, mediaLayer);
+    }
+  }
+
+  app.use(discoveryGuard);
+  const discoveryIndex = app._router.stack.length - 1;
+  const discoveryLayer = app._router.stack[discoveryIndex];
+  if (discoveryLayer) {
+    discoveryLayer.fynxDiscoveryPrivacyGuard = true;
+    const targets = app._router.stack.reduce((indexes, layer, index) => {
+      if (layer.route?.path === "/api/users/search" || layer.route?.path === "/api/marketplace/listings") indexes.push(index);
+      return indexes;
+    }, []);
+    if (targets.length) {
+      app._router.stack.splice(discoveryIndex, 1);
+      const insertAt = Math.min(...targets);
+      app._router.stack.splice(insertAt, 0, discoveryLayer);
+    }
   }
 }
