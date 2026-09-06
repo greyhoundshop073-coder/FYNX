@@ -53,12 +53,17 @@ jobs:
           node --check reliability.js
           node --check backgroundJobs.js
           node --check securityHardening.js
+          node --check aiVoiceSession.js
+          node --check aiRealtimeRoutes.js
           node --check verify-stage15f-security.mjs
           node --check verify-stage15g-integration.mjs
           node --check verify-stage15g-final-readiness.mjs
           node --check verify-stage15g-regression.mjs
           node --check verify-stage15d-advanced.mjs
           node --check verify-stage15d-jobs.mjs
+
+      - name: Verify realtime AI route contract
+        run: node verify-ai-realtime-route.mjs
 
       - name: Run consolidated Stage 14 verification
         run: node verify-stage14.mjs
@@ -115,7 +120,7 @@ jobs:
             ['background-job claim uses one UPDATE/CTE transition', /WITH picked AS[\\s\\S]*UPDATE background_jobs/],
             ['background-job claim preserves SKIP LOCKED', /FOR UPDATE SKIP LOCKED/],
             ['marketplace seller status index exists', /marketplace_orders_seller_status_idx/],
-            ['marketplace order list uses separate buyer/seller limits', /WHERE o\.buyer_id = \$1[\\s\\S]*LIMIT 100[\\s\\S]*UNION ALL[\\s\\S]*WHERE o\.seller_id = \$1[\\s\\S]*LIMIT 100/],
+            ['marketplace order list uses separate buyer/seller limits', /WHERE o\\.buyer_id = \\$1[\\s\\S]*LIMIT 100[\\s\\S]*UNION ALL[\\s\\S]*WHERE o\\.seller_id = \\$1[\\s\\S]*LIMIT 100/],
             ['HTTP connection controls are configurable', /FYNX_KEEP_ALIVE_TIMEOUT_MS[\\s\\S]*FYNX_MAX_CONNECTIONS/],
             ['metrics sampling is configurable', /FYNX_METRICS_SAMPLE_RATE/]
           ];
