@@ -6,7 +6,7 @@ export function installRequestResourceGuard(app) {
   if (!app?.use || app._fynxRequestResourceGuardInstalled) return;
   app._fynxRequestResourceGuardInstalled = true;
 
-  app.use((req, res, next) => {
+  const middleware = (req, res, next) => {
     const url = String(req.originalUrl || req.url || "");
     if (url.length > MAX_URL_LENGTH) return res.status(414).json({ error: "request target too long" });
     if (activeRequests >= MAX_ACTIVE_REQUESTS) {
@@ -24,5 +24,13 @@ export function installRequestResourceGuard(app) {
     res.once("finish", release);
     res.once("close", release);
     return next();
-  });
+  };
+
+  app.use(middleware);
+  const layer = app._router?.stack?.[app._router.stack.length - 1];
+  if (layer) {
+    layer.fynxRequestResourceGuard = true;
+    app._router.stack.pop();
+    app._router.stack.unshift(layer);
+  }
 }
