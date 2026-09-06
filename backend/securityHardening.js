@@ -74,6 +74,9 @@ export function installSecurityHardening({ app }) {
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()" );
     res.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
     res.setHeader("Cross-Origin-Resource-Policy", "same-site");
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+    res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
+    if (SENSITIVE_PATHS.test(req.path || "")) res.setHeader("Cache-Control", "no-store");
 
     const rawTarget = `${req.originalUrl || req.url || ""}`.slice(0, 5000);
     if (SUSPICIOUS_INPUT.test(rawTarget)) {
