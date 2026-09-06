@@ -12,6 +12,7 @@ const requiredVerifiers = [
   "verify-stage15d-reliability.mjs",
   "verify-stage15d-advanced.mjs",
   "verify-stage15d-jobs.mjs",
+  "verify-stage15e-performance.mjs",
   "verify-stage15f-security.mjs",
   "verify-stage15g-integration.mjs",
   "verify-stage15g-final-readiness.mjs"
@@ -22,7 +23,7 @@ if (missing.length) {
   throw new Error(`Stage 15G regression gate missing verifier files: ${missing.join(", ")}`);
 }
 
-const workflow = fs.readFileSync(new URL("../.github/workflows/backend-ci.yml", import.meta.url), "utf8");
+const workflow = fs.readFileSync(new URL("../.github/workflows/fynx-backend-ci.yml", import.meta.url), "utf8");
 const requiredWorkflowChecks = [
   "Run consolidated Stage 14 verification",
   "Run Stage 15 settlement verification",
@@ -30,10 +31,11 @@ const requiredWorkflowChecks = [
   "Run Stage 15C advertising foundation verification",
   "Run Stage 15D reliability verification",
   "Run Stage 15D background jobs verification",
+  "Run Stage 15E performance verification",
   "Run Stage 15F security hardening verification",
   "Run Stage 15G integration verification",
   "Run Stage 15G final readiness verification",
-  "Run Stage 15E performance verification"
+  "Run Stage 15G regression verification"
 ];
 const missingWorkflowChecks = requiredWorkflowChecks.filter((name) => !workflow.includes(name));
 if (missingWorkflowChecks.length) {
