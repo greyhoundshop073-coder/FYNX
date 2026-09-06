@@ -54,6 +54,7 @@ jobs:
           node --check backgroundJobs.js
           node --check securityHardening.js
           node --check verify-stage15f-security.mjs
+          node --check verify-stage15g-integration.mjs
           node --check verify-stage15d-advanced.mjs
           node --check verify-stage15d-jobs.mjs
 
@@ -92,6 +93,9 @@ jobs:
 
       - name: Run Stage 15F security hardening verification
         run: node verify-stage15f-security.mjs
+
+      - name: Run Stage 15G integration verification
+        run: node verify-stage15g-integration.mjs
 
       - name: Run Stage 15E performance verification
         run: node --input-type=module - <<'NODE'
