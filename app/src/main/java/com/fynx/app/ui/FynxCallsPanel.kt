@@ -56,7 +56,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                             calls = FynxCallsStore.load(context)
                         }
                         "accept" -> if (session?.id == event.callId) {
-                            session = FynxCallsFoundation.connect(session!!)
+                            session = FynxCallsFoundation.start(session!!)
                             FynxCallsStore.updateStatus(context, event.callId, "Accepted", missed = false)
                             calls = FynxCallsStore.load(context)
                         }
@@ -80,8 +80,8 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     }
 
     DisposableEffect(Unit) {
-        realtimeClient.startRealtime()
-        onDispose { realtimeClient.stopRealtime() }
+        realtimeClient.connect()
+        onDispose { realtimeClient.close() }
     }
 
     suspend fun resolveUser(username: String): String? = FynxSocialClient.searchUsers(context, username).getOrNull()?.firstOrNull { it.username.equals(username, true) }?.id
