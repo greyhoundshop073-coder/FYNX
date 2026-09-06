@@ -22,8 +22,9 @@ fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (Stri
     var person by remember(username) { mutableStateOf<FriendProfile?>(null) }
     var loading by remember(username) { mutableStateOf(true) }
     var error by remember(username) { mutableStateOf<String?>(null) }
+    var retryNonce by remember(username) { mutableIntStateOf(0) }
 
-    suspend fun loadProfile() {
+    LaunchedEffect(username, retryNonce) {
         loading = true
         error = null
         FynxSocialClient.searchUsers(context, username.removePrefix("@"))
@@ -50,8 +51,6 @@ fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (Stri
         loading = false
     }
 
-    LaunchedEffect(username) { loadProfile() }
-
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
@@ -75,7 +74,7 @@ fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (Stri
             ) {
                 Text(error ?: "User not found", color = FynxDesign.TextSecondary)
                 Spacer(Modifier.height(12.dp))
-                OutlinedButton(onClick = { LaunchedEffectScopeMarker.requestReload = true }) {
+                OutlinedButton(onClick = { retryNonce++ }) {
                     Text("Retry")
                 }
             }
@@ -101,8 +100,4 @@ fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (Stri
             }
         }
     }
-}
-
-private object LaunchedEffectScopeMarker {
-    var requestReload by mutableStateOf(false)
 }
