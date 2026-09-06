@@ -79,7 +79,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
         )
     }
 
-    DisposableEffect(Unit) { realtimeClient.connect(); onDispose { realtimeClient.disconnect() } }
+    DisposableEffect(Unit) { realtimeClient.connect(); onDispose { realtimeClient.close() } }
 
     suspend fun resolveUser(username: String): String? = FynxSocialClient.searchUsers(context, username).getOrNull()?.firstOrNull { it.username.equals(username, true) }?.id
 
