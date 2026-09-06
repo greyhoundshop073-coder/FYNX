@@ -1,9 +1,13 @@
 package com.fynx.app.ui
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,6 +17,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
@@ -21,9 +27,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 /** User-facing FYNX AI assistant. Sensitive FYNX data is not exposed by this panel. */
 @Composable
@@ -33,8 +41,42 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
     var input by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var voiceConnected by remember { mutableStateOf(false) }
+    var voiceConnecting by remember { mutableStateOf(false) }
+    var voiceMuted by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val voiceEngine = remember { FynxAiWebRtcEngine(context) }
+    val requestMicPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            scope.launch {
+                voiceConnecting = true
+                errorMessage = null
+                voiceEngine.connect(
+                    onStateChanged = { state, error ->
+                        voiceConnecting = state == FynxAiWebRtcEngine.State.CONNECTING
+                        voiceConnected = state == FynxAiWebRtcEngine.State.CONNECTED
+                        if (error != null) errorMessage = error
+                    },
+                    onEvent = { rawEvent ->
+                        parseRealtimeAssistantEvent(rawEvent)?.let { text ->
+                            messages = messages + AiMessage(text, false)
+                        }
+                    }
+                )
+                voiceConnecting = false
+            }
+        } else {
+            errorMessage = "Microphone permission is required for FYNX AI voice."
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { voiceEngine.close() }
+    }
+
     val toolLinks = remember {
         listOf(
             "To-Do" to "Daily Planning",
@@ -58,6 +100,36 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
         }, "Share FYNX AI response"))
     }
 
+    fun toggleVoice() {
+        if (voiceConnected) {
+            voiceEngine.close()
+            voiceConnected = false
+            voiceMuted = false
+            return
+        }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            scope.launch {
+                voiceConnecting = true
+                errorMessage = null
+                voiceEngine.connect(
+                    onStateChanged = { state, error ->
+                        voiceConnecting = state == FynxAiWebRtcEngine.State.CONNECTING
+                        voiceConnected = state == FynxAiWebRtcEngine.State.CONNECTED
+                        if (error != null) errorMessage = error
+                    },
+                    onEvent = { rawEvent ->
+                        parseRealtimeAssistantEvent(rawEvent)?.let { text ->
+                            messages = messages + AiMessage(text, false)
+                        }
+                    }
+                )
+                voiceConnecting = false
+            }
+        } else {
+            requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
     Column(
         Modifier.fillMaxSize().padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -78,7 +150,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
             Column(Modifier.weight(1f)) {
                 Text("FYNX AI", style = MaterialTheme.typography.headlineSmall)
                 Text(
-                    "Connected to your FYNX tools",
+                    if (voiceConnected) "Voice connected" else "Connected to your FYNX tools",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -88,6 +160,31 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
             ) {
                 Icon(Icons.Default.DeleteSweep, contentDescription = "Clear chat")
             }
+            IconButton(
+                enabled = !voiceConnecting,
+                onClick = { toggleVoice() }
+            ) {
+                Icon(
+                    if (voiceConnected && !voiceMuted) Icons.Default.Mic else Icons.Default.MicOff,
+                    contentDescription = if (voiceConnected) "Mute FYNX AI microphone" else "Start FYNX AI voice"
+                )
+            }
+        }
+
+        if (voiceConnected) {
+            AssistChip(
+                onClick = {
+                    voiceMuted = !voiceMuted
+                    voiceEngine.setMicrophoneEnabled(!voiceMuted)
+                },
+                label = { Text(if (voiceMuted) "Voice muted" else "Speak naturally — tap to mute") },
+                leadingIcon = {
+                    Icon(
+                        if (voiceMuted) Icons.Default.MicOff else Icons.Default.Mic,
+                        contentDescription = null
+                    )
+                }
+            )
         }
 
         LazyRow(
@@ -148,7 +245,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                     }
                 }
             }
-            if (loading) {
+            if (loading || voiceConnecting) {
                 item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             }
         }
@@ -214,3 +311,14 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
         )
     }
 }
+
+private fun parseRealtimeAssistantEvent(rawEvent: String): String? = runCatching {
+    val event = JSONObject(rawEvent)
+    when (event.optString("type")) {
+        "response.output_text.done" -> event.optString("text").takeIf { it.isNotBlank() }
+        "response.audio_transcript.done" -> event.optString("transcript").takeIf { it.isNotBlank() }
+        "conversation.item.input_audio_transcription.completed" ->
+            event.optString("transcript").takeIf { it.isNotBlank() }?.let { "You: $it" }
+        else -> null
+    }
+}.getOrNull()
