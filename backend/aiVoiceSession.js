@@ -6,7 +6,7 @@
  * to be wired into the authenticated /api/assistant realtime route.
  */
 
-export const FYNX_AI_VOICE_MODEL = process.env.OPENAI_REALTIME_MODEL || "gpt-realtime";
+export const FYNX_AI_VOICE_MODEL = process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2.1";
 export const FYNX_AI_VOICE = process.env.OPENAI_REALTIME_VOICE || "marin";
 
 export const FYNX_AI_VOICE_INSTRUCTIONS = [
