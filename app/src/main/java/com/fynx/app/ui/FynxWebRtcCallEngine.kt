@@ -68,8 +68,7 @@ class FynxWebRtcCallEngine(
                 override fun onDataChannel(channel: org.webrtc.DataChannel) = Unit
                 override fun onRenegotiationNeeded() = Unit
                 override fun onAddTrack(receiver: org.webrtc.RtpReceiver, mediaStreams: Array<out MediaStream>) {
-                    val track = receiver.track()
-                    when (track) {
+                    when (val track = receiver.track()) {
                         is AudioTrack -> callbacks.onRemoteAudioTrack(track)
                         is VideoTrack -> callbacks.onRemoteVideoTrack(track)
                     }
@@ -86,7 +85,6 @@ class FynxWebRtcCallEngine(
             override fun onCreateSuccess(description: SessionDescription) {
                 pc.setLocalDescription(object : SdpObserverAdapter() {
                     override fun onSetSuccess() { callbacks.onOffer(description.description) }
-                    override fun onCreateFailure(error: String) { callbacks.onError(error) }
                     override fun onSetFailure(error: String) { callbacks.onError(error) }
                 }, description)
             }
@@ -102,7 +100,6 @@ class FynxWebRtcCallEngine(
                     override fun onCreateSuccess(description: SessionDescription) {
                         pc.setLocalDescription(object : SdpObserverAdapter() {
                             override fun onSetSuccess() { callbacks.onAnswer(description.description) }
-                            override fun onCreateFailure(error: String) { callbacks.onError(error) }
                             override fun onSetFailure(error: String) { callbacks.onError(error) }
                         }, description)
                     }
@@ -122,7 +119,7 @@ class FynxWebRtcCallEngine(
 
     fun addRemoteIceCandidate(candidate: IceCandidate) {
         val pc = peerConnection ?: return callbacks.onError("call media is not connected")
-        pc.addIceCandidate(candidate) { success -> if (!success) callbacks.onError("failed to add remote ICE candidate") }
+        if (!pc.addIceCandidate(candidate)) callbacks.onError("failed to add remote ICE candidate")
     }
 
     private fun createLocalAudio() {
