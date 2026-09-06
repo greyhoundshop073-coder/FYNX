@@ -4,9 +4,10 @@ import { createBackgroundJobQueue } from "./backgroundJobs.js";
 import { registerMarketplaceSettlementRoutes } from "./marketplaceSettlement.js";
 import { registerMarketplaceProtectionRoutes } from "./marketplaceProtection.js";
 import { installSecurityHardening } from "./securityHardening.js";
+import { registerRealtimeAssistantRoutes } from "./aiRealtimeRoutes.js";
 
 // Apply safe HTTP connection limits before the existing FYNX server is created.
-// Marketplace settlement and protection routes are registered here because server.js is loaded
+// Marketplace settlement, protection and realtime AI routes are registered here because server.js is loaded
 // after this preload in the backend start command. Keep each route family registered exactly once.
 const originalCreateServer = http.createServer;
 http.createServer = function fynxCreateServer(...args) {
@@ -18,6 +19,7 @@ http.createServer = function fynxCreateServer(...args) {
       registerMarketplaceSettlementRoutes({ app });
       // protected settlement and buyer/seller protection routes enabled
       registerMarketplaceProtectionRoutes({ app });
+      registerRealtimeAssistantRoutes({ app });
     });
   }
   server.keepAliveTimeout = 65_000;
