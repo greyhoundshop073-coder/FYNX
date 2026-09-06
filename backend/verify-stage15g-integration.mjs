@@ -18,7 +18,7 @@ const checks = [
   ["protected settlement routes are wired by the existing preload architecture", scalability.includes("registerMarketplaceSettlementRoutes") && scalability.includes("registerMarketplaceProtectionRoutes")],
   ["marketplace order ownership is enforced", transactions.includes("isParticipant(order, req.user.sub)") && transactions.includes("only the buyer can cancel this order")],
   ["advertising ownership is enforced server-side", advertising.includes("WHERE c.owner_id=$1") && advertising.includes("owner_id=$2")],
-  ["advertising activation keeps approval and payment gates", advertising.includes("approved_at") && advertising.includes("payment_status !== 'paid'")],
+  ["advertising activation keeps approval and payment gates", advertising.includes("approved_at") && advertising.includes('payment_status !== "paid"')],
   ["protected settlement keeps buyer/seller authorization boundaries", settlement.includes("buyer_id") && settlement.includes("seller_id") && protection.includes("req.user = payload")],
   ["realtime messaging requires authenticated JWT", server.includes('const token = url.searchParams.get("token")') && server.includes("jwt.verify(token, JWT_SECRET)")]
 ];
