@@ -20,17 +20,35 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
 @Composable
 fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Boolean = false, onSettingsClosed: () -> Unit = {}, onSignOut: () -> Unit = {}, onAppearanceChanged: (String) -> Unit = {}, onAccentChanged: (FynxAccent) -> Unit = {}, onOpenPrivacy: () -> Unit = {}) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(openSettingsInitially) }
     var profile by remember(session.username) { mutableStateOf(FynxPreferencesStore.loadProfile(context, session.username)) }
     var description by remember(session.username) { mutableStateOf(FynxPreferencesStore.loadDescription(context)) }
     var photo by remember(session.username) { mutableStateOf(FynxPreferencesStore.loadProfilePhoto(context)) }
+    var syncing by remember { mutableStateOf(false) }
+    var syncError by remember { mutableStateOf<String?>(null) }
     var settings by remember { mutableStateOf(FynxPreferencesStore.loadSettings(context)) }
-    if (editing) { EditProfilePanel(profile, description, photo, onPhotoChanged = { uri -> photo = uri; FynxPreferencesStore.saveProfilePhoto(context, uri) }, onSave = { updatedProfile, updatedDescription -> profile = updatedProfile; description = updatedDescription; FynxPreferencesStore.saveProfile(context, updatedProfile); FynxPreferencesStore.saveDescription(context, updatedDescription); editing = false }, onCancel = { editing = false }); return }
+    if (editing) { EditProfilePanel(profile, description, photo, syncing, syncError, onPhotoChanged = { uri -> photo = uri }, onSave = { updatedProfile, updatedDescription, updatedPhoto ->
+        scope.launch {
+            syncing = true; syncError = null
+            var photoId: String? = null
+            if (updatedPhoto != photo || (updatedPhoto != null && updatedPhoto != FynxPreferencesStore.loadProfilePhoto(context))) {
+                val uri = updatedPhoto?.let(Uri::parse)
+                if (uri != null) FynxProfileRemoteClient.uploadProfilePhoto(context, uri).onSuccess { photoId = it }.onFailure { syncError = it.message }
+            }
+            if (syncError == null) FynxProfileRemoteClient.update(context, updatedProfile.displayName, updatedProfile.username, updatedProfile.bio, profilePhotoMediaId = photoId).onSuccess {
+                profile = updatedProfile; description = updatedDescription; photo = updatedPhoto
+                FynxPreferencesStore.saveProfile(context, updatedProfile); FynxPreferencesStore.saveDescription(context, updatedDescription); FynxPreferencesStore.saveProfilePhoto(context, updatedPhoto); editing = false
+            }.onFailure { syncError = it.message }
+            syncing = false
+        }
+    }, onCancel = { editing = false }); return }
     if (settingsOpen) { SettingsPanel(settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy); return }
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .6f))) { Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) { FynxProfileImage(profile.displayName, photo, Modifier.size(108.dp)); Spacer(Modifier.height(12.dp)); Text(profile.displayName, style = MaterialTheme.typography.headlineSmall); Text("@${profile.username.removePrefix("@")}", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); Text(profile.bio.ifBlank { "Welcome to FYNX" }, color = MaterialTheme.colorScheme.onSurfaceVariant); if (description.isNotBlank()) Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(14.dp)); Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { Button(onClick = { editing = true }, shape = FynxDesign.ControlShape) { Icon(Icons.Default.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text("Edit profile") }; OutlinedButton(onClick = { settingsOpen = true }, shape = FynxDesign.ControlShape) { Icon(Icons.Default.Settings, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text("Settings") } } } } }
@@ -43,13 +61,14 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
 
 @Composable private fun ProfileInfoCard(title: String, value: String) { Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) { Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) { Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f)); Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
 
-@Composable private fun EditProfilePanel(profile: FynxProfile, description: String, photoUri: String?, onPhotoChanged: (String?) -> Unit, onSave: (FynxProfile, String) -> Unit, onCancel: () -> Unit) {
+@Composable private fun EditProfilePanel(profile: FynxProfile, description: String, photoUri: String?, syncing: Boolean, syncError: String?, onPhotoChanged: (String?) -> Unit, onSave: (FynxProfile, String, String?) -> Unit, onCancel: () -> Unit) {
     var displayName by remember(profile) { mutableStateOf(profile.displayName) }; var username by remember(profile) { mutableStateOf(profile.username) }; var bio by remember(profile) { mutableStateOf(profile.bio) }; var about by remember(profile, description) { mutableStateOf(description) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> if (uri != null) onPhotoChanged(uri.toString()) }
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onCancel) { Text("Cancel") }; Text("Edit profile", style = MaterialTheme.typography.titleLarge); TextButton(onClick = { onSave(profile.copy(displayName = displayName.trim().ifBlank { profile.displayName }, username = username.trim().removePrefix("@").replace(" ", "").ifBlank { profile.username }), about.trim()) }) { Text("Save") } }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { TextButton(enabled = !syncing, onClick = onCancel) { Text("Cancel") }; Text("Edit profile", style = MaterialTheme.typography.titleLarge); TextButton(enabled = !syncing, onClick = { onSave(profile.copy(displayName = displayName.trim().ifBlank { profile.displayName }, username = username.trim().removePrefix("@").replace(" ", "").ifBlank { profile.username }, bio = bio.trim()), about.trim(), photoUri) }) { Text(if (syncing) "Saving…" else "Save") } }
+        syncError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         HorizontalDivider(); Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { FynxProfileImage(displayName, photoUri, Modifier.size(112.dp)) }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) { OutlinedButton(onClick = { picker.launch("image/*") }) { Icon(Icons.Default.AddAPhoto, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text(if (photoUri == null) "Add photo" else "Change photo") }; if (photoUri != null) { Spacer(Modifier.width(6.dp)); TextButton(onClick = { onPhotoChanged(null) }) { Text("Remove") } } }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) { OutlinedButton(enabled = !syncing, onClick = { picker.launch("image/*") }) { Icon(Icons.Default.AddAPhoto, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text(if (photoUri == null) "Add photo" else "Change photo") }; if (photoUri != null) { Spacer(Modifier.width(6.dp)); TextButton(enabled = !syncing, onClick = { onPhotoChanged(null) }) { Text("Remove") } } }
         OutlinedTextField(displayName, { displayName = it }, Modifier.fillMaxWidth(), label = { Text("Display name") }, singleLine = true, shape = FynxDesign.ControlShape)
         OutlinedTextField(username.removePrefix("@"), { username = it.removePrefix("@").replace(" ", "") }, Modifier.fillMaxWidth(), label = { Text("Username") }, prefix = { Text("@") }, singleLine = true, shape = FynxDesign.ControlShape)
         OutlinedTextField(bio, { bio = it }, Modifier.fillMaxWidth(), label = { Text("Bio") }, minLines = 3, shape = FynxDesign.ControlShape)
