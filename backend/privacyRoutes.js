@@ -95,15 +95,12 @@ function insertBeforeRoute(app, method, path, middleware) {
   router.stack.splice(targetIndex, 0, added);
 }
 
-function createGuard(method, path, handler) {
-  return (req, res, next) => {
-    if (req.method.toLowerCase() !== method) return next();
-    return handler(req, res, next);
-  };
+function createGuard(method, handler) {
+  return (req, res, next) => req.method.toLowerCase() === method ? handler(req, res, next) : next();
 }
 
 function registerServerEnforcement(app) {
-  insertBeforeRoute(app, "post", "/api/social/posts", createGuard("post", "/api/social/posts", async (req, res, next) => {
+  insertBeforeRoute(app, "post", "/api/social/posts", createGuard("post", async (req, res, next) => {
     try {
       const visibility = await getVisibility(req.user?.sub, "posts_visibility");
       if (visibility === "Nobody") return res.status(403).json({ error: "posting is disabled by your Posts privacy setting" });
@@ -115,11 +112,9 @@ function registerServerEnforcement(app) {
     }
   }));
 
-  insertBeforeRoute(app, "post", "/api/messages", createGuard("post", "/api/messages", async (req, res, next) => {
+  insertBeforeRoute(app, "post", "/api/messages", createGuard("post", async (req, res, next) => {
     try {
-      const username = typeof req.body?.recipientUsername === "string"
-        ? req.body.recipientUsername.trim().toLowerCase().replace(/^@+/, "")
-        : "";
+      const username = typeof req.body?.recipientUsername === "string" ? req.body.recipientUsername.trim().toLowerCase().replace(/^@+/, "") : "";
       if (!username) return next();
       const recipient = await pool.query("SELECT id FROM users WHERE username=$1", [username]);
       if (!recipient.rows[0]) return next();
@@ -127,12 +122,23 @@ function registerServerEnforcement(app) {
       if (String(recipientId) === String(req.user?.sub)) return next();
       const visibility = await getVisibility(recipientId, "messages_visibility");
       if (visibility === "Nobody") return res.status(403).json({ error: "this user is not accepting messages" });
-      if (visibility === DEFAULT_VISIBILITY && !(await areFriends(req.user.sub, recipientId))) {
-        return res.status(403).json({ error: "you must be friends with this user to send a message" });
-      }
+      if (visibility === DEFAULT_VISIBILITY && !(await areFriends(req.user.sub, recipientId))) return res.status(403).json({ error: "you must be friends with this user to send a message" });
       return next();
     } catch (error) {
       console.error("privacy message enforcement", error);
+      return res.status(503).json({ error: "privacy settings unavailable" });
+    }
+  }));
+
+  insertBeforeRoute(app, "post", "/api/statuses", createGuard("post", async (req, res, next) => {
+    try {
+      const visibility = await getVisibility(req.user?.sub, "status_visibility");
+      if (visibility === "Nobody") return res.status(403).json({ error: "status posting is disabled by your Status privacy setting" });
+      if (visibility === DEFAULT_VISIBILITY) req.body = { ...(req.body || {}), private_status: true };
+      if (visibility === "Everyone") req.body = { ...(req.body || {}), private_status: false };
+      return next();
+    } catch (error) {
+      console.error("privacy status enforcement", error);
       return res.status(503).json({ error: "privacy settings unavailable" });
     }
   }));
@@ -142,17 +148,10 @@ export function registerPrivacyRoutes({ app }) {
   app.get("/api/privacy", auth, async (req, res) => {
     try {
       await ensureSchema();
-      const result = await pool.query(
-        `INSERT INTO privacy_settings (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING
-         RETURNING profile_visibility, online_visibility, posts_visibility, status_visibility, profile_photo_visibility, messages_visibility`,
-        [req.privacyUser.sub]
-      );
+      const result = await pool.query(`INSERT INTO privacy_settings (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING RETURNING profile_visibility, online_visibility, posts_visibility, status_visibility, profile_photo_visibility, messages_visibility`, [req.privacyUser.sub]);
       let row = result.rows[0];
       if (!row) {
-        const existing = await pool.query(
-          `SELECT profile_visibility, online_visibility, posts_visibility, status_visibility, profile_photo_visibility, messages_visibility FROM privacy_settings WHERE user_id=$1`,
-          [req.privacyUser.sub]
-        );
+        const existing = await pool.query(`SELECT profile_visibility, online_visibility, posts_visibility, status_visibility, profile_photo_visibility, messages_visibility FROM privacy_settings WHERE user_id=$1`, [req.privacyUser.sub]);
         row = existing.rows[0];
       }
       res.set("Cache-Control", "no-store");
@@ -181,12 +180,7 @@ export function registerPrivacyRoutes({ app }) {
       const assignments = columns.map((key, index) => `${key}=$${index + 2}`);
       const insertColumns = ["user_id", ...columns].join(", ");
       const insertValues = ["$1", ...columns.map((_, index) => `$${index + 2}`)].join(", ");
-      const result = await pool.query(
-        `INSERT INTO privacy_settings (${insertColumns}) VALUES (${insertValues})
-         ON CONFLICT (user_id) DO UPDATE SET ${assignments.join(", ")}, updated_at=NOW()
-         RETURNING profile_visibility, online_visibility, posts_visibility, status_visibility, profile_photo_visibility, messages_visibility`,
-        params
-      );
+      const result = await pool.query(`INSERT INTO privacy_settings (${insertColumns}) VALUES (${insertValues}) ON CONFLICT (user_id) DO UPDATE SET ${assignments.join(", ")}, updated_at=NOW() RETURNING profile_visibility, online_visibility, posts_visibility, status_visibility, profile_photo_visibility, messages_visibility`, params);
       res.set("Cache-Control", "no-store");
       return res.json({ settings: values(result.rows[0]) });
     } catch (error) {
