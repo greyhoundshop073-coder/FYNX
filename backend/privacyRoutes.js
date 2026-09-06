@@ -51,7 +51,8 @@ function auth(req, res, next) {
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token || !JWT_SECRET) return res.status(401).json({ error: "authentication required" });
   try { req.privacyUser = jwt.verify(token, JWT_SECRET); return next(); }
-  catch { return res.status(401).json({ error: "invalid or expired token" }); }
+  catch { return res.status(401).json({ error: "invalid or expired token" });
+  }
 }
 
 function values(row) {
@@ -74,6 +75,14 @@ async function getVisibility(userId, key) {
 async function areFriends(userA, userB) {
   const result = await pool.query(
     `SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)) AND status='accepted' LIMIT 1`,
+    [userA, userB]
+  );
+  return Boolean(result.rowCount);
+}
+
+async function isBlocked(userA, userB) {
+  const result = await pool.query(
+    `SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1) LIMIT 1`,
     [userA, userB]
   );
   return Boolean(result.rowCount);
@@ -123,6 +132,7 @@ function registerServerEnforcement(app) {
       if (!recipient.rows[0]) return next();
       const recipientId = recipient.rows[0].id;
       if (String(recipientId) === String(req.user?.sub)) return next();
+      if (await isBlocked(req.user.sub, recipientId)) return res.status(403).json({ error: "messaging is unavailable between blocked users" });
       const visibility = await getVisibility(recipientId, "messages_visibility");
       if (visibility === "Nobody") return res.status(403).json({ error: "this user is not accepting messages" });
       if (visibility === DEFAULT_VISIBILITY && !(await areFriends(req.user.sub, recipientId))) return res.status(403).json({ error: "you must be friends with this user to send a message" });
@@ -154,6 +164,7 @@ function registerServerEnforcement(app) {
       if (!target.rows[0]) return next();
       const targetId = target.rows[0].id;
       if (String(targetId) === String(req.user?.sub)) return next();
+      if (await isBlocked(req.user.sub, targetId)) return res.status(403).json({ error: "this profile is unavailable" });
       const visibility = await getVisibility(targetId, "profile_visibility");
       if (visibility === "Nobody") return res.status(403).json({ error: "this profile is private" });
       if (visibility === DEFAULT_VISIBILITY && !(await areFriends(req.user.sub, targetId))) return res.status(403).json({ error: "you must be friends with this user to view their profile" });
