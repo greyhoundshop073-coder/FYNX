@@ -93,5 +93,28 @@ jobs:
       - name: Run Stage 15F security hardening verification
         run: node verify-stage15f-security.mjs
 
+      - name: Run Stage 15E performance verification
+        run: node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const jobs = fs.readFileSync('backgroundJobs.js', 'utf8');
+          const orders = fs.readFileSync('marketplaceTransactions.js', 'utf8');
+          const scale = fs.readFileSync('scalability.js', 'utf8');
+          const checks = [
+            ['background-job claim uses one UPDATE/CTE transition', /WITH picked AS[\\s\\S]*UPDATE background_jobs/],
+            ['background-job claim preserves SKIP LOCKED', /FOR UPDATE SKIP LOCKED/],
+            ['marketplace seller status index exists', /marketplace_orders_seller_status_idx/],
+            ['marketplace order list uses separate buyer/seller limits', /WHERE o\.buyer_id = \$1[\\s\\S]*LIMIT 100[\\s\\S]*UNION ALL[\\s\\S]*WHERE o\.seller_id = \$1[\\s\\S]*LIMIT 100/],
+            ['HTTP connection controls are configurable', /FYNX_KEEP_ALIVE_TIMEOUT_MS[\\s\\S]*FYNX_MAX_CONNECTIONS/],
+            ['metrics sampling is configurable', /FYNX_METRICS_SAMPLE_RATE/]
+          ];
+          for (const [name, pattern] of checks) {
+            if (!pattern.test(name.includes('background') ? jobs : name.includes('marketplace') ? orders : scale)) {
+              throw new Error(`Stage 15E performance check failed: ${name}`);
+            }
+            console.log(`PASS: ${name}`);
+          }
+          console.log('Stage 15E performance verification passed');
+          NODE
+
       - name: Verify backend package metadata
         run: node -e "const p=require('./package.json'); if(!p.scripts || !p.scripts.start) process.exit(1); console.log('FYNX backend package OK')"
