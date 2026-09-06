@@ -7,7 +7,10 @@ const PRIVATE_GET_PATHS = [
   /^\/api\/blocks(?:\/|$)/,
   /^\/api\/friends(?:\/|$)/,
   /^\/api\/marketplace\/media(?:\/|$)/,
-  /^\/api\/marketplace\/orders(?:\/|$)/
+  /^\/api\/marketplace\/orders(?:\/|$)/,
+  /^\/api\/marketplace\/protection(?:\/|$)/,
+  /^\/api\/marketplace\/settlement(?:\/|$)/,
+  /^\/api\/advertising\/(?:dashboard|campaigns)(?:\/|$)/
 ];
 
 function isPrivateGetPath(path) {
@@ -37,9 +40,6 @@ export function installPrivateCachePolicy(app) {
   const layer = app._router.stack[index];
   if (!layer) return;
   layer.fynxPrivateCachePolicy = true;
-
-  // Install before all existing routes. Matching is done from req.path at runtime,
-  // so parameterized private routes are protected too.
   app._router.stack.splice(index, 1);
   app._router.stack.unshift(layer);
 }
