@@ -31,6 +31,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
         CREATE UNIQUE INDEX IF NOT EXISTS marketplace_orders_buyer_idempotency_idx ON marketplace_orders (buyer_id, id);
         CREATE INDEX IF NOT EXISTS marketplace_orders_buyer_idx ON marketplace_orders (buyer_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS marketplace_orders_seller_idx ON marketplace_orders (seller_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS marketplace_orders_seller_status_idx ON marketplace_orders (seller_id, status, created_at DESC);
         CREATE INDEX IF NOT EXISTS marketplace_orders_listing_idx ON marketplace_orders (listing_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS marketplace_orders_status_idx ON marketplace_orders (status, updated_at DESC);
 
