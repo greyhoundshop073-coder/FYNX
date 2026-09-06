@@ -51,24 +51,43 @@ fun FynxGroupMediaPicker(
 
 @Composable
 fun FynxGroupCameraPicker(
+    context: Context,
     onMediaSelected: (Uri, String) -> Unit
 ) {
+    val scope = rememberCoroutineScope()
     var openCamera by remember { mutableStateOf(false) }
-    IconButton(onClick = { openCamera = true }) {
+    var uploading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    IconButton(enabled = !uploading, onClick = { openCamera = true }) {
         Icon(Icons.Default.PhotoCamera, contentDescription = "Open FYNX group camera")
     }
+    if (uploading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+    error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
     if (openCamera) {
         androidx.compose.ui.window.Dialog(
-            onDismissRequest = { openCamera = false },
+            onDismissRequest = { if (!uploading) openCamera = false },
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
         ) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 FynxCameraCapturePanel(
                     onCaptured = { uri, type ->
-                        onMediaSelected(uri, type)
-                        openCamera = false
+                        scope.launch {
+                            uploading = true
+                            error = null
+                            val mime = if (type == "video") "video/mp4" else "image/jpeg"
+                            FynxProductionMessaging.uploadMedia(context, uri, mime)
+                                .onSuccess { media ->
+                                    onMediaSelected(
+                                        Uri.parse("${FynxBackendClient.baseUrl(context).trimEnd('/')}/api/media/${media.id}"),
+                                        type
+                                    )
+                                    openCamera = false
+                                }
+                                .onFailure { error = it.message ?: "Unable to upload captured media." }
+                            uploading = false
+                        }
                     },
-                    onDismiss = { openCamera = false }
+                    onDismiss = { if (!uploading) openCamera = false }
                 )
             }
         }
@@ -133,7 +152,7 @@ fun FynxGroupSocialDialog(
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Group camera", modifier = Modifier.weight(1f))
-                        FynxGroupCameraPicker { uri, type -> handleCaptured(uri, type) }
+                        FynxGroupCameraPicker(context) { uri, type -> handleCaptured(uri, type) }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Group media", modifier = Modifier.weight(1f))
