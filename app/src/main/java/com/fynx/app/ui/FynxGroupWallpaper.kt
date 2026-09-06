@@ -30,5 +30,5 @@ fun FynxGroupWallpaperBackground(groupId:String,modifier:Modifier=Modifier,conte
 fun FynxGroupWallpaperDialog(groupId:String,onDismiss:()->Unit){
     val context=androidx.compose.ui.platform.LocalContext.current
     var selected by remember(groupId){mutableStateOf(FynxGroupWallpaperStore.load(context,groupId))}
-    AlertDialog(onDismissRequest=onDismiss,title={Text("Group wallpaper")},text={Column(verticalArrangement=Arrangement.spacedBy(4.dp)){FynxGroupWallpaperOptions.forEach{name->Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(name);RadioButton(selected==name){selected=name;FynxGroupWallpaperStore.save(context,groupId,name)}}}}},confirmButton={TextButton(onClick=onDismiss){Text("Done")}})
+    AlertDialog(onDismissRequest=onDismiss,title={Text("Group wallpaper")},text={Column(verticalArrangement=Arrangement.spacedBy(4.dp)){FynxGroupWallpaperOptions.forEach{name->Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(name);RadioButton(selected==name,onClick={selected=name;FynxGroupWallpaperStore.save(context,groupId,name)})}}}},confirmButton={TextButton(onClick=onDismiss){Text("Done")}})
 }
