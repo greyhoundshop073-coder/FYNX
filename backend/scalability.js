@@ -7,6 +7,7 @@ import { installSecurityHardening } from "./securityHardening.js";
 import { registerRealtimeAssistantRoutes } from "./aiRealtimeRoutes.js";
 import { registerPrivacyRoutes } from "./privacyRoutes.js";
 import { registerProfileRoutes } from "./profileRoutes.js";
+import { registerGroupRoutes } from "./groupRoutes.js";
 import { installPresencePrivacyGuard } from "./presencePrivacy.js";
 import { installMediaPrivacyGuard } from "./mediaPrivacy.js";
 import { installSocialHardening } from "./socialHardening.js";
@@ -32,6 +33,7 @@ http.createServer = function fynxCreateServer(...args) {
       registerRealtimeAssistantRoutes({ app });
       registerPrivacyRoutes({ app });
       registerProfileRoutes({ app });
+      registerGroupRoutes({ app });
       installMediaPrivacyGuard(app);
       installSocialHardening(app);
       installPrivateCachePolicy(app);

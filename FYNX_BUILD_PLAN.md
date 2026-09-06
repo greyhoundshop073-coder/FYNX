@@ -25,7 +25,9 @@ Continue the existing FYNX Android social + marketplace app. Do not rebuild or r
 ### Chat & Group Chat
 - [x] Private conversation camera entry and shared CameraX foundation
 - [x] Group conversation camera entry using the shared camera
-- [ ] Group media through the real group messaging pipeline
+- [x] Server-authoritative group creation/membership foundation
+- [x] Authenticated group message send/load pipeline
+- [x] Group media message ownership validation
 - [ ] Original FYNX conversation wallpaper/background
 - [ ] Full real-device voice/video call journey
 
