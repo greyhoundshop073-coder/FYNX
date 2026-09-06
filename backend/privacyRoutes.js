@@ -79,6 +79,76 @@ function values(row) {
   };
 }
 
+async function getVisibility(userId, key) {
+  await ensureSchema();
+  const result = await pool.query(`SELECT ${key} FROM privacy_settings WHERE user_id=$1`, [userId]);
+  return result.rows[0]?.[key] || DEFAULT_VISIBILITY;
+}
+
+async function areFriends(userA, userB) {
+  const result = await pool.query(
+    `SELECT 1 FROM friendships
+     WHERE ((user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1))
+       AND status='accepted' LIMIT 1`,
+    [userA, userB]
+  );
+  return Boolean(result.rowCount);
+}
+
+function insertBeforeRoute(app, method, path, middleware) {
+  const router = app._router;
+  if (!router?.stack) throw new Error("Express router is unavailable");
+  if (router.stack.some((layer) => layer.fynxPrivacyGuard === `${method}:${path}`)) return;
+  const index = router.stack.findIndex((layer) => layer.route?.path === path && layer.route?.methods?.[method]);
+  if (index < 0) throw new Error(`privacy target route not found: ${method.toUpperCase()} ${path}`);
+  middleware.fynxPrivacyGuard = `${method}:${path}`;
+  router.stack.splice(index, 0, middleware);
+}
+
+function createGuard(method, path, handler) {
+  const layer = function fynxPrivacyGuard(req, res, next) {
+    return handler(req, res, next);
+  };
+  layer.fynxPrivacyGuard = `${method}:${path}`;
+  return layer;
+}
+
+function registerServerEnforcement(app) {
+  insertBeforeRoute(app, "post", "/api/social/posts", createGuard("post", "/api/social/posts", async (req, res, next) => {
+    try {
+      const visibility = await getVisibility(req.user?.sub, "posts_visibility");
+      if (visibility === "Nobody") return res.status(403).json({ error: "posting is disabled by your Posts privacy setting" });
+      if (visibility === DEFAULT_VISIBILITY) req.body = { ...(req.body || {}), visibility: "FRIENDS_ONLY" };
+      return next();
+    } catch (error) {
+      console.error("privacy post enforcement", error);
+      return res.status(503).json({ error: "privacy settings unavailable" });
+    }
+  }));
+
+  insertBeforeRoute(app, "post", "/api/messages", createGuard("post", "/api/messages", async (req, res, next) => {
+    try {
+      const username = typeof req.body?.recipientUsername === "string"
+        ? req.body.recipientUsername.trim().toLowerCase().replace(/^@+/, "")
+        : "";
+      if (!username) return next();
+      const recipient = await pool.query("SELECT id FROM users WHERE username=$1", [username]);
+      if (!recipient.rows[0]) return next();
+      const recipientId = recipient.rows[0].id;
+      if (String(recipientId) === String(req.user?.sub)) return next();
+      const visibility = await getVisibility(recipientId, "messages_visibility");
+      if (visibility === "Nobody") return res.status(403).json({ error: "this user is not accepting messages" });
+      if (visibility === DEFAULT_VISIBILITY && !(await areFriends(req.user.sub, recipientId))) {
+        return res.status(403).json({ error: "you must be friends with this user to send a message" });
+      }
+      return next();
+    } catch (error) {
+      console.error("privacy message enforcement", error);
+      return res.status(503).json({ error: "privacy settings unavailable" });
+    }
+  }));
+}
+
 export function registerPrivacyRoutes({ app }) {
   app.get("/api/privacy", auth, async (req, res) => {
     try {
@@ -137,4 +207,6 @@ export function registerPrivacyRoutes({ app }) {
       return res.status(500).json({ error: "privacy settings update failed" });
     }
   });
+
+  registerServerEnforcement(app);
 }
