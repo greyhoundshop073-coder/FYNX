@@ -8,6 +8,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val FYNX_PRIVACY_OPTIONS = listOf("Everyone", "My friends", "Nobody")
 
@@ -21,6 +24,7 @@ private const val KEY_MESSAGES = "privacy_messages_visibility"
 @Composable
 fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var profile by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, KEY_PROFILE)) }
     var online by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, KEY_ONLINE)) }
     var posts by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, KEY_POSTS)) }
@@ -28,6 +32,67 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
     var photo by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, KEY_PROFILE_PHOTO)) }
     var messages by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, KEY_MESSAGES)) }
     var openKey by remember { mutableStateOf<String?>(null) }
+    var savingKey by remember { mutableStateOf<String?>(null) }
+    var notice by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        FynxPrivacyRemoteClient.load(context).onSuccess { remote ->
+            profile = remote[KEY_PROFILE]
+            online = remote[KEY_ONLINE]
+            posts = remote[KEY_POSTS]
+            status = remote[KEY_STATUS]
+            photo = remote[KEY_PROFILE_PHOTO]
+            messages = remote[KEY_MESSAGES]
+            listOf(
+                KEY_PROFILE to profile,
+                KEY_ONLINE to online,
+                KEY_POSTS to posts,
+                KEY_STATUS to status,
+                KEY_PROFILE_PHOTO to photo,
+                KEY_MESSAGES to messages
+            ).forEach { (key, value) -> FynxPreferencesStore.saveVisibility(context, key, value) }
+        }.onFailure { error ->
+            notice = error.message ?: "Privacy settings are currently offline."
+        }
+    }
+
+    fun saveSelection(key: String, option: String) {
+        val previous = when (key) {
+            KEY_PROFILE -> profile
+            KEY_ONLINE -> online
+            KEY_POSTS -> posts
+            KEY_STATUS -> status
+            KEY_PROFILE_PHOTO -> photo
+            KEY_MESSAGES -> messages
+            else -> option
+        }
+        savingKey = key
+        notice = null
+        scope.launch {
+            FynxPrivacyRemoteClient.update(context, key, option).onSuccess { remote ->
+                profile = remote[KEY_PROFILE]
+                online = remote[KEY_ONLINE]
+                posts = remote[KEY_POSTS]
+                status = remote[KEY_STATUS]
+                photo = remote[KEY_PROFILE_PHOTO]
+                messages = remote[KEY_MESSAGES]
+                remote.values.forEach { }
+                FynxPreferencesStore.saveVisibility(context, key, option)
+                openKey = null
+            }.onFailure { error ->
+                when (key) {
+                    KEY_PROFILE -> profile = previous
+                    KEY_ONLINE -> online = previous
+                    KEY_POSTS -> posts = previous
+                    KEY_STATUS -> status = previous
+                    KEY_PROFILE_PHOTO -> photo = previous
+                    KEY_MESSAGES -> messages = previous
+                }
+                notice = error.message ?: "Could not save this privacy setting."
+            }
+            savingKey = null
+        }
+    }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
         Row(Modifier.fillMaxWidth()) {
@@ -36,6 +101,14 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
             Text("Privacy", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
         }
         HorizontalDivider()
+        notice?.let { message ->
+            Text(
+                message,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 10.dp)
+            )
+        }
         LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item { PrivacyChoiceCard("Who can see my profile", profile) { openKey = KEY_PROFILE } }
             item { PrivacyChoiceCard("Who can see me online", online) { openKey = KEY_ONLINE } }
@@ -57,7 +130,7 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
             else -> null
         }
         AlertDialog(
-            onDismissRequest = { openKey = null },
+            onDismissRequest = { if (savingKey == null) openKey = null },
             title = { Text("Privacy setting") },
             text = {
                 Column {
@@ -70,25 +143,17 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
                         ) {
                             RadioButton(
                                 selected = current == option,
-                                onClick = {
-                                    FynxPreferencesStore.saveVisibility(context, key, option)
-                                    when (key) {
-                                        KEY_PROFILE -> profile = option
-                                        KEY_ONLINE -> online = option
-                                        KEY_POSTS -> posts = option
-                                        KEY_STATUS -> status = option
-                                        KEY_PROFILE_PHOTO -> photo = option
-                                        KEY_MESSAGES -> messages = option
-                                    }
-                                    openKey = null
-                                }
+                                enabled = savingKey == null,
+                                onClick = { saveSelection(key, option) }
                             )
                             Text(option)
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { openKey = null }) { Text("Done") } }
+            confirmButton = {
+                TextButton(enabled = savingKey == null, onClick = { openKey = null }) { Text("Done") }
+            }
         )
     }
 }
