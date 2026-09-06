@@ -7,9 +7,10 @@ import { installSecurityHardening } from "./securityHardening.js";
 import { registerRealtimeAssistantRoutes } from "./aiRealtimeRoutes.js";
 import { registerPrivacyRoutes } from "./privacyRoutes.js";
 import { installPresencePrivacyGuard } from "./presencePrivacy.js";
+import { installMediaPrivacyGuard } from "./mediaPrivacy.js";
 
 // Apply safe HTTP connection limits before the existing FYNX server is created.
-// Marketplace settlement, protection, realtime AI and privacy routes are registered here because server.js is loaded
+// Marketplace settlement, protection, realtime AI, privacy and media guards are registered here because server.js is loaded
 // after this preload in the backend start command. Keep each route family registered exactly once.
 installPresencePrivacyGuard();
 
@@ -25,6 +26,7 @@ http.createServer = function fynxCreateServer(...args) {
       registerMarketplaceProtectionRoutes({ app });
       registerRealtimeAssistantRoutes({ app });
       registerPrivacyRoutes({ app });
+      installMediaPrivacyGuard(app);
     });
   }
   server.keepAliveTimeout = 65_000;
