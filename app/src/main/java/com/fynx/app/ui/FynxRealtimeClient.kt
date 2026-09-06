@@ -22,7 +22,9 @@ class FynxRealtimeClient(
 ) {
     enum class State { CONNECTING, CONNECTED, DISCONNECTED, FAILED }
 
-    sealed interface Event {
+    // This event bus is intentionally extensible because new realtime domains (such as calls)
+    // can be added without forcing every existing chat consumer to handle every new event.
+    interface Event {
         data class MessageStatus(val messageId: String, val status: Status) : Event
         data class Typing(val userId: String, val isTyping: Boolean) : Event
         data class Presence(val userId: String, val online: Boolean) : Event
@@ -129,6 +131,14 @@ class FynxRealtimeClient(
                 scheduleReconnect()
             }
         })
+    }
+
+    private fun scheduleReconnect() {
+        if (manuallyClosed) return
+        reconnectHandler.removeCallbacksAndMessages(null)
+        reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(6)
+        val delayMs = (1000L shl (reconnectAttempt - 1)).coerceAtMost(30_000L)
+        reconnectHandler.postDelayed({ connectInternal() }, delayMs)
     }
 
     private fun parseCallEvent(root: JSONObject): Event.Call {
