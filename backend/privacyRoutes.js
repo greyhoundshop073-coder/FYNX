@@ -16,14 +16,7 @@ const pool = DATABASE_URL ? new Pool({
   keepAlive: true
 }) : null;
 
-const KEYS = [
-  "profile_visibility",
-  "online_visibility",
-  "posts_visibility",
-  "status_visibility",
-  "profile_photo_visibility",
-  "messages_visibility"
-];
+const KEYS = ["profile_visibility", "online_visibility", "posts_visibility", "status_visibility", "profile_photo_visibility", "messages_visibility"];
 const DEFAULT_VISIBILITY = "My friends";
 const OPTIONS = new Set(["Everyone", DEFAULT_VISIBILITY, "Nobody"]);
 let schemaPromise;
@@ -48,10 +41,7 @@ async function ensureSchema() {
         CHECK (profile_photo_visibility IN ('Everyone','My friends','Nobody')),
         CHECK (messages_visibility IN ('Everyone','My friends','Nobody'))
       );
-    `).catch((error) => {
-      schemaPromise = undefined;
-      throw error;
-    });
+    `).catch((error) => { schemaPromise = undefined; throw error; });
   }
   return schemaPromise;
 }
@@ -60,12 +50,8 @@ function auth(req, res, next) {
   const header = req.get("authorization") || "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token || !JWT_SECRET) return res.status(401).json({ error: "authentication required" });
-  try {
-    req.privacyUser = jwt.verify(token, JWT_SECRET);
-    return next();
-  } catch {
-    return res.status(401).json({ error: "invalid or expired token" });
-  }
+  try { req.privacyUser = jwt.verify(token, JWT_SECRET); return next(); }
+  catch { return res.status(401).json({ error: "invalid or expired token" }); }
 }
 
 function values(row) {
@@ -87,9 +73,7 @@ async function getVisibility(userId, key) {
 
 async function areFriends(userA, userB) {
   const result = await pool.query(
-    `SELECT 1 FROM friendships
-     WHERE ((user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1))
-       AND status='accepted' LIMIT 1`,
+    `SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)) AND status='accepted' LIMIT 1`,
     [userA, userB]
   );
   return Boolean(result.rowCount);
@@ -98,19 +82,24 @@ async function areFriends(userA, userB) {
 function insertBeforeRoute(app, method, path, middleware) {
   const router = app._router;
   if (!router?.stack) throw new Error("Express router is unavailable");
-  if (router.stack.some((layer) => layer.fynxPrivacyGuard === `${method}:${path}`)) return;
-  const index = router.stack.findIndex((layer) => layer.route?.path === path && layer.route?.methods?.[method]);
-  if (index < 0) throw new Error(`privacy target route not found: ${method.toUpperCase()} ${path}`);
-  middleware.fynxPrivacyGuard = `${method}:${path}`;
-  router.stack.splice(index, 0, middleware);
+  const marker = `${method}:${path}`;
+  if (router.stack.some((layer) => layer.fynxPrivacyGuard === marker)) return;
+  app.use(path, middleware);
+  const addedIndex = router.stack.length - 1;
+  const added = router.stack[addedIndex];
+  if (!added) throw new Error(`privacy guard layer creation failed: ${method.toUpperCase()} ${path}`);
+  added.fynxPrivacyGuard = marker;
+  const targetIndex = router.stack.findIndex((layer) => layer.route?.path === path && layer.route?.methods?.[method]);
+  if (targetIndex < 0) throw new Error(`privacy target route not found: ${method.toUpperCase()} ${path}`);
+  router.stack.splice(addedIndex, 1);
+  router.stack.splice(targetIndex, 0, added);
 }
 
 function createGuard(method, path, handler) {
-  const layer = function fynxPrivacyGuard(req, res, next) {
+  return (req, res, next) => {
+    if (req.method.toLowerCase() !== method) return next();
     return handler(req, res, next);
   };
-  layer.fynxPrivacyGuard = `${method}:${path}`;
-  return layer;
 }
 
 function registerServerEnforcement(app) {
@@ -154,8 +143,7 @@ export function registerPrivacyRoutes({ app }) {
     try {
       await ensureSchema();
       const result = await pool.query(
-        `INSERT INTO privacy_settings (user_id) VALUES ($1)
-         ON CONFLICT (user_id) DO NOTHING
+        `INSERT INTO privacy_settings (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING
          RETURNING profile_visibility, online_visibility, posts_visibility, status_visibility, profile_photo_visibility, messages_visibility`,
         [req.privacyUser.sub]
       );
@@ -188,7 +176,6 @@ export function registerPrivacyRoutes({ app }) {
         }
       }
       if (!Object.keys(updates).length) return res.status(400).json({ error: "at least one privacy setting is required" });
-
       const columns = Object.keys(updates);
       const params = [req.privacyUser.sub, ...columns.map((key) => updates[key])];
       const assignments = columns.map((key, index) => `${key}=$${index + 2}`);
