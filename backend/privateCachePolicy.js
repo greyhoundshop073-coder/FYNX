@@ -38,14 +38,8 @@ export function installPrivateCachePolicy(app) {
   if (!layer) return;
   layer.fynxPrivateCachePolicy = true;
 
-  const targetIndexes = app._router.stack.reduce((indexes, candidate, candidateIndex) => {
-    const path = candidate.route?.path;
-    if (typeof path === "string" && isPrivateGetPath(path)) indexes.push(candidateIndex);
-    return indexes;
-  }, []);
-
-  if (targetIndexes.length) {
-    app._router.stack.splice(index, 1);
-    app._router.stack.splice(Math.min(...targetIndexes), 0, layer);
-  }
+  // Install before all existing routes. Matching is done from req.path at runtime,
+  // so parameterized private routes are protected too.
+  app._router.stack.splice(index, 1);
+  app._router.stack.unshift(layer);
 }
