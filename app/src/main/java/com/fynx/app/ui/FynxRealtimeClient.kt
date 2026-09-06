@@ -22,8 +22,6 @@ class FynxRealtimeClient(
 ) {
     enum class State { CONNECTING, CONNECTED, DISCONNECTED, FAILED }
 
-    // This event bus is intentionally extensible because new realtime domains (such as calls)
-    // can be added without forcing every existing chat consumer to handle every new event.
     interface Event {
         data class MessageStatus(val messageId: String, val status: Status) : Event
         data class Typing(val userId: String, val isTyping: Boolean) : Event
@@ -63,7 +61,8 @@ class FynxRealtimeClient(
     private var manuallyClosed = false
     private var reconnectAttempt = 0
 
-    fun connect() {
+    /** Starts the authenticated realtime connection. Kept deliberately named to avoid API ambiguity. */
+    fun startRealtime() {
         manuallyClosed = false
         reconnectAttempt = 0
         reconnectHandler.removeCallbacksAndMessages(null)
@@ -164,29 +163,12 @@ class FynxRealtimeClient(
         )
     }
 
-    fun sendCallInvite(callId: String, targetUserId: String, video: Boolean) {
-        sendCall(callId, targetUserId, if (video) "video" else "voice", "invite")
-    }
-
-    fun sendCallAccept(callId: String, targetUserId: String, video: Boolean) {
-        sendCall(callId, targetUserId, if (video) "video" else "voice", "accept")
-    }
-
-    fun sendCallReject(callId: String, targetUserId: String, video: Boolean) {
-        sendCall(callId, targetUserId, if (video) "video" else "voice", "reject")
-    }
-
-    fun sendCallEnd(callId: String, targetUserId: String, video: Boolean) {
-        sendCall(callId, targetUserId, if (video) "video" else "voice", "end")
-    }
-
-    fun sendCallOffer(callId: String, targetUserId: String, sdp: String, video: Boolean) {
-        sendCall(callId, targetUserId, if (video) "video" else "voice", "offer", JSONObject().put("sdp", sdp))
-    }
-
-    fun sendCallAnswer(callId: String, targetUserId: String, sdp: String, video: Boolean) {
-        sendCall(callId, targetUserId, if (video) "video" else "voice", "answer", JSONObject().put("sdp", sdp))
-    }
+    fun sendCallInvite(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "invite")
+    fun sendCallAccept(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "accept")
+    fun sendCallReject(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "reject")
+    fun sendCallEnd(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "end")
+    fun sendCallOffer(callId: String, targetUserId: String, sdp: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "offer", JSONObject().put("sdp", sdp))
+    fun sendCallAnswer(callId: String, targetUserId: String, sdp: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "answer", JSONObject().put("sdp", sdp))
 
     fun sendCallIce(callId: String, targetUserId: String, candidate: IceCandidate, video: Boolean) {
         val payload = JSONObject().apply {
@@ -212,28 +194,18 @@ class FynxRealtimeClient(
     }
 
     fun sendTyping(recipientId: String, isTyping: Boolean) {
-        sendJson(JSONObject().apply {
-            put("type", "typing")
-            put("recipientId", recipientId)
-            put("isTyping", isTyping)
-        })
+        sendJson(JSONObject().apply { put("type", "typing"); put("recipientId", recipientId); put("isTyping", isTyping) })
     }
 
     fun sendRead(messageIds: List<String>) {
         val ids = messageIds.mapNotNull { it.toLongOrNull() }.take(100)
         if (ids.isEmpty()) return
-        sendJson(JSONObject().apply {
-            put("type", "read")
-            put("messageIds", JSONArray(ids))
-        })
+        sendJson(JSONObject().apply { put("type", "read"); put("messageIds", JSONArray(ids)) })
     }
 
     fun acknowledgeMessage(messageId: String) {
         val id = messageId.toLongOrNull() ?: return
-        sendJson(JSONObject().apply {
-            put("type", "message_ack")
-            put("messageId", id)
-        })
+        sendJson(JSONObject().apply { put("type", "message_ack"); put("messageId", id) })
     }
 
     private fun sendJson(payload: JSONObject) {
@@ -248,9 +220,7 @@ class FynxRealtimeClient(
 
     private fun flushPending(webSocket: WebSocket) {
         while (true) {
-            val next = synchronized(pendingLock) {
-                if (pendingPayloads.isEmpty()) null else pendingPayloads.removeFirst()
-            } ?: break
+            val next = synchronized(pendingLock) { if (pendingPayloads.isEmpty()) null else pendingPayloads.removeFirst() } ?: break
             if (!webSocket.send(next)) {
                 synchronized(pendingLock) { pendingPayloads.addFirst(next) }
                 break
@@ -258,7 +228,8 @@ class FynxRealtimeClient(
         }
     }
 
-    fun close() {
+    /** Stops realtime permanently for this screen instance and cancels reconnect callbacks. */
+    fun stopRealtime() {
         manuallyClosed = true
         reconnectHandler.removeCallbacksAndMessages(null)
         synchronized(pendingLock) { pendingPayloads.clear() }
