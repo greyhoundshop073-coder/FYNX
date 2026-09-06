@@ -11,10 +11,8 @@ import { installMediaPrivacyGuard } from "./mediaPrivacy.js";
 import { installSocialHardening } from "./socialHardening.js";
 import { installPrivateCachePolicy } from "./privateCachePolicy.js";
 import { installMarketplaceMediaPrivacyGuard } from "./marketplaceMediaPrivacy.js";
+import { installRequestResourceGuard } from "./requestResourceGuard.js";
 
-// Apply safe HTTP connection limits before the existing FYNX server is created.
-// Marketplace settlement, protection, realtime AI, privacy, media and social guards are registered here because server.js is loaded
-// after this preload in the backend start command. Keep each route family registered exactly once.
 installPresencePrivacyGuard();
 
 const originalCreateServer = http.createServer;
@@ -24,8 +22,8 @@ http.createServer = function fynxCreateServer(...args) {
   if (app && typeof app.use === "function") {
     setImmediate(() => {
       installSecurityHardening({ app });
+      installRequestResourceGuard(app);
       registerMarketplaceSettlementRoutes({ app });
-      // protected settlement and buyer/seller protection routes enabled
       registerMarketplaceProtectionRoutes({ app });
       registerRealtimeAssistantRoutes({ app });
       registerPrivacyRoutes({ app });
