@@ -36,12 +36,21 @@ fun FynxHomeSocialHubPanel(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val configuredPostVisibility = remember {
+        FynxPreferencesStore.loadVisibility(context, "privacy_posts_visibility")
+    }
+    val postingAllowed = configuredPostVisibility != "Nobody"
+    val defaultPostVisibility = if (configuredPostVisibility == "Everyone") {
+        FynxPostVisibility.PUBLIC
+    } else {
+        FynxPostVisibility.FRIENDS_ONLY
+    }
     var showComposer by remember { mutableStateOf(false) }
     var showCamera by remember { mutableStateOf(false) }
     var capturedUri by remember { mutableStateOf<Uri?>(null) }
     var capturedType by remember { mutableStateOf("image") }
     var text by remember { mutableStateOf("") }
-    var visibility by remember { mutableStateOf(FynxPostVisibility.PUBLIC) }
+    var visibility by remember { mutableStateOf(defaultPostVisibility) }
     var notice by remember { mutableStateOf<String?>(null) }
     var posting by remember { mutableStateOf(false) }
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -84,7 +93,7 @@ fun FynxHomeSocialHubPanel(
                     onClick = { context.startActivity(Intent(context, FynxContactsActivity::class.java)) }
                 ) { Icon(Icons.Default.People, "Phone contacts") }
                 FloatingActionButton(
-                    onClick = { showComposer = true; capturedUri = null; text = ""; notice = null }
+                    onClick = { showComposer = true; capturedUri = null; text = ""; notice = null; visibility = defaultPostVisibility }
                 ) { Icon(Icons.Default.AddAPhoto, "Create post") }
             }
         }
@@ -96,24 +105,27 @@ fun FynxHomeSocialHubPanel(
             title = { Text("Create a FYNX post") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(value = text, onValueChange = { text = it.take(4000) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 7, placeholder = { Text("Share something with your FYNX circle…") }, enabled = !posting)
+                    if (!postingAllowed) {
+                        Text("Posting is disabled by your Posts privacy setting.", color = MaterialTheme.colorScheme.error)
+                    }
+                    OutlinedTextField(value = text, onValueChange = { text = it.take(4000) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 7, placeholder = { Text("Share something with your FYNX circle…") }, enabled = !posting && postingAllowed)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { showComposer = false; showCamera = true }, modifier = Modifier.weight(1f), enabled = !posting) { Icon(Icons.Default.CameraAlt, null); Spacer(Modifier.width(4.dp)); Text("Camera") }
-                        OutlinedButton(onClick = { gallery.launch(arrayOf("image/*", "video/*")) }, modifier = Modifier.weight(1f), enabled = !posting) { Icon(Icons.Default.VideoLibrary, null); Spacer(Modifier.width(4.dp)); Text("Gallery") }
+                        OutlinedButton(onClick = { showComposer = false; showCamera = true }, modifier = Modifier.weight(1f), enabled = !posting && postingAllowed) { Icon(Icons.Default.CameraAlt, null); Spacer(Modifier.width(4.dp)); Text("Camera") }
+                        OutlinedButton(onClick = { gallery.launch(arrayOf("image/*", "video/*")) }, modifier = Modifier.weight(1f), enabled = !posting && postingAllowed) { Icon(Icons.Default.VideoLibrary, null); Spacer(Modifier.width(4.dp)); Text("Gallery") }
                     }
                     capturedUri?.let {
                         Text(if (capturedType == "video") "Video captured and ready" else "Photo captured and ready", color = MaterialTheme.colorScheme.primary)
                     }
                     Text("Who can see this?", style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(visibility == FynxPostVisibility.PUBLIC, { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") }, enabled = !posting)
-                        FilterChip(visibility == FynxPostVisibility.FRIENDS_ONLY, { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") }, enabled = !posting)
+                        FilterChip(visibility == FynxPostVisibility.PUBLIC, { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") }, enabled = !posting && postingAllowed && configuredPostVisibility == "Everyone")
+                        FilterChip(visibility == FynxPostVisibility.FRIENDS_ONLY, { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") }, enabled = !posting && postingAllowed)
                     }
                     notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
             confirmButton = {
-                Button(enabled = !posting && (text.isNotBlank() || capturedUri != null), onClick = {
+                Button(enabled = !posting && postingAllowed && (text.isNotBlank() || capturedUri != null), onClick = {
                     posting = true
                     notice = null
                     scope.launch {
