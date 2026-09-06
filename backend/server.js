@@ -53,6 +53,7 @@ const pool = DATABASE_URL ? new Pool({
   keepAlive: true
 }) : null;
 const clientsByUserId = new Map();
+const activeCalls = new Map();
 
 // Lightweight per-process abuse protection. Production deployments should also enforce
 // rate limits at the edge/load-balancer so limits remain effective across instances.
@@ -183,6 +184,38 @@ async function markPendingDelivered(userId) {
   const result = await pool.query(`UPDATE messages SET delivered_at = NOW() WHERE recipient_id = $1 AND delivered_at IS NULL AND deleted = FALSE RETURNING id, sender_id, recipient_id`, [userId]);
   for (const row of result.rows) broadcastToUser(row.sender_id, { type: "message_status", messageId: String(row.id), status: "delivered" });
 }
+function newCallId() { return `call_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`; }
+function callPeer(call, userId) { return String(call.callerId) === String(userId) ? String(call.calleeId) : String(call.callerId); }
+function validCallId(value) { return typeof value === "string" && /^call_[a-z0-9_]+$/i.test(value) && value.length <= 80; }
+function callMessage(call, userId, type, extra = {}) {
+  return { type: "call", callId: call.id, callType: call.mediaType, fromUserId: String(userId), toUserId: callPeer(call, userId), signalType: type, ...extra };
+}
+function closeCall(callId, reason, notify = true) {
+  const call = activeCalls.get(callId);
+  if (!call) return;
+  activeCalls.delete(callId);
+  if (notify) {
+    broadcastToUser(call.callerId, { type: "call", callId, callType: call.mediaType, fromUserId: call.calleeId, toUserId: call.callerId, signalType: reason });
+    broadcastToUser(call.calleeId, { type: "call", callId, callType: call.mediaType, fromUserId: call.callerId, toUserId: call.calleeId, signalType: reason });
+  }
+}
+function relayCallSignal(call, senderId, signalType, payload) {
+  const targetId = callPeer(call, senderId);
+  const message = callMessage(call, senderId, signalType, payload);
+  broadcastToUser(targetId, message);
+}
+function validateSignalPayload(signalType, body) {
+  if (signalType === "offer" || signalType === "answer") {
+    if (typeof body?.sdp !== "string" || body.sdp.length < 1 || body.sdp.length > 200_000) return null;
+    return { sdp: body.sdp };
+  }
+  if (signalType === "ice") {
+    const candidate = body?.candidate;
+    if (!candidate || typeof candidate !== "object" || typeof candidate.candidate !== "string" || candidate.candidate.length > 20_000) return null;
+    return { candidate: { candidate: candidate.candidate, sdpMid: candidate.sdpMid == null ? null : String(candidate.sdpMid).slice(0, 100), sdpMLineIndex: candidate.sdpMLineIndex == null ? null : Number(candidate.sdpMLineIndex), usernameFragment: candidate.usernameFragment == null ? null : String(candidate.usernameFragment).slice(0, 200) } };
+  }
+  return null;
+}
 
 app.get("/ready", async (_req, res) => {
   if (!pool) return res.status(503).json({ ok: false, service: "fynx-backend", database: "not-configured" });
@@ -236,7 +269,6 @@ app.get("/api/me", auth, async (req, res) => {
     return res.json({ user: user.rows[0] });
   } catch (error) { console.error("me", error); return res.status(500).json({ error: "request failed" }); }
 });
-
 
 app.post("/api/advertising/ai-advice", auth, async (req, res) => {
   try {
@@ -490,11 +522,53 @@ wss.on("connection", (socket, req) => {
     clientsByUserId.get(userId).add(socket);
     broadcastPresence(userId, true);
     markPendingDelivered(userId).catch((error) => console.error("deliver pending", error));
+    socket.on("message", (raw) => {
+      try {
+        const body = JSON.parse(raw.toString());
+        const signalType = typeof body?.signalType === "string" ? body.signalType.trim().toLowerCase() : "";
+        if (body?.type !== "call") return;
+        if (["invite", "accept", "reject", "end"].includes(signalType)) {
+          const targetUserId = String(body?.toUserId || "");
+          if (!targetUserId || targetUserId === userId) return sendSocket(socket, { type: "call", signalType: "error", error: "invalid call target" });
+          if (signalType === "invite") {
+            if (activeCalls.size >= 500) return sendSocket(socket, { type: "call", signalType: "error", error: "call capacity reached" });
+            const mediaType = body?.callType === "video" ? "video" : "voice";
+            const existing = [...activeCalls.values()].find(call => call.callerId === userId || call.calleeId === userId || call.callerId === targetUserId || call.calleeId === targetUserId);
+            if (existing) return sendSocket(socket, { type: "call", signalType: "busy", callId: existing.id, callType: existing.mediaType, fromUserId: targetUserId, toUserId: userId });
+            const callId = validCallId(body?.callId) ? body.callId : newCallId();
+            const call = { id: callId, callerId: userId, calleeId: targetUserId, mediaType, createdAt: Date.now() };
+            activeCalls.set(callId, call);
+            if (!clientsByUserId.has(targetUserId)) { activeCalls.delete(callId); return sendSocket(socket, { type: "call", callId, callType: mediaType, fromUserId: targetUserId, toUserId: userId, signalType: "unavailable" }); }
+            relayCallSignal(call, userId, "invite", { fromUsername: user.username || null });
+            return;
+          }
+          const callId = validCallId(body?.callId) ? body.callId : "";
+          const call = activeCalls.get(callId);
+          if (!call || ![call.callerId, call.calleeId].includes(userId) || ![call.callerId, call.calleeId].includes(targetUserId)) return sendSocket(socket, { type: "call", callId, signalType: "error", error: "call not found" });
+          if (signalType === "accept" || signalType === "reject" || signalType === "end") {
+            relayCallSignal(call, userId, signalType);
+            if (signalType !== "accept") closeCall(callId, signalType, false);
+            return;
+          }
+        }
+        const callId = validCallId(body?.callId) ? body.callId : "";
+        const call = activeCalls.get(callId);
+        if (!call || ![call.callerId, call.calleeId].includes(userId)) return sendSocket(socket, { type: "call", callId, signalType: "error", error: "call not found" });
+        if (!["offer", "answer", "ice"].includes(signalType)) return;
+        const payload = validateSignalPayload(signalType, body);
+        if (!payload) return sendSocket(socket, { type: "call", callId, signalType: "error", error: "invalid signaling payload" });
+        relayCallSignal(call, userId, signalType, payload);
+      } catch { sendSocket(socket, { type: "call", signalType: "error", error: "invalid realtime message" }); }
+    });
     socket.on("close", () => {
       const sockets = clientsByUserId.get(userId);
       if (!sockets) return;
       sockets.delete(socket);
-      if (!sockets.size) { clientsByUserId.delete(userId); broadcastPresence(userId, false); }
+      if (!sockets.size) {
+        clientsByUserId.delete(userId);
+        broadcastPresence(userId, false);
+        for (const [callId, call] of activeCalls) if (call.callerId === userId || call.calleeId === userId) closeCall(callId, "peer_disconnected");
+      }
     });
   } catch { socket.close(1008, "invalid token"); }
 });
