@@ -29,6 +29,7 @@ class FynxAiWebRtcEngine(
     private var audioSource: AudioSource? = null
     private var audioTrack: AudioTrack? = null
     private var localDescriptionReady: CompletableDeferred<String>? = null
+    private var iceGatheringReady: CompletableDeferred<Unit>? = null
     private var state: State = State.IDLE
     private var onStateChanged: ((State, String?) -> Unit)? = null
 
@@ -58,8 +59,12 @@ class FynxAiWebRtcEngine(
         audioTrack?.let { connection.addTrack(it) }
 
         val offer = createOffer(connection)
+        iceGatheringReady = CompletableDeferred()
         connection.setLocalDescriptionAwait(offer)
-        val localSdp = awaitLocalDescription()
+        awaitLocalDescription()
+        iceGatheringReady?.awaitWithTimeout()
+        val localSdp = connection.localDescription?.description
+            ?: error("FYNX AI local SDP is unavailable")
 
         val answerSdp = FynxAiVoiceSession.requestSession(appContext, localSdp).getOrThrow()
         require(answerSdp.isNotBlank()) { "FYNX AI returned an empty SDP answer" }
@@ -80,6 +85,8 @@ class FynxAiWebRtcEngine(
     fun close() {
         localDescriptionReady?.cancel()
         localDescriptionReady = null
+        iceGatheringReady?.cancel()
+        iceGatheringReady = null
         peerConnection?.close()
         peerConnection?.dispose()
         peerConnection = null
@@ -103,15 +110,15 @@ class FynxAiWebRtcEngine(
             }, MediaConstraints())
         }.awaitWithTimeout()
 
-    private suspend fun awaitLocalDescription(): String =
+    private suspend fun awaitLocalDescription() {
         localDescriptionReady?.awaitWithTimeout()
             ?: error("Local FYNX AI SDP was not prepared")
+    }
 
     private fun PeerConnection.setLocalDescriptionAwait(description: SessionDescription) {
         localDescriptionReady = CompletableDeferred()
         setLocalDescription(object : SdpObserverAdapter() {
             override fun onSetSuccess() {
-                // The SDP is sent only after the local description is installed.
                 localDescriptionReady?.complete(description.description)
             }
 
@@ -121,20 +128,19 @@ class FynxAiWebRtcEngine(
         }, description)
     }
 
-    private suspend fun CompletableDeferred<String>.awaitWithTimeout(): String =
-        withTimeout(15_000) { await() }
-
-    private fun PeerConnection.setRemoteDescriptionAwait(description: SessionDescription) {
-        val deferred = CompletableDeferred<Unit>()
-        setRemoteDescription(object : SdpObserverAdapter() {
-            override fun onSetSuccess() { deferred.complete(Unit) }
-            override fun onSetFailure(error: String) {
-                deferred.completeExceptionally(IllegalStateException(error))
-            }
-        }, description)
-        // The observer completes synchronously/asynchronously; the connect coroutine
-        // deliberately does not block here because WebRTC owns the callback thread.
+    private suspend fun PeerConnection.setRemoteDescriptionAwait(description: SessionDescription) {
+        CompletableDeferred<Unit>().also { deferred ->
+            setRemoteDescription(object : SdpObserverAdapter() {
+                override fun onSetSuccess() { deferred.complete(Unit) }
+                override fun onSetFailure(error: String) {
+                    deferred.completeExceptionally(IllegalStateException(error))
+                }
+            }, description)
+        }.awaitWithTimeout()
     }
+
+    private suspend fun <T> CompletableDeferred<T>.awaitWithTimeout(): T =
+        withTimeout(15_000) { await() }
 
     private fun observer() = object : PeerConnection.Observer {
         override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
@@ -144,7 +150,11 @@ class FynxAiWebRtcEngine(
             }
         }
         override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
-        override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) = Unit
+        override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) {
+            if (state == PeerConnection.IceGatheringState.COMPLETE) {
+                iceGatheringReady?.complete(Unit)
+            }
+        }
         override fun onIceCandidate(candidate: org.webrtc.IceCandidate) = Unit
         override fun onIceCandidatesRemoved(candidates: Array<out org.webrtc.IceCandidate>) = Unit
         override fun onAddStream(stream: org.webrtc.MediaStream) = Unit
