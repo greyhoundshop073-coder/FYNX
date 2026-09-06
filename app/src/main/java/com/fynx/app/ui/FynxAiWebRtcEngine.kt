@@ -3,13 +3,17 @@ package com.fynx.app.ui
 import android.content.Context
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
+import org.json.JSONObject
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
+import org.webrtc.DataChannel
 import org.webrtc.MediaConstraints
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpReceiver
 import org.webrtc.SessionDescription
+import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 
 /**
  * WebRTC transport for FYNX AI realtime voice.
@@ -28,10 +32,13 @@ class FynxAiWebRtcEngine(
     private var peerConnection: PeerConnection? = null
     private var audioSource: AudioSource? = null
     private var audioTrack: AudioTrack? = null
+    private var remoteAudioTrack: AudioTrack? = null
+    private var eventsChannel: DataChannel? = null
     private var localDescriptionReady: CompletableDeferred<String>? = null
     private var iceGatheringReady: CompletableDeferred<Unit>? = null
     private var state: State = State.IDLE
     private var onStateChanged: ((State, String?) -> Unit)? = null
+    private var onEvent: ((String) -> Unit)? = null
 
     init {
         PeerConnectionFactory.initialize(
@@ -41,10 +48,12 @@ class FynxAiWebRtcEngine(
     }
 
     suspend fun connect(
-        onStateChanged: (State, String?) -> Unit = { _, _ -> }
+        onStateChanged: (State, String?) -> Unit = { _, _ -> },
+        onEvent: (String) -> Unit = {}
     ): Result<Unit> = runCatching {
         require(state != State.CONNECTING && state != State.CONNECTED) { "FYNX AI voice is already connected" }
         this.onStateChanged = onStateChanged
+        this.onEvent = onEvent
         setState(State.CONNECTING, null)
 
         val connection = factory.createPeerConnection(
@@ -57,6 +66,10 @@ class FynxAiWebRtcEngine(
         audioTrack = factory.createAudioTrack("fynx-ai-microphone", audioSource)
         audioTrack?.setEnabled(true)
         audioTrack?.let { connection.addTrack(it) }
+
+        eventsChannel = connection.createDataChannel("oai-events", DataChannel.Init()).also { channel ->
+            channel.registerObserver(dataChannelObserver())
+        }
 
         val offer = createOffer(connection)
         iceGatheringReady = CompletableDeferred()
@@ -87,6 +100,10 @@ class FynxAiWebRtcEngine(
         localDescriptionReady = null
         iceGatheringReady?.cancel()
         iceGatheringReady = null
+        eventsChannel?.dispose()
+        eventsChannel = null
+        remoteAudioTrack?.setEnabled(false)
+        remoteAudioTrack = null
         peerConnection?.close()
         peerConnection?.dispose()
         peerConnection = null
@@ -139,6 +156,20 @@ class FynxAiWebRtcEngine(
         }.awaitWithTimeout()
     }
 
+    private fun dataChannelObserver() = object : DataChannel.Observer {
+        override fun onBufferedAmountChange(previousAmount: Long) = Unit
+
+        override fun onStateChange() = Unit
+
+        override fun onMessage(buffer: DataChannel.Buffer) {
+            if (buffer.binary) return
+            val bytes = ByteArray(buffer.data.remaining())
+            buffer.data.get(bytes)
+            val event = String(bytes, StandardCharsets.UTF_8)
+            if (event.isNotBlank()) onEvent?.invoke(event)
+        }
+    }
+
     private suspend fun <T> CompletableDeferred<T>.awaitWithTimeout(): T =
         withTimeout(15_000) { await() }
 
@@ -159,9 +190,19 @@ class FynxAiWebRtcEngine(
         override fun onIceCandidatesRemoved(candidates: Array<out org.webrtc.IceCandidate>) = Unit
         override fun onAddStream(stream: org.webrtc.MediaStream) = Unit
         override fun onRemoveStream(stream: org.webrtc.MediaStream) = Unit
-        override fun onDataChannel(channel: org.webrtc.DataChannel) = Unit
+        override fun onDataChannel(channel: DataChannel) {
+            if (eventsChannel == null) {
+                eventsChannel = channel
+                channel.registerObserver(dataChannelObserver())
+            }
+        }
         override fun onRenegotiationNeeded() = Unit
-        override fun onAddTrack(receiver: RtpReceiver, mediaStreams: Array<out org.webrtc.MediaStream>) = Unit
+        override fun onAddTrack(receiver: RtpReceiver, mediaStreams: Array<out org.webrtc.MediaStream>) {
+            (receiver.track() as? AudioTrack)?.let { track ->
+                remoteAudioTrack = track
+                track.setEnabled(true)
+            }
+        }
     }
 
     private fun setState(next: State, error: String?) {
