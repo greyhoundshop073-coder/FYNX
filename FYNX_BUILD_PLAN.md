@@ -48,6 +48,52 @@ Build one major stage at a time. Inspect existing code first. Keep each stage co
 - [x] Final UI/UX polish
 - [x] Full integration build and completion audit
 
+## ACTIVE PHASE — FYNX REALITY / FUNCTIONALITY FIX PASS
+This phase does not replace the old work. It is an integrated continuation of it. Every newly discovered defect, missing professional behavior, weak interaction, backend gap or security/privacy problem is added here and also mapped back to the original stage/backlog item. The objective is to make existing FYNX features actually work reliably, not merely appear on screen.
+
+### Order of execution for speed and stability
+1. Foundation/runtime/navigation blockers
+2. Authentication/session/account identity
+3. People discovery + complete profiles + privacy
+4. Chat/realtime/media/message reliability
+5. Friends/groups/social interactions
+6. Marketplace + payment protection
+7. Camera/media/display/upload reliability
+8. Notifications/sharing/preferences
+9. AI integrations and tool flows
+10. Admin/trust/safety/anti-scam
+11. Cross-feature integration, performance, security and regression verification
+
+### Current first fix batch — People Discovery → Complete Profile
+- [x] Search result can resolve the selected user through the authenticated backend search contract instead of relying only on the device-local friend store
+- [x] Shared Other User Profile surface remains the single profile destination; no duplicate profile implementation
+- [ ] Add a dedicated authenticated backend profile-detail contract returning only fields the viewer is authorized to see
+- [ ] Profile photo, display name, @username and bio/about from authoritative backend profile data
+- [ ] Country/region only where legitimately available and permitted
+- [ ] Verification indicator where applicable
+- [ ] Privacy-aware online/activity state
+- [ ] Mutual friends/connections where permitted
+- [ ] Public posts/status/content and profile media where permitted
+- [ ] Add Friend / Accept / Remove / Follow / Unfollow state driven by backend relationship state
+- [ ] Message, voice and video actions connected to supported existing pipelines
+- [ ] Share profile, block and report actions with backend enforcement
+- [ ] Proper loading, empty, permission-denied and retry states
+- [ ] Backend must enforce profile visibility; private fields must not be fetched and hidden only in the UI
+- [ ] Reuse this profile system from People search, Friends, Chat, Marketplace seller, Groups and Social content
+
+### Professional product-behavior audit findings to carry through the old work
+- [ ] Privacy controls must be real server-enforced controls, not device-only presentation switches
+- [ ] Presence/last-seen/activity must respect per-user privacy rules
+- [ ] Unknown-user discovery must have clear identity/context and abuse controls
+- [ ] Block/report must consistently stop or restrict the relevant interactions across search, chat, calls, social and marketplace
+- [ ] Messaging must have dependable delivery/read/error/retry/offline behavior before production-ready status
+- [ ] Media must have reliable upload, download, preview, playback, retry and failure states
+- [ ] Social profiles/content must use ownership checks for edit/delete/privacy operations
+- [ ] Every sensitive operation must be authorized by the backend, never trusted because a button is hidden in Android UI
+- [ ] Realtime and background work must recover cleanly from network loss, app restart and token/session changes
+- [ ] Every major surface needs empty/loading/error states, accessibility, responsive layout and safe repeated-tap behavior
+- [ ] Existing functionality must be tested as user journeys, not only by checking that screens compile/open
+
 ## Future development backlog — saved for later
 These are planned product features, not part of the current green build batch. Build them when their development phase is reached, without restarting or replacing the existing FYNX project.
 
@@ -98,7 +144,7 @@ These are planned product features, not part of the current green build batch. B
 - [ ] Abuse-resistant appeal/review controls
 
 ## Final completion state
-The current FYNX repository build scope is complete after the consolidated final audit and successful Android build verification. No additional feature-development batch is required for this completion cycle. Future product work should be treated as a new development phase rather than another completion step.
+The previous consolidated completion audit is preserved as historical status. The current development phase is the Reality / Functionality Fix Pass above; it must reach GREEN through actual build and verification before a new completion claim is made.
 
 ## Important
 Stage 3 UI and local persistence are foundations. Production messaging requires a backend, realtime transport, authenticated server APIs, secure media storage, and encryption design. Those should be connected before calling the messaging system production-ready.
@@ -107,7 +153,6 @@ Profile and settings currently remain local foundations. Production account reco
 
 ## Removed permanently
 AI image generation and AI video generation are NOT part of the FYNX project roadmap. Do not add them back.
-
 
 ## Stage 12 — AI Creation Layer follow-up backlog
 - [ ] AI Creation remains connected to the existing FYNX media and posting pipeline; no duplicate posting system
@@ -118,7 +163,6 @@ AI image generation and AI video generation are NOT part of the FYNX project roa
 - [ ] Chat profile information: improve the existing conversation header/profile details, including country/region where legitimately available
 - [ ] Full media display: remove unnecessary black/empty side areas around videos and stories while preserving aspect ratio and important content
 - [ ] Apply the media-display correction consistently across status/stories, social posts and other existing media presentation surfaces
-
 
 ## Chat & Group Chat UX requirement — screenshot-inspired, FYNX-native
 - Use the user's supplied chat screenshots as UX reference for familiar conversation structure and discoverability, without copying another service's branding/assets.
