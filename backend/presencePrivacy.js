@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import pg from "pg";
-import { WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -19,6 +19,8 @@ const pool = DATABASE_URL ? new Pool({
 
 const cache = new Map();
 const pending = new Map();
+const callBlockCache = new Map();
+const callBlockPending = new Map();
 const CACHE_TTL_MS = 5_000;
 
 function viewerIdFromRequest(req) {
@@ -62,16 +64,68 @@ async function canSeePresence(viewerId, targetId) {
   return allowed;
 }
 
+async function areCallPeersBlocked(userId, targetId) {
+  if (!userId || !targetId || userId === targetId) return true;
+  if (!pool) return true;
+  const key = `${userId}:${targetId}`;
+  const cached = callBlockCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.blocked;
+  const result = await pool.query(
+    `SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1) LIMIT 1`,
+    [userId, targetId]
+  );
+  const blocked = Boolean(result.rowCount);
+  callBlockCache.set(key, { blocked, expiresAt: Date.now() + CACHE_TTL_MS });
+  return blocked;
+}
+
+function installCallPrivacyGuard() {
+  const marker = "__fynxCallPrivacyGuard";
+  if (WebSocket.prototype[marker]) return;
+  WebSocket.prototype[marker] = true;
+  const originalOn = WebSocket.prototype.on;
+  WebSocket.prototype.on = function fynxCallPrivacyOn(event, listener) {
+    if (event !== "message" || this.__fynxCallPrivacyMessageWrapped) return originalOn.call(this, event, listener);
+    this.__fynxCallPrivacyMessageWrapped = true;
+    const socket = this;
+    return originalOn.call(this, event, (raw, ...rest) => {
+      let body;
+      try { body = JSON.parse(raw.toString()); } catch { return listener(raw, ...rest); }
+      if (body?.type !== "call" || String(body?.signalType || "").toLowerCase() !== "invite") return listener(raw, ...rest);
+      const targetId = String(body?.toUserId || "");
+      const viewerId = socket.__fynxRealtimeViewerId || "";
+      if (!viewerId || !targetId) return listener(raw, ...rest);
+      const key = `${viewerId}:${targetId}`;
+      const cached = callBlockCache.get(key);
+      if (cached && cached.expiresAt > Date.now()) {
+        if (!cached.blocked) return listener(raw, ...rest);
+        if (socket.readyState === 1) socket.send(JSON.stringify({ type: "call", signalType: "error", error: "calls are unavailable between blocked users" }));
+        return;
+      }
+      if (!callBlockPending.has(key)) {
+        const task = areCallPeersBlocked(viewerId, targetId).catch(() => true).finally(() => callBlockPending.delete(key));
+        callBlockPending.set(key, task);
+        task.then((blocked) => {
+          if (!blocked) listener(raw, ...rest);
+          else if (socket.readyState === 1) socket.send(JSON.stringify({ type: "call", signalType: "error", error: "calls are unavailable between blocked users" }));
+        }).catch(() => {});
+      }
+    });
+  };
+}
+
 export function installPresencePrivacyGuard() {
   const marker = "__fynxPresencePrivacyGuard";
   if (WebSocketServer.prototype[marker]) return;
   WebSocketServer.prototype[marker] = true;
+  installCallPrivacyGuard();
 
   const originalEmit = WebSocketServer.prototype.emit;
   WebSocketServer.prototype.emit = function fynxPresenceEmit(event, socket, req, ...rest) {
     if (event === "connection" && socket && req && !socket.__fynxPresencePrivacyWrapped) {
       socket.__fynxPresencePrivacyWrapped = true;
       const viewerId = viewerIdFromRequest(req);
+      socket.__fynxRealtimeViewerId = viewerId;
       const originalSend = socket.send.bind(socket);
 
       socket.send = (data, ...args) => {
