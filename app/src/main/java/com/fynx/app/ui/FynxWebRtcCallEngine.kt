@@ -5,18 +5,33 @@ import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
 import org.webrtc.Camera2Enumerator
 import org.webrtc.CameraVideoCapturer
+import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
+import org.webrtc.MediaStream
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
+import org.webrtc.SdpObserver
+import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
 
-/** Real WebRTC media/peer-connection engine. Signaling remains transport-injected. */
+/** WebRTC media engine with transport-neutral SDP/ICE callbacks for FYNX signaling. */
 class FynxWebRtcCallEngine(
     context: Context,
-    private val iceServers: List<PeerConnection.IceServer> = emptyList()
+    private val iceServers: List<PeerConnection.IceServer> = emptyList(),
+    private val callbacks: CallCallbacks = CallCallbacks()
 ) : FynxCallMediaEngine {
+    data class CallCallbacks(
+        val onOffer: (String) -> Unit = {},
+        val onAnswer: (String) -> Unit = {},
+        val onIceCandidate: (IceCandidate) -> Unit = {},
+        val onRemoteAudioTrack: (AudioTrack) -> Unit = {},
+        val onRemoteVideoTrack: (VideoTrack) -> Unit = {},
+        val onConnectionState: (PeerConnection.IceConnectionState) -> Unit = {},
+        val onError: (String) -> Unit = {}
+    )
+
     private val appContext = context.applicationContext
     private val factory: PeerConnectionFactory
     private var peerConnection: PeerConnection? = null
@@ -35,25 +50,79 @@ class FynxWebRtcCallEngine(
     }
 
     override fun connect(session: FynxCallSession) {
-        peerConnection?.close()
+        disconnect()
         peerConnection = factory.createPeerConnection(
             PeerConnection.RTCConfiguration(iceServers),
             object : PeerConnection.Observer {
                 override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
-                override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) = Unit
+                override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) { callbacks.onConnectionState(state) }
                 override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
                 override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) = Unit
-                override fun onIceCandidate(candidate: org.webrtc.IceCandidate) = Unit
-                override fun onIceCandidatesRemoved(candidates: Array<out org.webrtc.IceCandidate>) = Unit
-                override fun onAddStream(stream: org.webrtc.MediaStream) = Unit
-                override fun onRemoveStream(stream: org.webrtc.MediaStream) = Unit
+                override fun onIceCandidate(candidate: IceCandidate) { callbacks.onIceCandidate(candidate) }
+                override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) = Unit
+                override fun onAddStream(stream: MediaStream) {
+                    stream.audioTracks.firstOrNull()?.let(callbacks.onRemoteAudioTrack)
+                    stream.videoTracks.firstOrNull()?.let(callbacks.onRemoteVideoTrack)
+                }
+                override fun onRemoveStream(stream: MediaStream) = Unit
                 override fun onDataChannel(channel: org.webrtc.DataChannel) = Unit
                 override fun onRenegotiationNeeded() = Unit
-                override fun onAddTrack(receiver: org.webrtc.RtpReceiver, mediaStreams: Array<out org.webrtc.MediaStream>) = Unit
+                override fun onAddTrack(receiver: org.webrtc.RtpReceiver, mediaStreams: Array<out MediaStream>) {
+                    val track = receiver.track()
+                    when (track) {
+                        is AudioTrack -> callbacks.onRemoteAudioTrack(track)
+                        is VideoTrack -> callbacks.onRemoteVideoTrack(track)
+                    }
+                }
             }
         )
         createLocalAudio()
         if (session.type == FynxCallType.VIDEO) createLocalVideo()
+    }
+
+    fun createOffer() {
+        val pc = peerConnection ?: return callbacks.onError("call media is not connected")
+        pc.createOffer(object : SdpObserverAdapter() {
+            override fun onCreateSuccess(description: SessionDescription) {
+                pc.setLocalDescription(object : SdpObserverAdapter() {
+                    override fun onSetSuccess() { callbacks.onOffer(description.description) }
+                    override fun onCreateFailure(error: String) { callbacks.onError(error) }
+                    override fun onSetFailure(error: String) { callbacks.onError(error) }
+                }, description)
+            }
+            override fun onCreateFailure(error: String) { callbacks.onError(error) }
+        }, MediaConstraints())
+    }
+
+    fun acceptOfferAndCreateAnswer(sdp: String) {
+        val pc = peerConnection ?: return callbacks.onError("call media is not connected")
+        pc.setRemoteDescription(object : SdpObserverAdapter() {
+            override fun onSetSuccess() {
+                pc.createAnswer(object : SdpObserverAdapter() {
+                    override fun onCreateSuccess(description: SessionDescription) {
+                        pc.setLocalDescription(object : SdpObserverAdapter() {
+                            override fun onSetSuccess() { callbacks.onAnswer(description.description) }
+                            override fun onCreateFailure(error: String) { callbacks.onError(error) }
+                            override fun onSetFailure(error: String) { callbacks.onError(error) }
+                        }, description)
+                    }
+                    override fun onCreateFailure(error: String) { callbacks.onError(error) }
+                }, MediaConstraints())
+            }
+            override fun onSetFailure(error: String) { callbacks.onError(error) }
+        }, SessionDescription(SessionDescription.Type.OFFER, sdp))
+    }
+
+    fun applyAnswer(sdp: String) {
+        val pc = peerConnection ?: return callbacks.onError("call media is not connected")
+        pc.setRemoteDescription(object : SdpObserverAdapter() {
+            override fun onSetFailure(error: String) { callbacks.onError(error) }
+        }, SessionDescription(SessionDescription.Type.ANSWER, sdp))
+    }
+
+    fun addRemoteIceCandidate(candidate: IceCandidate) {
+        val pc = peerConnection ?: return callbacks.onError("call media is not connected")
+        pc.addIceCandidate(candidate) { success -> if (!success) callbacks.onError("failed to add remote ICE candidate") }
     }
 
     private fun createLocalAudio() {
@@ -73,9 +142,6 @@ class FynxWebRtcCallEngine(
         videoTrack = factory.createVideoTrack("fynx-video", videoSource)
         videoTrack?.setEnabled(true)
         videoTrack?.let { peerConnection?.addTrack(it) }
-
-        // Use a dedicated EGL context created by WebRTC rather than referencing a
-        // non-existent factory EGL property.
         val eglContext = org.webrtc.EglBase.create().eglBaseContext
         surfaceTextureHelper = SurfaceTextureHelper.create("FYNX-Camera", eglContext)
         cameraCapturer?.initialize(surfaceTextureHelper, appContext, videoSource?.capturerObserver)
@@ -104,5 +170,12 @@ class FynxWebRtcCallEngine(
         audioSource = null
         videoTrack = null
         videoSource = null
+    }
+
+    private open class SdpObserverAdapter : SdpObserver {
+        override fun onCreateSuccess(description: SessionDescription) = Unit
+        override fun onSetSuccess() = Unit
+        override fun onCreateFailure(error: String) = Unit
+        override fun onSetFailure(error: String) = Unit
     }
 }
