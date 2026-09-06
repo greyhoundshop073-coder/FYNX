@@ -5,7 +5,8 @@ const PRIVATE_GET_PATHS = [
   /^\/api\/statuses(?:\/|$)/,
   /^\/api\/privacy(?:\/|$)/,
   /^\/api\/blocks(?:\/|$)/,
-  /^\/api\/friends(?:\/|$)/
+  /^\/api\/friends(?:\/|$)/,
+  /^\/api\/marketplace\/media(?:\/|$)/
 ];
 
 function isPrivateGetPath(path) {
@@ -18,9 +19,14 @@ export function installPrivateCachePolicy(app) {
 
   const middleware = (req, res, next) => {
     if ((req.method === "GET" || req.method === "HEAD") && isPrivateGetPath(req.path || "")) {
-      res.setHeader("Cache-Control", "no-store");
-      res.setHeader("Pragma", "no-cache");
-      res.setHeader("Vary", "Authorization");
+      const originalSetHeader = res.setHeader.bind(res);
+      res.setHeader = (name, value) => {
+        if (String(name).toLowerCase() === "cache-control") value = "no-store";
+        return originalSetHeader(name, value);
+      };
+      originalSetHeader("Cache-Control", "no-store");
+      originalSetHeader("Pragma", "no-cache");
+      originalSetHeader("Vary", "Authorization");
     }
     return next();
   };
