@@ -1,6 +1,10 @@
 const SAFE_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
 const SENSITIVE_PATHS = /\/(auth|payments?|settlement|refund|dispute|advertis|admin|account|password|token)/i;
 const SUSPICIOUS_INPUT = /(?:\.\.(?:\/|\\)|<script|javascript:|\bunion\s+select\b|\bor\s+1\s*=\s*1|\bdrop\s+table\b)/i;
+const AUTH_FAILURE_WINDOW_MS = 60_000;
+const AUTH_FAILURE_ALERT_THRESHOLD = 5;
+const MAX_AUTH_FAILURE_BUCKETS = 10_000;
+const authFailureBuckets = new Map();
 
 function safeIp(req) {
   const value = req.ip || req.socket?.remoteAddress || "unknown";
@@ -19,6 +23,29 @@ function audit(event, req, extra = {}) {
   };
   console.warn(`[fynx-security] ${JSON.stringify(payload)}`);
 }
+
+function recordAuthFailure(req) {
+  const key = safeIp(req);
+  const now = Date.now();
+  const current = authFailureBuckets.get(key);
+  if (!current || now - current.startedAt >= AUTH_FAILURE_WINDOW_MS) {
+    if (!current && authFailureBuckets.size >= MAX_AUTH_FAILURE_BUCKETS) return;
+    authFailureBuckets.set(key, { startedAt: now, count: 1, alerted: false });
+    return;
+  }
+  current.count += 1;
+  if (current.count >= AUTH_FAILURE_ALERT_THRESHOLD && !current.alerted) {
+    current.alerted = true;
+    audit("repeated_auth_failures", req, { count: current.count, windowMs: AUTH_FAILURE_WINDOW_MS });
+  }
+}
+
+setInterval(() => {
+  const cutoff = Date.now() - AUTH_FAILURE_WINDOW_MS;
+  for (const [key, value] of authFailureBuckets) {
+    if (value.startedAt < cutoff) authFailureBuckets.delete(key);
+  }
+}, AUTH_FAILURE_WINDOW_MS).unref();
 
 export function installSecurityHardening({ app }) {
   app.use((req, res, next) => {
@@ -44,6 +71,7 @@ export function installSecurityHardening({ app }) {
 
     const startedAt = process.hrtime.bigint();
     res.on("finish", () => {
+      if (res.statusCode === 401) recordAuthFailure(req);
       if (res.statusCode === 401 || res.statusCode === 403 || res.statusCode === 429 || res.statusCode >= 500) {
         audit("security_relevant_response", req, {
           status: res.statusCode,
