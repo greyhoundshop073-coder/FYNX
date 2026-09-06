@@ -41,7 +41,7 @@ fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (Stri
                     val known = FynxFriendsStore(context).load()
                         .firstOrNull { it.username.equals(remote.username, true) }
                     person = known ?: FriendProfile(
-                        username = "@${remote.username.removePrefix("@")} ",
+                        username = "@${remote.username.removePrefix("@").trim()}",
                         displayName = remote.displayName.ifBlank { remote.username },
                         bio = ""
                     )
