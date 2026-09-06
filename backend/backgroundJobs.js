@@ -30,8 +30,6 @@ function idempotencyFingerprint(type, payload) {
 }
 
 export function createBackgroundJobQueue({ connectionString = process.env.DATABASE_URL, logger = console, pollMs = DEFAULT_POLL_MS, leaseMs = DEFAULT_LEASE_MS } = {}) {
-  // Keep pg lazy: verification, health checks, and local startup must work when the
-  // optional database-backed worker is disabled or its dependency is not installed.
   if (!connectionString) {
     return {
       enabled: false,
@@ -141,8 +139,6 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
     if (result.rows[0]) return result.rows[0];
     if (!idempotencyKey) throw new Error("Background job insert returned no row");
 
-    // A reused idempotency key is only a duplicate when the operation fingerprint
-    // matches. A different payload/type must never silently reuse the old job.
     const existing = await pool.query(
       `SELECT id, type, payload, status, attempts, max_attempts, available_at, idempotency_key, idempotency_fingerprint
        FROM fynx_background_jobs
@@ -165,13 +161,18 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
 
   async function reclaimExpired() {
     const pool = await getPool();
-    const result = await pool.query(
-      `UPDATE fynx_background_jobs
-       SET status = 'queued', available_at = NOW(), lease_expires_at = NULL, updated_at = NOW()
-       WHERE status = 'running' AND lease_expires_at < NOW()
-       RETURNING id`
+    return retryWithBackoff(
+      async () => {
+        const result = await pool.query(
+          `UPDATE fynx_background_jobs
+           SET status = 'queued', available_at = NOW(), lease_expires_at = NULL, updated_at = NOW()
+           WHERE status = 'running' AND lease_expires_at < NOW()
+           RETURNING id`
+        );
+        metrics.recovered += result.rowCount || 0;
+      },
+      { maxAttempts: 3, baseDelayMs: 100, maxDelayMs: 1_000, shouldRetry: isTransientDatabaseError }
     );
-    metrics.recovered += result.rowCount || 0;
   }
 
   async function claimOne() {
@@ -213,26 +214,28 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
 
   async function finish(job, error = null) {
     const pool = await getPool();
-    if (!error) {
-      await pool.query(`UPDATE fynx_background_jobs SET status = 'completed', lease_expires_at = NULL, completed_at = NOW(), updated_at = NOW() WHERE id = $1`, [job.id]);
-      metrics.completed += 1;
-      return;
-    }
-    const message = String(error?.message || error).slice(0, 2_000);
-    if (job.attempts >= job.max_attempts) {
-      await pool.query(`UPDATE fynx_background_jobs SET status = 'dead', lease_expires_at = NULL, last_error = $2, updated_at = NOW() WHERE id = $1`, [job.id, message]);
-      metrics.deadLettered += 1;
-      emitAlertsIfNeeded();
-      return;
-    }
-    const delay = backoffMs(job.attempts);
-    await pool.query(
-      `UPDATE fynx_background_jobs
-       SET status = 'queued', available_at = NOW() + ($2::text || ' milliseconds')::interval, lease_expires_at = NULL, last_error = $3, updated_at = NOW()
-       WHERE id = $1`,
-      [job.id, delay, message]
-    );
-    metrics.retried += 1;
+    return retryWithBackoff(async () => {
+      if (!error) {
+        await pool.query(`UPDATE fynx_background_jobs SET status = 'completed', lease_expires_at = NULL, completed_at = NOW(), updated_at = NOW() WHERE id = $1`, [job.id]);
+        metrics.completed += 1;
+        return;
+      }
+      const message = String(error?.message || error).slice(0, 2_000);
+      if (job.attempts >= job.max_attempts) {
+        await pool.query(`UPDATE fynx_background_jobs SET status = 'dead', lease_expires_at = NULL, last_error = $2, updated_at = NOW() WHERE id = $1`, [job.id, message]);
+        metrics.deadLettered += 1;
+        emitAlertsIfNeeded();
+        return;
+      }
+      const delay = backoffMs(job.attempts);
+      await pool.query(
+        `UPDATE fynx_background_jobs
+         SET status = 'queued', available_at = NOW() + ($2::text || ' milliseconds')::interval, lease_expires_at = NULL, last_error = $3, updated_at = NOW()
+         WHERE id = $1`,
+        [job.id, delay, message]
+      );
+      metrics.retried += 1;
+    }, { maxAttempts: 3, baseDelayMs: 100, maxDelayMs: 1_000, shouldRetry: isTransientDatabaseError });
   }
 
   async function tick() {
