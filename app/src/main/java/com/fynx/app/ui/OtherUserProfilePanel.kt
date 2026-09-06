@@ -12,9 +12,8 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Shared other-user profile surface used by people search, friends, chat and marketplace.
- * It first resolves the profile from the authenticated backend search contract and falls back
- * to the local relationship store for already-known users. Private fields are never rendered
- * from the search phone field.
+ * It resolves the requested identity from the authenticated backend search contract first,
+ * then uses the local relationship store for richer locally-known profile fields.
  */
 @Composable
 fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (String) -> Unit) {
@@ -39,16 +38,13 @@ fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (Stri
         FynxSocialClient.searchUsers(context, username.removePrefix("@"))
             .onSuccess { users ->
                 users.firstOrNull { it.username.equals(username.removePrefix("@"), true) }?.let { remote ->
-                    // Search results are the current authenticated backend identity contract.
-                    // Do not expose the phone field; it is intentionally not a profile detail.
-                    person = FynxFriendsStore(context).load()
+                    val known = FynxFriendsStore(context).load()
                         .firstOrNull { it.username.equals(remote.username, true) }
-                        ?: FynxFriend(
-                            username = remote.username,
-                            displayName = remote.displayName.ifBlank { remote.username },
-                            bio = "",
-                            isFriend = localPerson?.isFriend == true
-                        )
+                    person = known ?: FriendProfile(
+                        username = "@${remote.username.removePrefix("@")} ",
+                        displayName = remote.displayName.ifBlank { remote.username },
+                        bio = ""
+                    )
                 } ?: run { error = "User not found" }
             }
             .onFailure { error = "Unable to load this profile. Check your connection and try again." }
@@ -85,7 +81,7 @@ fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (Stri
             }
             Spacer(Modifier.height(14.dp))
             Text(profile.displayName.ifBlank { profile.username }, style = MaterialTheme.typography.headlineSmall)
-            Text("@${profile.username.removePrefix("@")}", color = FynxDesign.TextSecondary)
+            Text("@${profile.username.removePrefix("@").trim()}", color = FynxDesign.TextSecondary)
 
             if (show(bioVisibility)) {
                 Spacer(Modifier.height(12.dp))
