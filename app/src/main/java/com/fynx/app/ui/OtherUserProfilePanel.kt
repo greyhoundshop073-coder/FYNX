@@ -13,8 +13,8 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Shared other-user profile surface used by people search, friends, chat and marketplace.
- * The selected backend identity is authoritative; the device-local relationship store is not
- * treated as another user's profile or privacy configuration.
+ * The backend identity is authoritative; local relationship/profile stores are not used as
+ * another user's private profile data.
  */
 @Composable
 fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (String) -> Unit) {
@@ -27,18 +27,18 @@ fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (Stri
     LaunchedEffect(username, retryNonce) {
         loading = true
         error = null
-        FynxSocialClient.searchUsers(context, username.removePrefix("@"))
+        val target = username.removePrefix("@").trim()
+        FynxSocialClient.searchUsers(context, target)
             .onSuccess { users ->
                 users.firstOrNull {
-                    it.username.removePrefix("@").trim().equals(username.removePrefix("@").trim(), true)
+                    it.username.removePrefix("@").trim().equals(target, true)
                 }?.let { remote ->
-                    // Search identity is authoritative for this surface. Do not copy a locally
-                    // cached bio/photo/privacy setting from another device/account context.
                     person = FriendProfile(
                         username = "@${remote.username.removePrefix("@").trim()}",
-                        displayName = remote.displayName.ifBlank { remote.username.removePrefix("@").trim() },
+                        displayName = remote.displayName.ifBlank { target },
                         bio = ""
                     )
+                    error = null
                 } ?: run {
                     person = null
                     error = "User not found"
@@ -74,9 +74,7 @@ fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (Stri
             ) {
                 Text(error ?: "User not found", color = FynxDesign.TextSecondary)
                 Spacer(Modifier.height(12.dp))
-                OutlinedButton(onClick = { retryNonce++ }) {
-                    Text("Retry")
-                }
+                OutlinedButton(onClick = { retryNonce++ }) { Text("Retry") }
             }
             return@Column
         }
@@ -87,11 +85,6 @@ fun OtherUserProfilePanel(username: String, onBack: () -> Unit, onMessage: (Stri
             Spacer(Modifier.height(14.dp))
             Text(profile.displayName.ifBlank { profile.username }, style = MaterialTheme.typography.headlineSmall)
             Text("@${profile.username.removePrefix("@").trim()}", color = FynxDesign.TextSecondary)
-
-            // Bio/about are intentionally not synthesized from the viewer's local preferences.
-            // They will be rendered here when the authenticated profile-detail contract supplies
-            // an authorized value for the requested user.
-
             Spacer(Modifier.height(20.dp))
             Button(onClick = { onMessage(profile.username) }) {
                 Icon(Icons.Default.Message, null)
