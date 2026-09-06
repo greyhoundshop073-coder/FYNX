@@ -68,7 +68,7 @@ http.createServer = function fynxCreateServer(...args) {
     console.error("[fynx-http] server error", error);
   });
 
-  const recovery = installFailureRecovery({ server, pool: null, logger: console });
+  const recovery = installFailureRecovery({ server, pool: globalThis.__fynxPool || null, logger: console });
   globalThis.__fynxRecovery = recovery;
   globalThis.__fynxIdempotency = createIdempotencyStore({ maxEntries: 10_000, ttlMs: 24 * 60 * 60 * 1000 });
   globalThis.__fynxJobHandlers = globalThis.__fynxJobHandlers || {};
