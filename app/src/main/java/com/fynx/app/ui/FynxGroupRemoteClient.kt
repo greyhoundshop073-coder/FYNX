@@ -1,79 +1,22 @@
 package com.fynx.app.ui
 
 import android.content.Context
-import org.json.JSONObject
+import android.net.Uri
 import org.json.JSONArray
+import org.json.JSONObject
 
 object FynxGroupRemoteClient {
-    data class RemoteMessage(
-        val id: String,
-        val text: String,
-        val senderUsername: String,
-        val timestamp: Long,
-        val attachmentMediaId: String?,
-        val attachmentType: String?,
-        val attachmentUrl: String?
-    )
-
-    suspend fun syncGroup(context: Context, group: FynxGroup): Result<Unit> = runCatching {
-        val body = JSONObject().apply {
-            put("ownerUsername", group.ownerUsername.trim().removePrefix("@"))
-            put("name", group.name)
-            put("description", group.description)
-            put("visibility", group.visibility.name)
-            put("members", JSONArray().apply { group.members.forEach { put(it.username.trim().removePrefix("@")) } })
+    data class RemoteMessage(val id:String,val text:String,val senderUsername:String,val timestamp:Long,val attachmentMediaId:String?,val attachmentType:String?,val attachmentUrl:String?)
+    suspend fun syncGroup(context:Context,group:FynxGroup):Result<Unit> = runCatching { val body=JSONObject().apply{put("ownerUsername",group.ownerUsername.trim().removePrefix("@"));put("name",group.name);put("description",group.description);put("visibility",group.visibility.name);put("members",JSONArray().apply{group.members.forEach{put(it.username.trim().removePrefix("@"))}})};FynxBackendClient.postJson(context,"/api/groups/${group.id}/sync",body.toString()).getOrThrow();Unit }
+    suspend fun loadMessages(context:Context,groupId:String):Result<List<RemoteMessage>> = runCatching { val raw=FynxBackendClient.get(context,"/api/groups/$groupId/messages").getOrThrow();val a=JSONObject(raw).optJSONArray("messages")?:JSONArray();buildList{for(i in 0 until a.length()){val o=a.getJSONObject(i);add(RemoteMessage(o.getString("id"),o.optString("text"),o.optString("senderUsername"),o.optLong("timestamp"),o.optString("attachmentMediaId").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentType").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentUrl").takeIf{it.isNotBlank()&&it!="null"}))}} }
+    suspend fun sendMessage(context:Context,groupId:String,message:ChatMessage):Result<RemoteMessage> = runCatching {
+        var mediaId:Long?=message.attachmentUri?.substringAfterLast('/').takeIf{it?.all(Char::isDigit)==true}?.toLongOrNull()
+        var mediaType=message.attachmentType
+        if(mediaId==null && message.attachmentUri!=null){
+            val uri=Uri.parse(message.attachmentUri!!);val mime=context.contentResolver.getType(uri)?.lowercase()?:when(mediaType){"video"->"video/mp4";"audio"->"audio/mp4";else->"image/jpeg"};val uploaded=FynxProductionMessaging.uploadMedia(context,uri,mime).getOrThrow();mediaId=uploaded.id;mediaType=mediaType?:mime.substringBefore('/')
         }
-        FynxBackendClient.postJson(context, "/api/groups/${group.id}/sync", body.toString()).getOrThrow()
+        val body=JSONObject().apply{put("id",message.id);put("text",message.text);if(mediaId!=null)put("attachmentMediaId",mediaId);if(mediaType!=null)put("attachmentType",mediaType)}
+        val raw=FynxBackendClient.postJson(context,"/api/groups/$groupId/messages",body.toString()).getOrThrow();val o=JSONObject(raw).getJSONObject("message");RemoteMessage(o.getString("id"),o.optString("text"),o.optString("senderUsername"),o.optLong("timestamp"),o.optString("attachmentMediaId").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentType").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentUrl").takeIf{it.isNotBlank()&&it!="null"})
     }
-
-    suspend fun loadMessages(context: Context, groupId: String): Result<List<RemoteMessage>> = runCatching {
-        val raw = FynxBackendClient.get(context, "/api/groups/$groupId/messages").getOrThrow()
-        val array = JSONObject(raw).optJSONArray("messages") ?: JSONArray()
-        buildList {
-            for (i in 0 until array.length()) {
-                val item = array.getJSONObject(i)
-                add(RemoteMessage(
-                    id = item.getString("id"),
-                    text = item.optString("text"),
-                    senderUsername = item.optString("senderUsername"),
-                    timestamp = item.optLong("timestamp"),
-                    attachmentMediaId = item.optString("attachmentMediaId").takeIf { it.isNotBlank() && it != "null" },
-                    attachmentType = item.optString("attachmentType").takeIf { it.isNotBlank() && it != "null" },
-                    attachmentUrl = item.optString("attachmentUrl").takeIf { it.isNotBlank() && it != "null" }
-                ))
-            }
-        }
-    }
-
-    suspend fun sendMessage(context: Context, groupId: String, message: ChatMessage): Result<RemoteMessage> = runCatching {
-        val mediaId = message.attachmentUri?.substringAfterLast('/')?.takeIf { it.all(Char::isDigit) }
-        val body = JSONObject().apply {
-            put("id", message.id)
-            put("text", message.text)
-            if (mediaId != null) put("attachmentMediaId", mediaId.toLong())
-            if (message.attachmentType != null) put("attachmentType", message.attachmentType)
-        }
-        val raw = FynxBackendClient.postJson(context, "/api/groups/$groupId/messages", body.toString()).getOrThrow()
-        val item = JSONObject(raw).getJSONObject("message")
-        RemoteMessage(
-            id = item.getString("id"),
-            text = item.optString("text"),
-            senderUsername = item.optString("senderUsername"),
-            timestamp = item.optLong("timestamp"),
-            attachmentMediaId = item.optString("attachmentMediaId").takeIf { it.isNotBlank() && it != "null" },
-            attachmentType = item.optString("attachmentType").takeIf { it.isNotBlank() && it != "null" },
-            attachmentUrl = item.optString("attachmentUrl").takeIf { it.isNotBlank() && it != "null" }
-        )
-    }
-
-    fun toChatMessage(message: RemoteMessage, currentUsername: String, baseUrl: String): ChatMessage = ChatMessage(
-        text = message.text,
-        fromMe = message.senderUsername.equals(currentUsername.removePrefix("@"), ignoreCase = true),
-        id = message.id,
-        timestamp = message.timestamp,
-        delivered = true,
-        read = true,
-        attachmentUri = message.attachmentUrl?.let { if (it.startsWith("http")) it else baseUrl.trimEnd('/') + it },
-        attachmentType = message.attachmentType
-    )
+    fun toChatMessage(m:RemoteMessage,currentUsername:String,baseUrl:String)=ChatMessage(m.text,m.senderUsername.equals(currentUsername.removePrefix("@"),true),m.id,m.timestamp,delivered=true,read=true,attachmentUri=m.attachmentUrl?.let{if(it.startsWith("http"))it else baseUrl.trimEnd('/')+it},attachmentType=m.attachmentType)
 }
