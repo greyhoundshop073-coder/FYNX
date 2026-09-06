@@ -59,11 +59,14 @@ class FynxRealtimeClient(
             onStateChanged(State.FAILED)
             return
         }
-        val wsUrl = "wss://${httpBase.removePrefix("https://")}/realtime"
+        // The existing backend realtime endpoint authenticates the WebSocket
+        // during the upgrade from the token query parameter. Keep the normal
+        // API bearer token out of any additional payloads after connection.
+        val encodedToken = java.net.URLEncoder.encode(token, Charsets.UTF_8.name())
+        val wsUrl = "wss://${httpBase.removePrefix("https://")}/realtime?token=$encodedToken"
         onStateChanged(State.CONNECTING)
         val request = Request.Builder()
             .url(wsUrl)
-            .header("Authorization", "Bearer $token")
             .build()
         socket?.cancel()
         socket = client.newWebSocket(request, object : WebSocketListener() {
