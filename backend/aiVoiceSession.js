@@ -31,6 +31,7 @@ export function buildRealtimeSessionConfig() {
     audio: {
       input: {
         noise_reduction: { type: "near_field" },
+        transcription: { model: "gpt-4o-mini-transcribe" },
         turn_detection: { type: "semantic_vad", eagerness: "medium", create_response: true, interrupt_response: true }
       }
     }
