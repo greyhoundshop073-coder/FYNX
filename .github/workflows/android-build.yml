@@ -11,9 +11,11 @@ permissions:
   contents: read
   id-token: write
 
+# Keep verification runs alive so rapid development pushes do not cancel an
+# otherwise healthy build/test run and leave a misleading cancelled result.
 concurrency:
   group: fynx-android-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   GOOGLE_CLOUD_PROJECT: fynx-f0868
