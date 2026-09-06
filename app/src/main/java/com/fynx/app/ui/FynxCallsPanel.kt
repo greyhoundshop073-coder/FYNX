@@ -10,14 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.CallEnd
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MicOff
-import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material.icons.filled.VideocamOff
-import androidx.compose.material.icons.filled.VolumeOff
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,120 +19,99 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.launch
 
 enum class FynxCallHistoryFilter { ALL, MISSED, VIDEO, VOICE }
 
 @Composable
-fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false) {
+fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, initialOutgoing: Boolean = false) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var activeCall by remember { mutableStateOf(initialName?.removePrefix("@").orEmpty().ifBlank { initialName }) }
     var video by remember { mutableStateOf(initialVideo) }
     var targetUserId by remember { mutableStateOf<String?>(null) }
-    var targetLookupError by remember { mutableStateOf<String?>(null) }
-    var session by remember {
-        mutableStateOf(
-            initialName?.let {
-                val id = "incoming-${System.currentTimeMillis()}"
-                FynxCallSession(
-                    id = id,
-                    callerUsername = it,
-                    participantUsernames = listOf(it),
-                    type = if (initialVideo) FynxCallType.VIDEO else FynxCallType.VOICE,
-                    state = FynxCallState.RINGING
-                )
-            }
-        )
-    }
-    var permissionMessage by remember { mutableStateOf<String?>(null) }
+    var targetUsername by remember { mutableStateOf(initialName?.removePrefix("@")?.trim()) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     var calls by remember { mutableStateOf(FynxCallsStore.load(context)) }
     var filter by remember { mutableStateOf(FynxCallHistoryFilter.ALL) }
+    var session by remember {
+        mutableStateOf(initialName?.let { name ->
+            FynxCallSession(
+                id = "call-${System.currentTimeMillis()}",
+                callerUsername = if (initialOutgoing) "me" else name,
+                participantUsernames = listOf(name),
+                type = if (initialVideo) FynxCallType.VIDEO else FynxCallType.VOICE,
+                state = if (initialOutgoing) FynxCallState.CONNECTING else FynxCallState.RINGING
+            )
+        })
+    }
     var realtimeState by remember { mutableStateOf(FynxRealtimeClient.State.DISCONNECTED) }
-
     val realtimeClient = remember {
-        FynxRealtimeClient(
-            context = context,
-            onMessage = {},
-            onStateChanged = { realtimeState = it },
-            onEvent = { event ->
-                if (event is FynxRealtimeClient.Event.Call) {
-                    // Incoming-call UI will consume these events in the next call-experience batch.
-                }
+        FynxRealtimeClient(context, onMessage = {}, onStateChanged = { realtimeState = it }, onEvent = {})
+    }
+
+    DisposableEffect(Unit) { realtimeClient.connect(); onDispose { } }
+
+    suspend fun resolveUser(username: String): String? = FynxSocialClient.searchUsers(context, username)
+        .getOrNull()?.firstOrNull { it.username.equals(username, true) }?.id
+
+    fun beginOutgoing(name: String, isVideo: Boolean) {
+        val username = name.removePrefix("@").trim()
+        if (username.isBlank()) return
+        video = isVideo
+        activeCall = username
+        targetUsername = username
+        errorMessage = null
+        scope.launch {
+            val resolvedId = resolveUser(username)
+            if (resolvedId == null) {
+                errorMessage = "We couldn't find @$username. Please check the username and try again."
+                activeCall = null
+                session = null
+                return@launch
             }
-        )
-    }
-
-    DisposableEffect(Unit) {
-        realtimeClient.connect()
-        onDispose { }
-    }
-
-    LaunchedEffect(initialName) {
-        if (!initialName.isNullOrBlank()) {
-            val username = initialName.removePrefix("@").trim()
-            val result = FynxSocialClient.searchUsers(context, username)
-            targetUserId = result.getOrNull()
-                ?.firstOrNull { it.username.equals(username, true) }
-                ?.id
-            if (targetUserId == null) {
-                targetLookupError = "We couldn't find @$username. Please open the user's profile and try again."
-            }
-        }
-    }
-
-    LaunchedEffect(initialName, session?.id) {
-        val current = session ?: return@LaunchedEffect
-        if (initialName != null && calls.none { it.id == current.id }) {
-            FynxCallsStore.add(context, FynxCallRecord(current.id, initialName, if (initialVideo) "Video call" else "Voice call", "Just now", missed = true, status = "Incoming"))
+            targetUserId = resolvedId
+            val id = "call-${System.currentTimeMillis()}"
+            val newSession = FynxCallSession(id, "me", listOf("@$username"), if (isVideo) FynxCallType.VIDEO else FynxCallType.VOICE, FynxCallState.CONNECTING)
+            session = newSession
+            FynxCallsStore.add(context, FynxCallRecord(id, "@$username", if (isVideo) "Video call" else "Voice call", "Just now", status = "Outgoing"))
             calls = FynxCallsStore.load(context)
+            val required = if (isVideo) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)
+            if (required.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
+                realtimeClient.sendCallInvite(id, resolvedId, isVideo)
+                FynxCallsStore.updateStatus(context, id, "Calling")
+                calls = FynxCallsStore.load(context)
+            } else {
+                permissionLauncher.launch(required)
+            }
         }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        val current = session
+        val current = session ?: return@rememberLauncherForActivityResult
         val required = if (video) listOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else listOf(Manifest.permission.RECORD_AUDIO)
-        if (current != null && required.all { result[it] == true || ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
-            session = FynxCallsFoundation.start(current)
-            FynxCallsStore.updateStatus(context, current.id, "Connecting")
+        if (required.all { result[it] == true || ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
+            targetUserId?.let { realtimeClient.sendCallInvite(current.id, it, video) }
+            FynxCallsStore.updateStatus(context, current.id, "Calling")
             calls = FynxCallsStore.load(context)
-            permissionMessage = null
         } else {
-            permissionMessage = if (video) "Camera and microphone access are needed for video calls." else "Microphone access is needed for voice calls."
-            current?.let { FynxCallsStore.updateStatus(context, it.id, "Permission denied", missed = false) }
+            errorMessage = if (video) "Camera and microphone access are needed for video calls." else "Microphone access is needed for voice calls."
+            FynxCallsStore.updateStatus(context, current.id, "Permission denied", missed = false)
             activeCall = null
             session = null
             calls = FynxCallsStore.load(context)
         }
     }
 
-    fun startCall(name: String, isVideo: Boolean) {
-        video = isVideo
-        activeCall = name.removePrefix("@").ifBlank { name }
-        permissionMessage = null
-        targetLookupError = null
-        val id = "call-${System.currentTimeMillis()}"
-        val newSession = FynxCallSession(
-            id = id,
-            callerUsername = "me",
-            participantUsernames = listOf(name),
-            type = if (isVideo) FynxCallType.VIDEO else FynxCallType.VOICE
-        )
-        session = newSession
-        FynxCallsStore.add(context, FynxCallRecord(id, name, if (isVideo) "Video call" else "Voice call", "Just now", status = "Outgoing"))
-        calls = FynxCallsStore.load(context)
-        val required = if (isVideo) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)
-        if (targetUserId.isNullOrBlank()) {
-            targetLookupError = "We couldn't resolve this FYNX user yet. Please try again in a moment."
-            session = null
-            activeCall = null
-            return
-        }
-        if (required.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
-            session = FynxCallsFoundation.start(newSession)
-            FynxCallsStore.updateStatus(context, id, "Calling")
-            realtimeClient.sendCallInvite(id, targetUserId!!, isVideo)
+    LaunchedEffect(initialName, initialOutgoing) {
+        if (initialOutgoing && !initialName.isNullOrBlank()) beginOutgoing(initialName, initialVideo)
+    }
+
+    LaunchedEffect(initialName, session?.id) {
+        val current = session ?: return@LaunchedEffect
+        if (!initialOutgoing && initialName != null && calls.none { it.id == current.id }) {
+            FynxCallsStore.add(context, FynxCallRecord(current.id, initialName, if (initialVideo) "Video call" else "Voice call", "Just now", missed = true, status = "Incoming"))
             calls = FynxCallsStore.load(context)
-        } else {
-            permissionLauncher.launch(required)
         }
     }
 
@@ -147,34 +119,24 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false) {
         FynxActiveCallPanel(
             name = activeCall!!,
             session = session!!,
+            realtimeState = realtimeState,
             onAnswer = {
                 val current = session!!
+                targetUserId?.let { realtimeClient.sendCallAccept(current.id, it, video) }
                 session = FynxCallsFoundation.answer(current)
                 FynxCallsStore.updateStatus(context, current.id, "Answered", missed = false)
                 calls = FynxCallsStore.load(context)
             },
-            onRetry = {
-                val current = session!!
-                val required = if (video) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)
-                if (required.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
-                    session = FynxCallsFoundation.start(current)
-                    FynxCallsStore.updateStatus(context, current.id, "Connecting")
-                    if (targetUserId != null) realtimeClient.sendCallInvite(current.id, targetUserId!!, video)
-                    calls = FynxCallsStore.load(context)
-                } else {
-                    permissionLauncher.launch(required)
-                }
-            },
+            onRetry = { targetUsername?.let { beginOutgoing(it, video) } },
             onToggleMicrophone = { session = FynxCallsFoundation.toggleMicrophone(session!!) },
             onToggleCamera = { session = FynxCallsFoundation.toggleCamera(session!!) },
             onSwitchCamera = { session = FynxCallsFoundation.switchCamera(session!!) },
             onToggleSpeaker = { session = FynxCallsFoundation.toggleSpeaker(session!!) },
             onEnd = {
                 val current = session!!
-                val wasIncoming = current.state == FynxCallState.RINGING
                 targetUserId?.let { realtimeClient.sendCallEnd(current.id, it, video) }
                 session = FynxCallsFoundation.end(current)
-                FynxCallsStore.updateStatus(context, current.id, if (wasIncoming) "Declined" else "Ended", missed = wasIncoming)
+                FynxCallsStore.updateStatus(context, current.id, if (current.state == FynxCallState.RINGING) "Declined" else "Ended", missed = current.state == FynxCallState.RINGING)
                 calls = FynxCallsStore.load(context)
                 activeCall = null
                 session = null
@@ -183,151 +145,54 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false) {
         return
     }
 
-    val filteredCalls = remember(calls, filter) {
-        when (filter) {
+    Column(Modifier.fillMaxSize().background(FynxDesign.Background).padding(16.dp)) {
+        Text("Calls", style = MaterialTheme.typography.headlineSmall)
+        Text("Voice and video calls", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (realtimeState == FynxRealtimeClient.State.FAILED) Text("Call connection is reconnecting…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        errorMessage?.let { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer), modifier = Modifier.padding(top = 10.dp)) { Text(it, modifier = Modifier.padding(14.dp), color = MaterialTheme.colorScheme.onErrorContainer) } }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(FynxCallHistoryFilter.ALL to "All", FynxCallHistoryFilter.MISSED to "Missed", FynxCallHistoryFilter.VIDEO to "Video", FynxCallHistoryFilter.VOICE to "Voice").forEach { (value, label) -> FilterChip(filter == value, onClick = { filter = value }, label = { Text(label) }) }
+        }
+        Spacer(Modifier.height(10.dp))
+        val filtered = when (filter) {
             FynxCallHistoryFilter.ALL -> calls
             FynxCallHistoryFilter.MISSED -> calls.filter { it.missed }
             FynxCallHistoryFilter.VIDEO -> calls.filter { it.type == "Video call" }
             FynxCallHistoryFilter.VOICE -> calls.filter { it.type == "Voice call" }
         }
-    }
-
-    Column(Modifier.fillMaxSize().background(FynxDesign.Background).padding(16.dp)) {
-        Text("Calls", style = MaterialTheme.typography.headlineSmall)
-        Text("Voice and video calls", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (realtimeState == FynxRealtimeClient.State.FAILED) {
-            Spacer(Modifier.height(6.dp))
-            Text("Call connection is reconnecting…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Spacer(Modifier.height(12.dp))
-        targetLookupError?.let {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                Text(it, modifier = Modifier.padding(14.dp), color = MaterialTheme.colorScheme.onErrorContainer)
-            }
-            Spacer(Modifier.height(10.dp))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            listOf(
-                FynxCallHistoryFilter.ALL to "All",
-                FynxCallHistoryFilter.MISSED to "Missed",
-                FynxCallHistoryFilter.VIDEO to "Video",
-                FynxCallHistoryFilter.VOICE to "Voice"
-            ).forEach { (value, label) ->
-                FilterChip(selected = filter == value, onClick = { filter = value }, label = { Text(label) })
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        permissionMessage?.let {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                Text(it, modifier = Modifier.padding(14.dp), color = MaterialTheme.colorScheme.onErrorContainer)
-            }
-            Spacer(Modifier.height(10.dp))
-        }
-        if (filteredCalls.isEmpty()) {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.Call, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(8.dp))
-                    Text("No calls here", style = MaterialTheme.typography.titleMedium)
-                    Text("Your call history will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(filteredCalls, key = { it.id }) { call ->
-                    Card(Modifier.fillMaxWidth()) {
-                        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(46.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
-                                Icon(if (call.type == "Video call") Icons.Default.Videocam else Icons.Default.Call, "Call type", tint = MaterialTheme.colorScheme.primary)
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(call.name, style = MaterialTheme.typography.titleMedium)
-                                Text("${call.type} • ${call.time}", style = MaterialTheme.typography.bodySmall, color = if (call.missed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(call.status, style = MaterialTheme.typography.labelSmall, color = if (call.missed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            IconButton(onClick = {
-                                val username = call.name.removePrefix("@").trim()
-                                targetUserId = null
-                                targetLookupError = null
-                                activeCall = username
-                                LaunchedEffect // no-op marker removed by compiler; lookup occurs from initial call target flow
-                                startCall("@$username", call.type == "Video call")
-                            }) {
-                                Icon(if (call.type == "Video call") Icons.Default.Videocam else Icons.Default.Call, "Call ${call.name}")
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        if (filtered.isEmpty()) Card(Modifier.fillMaxWidth()) { Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Call, null); Spacer(Modifier.height(8.dp)); Text("No calls here", style = MaterialTheme.typography.titleMedium); Text("Your call history will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) { items(filtered, key = { it.id }) { call ->
+            Card(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(if (call.type == "Video call") Icons.Default.Videocam else Icons.Default.Call, null)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) { Text(call.name, style = MaterialTheme.typography.titleMedium); Text("${call.type} • ${call.time}", style = MaterialTheme.typography.bodySmall); Text(call.status, style = MaterialTheme.typography.labelSmall) }
+                IconButton(onClick = { beginOutgoing(call.name, call.type == "Video call") }) { Icon(if (call.type == "Video call") Icons.Default.Videocam else Icons.Default.Call, "Call ${call.name}") }
+            } }
+        } }
     }
 }
 
 @Composable
-fun FynxActiveCallPanel(
-    name: String,
-    session: FynxCallSession,
-    onAnswer: () -> Unit,
-    onRetry: () -> Unit,
-    onToggleMicrophone: () -> Unit,
-    onToggleCamera: () -> Unit,
-    onSwitchCamera: () -> Unit,
-    onToggleSpeaker: () -> Unit,
-    onEnd: () -> Unit
-) {
+fun FynxActiveCallPanel(name: String, session: FynxCallSession, realtimeState: FynxRealtimeClient.State = FynxRealtimeClient.State.CONNECTED, onAnswer: () -> Unit, onRetry: () -> Unit, onToggleMicrophone: () -> Unit, onToggleCamera: () -> Unit, onSwitchCamera: () -> Unit, onToggleSpeaker: () -> Unit, onEnd: () -> Unit) {
     val isConnecting = session.state == FynxCallState.CONNECTING
     val isIncoming = session.state == FynxCallState.RINGING
     val isConnected = session.state == FynxCallState.CONNECTED
     val isVideo = session.type == FynxCallType.VIDEO
-
     Column(Modifier.fillMaxSize().background(FynxDesign.Background), horizontalAlignment = Alignment.CenterHorizontally) {
-        Spacer(Modifier.height(44.dp))
-        Text(name, style = MaterialTheme.typography.headlineSmall)
-        Text(
-            when (session.state) {
-                FynxCallState.IDLE -> "Ready"
-                FynxCallState.RINGING -> "Incoming ${if (isVideo) "video" else "voice"} call"
-                FynxCallState.CONNECTING -> "Connecting…"
-                FynxCallState.CONNECTED -> if (isVideo) "Video call" else "Voice call"
-                FynxCallState.ENDED -> "Call ended"
-            },
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(30.dp))
-        Box(Modifier.size(190.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-            Text(name.take(1).uppercase(), style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.primary)
-        }
+        Spacer(Modifier.height(44.dp)); Text(name, style = MaterialTheme.typography.headlineSmall)
+        Text(when (session.state) { FynxCallState.IDLE -> "Ready"; FynxCallState.RINGING -> "Incoming ${if (isVideo) "video" else "voice"} call"; FynxCallState.CONNECTING -> if (realtimeState == FynxRealtimeClient.State.CONNECTED) "Calling…" else "Connecting…"; FynxCallState.CONNECTED -> if (isVideo) "Video call" else "Voice call"; FynxCallState.ENDED -> "Call ended" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(30.dp)); Box(Modifier.size(190.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Text(name.take(1).uppercase(), style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.primary) }
         Spacer(Modifier.weight(1f))
-
-        if (isIncoming) {
-            Text("Answer this call?", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                OutlinedButton(onClick = onEnd) { Text("Decline") }
-                Button(onClick = onAnswer) { Icon(Icons.Default.Call, null); Spacer(Modifier.width(6.dp)); Text("Answer") }
+        if (isIncoming) { Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) { OutlinedButton(onClick = onEnd) { Text("Decline") }; Button(onClick = onAnswer) { Icon(Icons.Default.Call, null); Spacer(Modifier.width(6.dp)); Text("Answer") } }; Spacer(Modifier.height(24.dp)) }
+        else if (isConnecting) { OutlinedButton(onClick = onRetry) { Text("Retry call") }; Spacer(Modifier.height(18.dp)) }
+        if (isConnected) Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            FilledTonalIconButton(onClick = onToggleMicrophone) { Icon(if (session.microphoneEnabled) Icons.Default.Mic else Icons.Default.MicOff, "Mute") }
+            if (isVideo) { FilledTonalIconButton(onClick = onToggleCamera) { Icon(if (session.cameraEnabled) Icons.Default.Videocam else Icons.Default.VideocamOff, "Camera") }; FilledTonalIconButton(onClick = onSwitchCamera) { Icon(Icons.Default.Videocam, "Switch camera") }
             }
-            Spacer(Modifier.height(24.dp))
-        } else if (isConnecting) {
-            Text("Calling this FYNX user…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(10.dp))
-            OutlinedButton(onClick = onRetry) { Text("Retry call") }
-            Spacer(Modifier.height(18.dp))
-        }
-
-        if (isConnected) {
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                FilledTonalIconButton(onClick = onToggleMicrophone) { Icon(if (session.microphoneEnabled) Icons.Default.Mic else Icons.Default.MicOff, "Mute") }
-                if (isVideo) {
-                    FilledTonalIconButton(onClick = onToggleCamera) { Icon(if (session.cameraEnabled) Icons.Default.Videocam else Icons.Default.VideocamOff, "Camera") }
-                    FilledTonalIconButton(onClick = onSwitchCamera) { Icon(Icons.Default.Videocam, "Switch camera") }
-                }
-                FilledTonalIconButton(onClick = onToggleSpeaker) { Icon(if (session.speakerEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff, if (session.speakerEnabled) "Speaker on" else "Speaker off") }
-                FloatingActionButton(onClick = onEnd) { Icon(Icons.Default.CallEnd, "End call") }
-            }
-        } else if (!isIncoming) {
+            FilledTonalIconButton(onClick = onToggleSpeaker) { Icon(if (session.speakerEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff, "Speaker") }
             FloatingActionButton(onClick = onEnd) { Icon(Icons.Default.CallEnd, "End call") }
-        }
+        } else if (!isIncoming) FloatingActionButton(onClick = onEnd) { Icon(Icons.Default.CallEnd, "End call") }
         Spacer(Modifier.height(32.dp))
     }
 }
