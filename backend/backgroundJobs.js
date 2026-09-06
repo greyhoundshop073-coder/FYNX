@@ -62,7 +62,36 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
   let timer = null;
   let running = false;
   let stopped = false;
+  let lastAlertSignature = "";
   const metrics = { claimed: 0, completed: 0, retried: 0, deadLettered: 0, recovered: 0, failures: 0 };
+  const alertThresholds = {
+    failures: Math.max(1, Number(process.env.JOB_FAILURE_ALERT_THRESHOLD || 3)),
+    deadLettered: Math.max(1, Number(process.env.JOB_DEAD_LETTER_ALERT_THRESHOLD || 1))
+  };
+
+  function snapshot() {
+    const alerts = [];
+    if (metrics.failures >= alertThresholds.failures) alerts.push("worker_failures");
+    if (metrics.deadLettered >= alertThresholds.deadLettered) alerts.push("dead_letter_jobs");
+    return {
+      enabled: true,
+      running,
+      stopped,
+      ...metrics,
+      alert: alerts.length > 0,
+      alerts,
+      alertThresholds
+    };
+  }
+
+  function emitAlertsIfNeeded() {
+    const state = snapshot();
+    if (!state.alert) return;
+    const signature = state.alerts.join(",");
+    if (signature === lastAlertSignature) return;
+    lastAlertSignature = signature;
+    logger.error("[fynx-jobs] alert", JSON.stringify({ alerts: state.alerts, failures: state.failures, deadLettered: state.deadLettered }));
+  }
 
   async function ensureSchema() {
     const pool = await getPool();
@@ -193,6 +222,7 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
     if (job.attempts >= job.max_attempts) {
       await pool.query(`UPDATE fynx_background_jobs SET status = 'dead', lease_expires_at = NULL, last_error = $2, updated_at = NOW() WHERE id = $1`, [job.id, message]);
       metrics.deadLettered += 1;
+      emitAlertsIfNeeded();
       return;
     }
     const delay = backoffMs(job.attempts);
@@ -219,6 +249,7 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
       }
     } catch (error) {
       metrics.failures += 1;
+      emitAlertsIfNeeded();
       logger.error("[fynx-jobs] worker error", error?.message || error);
     } finally {
       running = false;
@@ -240,5 +271,5 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
     if (pool) await pool.end();
   }
 
-  return { enabled: true, enqueue, start, stop, snapshot: () => ({ enabled: true, running, stopped, ...metrics }) };
+  return { enabled: true, enqueue, start, stop, snapshot };
 }
