@@ -10,6 +10,7 @@ import { installPresencePrivacyGuard } from "./presencePrivacy.js";
 import { installMediaPrivacyGuard } from "./mediaPrivacy.js";
 import { installSocialHardening } from "./socialHardening.js";
 import { installPrivateCachePolicy } from "./privateCachePolicy.js";
+import { installMarketplaceMediaPrivacyGuard } from "./marketplaceMediaPrivacy.js";
 
 // Apply safe HTTP connection limits before the existing FYNX server is created.
 // Marketplace settlement, protection, realtime AI, privacy, media and social guards are registered here because server.js is loaded
@@ -31,6 +32,7 @@ http.createServer = function fynxCreateServer(...args) {
       installMediaPrivacyGuard(app);
       installSocialHardening(app);
       installPrivateCachePolicy(app);
+      installMarketplaceMediaPrivacyGuard(app);
     });
   }
   server.keepAliveTimeout = 65_000;
