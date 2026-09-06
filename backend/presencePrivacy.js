@@ -91,25 +91,46 @@ function installCallPrivacyGuard() {
     return originalOn.call(this, event, (raw, ...rest) => {
       let body;
       try { body = JSON.parse(raw.toString()); } catch { return listener(raw, ...rest); }
-      if (body?.type !== "call" || String(body?.signalType || "").toLowerCase() !== "invite") return listener(raw, ...rest);
-      const targetId = String(body?.toUserId || "");
+      if (body?.type !== "call") return listener(raw, ...rest);
+
+      const signalType = String(body?.signalType || "").trim().toLowerCase();
+      if (!["invite", "accept", "reject", "end", "offer", "answer", "ice"].includes(signalType)) {
+        return listener(raw, ...rest);
+      }
+
       const viewerId = socket.__fynxRealtimeViewerId || "";
-      if (!viewerId || !targetId) return listener(raw, ...rest);
+      const targetId = String(body?.toUserId || body?.targetUserId || "");
+      if (!viewerId || !targetId || viewerId === targetId) return listener(raw, ...rest);
+
+      const deny = () => {
+        if (socket.readyState === 1) {
+          socket.send(JSON.stringify({
+            type: "call",
+            callId: typeof body?.callId === "string" ? body.callId : undefined,
+            signalType: "error",
+            error: "calls are unavailable between blocked users"
+          }));
+        }
+      };
+
       const key = `${viewerId}:${targetId}`;
       const cached = callBlockCache.get(key);
       if (cached && cached.expiresAt > Date.now()) {
         if (!cached.blocked) return listener(raw, ...rest);
-        if (socket.readyState === 1) socket.send(JSON.stringify({ type: "call", signalType: "error", error: "calls are unavailable between blocked users" }));
-        return;
+        return deny();
       }
+
       if (!callBlockPending.has(key)) {
         const task = areCallPeersBlocked(viewerId, targetId).catch(() => true).finally(() => callBlockPending.delete(key));
         callBlockPending.set(key, task);
-        task.then((blocked) => {
-          if (!blocked) listener(raw, ...rest);
-          else if (socket.readyState === 1) socket.send(JSON.stringify({ type: "call", signalType: "error", error: "calls are unavailable between blocked users" }));
-        }).catch(() => {});
       }
+
+      callBlockPending.get(key)
+        .then((blocked) => {
+          if (!blocked) listener(raw, ...rest);
+          else deny();
+        })
+        .catch(deny);
     });
   };
 }
