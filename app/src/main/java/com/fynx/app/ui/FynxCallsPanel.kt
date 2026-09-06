@@ -36,9 +36,50 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     var filter by remember { mutableStateOf(FynxCallHistoryFilter.ALL) }
     var realtimeState by remember { mutableStateOf(FynxRealtimeClient.State.DISCONNECTED) }
     var session by remember { mutableStateOf(initialName?.let { name -> FynxCallSession("call-${System.currentTimeMillis()}", if (initialOutgoing) "me" else name, listOf(name), if (initialVideo) FynxCallType.VIDEO else FynxCallType.VOICE, if (initialOutgoing) FynxCallState.CONNECTING else FynxCallState.RINGING) }) }
-    val realtimeClient = remember { FynxRealtimeClient(context, onMessage = {}, onStateChanged = { realtimeState = it }, onEvent = {}) }
 
-    DisposableEffect(Unit) { realtimeClient.connect(); onDispose { } }
+    val realtimeClient = remember {
+        FynxRealtimeClient(
+            context = context,
+            onMessage = {},
+            onStateChanged = { realtimeState = it },
+            onEvent = { event ->
+                if (event is FynxRealtimeClient.Event.Call) {
+                    when (event.signalType) {
+                        "invite" -> if (!initialOutgoing && session == null) {
+                            val incomingName = event.fromUsername?.removePrefix("@").orEmpty().ifBlank { event.fromUserId }
+                            video = event.callType.equals("video", true)
+                            targetUserId = event.fromUserId
+                            targetUsername = incomingName
+                            activeCall = incomingName
+                            session = FynxCallSession(event.callId, event.fromUsername ?: event.fromUserId, listOf(incomingName), if (video) FynxCallType.VIDEO else FynxCallType.VOICE, FynxCallState.RINGING)
+                            FynxCallsStore.add(context, FynxCallRecord(event.callId, "@$incomingName", if (video) "Video call" else "Voice call", "Just now", missed = true, status = "Incoming"))
+                            calls = FynxCallsStore.load(context)
+                        }
+                        "accept" -> if (session?.id == event.callId) {
+                            session = FynxCallsFoundation.connect(session!!)
+                            FynxCallsStore.updateStatus(context, event.callId, "Accepted", missed = false)
+                            calls = FynxCallsStore.load(context)
+                        }
+                        "reject", "end" -> if (session?.id == event.callId) {
+                            FynxCallsStore.updateStatus(context, event.callId, if (event.signalType == "reject") "Declined" else "Ended", missed = false)
+                            calls = FynxCallsStore.load(context)
+                            session = null
+                            activeCall = null
+                        }
+                        "busy" -> if (session?.id == event.callId) {
+                            errorMessage = "@$targetUsername is already on another call."
+                            FynxCallsStore.updateStatus(context, event.callId, "Busy", missed = false)
+                            calls = FynxCallsStore.load(context)
+                            session = null
+                            activeCall = null
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    DisposableEffect(Unit) { realtimeClient.connect(); onDispose { realtimeClient.disconnect() } }
 
     suspend fun resolveUser(username: String): String? = FynxSocialClient.searchUsers(context, username).getOrNull()?.firstOrNull { it.username.equals(username, true) }?.id
 
@@ -79,16 +120,10 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     }
 
     LaunchedEffect(initialName, initialOutgoing) { if (initialOutgoing && !initialName.isNullOrBlank()) beginOutgoing(initialName, initialVideo) }
-    LaunchedEffect(initialName, session?.id) {
-        val current = session ?: return@LaunchedEffect
-        if (!initialOutgoing && initialName != null && calls.none { it.id == current.id }) {
-            FynxCallsStore.add(context, FynxCallRecord(current.id, initialName, if (initialVideo) "Video call" else "Voice call", "Just now", missed = true, status = "Incoming")); calls = FynxCallsStore.load(context)
-        }
-    }
 
     if (activeCall != null && session != null) {
         FynxActiveCallPanel(name = activeCall!!, session = session!!, realtimeState = realtimeState,
-            onAnswer = { val current = session!!; targetUserId?.let { realtimeClient.sendCallAccept(current.id, it, video) }; session = FynxCallsFoundation.answer(current); FynxCallsStore.updateStatus(context, current.id, "Answered", missed = false); calls = FynxCallsStore.load(context) },
+            onAnswer = { val current = session!!; val callerId = targetUserId ?: current.callerUsername; realtimeClient.sendCallAccept(current.id, callerId, video); session = FynxCallsFoundation.answer(current); FynxCallsStore.updateStatus(context, current.id, "Answered", missed = false); calls = FynxCallsStore.load(context) },
             onRetry = { targetUsername?.let { beginOutgoing(it, video) } },
             onToggleMicrophone = { session = FynxCallsFoundation.toggleMicrophone(session!!) },
             onToggleCamera = { session = FynxCallsFoundation.toggleCamera(session!!) },
