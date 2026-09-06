@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import org.webrtc.AudioTrack
-import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
 import org.webrtc.VideoTrack
 
@@ -42,7 +41,30 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     var mediaConnected by remember { mutableStateOf(false) }
     var session by remember { mutableStateOf<FynxCallSession?>(null) }
 
-    val realtimeClient = remember {
+    lateinit var realtimeClient: FynxRealtimeClient
+    val mediaEngine = remember {
+        FynxWebRtcCallEngine(
+            context = context,
+            callbacks = FynxWebRtcCallEngine.CallCallbacks(
+                onOffer = { sdp -> val current = session; val target = targetUserId; if (current != null && target != null) realtimeClient.sendCallOffer(current.id, target, sdp, current.type == FynxCallType.VIDEO) },
+                onAnswer = { sdp -> val current = session; val target = targetUserId; if (current != null && target != null) realtimeClient.sendCallAnswer(current.id, target, sdp, current.type == FynxCallType.VIDEO) },
+                onIceCandidate = { candidate -> val current = session; val target = targetUserId; if (current != null && target != null) realtimeClient.sendCallIce(current.id, target, candidate, current.type == FynxCallType.VIDEO) },
+                onRemoteAudioTrack = { track: AudioTrack -> track.setEnabled(true) },
+                onRemoteVideoTrack = { track: VideoTrack -> track.setEnabled(true) },
+                onConnectionState = { state ->
+                    when (state) {
+                        PeerConnection.IceConnectionState.CONNECTED, PeerConnection.IceConnectionState.COMPLETED -> session?.let { current -> session = current.copy(state = FynxCallState.CONNECTED); FynxCallsStore.updateStatus(context, current.id, "Connected", missed = false); calls = FynxCallsStore.load(context) }
+                        PeerConnection.IceConnectionState.FAILED -> errorMessage = "The call connection failed. Please try again."
+                        PeerConnection.IceConnectionState.DISCONNECTED -> if (session?.state == FynxCallState.CONNECTED) errorMessage = "The call connection was interrupted."
+                        else -> Unit
+                    }
+                },
+                onError = { message -> errorMessage = message }
+            )
+        )
+    }
+
+    realtimeClient = remember {
         FynxRealtimeClient(
             context = context,
             onMessage = {},
@@ -79,43 +101,17 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                         "reject", "end" -> if (session?.id == event.callId) {
                             FynxCallsStore.updateStatus(context, event.callId, if (event.signalType == "reject") "Declined" else "Ended", missed = false)
                             calls = FynxCallsStore.load(context)
-                            mediaEngine.disconnect(); mediaConnected = false
-                            session = null
-                            activeCall = null
+                            mediaEngine.disconnect(); mediaConnected = false; session = null; activeCall = null
                         }
                         "busy" -> if (session?.id == event.callId) {
                             errorMessage = "@$targetUsername is already on another call."
                             FynxCallsStore.updateStatus(context, event.callId, "Busy", missed = false)
                             calls = FynxCallsStore.load(context)
-                            mediaEngine.disconnect(); mediaConnected = false
-                            session = null
-                            activeCall = null
+                            mediaEngine.disconnect(); mediaConnected = false; session = null; activeCall = null
                         }
                     }
                 }
             }
-        )
-    }
-
-    val mediaEngine = remember {
-        FynxWebRtcCallEngine(
-            context = context,
-            callbacks = FynxWebRtcCallEngine.CallCallbacks(
-                onOffer = { sdp -> val current = session; val target = targetUserId; if (current != null && target != null) realtimeClient.sendCallOffer(current.id, target, sdp, current.type == FynxCallType.VIDEO) },
-                onAnswer = { sdp -> val current = session; val target = targetUserId; if (current != null && target != null) realtimeClient.sendCallAnswer(current.id, target, sdp, current.type == FynxCallType.VIDEO) },
-                onIceCandidate = { candidate -> val current = session; val target = targetUserId; if (current != null && target != null) realtimeClient.sendCallIce(current.id, target, candidate, current.type == FynxCallType.VIDEO) },
-                onRemoteAudioTrack = { track: AudioTrack -> track.setEnabled(true) },
-                onRemoteVideoTrack = { track: VideoTrack -> track.setEnabled(true) },
-                onConnectionState = { state ->
-                    when (state) {
-                        PeerConnection.IceConnectionState.CONNECTED, PeerConnection.IceConnectionState.COMPLETED -> session?.let { current -> session = current.copy(state = FynxCallState.CONNECTED); FynxCallsStore.updateStatus(context, current.id, "Connected", missed = false); calls = FynxCallsStore.load(context) }
-                        PeerConnection.IceConnectionState.FAILED -> errorMessage = "The call connection failed. Please try again."
-                        PeerConnection.IceConnectionState.DISCONNECTED -> if (session?.state == FynxCallState.CONNECTED) errorMessage = "The call connection was interrupted."
-                        else -> Unit
-                    }
-                },
-                onError = { message -> errorMessage = message }
-            )
         )
     }
 
@@ -187,7 +183,6 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 val current = session!!; targetUserId?.let { realtimeClient.sendCallEnd(current.id, it, video) }
                 val incoming = current.state == FynxCallState.RINGING
                 mediaEngine.disconnect(); mediaConnected = false
-                session = FynxCallsFoundation.end(current)
                 FynxCallsStore.updateStatus(context, current.id, if (incoming) "Declined" else "Ended", missed = incoming)
                 calls = FynxCallsStore.load(context); activeCall = null; session = null
             }
