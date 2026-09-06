@@ -47,13 +47,17 @@ async function canSeePresence(viewerId, targetId) {
              SELECT 1 FROM friendships f
              WHERE ((f.user_id=$1 AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=$1))
                AND f.status='accepted'
-           ) AS friends
+           ) AS friends,
+           EXISTS (
+             SELECT 1 FROM blocks b
+             WHERE (b.blocker_id=$1 AND b.blocked_id=$2) OR (b.blocker_id=$2 AND b.blocked_id=$1)
+           ) AS blocked
     FROM (SELECT 1) base
     LEFT JOIN privacy_settings p ON p.user_id=$2
   `, [viewerId, targetId]);
 
-  const row = result.rows[0] || { visibility: "My friends", friends: false };
-  const allowed = row.visibility === "Everyone" || (row.visibility === "My friends" && row.friends);
+  const row = result.rows[0] || { visibility: "My friends", friends: false, blocked: false };
+  const allowed = !row.blocked && (row.visibility === "Everyone" || (row.visibility === "My friends" && row.friends));
   cache.set(key, { allowed, expiresAt: Date.now() + CACHE_TTL_MS });
   return allowed;
 }
