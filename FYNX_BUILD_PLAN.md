@@ -16,10 +16,11 @@ Continue the existing FYNX Android social + marketplace app. Do not rebuild or r
 - [x] Backend-driven friend/request state
 - [x] Message, block and remove-friend actions use existing pipelines
 - [x] Loading, empty, denied and retry states
-- [ ] Backend-backed profile photo editing/upload
-- [ ] Backend-backed follow/unfollow
-- [ ] Backend-backed report case submission/status
-- [ ] Profile content/media feed reuse
+- [x] Backend-backed profile photo editing/upload
+- [x] Backend-backed follow/unfollow
+- [x] Backend-backed report case submission/status
+- [x] Profile content/media feed reuse
+- [x] Remote profile photo display with privacy-aware media fetch
 
 ### Chat & Group Chat
 - [x] Private conversation camera entry and shared CameraX foundation
@@ -47,6 +48,7 @@ Continue the existing FYNX Android social + marketplace app. Do not rebuild or r
 - [x] AI Photo Editor integration
 - [ ] AI Money Coach
 - [ ] Chat profile information improvements
+- [x] Consistent profile media display foundation
 - [ ] Consistent full media display across status/social/media surfaces
 
 ## Removed permanently
