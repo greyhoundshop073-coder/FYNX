@@ -195,7 +195,19 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
   app.get('/api/marketplace/orders', auth, async (req, res) => {
     try {
       await ensureMarketplaceTransactionSchema();
-      const result = await pool.query(`SELECT o.* FROM marketplace_orders o WHERE o.buyer_id = $1 OR o.seller_id = $1 ORDER BY o.created_at DESC LIMIT 100`, [req.user.sub]);
+      const result = await pool.query(`
+        SELECT o.*
+        FROM (
+          SELECT o.* FROM marketplace_orders o WHERE o.buyer_id = $1 ORDER BY o.created_at DESC LIMIT 100
+        ) o
+        UNION ALL
+        SELECT o.*
+        FROM (
+          SELECT o.* FROM marketplace_orders o WHERE o.seller_id = $1 ORDER BY o.created_at DESC LIMIT 100
+        ) o
+        ORDER BY created_at DESC
+        LIMIT 100
+      `, [req.user.sub]);
       return res.json({ orders: result.rows.map(publicOrder) });
     } catch (error) { console.error('marketplace orders', error); return res.status(500).json({ error: 'order lookup failed' }); }
   });
