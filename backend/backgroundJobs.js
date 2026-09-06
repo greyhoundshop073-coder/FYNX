@@ -182,24 +182,29 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
       try {
         await client.query("BEGIN");
         const result = await client.query(
-          `SELECT id, type, payload, attempts, max_attempts
-           FROM fynx_background_jobs
-           WHERE status = 'queued' AND available_at <= NOW()
-           ORDER BY available_at ASC, created_at ASC
-           FOR UPDATE SKIP LOCKED LIMIT 1`
+          `WITH picked AS (
+             SELECT id
+             FROM fynx_background_jobs
+             WHERE status = 'queued' AND available_at <= NOW()
+             ORDER BY available_at ASC, created_at ASC
+             FOR UPDATE SKIP LOCKED
+             LIMIT 1
+           )
+           UPDATE fynx_background_jobs AS j
+           SET status = 'running',
+               attempts = j.attempts + 1,
+               lease_expires_at = NOW() + ($1::text || ' milliseconds')::interval,
+               updated_at = NOW()
+           FROM picked
+           WHERE j.id = picked.id
+           RETURNING j.id, j.type, j.payload, j.attempts, j.max_attempts`,
+          [leaseMs]
         );
         if (!result.rows[0]) { await client.query("COMMIT"); return null; }
         const row = result.rows[0];
-        const nextAttempt = row.attempts + 1;
-        await client.query(
-          `UPDATE fynx_background_jobs
-           SET status = 'running', attempts = $2, lease_expires_at = NOW() + ($3::text || ' milliseconds')::interval, updated_at = NOW()
-           WHERE id = $1`,
-          [row.id, nextAttempt, leaseMs]
-        );
         await client.query("COMMIT");
         metrics.claimed += 1;
-        return { ...row, attempts: nextAttempt };
+        return row;
       } catch (error) {
         await client.query("ROLLBACK").catch(() => {});
         throw error;
