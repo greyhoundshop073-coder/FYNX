@@ -41,6 +41,8 @@ class FynxWebRtcCallEngine(
     private var videoTrack: VideoTrack? = null
     private var cameraCapturer: CameraVideoCapturer? = null
     private var surfaceTextureHelper: SurfaceTextureHelper? = null
+    private val pendingRemoteCandidates = mutableListOf<IceCandidate>()
+    private var remoteDescriptionSet = false
 
     init {
         PeerConnectionFactory.initialize(
@@ -51,6 +53,8 @@ class FynxWebRtcCallEngine(
 
     override fun connect(session: FynxCallSession) {
         disconnect()
+        remoteDescriptionSet = false
+        pendingRemoteCandidates.clear()
         peerConnection = factory.createPeerConnection(
             PeerConnection.RTCConfiguration(iceServers),
             object : PeerConnection.Observer {
@@ -96,6 +100,8 @@ class FynxWebRtcCallEngine(
         val pc = peerConnection ?: return callbacks.onError("call media is not connected")
         pc.setRemoteDescription(object : SdpObserverAdapter() {
             override fun onSetSuccess() {
+                remoteDescriptionSet = true
+                flushRemoteCandidates(pc)
                 pc.createAnswer(object : SdpObserverAdapter() {
                     override fun onCreateSuccess(description: SessionDescription) {
                         pc.setLocalDescription(object : SdpObserverAdapter() {
@@ -113,13 +119,28 @@ class FynxWebRtcCallEngine(
     fun applyAnswer(sdp: String) {
         val pc = peerConnection ?: return callbacks.onError("call media is not connected")
         pc.setRemoteDescription(object : SdpObserverAdapter() {
+            override fun onSetSuccess() {
+                remoteDescriptionSet = true
+                flushRemoteCandidates(pc)
+            }
             override fun onSetFailure(error: String) { callbacks.onError(error) }
         }, SessionDescription(SessionDescription.Type.ANSWER, sdp))
     }
 
     fun addRemoteIceCandidate(candidate: IceCandidate) {
         val pc = peerConnection ?: return callbacks.onError("call media is not connected")
+        if (!remoteDescriptionSet) {
+            pendingRemoteCandidates += candidate
+            return
+        }
         if (!pc.addIceCandidate(candidate)) callbacks.onError("failed to add remote ICE candidate")
+    }
+
+    private fun flushRemoteCandidates(pc: PeerConnection) {
+        if (pendingRemoteCandidates.isEmpty()) return
+        val pending = pendingRemoteCandidates.toList()
+        pendingRemoteCandidates.clear()
+        pending.forEach { candidate -> if (!pc.addIceCandidate(candidate)) callbacks.onError("failed to add remote ICE candidate") }
     }
 
     private fun createLocalAudio() {
@@ -139,10 +160,11 @@ class FynxWebRtcCallEngine(
         videoTrack = factory.createVideoTrack("fynx-video", videoSource)
         videoTrack?.setEnabled(true)
         videoTrack?.let { peerConnection?.addTrack(it) }
-        val eglContext = org.webrtc.EglBase.create().eglBaseContext
-        surfaceTextureHelper = SurfaceTextureHelper.create("FYNX-Camera", eglContext)
+        val eglBase = org.webrtc.EglBase.create()
+        surfaceTextureHelper = SurfaceTextureHelper.create("FYNX-Camera", eglBase.eglBaseContext)
         cameraCapturer?.initialize(surfaceTextureHelper, appContext, videoSource?.capturerObserver)
         cameraCapturer?.startCapture(1280, 720, 30)
+        eglBase.release()
     }
 
     override fun setMicrophoneEnabled(enabled: Boolean) { audioTrack?.setEnabled(enabled) }
@@ -159,6 +181,8 @@ class FynxWebRtcCallEngine(
         peerConnection?.close()
         peerConnection?.dispose()
         peerConnection = null
+        pendingRemoteCandidates.clear()
+        remoteDescriptionSet = false
         audioTrack?.dispose()
         audioSource?.dispose()
         videoTrack?.dispose()
