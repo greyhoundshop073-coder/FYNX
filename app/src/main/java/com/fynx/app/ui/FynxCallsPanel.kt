@@ -40,6 +40,8 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     var realtimeState by remember { mutableStateOf(FynxRealtimeClient.State.DISCONNECTED) }
     var mediaConnected by remember { mutableStateOf(false) }
     var session by remember { mutableStateOf<FynxCallSession?>(null) }
+    var localVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
+    var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
 
     lateinit var realtimeClient: FynxRealtimeClient
     val mediaEngine = remember {
@@ -49,8 +51,9 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 onOffer = { sdp -> val current = session; val target = targetUserId; if (current != null && target != null) realtimeClient.sendCallOffer(current.id, target, sdp, current.type == FynxCallType.VIDEO) },
                 onAnswer = { sdp -> val current = session; val target = targetUserId; if (current != null && target != null) realtimeClient.sendCallAnswer(current.id, target, sdp, current.type == FynxCallType.VIDEO) },
                 onIceCandidate = { candidate -> val current = session; val target = targetUserId; if (current != null && target != null) realtimeClient.sendCallIce(current.id, target, candidate, current.type == FynxCallType.VIDEO) },
+                onLocalVideoTrack = { track -> localVideoTrack = track.apply { setEnabled(true) } },
                 onRemoteAudioTrack = { track: AudioTrack -> track.setEnabled(true) },
-                onRemoteVideoTrack = { track: VideoTrack -> track.setEnabled(true) },
+                onRemoteVideoTrack = { track: VideoTrack -> remoteVideoTrack = track.apply { setEnabled(true) } },
                 onConnectionState = { state ->
                     when (state) {
                         PeerConnection.IceConnectionState.CONNECTED, PeerConnection.IceConnectionState.COMPLETED -> session?.let { current -> session = current.copy(state = FynxCallState.CONNECTED); FynxCallsStore.updateStatus(context, current.id, "Connected", missed = false); calls = FynxCallsStore.load(context) }
@@ -101,13 +104,13 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                         "reject", "end" -> if (session?.id == event.callId) {
                             FynxCallsStore.updateStatus(context, event.callId, if (event.signalType == "reject") "Declined" else "Ended", missed = false)
                             calls = FynxCallsStore.load(context)
-                            mediaEngine.disconnect(); mediaConnected = false; session = null; activeCall = null
+                            mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; session = null; activeCall = null
                         }
                         "busy" -> if (session?.id == event.callId) {
                             errorMessage = "@$targetUsername is already on another call."
                             FynxCallsStore.updateStatus(context, event.callId, "Busy", missed = false)
                             calls = FynxCallsStore.load(context)
-                            mediaEngine.disconnect(); mediaConnected = false; session = null; activeCall = null
+                            mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; session = null; activeCall = null
                         }
                     }
                 }
@@ -140,7 +143,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     fun beginOutgoing(name: String, isVideo: Boolean) {
         val username = name.removePrefix("@").trim()
         if (username.isBlank()) return
-        mediaEngine.disconnect(); mediaConnected = false
+        mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null
         video = isVideo; activeCall = username; targetUsername = username; errorMessage = null
         scope.launch {
             val resolvedId = resolveUser(username)
@@ -164,7 +167,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     LaunchedEffect(initialName, initialOutgoing) { if (initialOutgoing && !initialName.isNullOrBlank()) beginOutgoing(initialName, initialVideo) }
 
     if (activeCall != null && session != null) {
-        FynxActiveCallPanel(name = activeCall!!, session = session!!, realtimeState = realtimeState,
+        FynxActiveCallPanel(name = activeCall!!, session = session!!, realtimeState = realtimeState, localVideoTrack = localVideoTrack, remoteVideoTrack = remoteVideoTrack,
             onAnswer = {
                 val current = session!!
                 val callerId = targetUserId ?: current.callerUsername
@@ -182,7 +185,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             onEnd = {
                 val current = session!!; targetUserId?.let { realtimeClient.sendCallEnd(current.id, it, video) }
                 val incoming = current.state == FynxCallState.RINGING
-                mediaEngine.disconnect(); mediaConnected = false
+                mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null
                 FynxCallsStore.updateStatus(context, current.id, if (incoming) "Declined" else "Ended", missed = incoming)
                 calls = FynxCallsStore.load(context); activeCall = null; session = null
             }
@@ -191,10 +194,12 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     }
 
     Column(Modifier.fillMaxSize().background(FynxDesign.Background).padding(16.dp)) {
-        Text("Calls", style = MaterialTheme.typography.headlineSmall); Text("Voice and video calls", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Calls", style = MaterialTheme.typography.headlineSmall)
+        Text("Voice and video calls", color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (realtimeState == FynxRealtimeClient.State.FAILED) Text("Call connection is reconnecting…", style = MaterialTheme.typography.bodySmall)
         errorMessage?.let { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer), modifier = Modifier.padding(top = 10.dp)) { Text(it, modifier = Modifier.padding(14.dp), color = MaterialTheme.colorScheme.onErrorContainer) } }
-        Spacer(Modifier.height(12.dp)); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(FynxCallHistoryFilter.ALL to "All", FynxCallHistoryFilter.MISSED to "Missed", FynxCallHistoryFilter.VIDEO to "Video", FynxCallHistoryFilter.VOICE to "Voice").forEach { (value, label) -> FilterChip(filter == value, onClick = { filter = value }, label = { Text(label) }) } }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(FynxCallHistoryFilter.ALL to "All", FynxCallHistoryFilter.MISSED to "Missed", FynxCallHistoryFilter.VIDEO to "Video", FynxCallHistoryFilter.VOICE to "Voice").forEach { (value, label) -> FilterChip(filter == value, onClick = { filter = value }, label = { Text(label) }) } }
         Spacer(Modifier.height(10.dp))
         val filtered = when (filter) { FynxCallHistoryFilter.ALL -> calls; FynxCallHistoryFilter.MISSED -> calls.filter { it.missed }; FynxCallHistoryFilter.VIDEO -> calls.filter { it.type == "Video call" }; FynxCallHistoryFilter.VOICE -> calls.filter { it.type == "Voice call" } }
         if (filtered.isEmpty()) Card(Modifier.fillMaxWidth()) { Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Call, null); Spacer(Modifier.height(8.dp)); Text("No calls here", style = MaterialTheme.typography.titleMedium); Text("Your call history will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
@@ -203,15 +208,68 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
 }
 
 @Composable
-fun FynxActiveCallPanel(name: String, session: FynxCallSession, realtimeState: FynxRealtimeClient.State = FynxRealtimeClient.State.CONNECTED, onAnswer: () -> Unit, onRetry: () -> Unit, onToggleMicrophone: () -> Unit, onToggleCamera: () -> Unit, onSwitchCamera: () -> Unit, onToggleSpeaker: () -> Unit, onEnd: () -> Unit) {
-    val incoming = session.state == FynxCallState.RINGING; val connected = session.state == FynxCallState.CONNECTED; val video = session.type == FynxCallType.VIDEO
+fun FynxActiveCallPanel(
+    name: String,
+    session: FynxCallSession,
+    realtimeState: FynxRealtimeClient.State = FynxRealtimeClient.State.CONNECTED,
+    localVideoTrack: VideoTrack? = null,
+    remoteVideoTrack: VideoTrack? = null,
+    onAnswer: () -> Unit,
+    onRetry: () -> Unit,
+    onToggleMicrophone: () -> Unit,
+    onToggleCamera: () -> Unit,
+    onSwitchCamera: () -> Unit,
+    onToggleSpeaker: () -> Unit,
+    onEnd: () -> Unit
+) {
+    val incoming = session.state == FynxCallState.RINGING
+    val connected = session.state == FynxCallState.CONNECTED
+    val video = session.type == FynxCallType.VIDEO
     Column(Modifier.fillMaxSize().background(FynxDesign.Background), horizontalAlignment = Alignment.CenterHorizontally) {
-        Spacer(Modifier.height(44.dp)); Text(name, style = MaterialTheme.typography.headlineSmall); Text(when (session.state) { FynxCallState.IDLE -> "Ready"; FynxCallState.RINGING -> "Incoming ${if (video) "video" else "voice"} call"; FynxCallState.CONNECTING -> if (realtimeState == FynxRealtimeClient.State.CONNECTED) "Connecting media…" else "Connecting…"; FynxCallState.CONNECTED -> if (video) "Video call" else "Voice call"; FynxCallState.ENDED -> "Call ended" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(30.dp)); Box(Modifier.size(190.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Text(name.take(1).uppercase(), style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.primary) }; Spacer(Modifier.weight(1f))
-        if (incoming) { Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) { OutlinedButton(onClick = onEnd) { Text("Decline") }; Button(onClick = onAnswer) { Icon(Icons.Default.Call, null); Spacer(Modifier.width(6.dp)); Text("Answer") } }; Spacer(Modifier.height(24.dp)) }
-        else if (session.state == FynxCallState.CONNECTING) { OutlinedButton(onClick = onRetry) { Text("Retry call") }; Spacer(Modifier.height(18.dp)) }
-        if (connected) Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) { FilledTonalIconButton(onClick = onToggleMicrophone) { Icon(if (session.microphoneEnabled) Icons.Default.Mic else Icons.Default.MicOff, "Mute") }; if (video) { FilledTonalIconButton(onClick = onToggleCamera) { Icon(if (session.cameraEnabled) Icons.Default.Videocam else Icons.Default.VideocamOff, "Camera") }; FilledTonalIconButton(onClick = onSwitchCamera) { Icon(Icons.Default.Videocam, "Switch camera") } }; FilledTonalIconButton(onClick = onToggleSpeaker) { Icon(if (session.speakerEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff, "Speaker") }; FloatingActionButton(onClick = onEnd) { Icon(Icons.Default.CallEnd, "End call") } }
-        else if (!incoming) FloatingActionButton(onClick = onEnd) { Icon(Icons.Default.CallEnd, "End call") }
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(30.dp))
+        Text(name, style = MaterialTheme.typography.headlineSmall)
+        Text(when (session.state) {
+            FynxCallState.IDLE -> "Ready"
+            FynxCallState.RINGING -> "Incoming ${if (video) "video" else "voice"} call"
+            FynxCallState.CONNECTING -> if (realtimeState == FynxRealtimeClient.State.CONNECTED) "Connecting media…" else "Connecting…"
+            FynxCallState.CONNECTED -> if (video) "Video call" else "Voice call"
+            FynxCallState.ENDED -> "Call ended"
+        }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(18.dp))
+        if (video) {
+            Box(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 10.dp)) {
+                FynxCallVideoSurface(remoteVideoTrack, Modifier.fillMaxSize(), mirror = false)
+                Box(Modifier.align(Alignment.TopEnd).padding(12.dp).size(120.dp, 170.dp).clip(MaterialTheme.shapes.medium)) {
+                    FynxCallVideoSurface(localVideoTrack, Modifier.fillMaxSize(), mirror = true)
+                }
+                if (remoteVideoTrack == null) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(110.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Text(name.take(1).uppercase(), style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary) }
+                    }
+                }
+            }
+        } else {
+            Box(Modifier.size(190.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Text(name.take(1).uppercase(), style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.primary) }
+            Spacer(Modifier.weight(1f))
+        }
+        if (incoming) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) { OutlinedButton(onClick = onEnd) { Text("Decline") }; Button(onClick = onAnswer) { Icon(Icons.Default.Call, null); Spacer(Modifier.width(6.dp)); Text("Answer") } }
+            Spacer(Modifier.height(24.dp))
+        } else if (session.state == FynxCallState.CONNECTING) {
+            OutlinedButton(onClick = onRetry) { Text("Retry call") }
+            Spacer(Modifier.height(18.dp))
+        }
+        if (connected) {
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                FilledTonalIconButton(onClick = onToggleMicrophone) { Icon(if (session.microphoneEnabled) Icons.Default.Mic else Icons.Default.MicOff, "Mute") }
+                if (video) {
+                    FilledTonalIconButton(onClick = onToggleCamera) { Icon(if (session.cameraEnabled) Icons.Default.Videocam else Icons.Default.VideocamOff, "Camera") }
+                    FilledTonalIconButton(onClick = onSwitchCamera) { Icon(Icons.Default.Videocam, "Switch camera") }
+                }
+                FilledTonalIconButton(onClick = onToggleSpeaker) { Icon(if (session.speakerEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff, "Speaker") }
+                FilledTonalIconButton(onClick = onEnd) { Icon(Icons.Default.CallEnd, "End call") }
+            }
+            Spacer(Modifier.height(28.dp))
+        }
     }
 }

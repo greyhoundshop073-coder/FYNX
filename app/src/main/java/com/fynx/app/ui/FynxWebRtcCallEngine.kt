@@ -28,6 +28,7 @@ class FynxWebRtcCallEngine(
         val onOffer: (String) -> Unit = {},
         val onAnswer: (String) -> Unit = {},
         val onIceCandidate: (IceCandidate) -> Unit = {},
+        val onLocalVideoTrack: (VideoTrack) -> Unit = {},
         val onRemoteAudioTrack: (AudioTrack) -> Unit = {},
         val onRemoteVideoTrack: (VideoTrack) -> Unit = {},
         val onConnectionState: (PeerConnection.IceConnectionState) -> Unit = {},
@@ -49,9 +50,7 @@ class FynxWebRtcCallEngine(
     private var remoteDescriptionSet = false
 
     init {
-        PeerConnectionFactory.initialize(
-            PeerConnectionFactory.InitializationOptions.builder(appContext).createInitializationOptions()
-        )
+        PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(appContext).createInitializationOptions())
         factory = PeerConnectionFactory.builder().createPeerConnectionFactory()
     }
 
@@ -163,7 +162,10 @@ class FynxWebRtcCallEngine(
         videoSource = factory.createVideoSource(false)
         videoTrack = factory.createVideoTrack("fynx-video", videoSource)
         videoTrack?.setEnabled(true)
-        videoTrack?.let { peerConnection?.addTrack(it) }
+        videoTrack?.let {
+            peerConnection?.addTrack(it)
+            callbacks.onLocalVideoTrack(it)
+        }
         eglBase = org.webrtc.EglBase.create()
         surfaceTextureHelper = SurfaceTextureHelper.create("FYNX-Camera", eglBase!!.eglBaseContext)
         cameraCapturer?.initialize(surfaceTextureHelper, appContext, videoSource?.capturerObserver)
