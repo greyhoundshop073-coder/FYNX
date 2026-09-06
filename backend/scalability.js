@@ -20,22 +20,20 @@ http.createServer = function fynxCreateServer(...args) {
       registerMarketplaceProtectionRoutes({ app });
     });
   }
-  server.keepAliveTimeout = Number(process.env.FYNX_KEEP_ALIVE_TIMEOUT_MS || 65_000);
-  server.headersTimeout = Number(process.env.FYNX_HEADERS_TIMEOUT_MS || 70_000);
-  server.requestTimeout = Number(process.env.FYNX_REQUEST_TIMEOUT_MS || 30_000);
-  server.maxRequestsPerSocket = Number(process.env.FYNX_MAX_REQUESTS_PER_SOCKET || 1_000);
-  server.maxConnections = Number(process.env.FYNX_MAX_CONNECTIONS || 500);
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 70_000;
+  server.requestTimeout = 30_000;
+  server.maxRequestsPerSocket = 1_000;
+  server.maxConnections = 500;
 
   let requests = 0;
   let completed = 0;
   let totalLatencyMs = 0;
   let errors = 0;
-  const metricsSampleRate = Math.max(1, Number(process.env.FYNX_METRICS_SAMPLE_RATE || 10));
 
   server.on("request", (_req, res) => {
-    requests += 1;
-    if (requests % metricsSampleRate !== 0) return;
     const startedAt = process.hrtime.bigint();
+    requests += 1;
     res.on("finish", () => {
       completed += 1;
       totalLatencyMs += Number(process.hrtime.bigint() - startedAt) / 1_000_000;
@@ -46,7 +44,7 @@ http.createServer = function fynxCreateServer(...args) {
   const report = setInterval(() => {
     if (!completed) return;
     const averageLatencyMs = totalLatencyMs / completed;
-    console.log(`[fynx-metrics] requests=${requests} sampledCompleted=${completed} sampleRate=${metricsSampleRate} sampledErrors5xx=${errors} avgLatencyMs=${averageLatencyMs.toFixed(1)}`);
+    console.log(`[fynx-metrics] requests=${requests} completed=${completed} errors5xx=${errors} avgLatencyMs=${averageLatencyMs.toFixed(1)}`);
   }, 60_000);
   report.unref();
 
