@@ -90,7 +90,10 @@ function insertBeforeRoute(app, method, path, middleware) {
   if (!added) throw new Error(`privacy guard layer creation failed: ${method.toUpperCase()} ${path}`);
   added.fynxPrivacyGuard = marker;
   const targetIndex = router.stack.findIndex((layer) => layer.route?.path === path && layer.route?.methods?.[method]);
-  if (targetIndex < 0) throw new Error(`privacy target route not found: ${method.toUpperCase()} ${path}`);
+  if (targetIndex < 0) {
+    router.stack.splice(addedIndex, 1);
+    return;
+  }
   router.stack.splice(addedIndex, 1);
   router.stack.splice(targetIndex, 0, added);
 }
@@ -139,6 +142,24 @@ function registerServerEnforcement(app) {
       return next();
     } catch (error) {
       console.error("privacy status enforcement", error);
+      return res.status(503).json({ error: "privacy settings unavailable" });
+    }
+  }));
+
+  insertBeforeRoute(app, "get", "/api/social/profile/:username", createGuard("get", async (req, res, next) => {
+    try {
+      const targetUsername = typeof req.params?.username === "string" ? req.params.username.trim().toLowerCase().replace(/^@+/, "") : "";
+      if (!targetUsername) return next();
+      const target = await pool.query("SELECT id FROM users WHERE username=$1", [targetUsername]);
+      if (!target.rows[0]) return next();
+      const targetId = target.rows[0].id;
+      if (String(targetId) === String(req.user?.sub)) return next();
+      const visibility = await getVisibility(targetId, "profile_visibility");
+      if (visibility === "Nobody") return res.status(403).json({ error: "this profile is private" });
+      if (visibility === DEFAULT_VISIBILITY && !(await areFriends(req.user.sub, targetId))) return res.status(403).json({ error: "you must be friends with this user to view their profile" });
+      return next();
+    } catch (error) {
+      console.error("privacy profile enforcement", error);
       return res.status(503).json({ error: "privacy settings unavailable" });
     }
   }));
