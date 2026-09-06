@@ -6,7 +6,8 @@ const PRIVATE_GET_PATHS = [
   /^\/api\/privacy(?:\/|$)/,
   /^\/api\/blocks(?:\/|$)/,
   /^\/api\/friends(?:\/|$)/,
-  /^\/api\/marketplace\/media(?:\/|$)/
+  /^\/api\/marketplace\/media(?:\/|$)/,
+  /^\/api\/marketplace\/orders(?:\/|$)/
 ];
 
 function isPrivateGetPath(path) {

@@ -33,5 +33,16 @@ export function installMarketplaceMediaPrivacyGuard(app) {
   app.use(guard);
   const index = app._router.stack.length - 1;
   const layer = app._router.stack[index];
-  if (layer) layer.fynxMarketplaceMediaPrivacyGuard = true;
+  if (!layer) return;
+  layer.fynxMarketplaceMediaPrivacyGuard = true;
+
+  const targetIndexes = app._router.stack.reduce((indexes, candidate, candidateIndex) => {
+    const path = candidate.route?.path;
+    if (path === "/api/marketplace/media/:id") indexes.push(candidateIndex);
+    return indexes;
+  }, []);
+  if (targetIndexes.length) {
+    app._router.stack.splice(index, 1);
+    app._router.stack.splice(Math.min(...targetIndexes), 0, layer);
+  }
 }
