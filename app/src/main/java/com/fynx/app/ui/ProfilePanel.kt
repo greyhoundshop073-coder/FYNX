@@ -77,6 +77,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
         item { ProfileInfoCard("Account", if (session.state == AuthState.SIGNED_IN) "Signed in" else "Signed out") }
         if (session.state == AuthState.SIGNED_IN) item { OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.ControlShape) { Text("Sign out") } }
     }
+    connectionType?.let { type -> ProfileConnectionsDialog(type, connections, connectionsLoading, connectionsError) { connectionType = null } }
 }
 
 
