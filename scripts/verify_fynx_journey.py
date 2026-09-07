@@ -89,8 +89,10 @@ check(
     and "ProfileConnectionsDialog" in profile_panel
     and "FynxProfileRemoteClient.followers" in profile_panel
     and "FynxProfileRemoteClient.following" in profile_panel
-    and '"Followers"' not in other_profile_panel
-    and '"Following"' not in other_profile_panel
+    and 'ProfileStat("Followers"' not in other_profile_panel
+    and 'ProfileStat("Following"' not in other_profile_panel
+    and "followerCount" not in other_profile_panel
+    and "followingCount" not in other_profile_panel
 )
 
 check("owner/admin client exposes server controls", all(x in admin for x in ["dashboard", "admins", "setAccountStatus", "grantAdmin", "revokeAdmin"]))
