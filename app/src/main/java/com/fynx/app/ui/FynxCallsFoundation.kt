@@ -21,8 +21,12 @@ object FynxCallsFoundation {
     fun answer(session: FynxCallSession): FynxCallSession = session.copy(state = FynxCallState.CONNECTED)
     fun end(session: FynxCallSession): FynxCallSession = session.copy(state = FynxCallState.ENDED)
     fun toggleMicrophone(session: FynxCallSession): FynxCallSession = session.copy(microphoneEnabled = !session.microphoneEnabled)
-    fun toggleCamera(session: FynxCallSession): FynxCallSession = session.copy(cameraEnabled = !session.cameraEnabled)
+    fun toggleCamera(session: FynxCallSession): FynxCallSession =
+        if (session.type == FynxCallType.VIDEO) session.copy(cameraEnabled = !session.cameraEnabled) else session
     fun toggleSpeaker(session: FynxCallSession): FynxCallSession = session.copy(speakerEnabled = !session.speakerEnabled)
-    fun switchCamera(session: FynxCallSession): FynxCallSession = session.copy(usingFrontCamera = !session.usingFrontCamera)
+    fun switchCamera(session: FynxCallSession): FynxCallSession =
+        if (session.type == FynxCallType.VIDEO) session.copy(usingFrontCamera = !session.usingFrontCamera) else session
     fun canUseCamera(session: FynxCallSession): Boolean = session.type == FynxCallType.VIDEO
+    fun canRetry(session: FynxCallSession): Boolean = session.state != FynxCallState.ENDED
+    fun isActive(session: FynxCallSession): Boolean = session.state == FynxCallState.RINGING || session.state == FynxCallState.CONNECTING || session.state == FynxCallState.CONNECTED
 }
