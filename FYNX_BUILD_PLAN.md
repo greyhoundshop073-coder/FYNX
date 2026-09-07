@@ -28,7 +28,7 @@ Continue the existing FYNX Android social + marketplace app. Do not rebuild or r
 - [x] Server-authoritative group creation/membership foundation
 - [x] Authenticated group message send/load pipeline
 - [x] Group media message ownership validation
-- [ ] Original FYNX conversation wallpaper/background
+- [x] Original FYNX conversation wallpaper/background
 - [ ] Full real-device voice/video call journey
 
 ### Professional behavior still to finish
@@ -45,10 +45,10 @@ Continue the existing FYNX Android social + marketplace app. Do not rebuild or r
 - [ ] Anti-scam, account safety and appeals
 
 ## Stage 12 follow-up
-- [ ] AI Creation stays connected to the existing media/posting pipeline
-- [ ] AI-assisted captions, rewrites, ideas and marketplace descriptions
+- [x] AI Creation stays connected to the existing media/posting pipeline
+- [x] AI-assisted captions, rewrites, ideas and marketplace descriptions
 - [x] AI Photo Editor integration
-- [ ] AI Money Coach
+- [x] AI Money Coach
 - [ ] Chat profile information improvements
 - [x] Consistent profile media display foundation
 - [ ] Consistent full media display across status/social/media surfaces

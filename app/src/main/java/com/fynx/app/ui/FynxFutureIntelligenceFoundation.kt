@@ -14,6 +14,7 @@ enum class FynxAiCapability {
     RECOMMENDATIONS,
     MARKETPLACE_ASSIST,
     MEDIA_ASSIST,
+    MONEY_COACH,
     PERSONAL_CONTEXT
 }
 

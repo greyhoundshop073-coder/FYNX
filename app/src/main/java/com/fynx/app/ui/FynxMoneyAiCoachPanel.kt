@@ -33,10 +33,18 @@ fun FynxMoneyAiCoachPanel(onBack: () -> Unit = {}) {
             Do not invent balances or personal financial facts. Use only information the user
             provides in this request. For financial decisions, clearly distinguish general
             guidance from personalized advice.
-            
+
             User question:
             $question
         """.trimIndent()
+        val decision = FynxFutureIntelligencePolicy.authorize(
+            permissions = listOf(FynxAiPermission(FynxAiCapability.MONEY_COACH, setOf(FynxAiDataScope.NONE), true)),
+            request = FynxAiRequest(FynxAiCapability.MONEY_COACH, prompt, setOf(FynxAiDataScope.NONE))
+        )
+        if (!decision.allowed) {
+            error = "I couldn't process that money-coaching request safely."
+            return
+        }
         loading = true
         error = null
         scope.launch {

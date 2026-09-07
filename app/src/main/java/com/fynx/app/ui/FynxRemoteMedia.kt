@@ -21,6 +21,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -34,30 +35,54 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
     var bitmap by remember(mediaUrl, type) { mutableStateOf<android.graphics.Bitmap?>(null) }
     var localFile by remember(mediaUrl, type) { mutableStateOf<File?>(null) }
     LaunchedEffect(mediaUrl, type) {
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val connection = (URL(mediaUrl).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 10_000; readTimeout = 20_000; useCaches = false
-                    setRequestProperty("Authorization", "Bearer ${FynxBackendClient.accessToken(context).orEmpty()}")
-                }
-                try {
-                    if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
-                    val contentType = connection.contentType.orEmpty().lowercase()
-                    val isVideo = type.equals("video", true) || (type.equals("auto", true) && contentType.startsWith("video/"))
-                    if (isVideo) {
-                        val extension = when { contentType.contains("webm") -> ".webm"; contentType.contains("3gpp") -> ".3gp"; else -> ".mp4" }
-                        val file = File(context.cacheDir, "fynx_media_${mediaUrl.hashCode()}$extension")
-                        if (!file.exists() || file.length() == 0L) {
-                            val temp = File(context.cacheDir, "${file.name}.part"); temp.delete()
-                            connection.inputStream.use { input -> temp.outputStream().use { output -> input.copyTo(output) } }
-                            if (!temp.renameTo(file)) { temp.delete(); error("Unable to cache media") }
-                        }
-                        localFile = file; kind = "video"
-                    } else {
-                        bitmap = connection.inputStream.use { BitmapFactory.decodeStream(it) }; kind = if (bitmap != null) "image" else "error"
+        try {
+            val loaded = withContext(Dispatchers.IO) {
+                runCatching {
+                    val connection = (URL(mediaUrl).openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 10_000
+                        readTimeout = 20_000
+                        useCaches = false
+                        setRequestProperty("Authorization", "Bearer ${FynxBackendClient.accessToken(context).orEmpty()}")
                     }
-                } finally { connection.disconnect() }
-            }.onFailure { kind = "error" }
+                    try {
+                        if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
+                        val contentType = connection.contentType.orEmpty().lowercase()
+                        val isVideo = type.equals("video", true) || (type.equals("auto", true) && contentType.startsWith("video/"))
+                        if (isVideo) {
+                            val extension = when {
+                                contentType.contains("webm") -> ".webm"
+                                contentType.contains("3gpp") -> ".3gp"
+                                else -> ".mp4"
+                            }
+                            val file = File(context.cacheDir, "fynx_media_${mediaUrl.hashCode()}$extension")
+                            if (!file.exists() || file.length() == 0L) {
+                                val temp = File(context.cacheDir, "${file.name}.part")
+                                temp.delete()
+                                connection.inputStream.use { input -> temp.outputStream().use { output -> input.copyTo(output) } }
+                                if (!temp.renameTo(file)) {
+                                    temp.delete()
+                                    error("Unable to cache media")
+                                }
+                            }
+                            MediaLoadResult.Video(file)
+                        } else {
+                            val decoded = connection.inputStream.use { BitmapFactory.decodeStream(it) }
+                            if (decoded == null) error("Unable to decode media")
+                            MediaLoadResult.Image(decoded)
+                        }
+                    } finally {
+                        connection.disconnect()
+                    }
+                }
+            }.getOrElse { throw it }
+            when (loaded) {
+                is MediaLoadResult.Image -> { bitmap = loaded.bitmap; localFile = null; kind = "image" }
+                is MediaLoadResult.Video -> { localFile = loaded.file; bitmap = null; kind = "video" }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            kind = "error"
         }
     }
     when (kind) {
@@ -66,6 +91,11 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
         "error" -> Box(modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { Icon(Icons.Default.BrokenImage, "Media unavailable") }
         else -> Box(modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { CircularProgressIndicator() }
     }
+}
+
+private sealed interface MediaLoadResult {
+    data class Image(val bitmap: android.graphics.Bitmap) : MediaLoadResult
+    data class Video(val file: File) : MediaLoadResult
 }
 
 @Composable
@@ -79,13 +109,24 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier) {
         IconButton(enabled = !loading, onClick = {
             if (playing) { player?.pause(); playing = false; return@IconButton }
             if (player == null) {
-                loading = true; val p = MediaPlayer(); player = p
+                loading = true
+                val p = MediaPlayer()
+                player = p
                 runCatching {
                     p.setDataSource(context, Uri.parse(mediaUrl), mapOf("Authorization" to "Bearer ${FynxBackendClient.accessToken(context).orEmpty()}"))
-                    p.setOnPreparedListener { loading = false; playing = true; it.start() }; p.setOnCompletionListener { playing = false }
-                    p.setOnErrorListener { _, _, _ -> loading = false; playing = false; true }; p.prepareAsync()
-                }.onFailure { loading = false; player?.release(); player = null }
-            } else { player?.start(); playing = true }
+                    p.setOnPreparedListener { loading = false; playing = true; it.start() }
+                    p.setOnCompletionListener { playing = false }
+                    p.setOnErrorListener { _, _, _ -> loading = false; playing = false; true }
+                    p.prepareAsync()
+                }.onFailure {
+                    loading = false
+                    player?.release()
+                    player = null
+                }
+            } else {
+                player?.start()
+                playing = true
+            }
         }) { Icon(if (playing) Icons.Default.GraphicEq else Icons.Default.PlayArrow, if (playing) "Pause" else "Play") }
         Text(if (loading) "Loading voice message…" else if (playing) "Playing voice message" else "Voice message", color = FynxDesign.TextSecondary)
     }
