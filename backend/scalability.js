@@ -8,6 +8,7 @@ import { registerRealtimeAssistantRoutes } from "./aiRealtimeRoutes.js";
 import { registerPrivacyRoutes } from "./privacyRoutes.js";
 import { registerProfileRoutes } from "./profileRoutes.js";
 import { registerGroupRoutes } from "./groupRoutes.js";
+import { registerNotificationPreferenceRoutes } from "./notificationPreferences.js";
 import { installPresencePrivacyGuard } from "./presencePrivacy.js";
 import { installMediaPrivacyGuard } from "./mediaPrivacy.js";
 import { installSocialHardening } from "./socialHardening.js";
@@ -17,7 +18,6 @@ import { installRequestResourceGuard } from "./requestResourceGuard.js";
 import { installApiAbuseGuard } from "./apiAbuseGuard.js";
 
 installPresencePrivacyGuard();
-
 const originalCreateServer = http.createServer;
 http.createServer = function fynxCreateServer(...args) {
   const server = originalCreateServer.apply(this, args);
@@ -34,6 +34,7 @@ http.createServer = function fynxCreateServer(...args) {
       registerPrivacyRoutes({ app });
       registerProfileRoutes({ app });
       registerGroupRoutes({ app });
+      registerNotificationPreferenceRoutes({ app });
       installMediaPrivacyGuard(app);
       installSocialHardening(app);
       installPrivateCachePolicy(app);
@@ -45,40 +46,12 @@ http.createServer = function fynxCreateServer(...args) {
   server.requestTimeout = 30_000;
   server.maxRequestsPerSocket = 1_000;
   server.maxConnections = 500;
-
-  let requests = 0;
-  let completed = 0;
-  let totalLatencyMs = 0;
-  let errors = 0;
-
-  server.on("request", (_req, res) => {
-    const startedAt = process.hrtime.bigint();
-    requests += 1;
-    res.on("finish", () => {
-      completed += 1;
-      totalLatencyMs += Number(process.hrtime.bigint() - startedAt) / 1_000_000;
-      if (res.statusCode >= 500) errors += 1;
-    });
-  });
-
-  const report = setInterval(() => {
-    if (!completed) return;
-    const averageLatencyMs = totalLatencyMs / completed;
-    console.log(`[fynx-metrics] requests=${requests} completed=${completed} errors5xx=${errors} avgLatencyMs=${averageLatencyMs.toFixed(1)}`);
-  }, 60_000);
-  report.unref();
-
-  server.on("error", (error) => {
-    console.error("[fynx-http] server error", error);
-  });
-
+  let requests = 0; let completed = 0; let totalLatencyMs = 0; let errors = 0;
+  server.on("request", (_req, res) => { const startedAt = process.hrtime.bigint(); requests += 1; res.on("finish", () => { completed += 1; totalLatencyMs += Number(process.hrtime.bigint() - startedAt) / 1_000_000; if (res.statusCode >= 500) errors += 1; }); });
+  const report = setInterval(() => { if (!completed) return; const averageLatencyMs = totalLatencyMs / completed; console.log(`[fynx-metrics] requests=${requests} completed=${completed} errors5xx=${errors} avgLatencyMs=${averageLatencyMs.toFixed(1)}`); }, 60_000); report.unref();
+  server.on("error", (error) => { console.error("[fynx-http] server error", error); });
   const recovery = installFailureRecovery({ server, pool: globalThis.__fynxPool || null, logger: console });
-  globalThis.__fynxRecovery = recovery;
-  globalThis.__fynxIdempotency = createIdempotencyStore({ maxEntries: 10_000, ttlMs: 24 * 60 * 60 * 1000 });
-  globalThis.__fynxJobHandlers = globalThis.__fynxJobHandlers || {};
-  const jobs = createBackgroundJobQueue({ logger: console });
-  globalThis.__fynxBackgroundJobs = jobs;
-  void jobs.start().catch(error => console.error("[fynx-jobs] startup failed", error?.message || error));
-
+  globalThis.__fynxRecovery = recovery; globalThis.__fynxIdempotency = createIdempotencyStore({ maxEntries: 10_000, ttlMs: 24 * 60 * 60 * 1000 }); globalThis.__fynxJobHandlers = globalThis.__fynxJobHandlers || {};
+  const jobs = createBackgroundJobQueue({ logger: console }); globalThis.__fynxBackgroundJobs = jobs; void jobs.start().catch(error => console.error("[fynx-jobs] startup failed", error?.message || error));
   return server;
 };
