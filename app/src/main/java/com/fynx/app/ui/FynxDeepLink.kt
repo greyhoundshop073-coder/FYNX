@@ -12,6 +12,22 @@ object FynxDeepLinkParser {
     private const val INVITE_PATH = "/invite"
     private const val HOME_PATH = "/home"
 
+    fun homeWebLink(): String = "https://$FYNX_HOST$HOME_PATH"
+
+    fun homeAppLink(): String = "fynx://home"
+
+    fun inviteWebLink(code: String?): String {
+        val normalized = code?.trim()?.takeIf { it.isNotBlank() }
+            ?: return "https://$FYNX_HOST$INVITE_PATH"
+        return Uri.Builder()
+            .scheme("https")
+            .authority(FYNX_HOST)
+            .path(INVITE_PATH)
+            .appendQueryParameter("code", normalized)
+            .build()
+            .toString()
+    }
+
     fun parse(uri: Uri?): FynxDeepLinkDestination? {
         if (uri == null) return null
 
