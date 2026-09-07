@@ -13,7 +13,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun FynxVerifiedBadge(modifier: Modifier = Modifier) {
@@ -24,18 +23,23 @@ fun FynxVerifiedBadge(modifier: Modifier = Modifier) {
         contentColor = Color.White
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = "✓",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold
-            )
+            Text("✓", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
         }
     }
 }
 
 @Composable
-fun FynxAvatar(name: String, avatarUri: String? = null, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
+fun FynxAvatar(name: String, modifier: Modifier = Modifier) {
+    FynxAvatarContent(name, null, modifier)
+}
+
+@Composable
+fun FynxAvatar(name: String, avatarUri: String?, modifier: Modifier = Modifier) {
+    FynxAvatarContent(name, avatarUri, modifier)
+}
+
+@Composable
+private fun FynxAvatarContent(name: String, avatarUri: String?, modifier: Modifier) {
     val initials = name.trim()
         .split(Regex("\\s+"))
         .filter { it.isNotEmpty() }
@@ -43,16 +47,13 @@ fun FynxAvatar(name: String, avatarUri: String? = null, modifier: Modifier = Mod
         .joinToString("") { it.first().uppercase() }
 
     Box(
-        modifier = modifier
-            .size(52.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+        modifier = modifier.size(52.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center
     ) {
         if (!avatarUri.isNullOrBlank()) {
             FynxRemoteMedia(
                 mediaUrl = avatarUri,
-                mediaType = "image",
+                type = "image",
                 modifier = Modifier.fillMaxSize().clip(CircleShape)
             )
         } else {
