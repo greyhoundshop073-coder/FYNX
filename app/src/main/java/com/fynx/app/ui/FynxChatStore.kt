@@ -82,7 +82,8 @@ object FynxChatStore {
                         lastMessage = item.optString("lastMessage"),
                         time = item.optString("time"),
                         unreadCount = item.optInt("unreadCount"),
-                        online = item.optBoolean("online")
+                        online = item.optBoolean("online"),
+                        avatarUri = item.optString("avatarUri").takeIf { it.isNotEmpty() }
                     ))
                 }
             }
@@ -101,6 +102,7 @@ object FynxChatStore {
                 put("time", item.time)
                 put("unreadCount", item.unreadCount)
                 put("online", item.online)
+                put("avatarUri", item.avatarUri ?: "")
             })
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
