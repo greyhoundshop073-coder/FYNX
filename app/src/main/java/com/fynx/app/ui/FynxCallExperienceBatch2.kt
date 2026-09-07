@@ -37,10 +37,28 @@ object FynxCallExperienceBatch2 {
         call.copy(durationSeconds = seconds.coerceAtLeast(0L))
 
     fun reconnect(call: FynxCallExperience): FynxCallExperience =
-        call.copy(reconnecting = true, session = call.session.copy(state = FynxCallState.CONNECTING), lastError = null)
+        if (FynxCallsFoundation.canRetry(call.session)) call.copy(reconnecting = true, session = call.session.copy(state = FynxCallState.CONNECTING), lastError = null) else call
 
     fun reconnectFailed(call: FynxCallExperience, reason: String): FynxCallExperience =
         call.copy(reconnecting = false, lastError = reason.trim().take(240).ifBlank { "Call connection failed. Please try again." })
 
     fun clearError(call: FynxCallExperience): FynxCallExperience = call.copy(lastError = null)
+
+    fun formatDuration(seconds: Long): String {
+        val safe = seconds.coerceAtLeast(0L)
+        val hours = safe / 3600
+        val minutes = (safe % 3600) / 60
+        val secs = safe % 60
+        return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, secs) else "%02d:%02d".format(minutes, secs)
+    }
+
+    fun statusLabel(call: FynxCallExperience): String = when {
+        call.lastError != null -> call.lastError
+        call.reconnecting -> "Reconnecting…"
+        call.session.state == FynxCallState.RINGING -> "Incoming ${if (call.session.type == FynxCallType.VIDEO) "video" else "voice"} call"
+        call.session.state == FynxCallState.CONNECTING -> "Connecting…"
+        call.session.state == FynxCallState.CONNECTED -> formatDuration(call.durationSeconds)
+        call.session.state == FynxCallState.ENDED -> "Call ended"
+        else -> "Ready"
+    }
 }
