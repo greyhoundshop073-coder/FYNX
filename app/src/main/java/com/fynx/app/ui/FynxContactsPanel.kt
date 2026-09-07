@@ -23,6 +23,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 private data class DeviceContact(val name: String, val phone: String)
@@ -49,16 +52,48 @@ fun FynxContactsPanel(onBack: () -> Unit = {}) {
         scope.launch {
             loading = true
             notice = null
-            val local = readDeviceContacts(context)
-            val sim = readSimContacts(context)
-            contacts = mergeContacts(local, sim)
-            val found = mutableMapOf<String, FynxSocialClient.User>()
-            contacts.take(150).forEach { contact ->
-                FynxSocialClient.searchUsers(context, FynxPeopleDiscovery.normalizePhone(contact.phone), phoneSearch = true)
-                    .getOrNull()?.firstOrNull()?.let { found[contact.phone] = it }
+            try {
+                val local = readDeviceContacts(context)
+                val sim = readSimContacts(context)
+                contacts = mergeContacts(local, sim)
+
+                // Keep phone matching bounded and authenticated, while resolving several contacts
+                // concurrently so a large address book does not make the Contacts screen feel stuck.
+                val candidates = contacts.take(150)
+                val found = mutableMapOf<String, FynxSocialClient.User>()
+                var failedLookups = 0
+                candidates.chunked(4).forEach { batch ->
+                    val results = coroutineScope {
+                        batch.map { contact ->
+                            async {
+                                val result = FynxSocialClient.searchUsers(
+                                    context,
+                                    FynxPeopleDiscovery.normalizePhone(contact.phone),
+                                    phoneSearch = true
+                                )
+                                contact to result
+                            }
+                        }.awaitAll()
+                    }
+                    results.forEach { (contact, result) ->
+                        result.getOrNull()?.firstOrNull()?.let { found[contact.phone] = it }
+                            ?: run { if (result.isFailure) failedLookups += 1 }
+                    }
+                }
+                matched = found.toMap()
+                if (failedLookups > 0 && found.isEmpty() && candidates.isNotEmpty()) {
+                    notice = "FYNX could not complete contact matching right now. Check your connection and try again."
+                } else if (failedLookups > 0) {
+                    notice = "Some contacts could not be checked. Showing the matches FYNX found."
+                }
+            } catch (_: kotlinx.coroutines.CancellationException) {
+                throw CancellationException()
+            } catch (error: Exception) {
+                matched = emptyMap()
+                notice = "FYNX could not load your contacts right now. Check your connection and try again."
+            } finally {
+                loading = false
             }
-            matched = found
-            loading = false
         }
     }
 
