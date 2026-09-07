@@ -52,6 +52,7 @@ jobs:
           node --check marketplaceAdvertising.js
           node --check scalability.js
           node --check privacyRoutes.js
+          node --check trustSafety.js
           node --check reliability.js
           node --check backgroundJobs.js
           node --check securityHardening.js
