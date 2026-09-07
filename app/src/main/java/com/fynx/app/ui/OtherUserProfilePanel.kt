@@ -55,20 +55,7 @@ fun OtherUserProfilePanel(
         }
     }
 
-    LaunchedEffect(username) {
-        loading = true
-        error = null
-        FynxProfileRemoteClient.get(context, username)
-            .onSuccess { loaded ->
-                profile = loaded
-                following = loaded.followedByCurrentUser
-                FynxProfileRemoteClient.posts(context, loaded.username)
-                    .onSuccess { loadedPosts -> posts = loadedPosts }
-                    .onFailure { posts = emptyList() }
-            }
-            .onFailure { error = it.message ?: "Unable to load this profile." }
-        loading = false
-    }
+    LaunchedEffect(username) { loadProfile() }
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -86,11 +73,8 @@ fun OtherUserProfilePanel(
                 Box(
                     Modifier.fillMaxWidth().padding(40.dp),
                     contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
+                ) { CircularProgressIndicator() }
             }
-
             profile == null -> {
                 Column(
                     Modifier.fillMaxWidth().padding(24.dp),
@@ -98,12 +82,9 @@ fun OtherUserProfilePanel(
                 ) {
                     Text(error ?: "User not found", color = FynxDesign.TextSecondary)
                     Spacer(Modifier.height(12.dp))
-                    OutlinedButton(onClick = { loadProfile() }) {
-                        Text("Retry")
-                    }
+                    OutlinedButton(onClick = { loadProfile() }) { Text("Retry") }
                 }
             }
-
             else -> {
                 val person = profile!!
                 LazyColumn(
@@ -112,25 +93,12 @@ fun OtherUserProfilePanel(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     item {
-                        RemoteProfilePhoto(
-                            person.profilePhotoMediaId,
-                            person.displayName,
-                            Modifier.size(104.dp)
-                        )
+                        RemoteProfilePhoto(person.profilePhotoMediaId, person.displayName, Modifier.size(104.dp))
                         Spacer(Modifier.height(14.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                person.displayName.ifBlank { person.username },
-                                style = MaterialTheme.typography.headlineSmall
-                            )
-                            if (person.verified) {
-                                Spacer(Modifier.width(6.dp))
-                                FynxVerifiedBadge()
-                            }
-                        }
+                        Text(
+                            person.displayName.ifBlank { person.username },
+                            style = MaterialTheme.typography.headlineSmall
+                        )
                         Text(
                             "@${person.username.removePrefix("@").trim()}",
                             color = FynxDesign.TextSecondary
@@ -143,24 +111,34 @@ fun OtherUserProfilePanel(
                             Text(person.country, color = FynxDesign.TextSecondary)
                         }
                         Spacer(Modifier.height(16.dp))
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            ProfileStat("Posts", formatProfileCount(person.postCount))
+                            if (person.connectionsVisible) {
+                                ProfileStat("Followers", formatProfileCount(person.followerCount ?: 0))
+                                ProfileStat("Following", formatProfileCount(person.followingCount ?: 0))
+                            } else {
+                                ProfileStat("Followers", "Hidden")
+                                ProfileStat("Following", "Hidden")
+                            }
+                        }
+                        Spacer(Modifier.height(14.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
                                 enabled = !busy,
                                 onClick = {
                                     scope.launch {
                                         busy = true
-                                        FynxRemoteSocialClient.follow(
-                                            context,
-                                            person.username,
-                                            following
-                                        ).onSuccess { following = it }
+                                        FynxRemoteSocialClient.follow(context, person.username, following)
+                                            .onSuccess { following = it }
                                             .onFailure { error = it.message }
                                         busy = false
                                     }
                                 }
-                            ) {
-                                Text(if (following) "Following" else "Follow")
-                            }
+                            ) { Text(if (following) "Following" else "Follow") }
                             OutlinedButton(
                                 enabled = !busy,
                                 onClick = { onMessage(person.username) }
@@ -172,25 +150,17 @@ fun OtherUserProfilePanel(
                         }
                         TextButton(
                             enabled = !busy,
-                            onClick = {
-                                reportMessage = null
-                                reportOpen = true
-                            }
-                        ) {
-                            Text("Report")
-                        }
-                        Text(
-                            "${person.postCount} posts • ${person.mutualFriends} mutual friends",
-                            color = FynxDesign.TextSecondary
-                        )
+                            onClick = { reportMessage = null; reportOpen = true }
+                        ) { Text("Report") }
                         if (posts.isEmpty()) {
                             Text(
                                 "No posts to show",
                                 Modifier.padding(top = 20.dp),
                                 color = FynxDesign.TextSecondary
                             )
+                        } else {
+                            posts.forEach { post -> ProfilePostCard(post) }
                         }
-                        posts.forEach { post -> ProfilePostCard(post) }
                     }
                 }
             }
@@ -239,46 +209,33 @@ fun OtherUserProfilePanel(
                             busy = false
                         }
                     }
-                ) {
-                    Text("Submit")
-                }
+                ) { Text("Submit") }
             },
             dismissButton = {
-                TextButton(
-                    enabled = !busy,
-                    onClick = { reportOpen = false }
-                ) {
-                    Text("Cancel")
-                }
+                TextButton(enabled = !busy, onClick = { reportOpen = false }) { Text("Cancel") }
             }
         )
     }
 }
 
 @Composable
-private fun RemoteProfilePhoto(
-    mediaId: String?,
-    name: String,
-    modifier: Modifier
-) {
+private fun RemoteProfilePhoto(mediaId: String?, name: String, modifier: Modifier) {
     val context = LocalContext.current
     var bitmap by remember(mediaId) { mutableStateOf<android.graphics.Bitmap?>(null) }
 
     LaunchedEffect(mediaId) {
-        if (mediaId != null) {
+        bitmap = if (mediaId != null) {
             val uri = FynxProductionMessaging
                 .cacheRemoteMedia(context, mediaId, "/api/social/media/$mediaId")
                 .getOrNull()
             if (uri != null) {
-                bitmap = withContext(Dispatchers.IO) {
+                withContext(Dispatchers.IO) {
                     runCatching {
-                        context.contentResolver.openInputStream(uri).use {
-                            BitmapFactory.decodeStream(it)
-                        }
+                        context.contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it) }
                     }.getOrNull()
                 }
-            }
-        }
+            } else null
+        } else null
     }
 
     val image = bitmap
@@ -295,6 +252,20 @@ private fun RemoteProfilePhoto(
 }
 
 @Composable
+private fun ProfileStat(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, style = MaterialTheme.typography.titleLarge)
+        Text(label, color = FynxDesign.TextSecondary, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+private fun formatProfileCount(value: Int): String = when {
+    value >= 1_000_000 -> String.format("%.1fM", value / 1_000_000f).replace(".0M", "M")
+    value >= 1_000 -> String.format("%.1fK", value / 1_000f).replace(".0K", "K")
+    else -> value.toString()
+}
+
+@Composable
 private fun ProfilePostCard(post: FynxProfileRemoteClient.ProfilePost) {
     Card(Modifier.fillMaxWidth().padding(top = 10.dp)) {
         Column(Modifier.padding(14.dp)) {
@@ -305,9 +276,7 @@ private fun ProfilePostCard(post: FynxProfileRemoteClient.ProfilePost) {
                 FynxRemoteMedia(
                     mediaUrl = mediaUrl,
                     type = post.mediaType ?: "auto",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 180.dp, max = 420.dp)
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 420.dp)
                 )
             }
             Text(
