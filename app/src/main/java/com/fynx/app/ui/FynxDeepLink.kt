@@ -10,6 +10,7 @@ sealed interface FynxDeepLinkDestination {
 object FynxDeepLinkParser {
     private const val FYNX_HOST = "fynx.app"
     private const val INVITE_PATH = "/invite"
+    private const val HOME_PATH = "/home"
 
     fun parse(uri: Uri?): FynxDeepLinkDestination? {
         if (uri == null) return null
@@ -20,8 +21,12 @@ object FynxDeepLinkParser {
         if (!isFynxScheme && !isFynxWeb) return null
 
         val normalizedPath = uri.path.orEmpty().trimEnd('/').ifBlank { "/" }
+        val isHome = normalizedPath == "/" || normalizedPath.equals(HOME_PATH, ignoreCase = true) ||
+            (isFynxScheme && uri.host.equals("home", ignoreCase = true))
+        if (isHome) return FynxDeepLinkDestination.Home
+
         val isInvite = if (isFynxScheme) {
-            normalizedPath.equals("/invite", ignoreCase = true) ||
+            normalizedPath.equals(INVITE_PATH, ignoreCase = true) ||
                 uri.host.equals("invite", ignoreCase = true)
         } else {
             normalizedPath.equals(INVITE_PATH, ignoreCase = true) ||
