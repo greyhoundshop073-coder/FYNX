@@ -13,34 +13,51 @@ private const val FYNX_MEDIA_CACHE_DIR = "fynx_media_cache_v2"
 private const val MAX_FYNX_MEDIA_CACHE_BYTES = 100L * 1024L * 1024L
 private const val MAX_FYNX_MEDIA_FILE_BYTES = 12 * 1024 * 1024
 private const val MAX_IMAGE_DIMENSION = 1600
+private const val MAX_DOWNLOAD_ATTEMPTS = 3
 
 internal object FynxMediaCache {
     fun getOrDownload(context: Context, path: String, type: String?): File? {
         if (path.isBlank()) return null
+        val normalizedPath = path.trim()
+        if (!normalizedPath.startsWith("/api/media/")) return null
         val directory = File(context.cacheDir, FYNX_MEDIA_CACHE_DIR).apply { mkdirs() }
         val extension = when (type) { "video" -> ".mp4"; "audio" -> ".m4a"; else -> ".jpg" }
-        val file = File(directory, "${key(path, type)}$extension")
+        val file = File(directory, "${key(normalizedPath, type)}$extension")
         if (file.isFile && file.length() in 1..MAX_FYNX_MEDIA_FILE_BYTES) {
             file.setLastModified(System.currentTimeMillis())
             return file
         }
         file.delete()
-        return download(context, path, file)?.also { trim(directory, it) }
+        return download(context, normalizedPath, file)?.also { trim(directory, it) }
     }
 
-    private fun download(context: Context, path: String, destination: File): File? = runCatching {
-        val baseUrl = FynxBackendClient.baseUrl(context)
+    private fun download(context: Context, path: String, destination: File): File? {
+        repeat(MAX_DOWNLOAD_ATTEMPTS) { attempt ->
+            val result = downloadOnce(context, path, destination)
+            if (result != null) return result
+            if (attempt + 1 < MAX_DOWNLOAD_ATTEMPTS) Thread.sleep(300L * (1L shl attempt))
+        }
+        return null
+    }
+
+    private fun downloadOnce(context: Context, path: String, destination: File): File? = runCatching {
+        val baseUrl = FynxBackendClient.baseUrl(context).trimEnd('/')
         val connection = (URL(baseUrl + path).openConnection() as HttpURLConnection).apply {
             connectTimeout = 8000
             readTimeout = 15000
+            instanceFollowRedirects = false
             setRequestProperty("Authorization", "Bearer ${FynxBackendClient.accessToken(context) ?: ""}")
+            setRequestProperty("Accept", "image/*,video/*,audio/*")
             setRequestProperty("Connection", "keep-alive")
         }
+        val temporary = File(destination.parentFile, ".${destination.name}.part")
         try {
-            if (connection.responseCode !in 200..299) return null
-            val temporary = File(destination.parentFile, ".${destination.name}.part")
+            val status = connection.responseCode
+            if (status !in 200..299) return null
             temporary.delete()
-            var total = 0
+            var total = 0L
+            val declaredLength = connection.contentLengthLong
+            if (declaredLength > MAX_FYNX_MEDIA_FILE_BYTES) return null
             val buffer = ByteArray(32 * 1024)
             connection.inputStream.use { input ->
                 FileOutputStream(temporary).use { output ->
@@ -54,9 +71,13 @@ internal object FynxMediaCache {
                         }
                         output.write(buffer, 0, read)
                     }
+                    output.fd.sync()
                 }
             }
-            if (total <= 0) { temporary.delete(); return null }
+            if (total <= 0L || temporary.length() != total) {
+                temporary.delete()
+                return null
+            }
             optimizeImageIfNeeded(temporary, destination)
             if (!destination.exists()) {
                 if (!temporary.renameTo(destination)) { temporary.delete(); return null }
@@ -68,7 +89,10 @@ internal object FynxMediaCache {
                 return null
             }
             destination
-        } finally { connection.disconnect() }
+        } finally {
+            temporary.delete()
+            connection.disconnect()
+        }
     }.getOrNull()
 
     private fun optimizeImageIfNeeded(source: File, destination: File) {
@@ -86,6 +110,7 @@ internal object FynxMediaCache {
         try {
             FileOutputStream(destination).use { output ->
                 if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 88, output)) destination.delete()
+                else output.fd.sync()
             }
         } finally {
             bitmap.recycle()
