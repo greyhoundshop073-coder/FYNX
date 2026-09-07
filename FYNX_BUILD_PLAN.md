@@ -38,7 +38,7 @@ Continue the existing FYNX Android social + marketplace app. Do not rebuild or r
 - [ ] Full real-device user-journey audit across every major surface
 
 ## Future backlog
-- [ ] Personal status/timeline expansion
+- [x] Personal status/timeline expansion — backend-first timeline now surfaces authenticated Status media/text/audio while retaining Stories creation/viewing
 - [ ] FYNX official announcements/admin controls
 - [x] Server-backed notification preferences foundation
 - [ ] Owner/Admin control center
