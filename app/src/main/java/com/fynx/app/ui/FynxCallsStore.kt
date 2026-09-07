@@ -20,41 +20,47 @@ object FynxCallsStore {
 
     fun load(context: Context): List<FynxCallRecord> {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(CALLS_KEY, null) ?: return defaultCalls()
+            .getString(CALLS_KEY, null) ?: return emptyList()
         return runCatching {
             val array = JSONArray(raw)
             buildList {
                 for (index in 0 until array.length()) {
-                    val item = array.getJSONObject(index)
-                    val name = item.optString("name")
-                    val type = item.optString("type")
-                    if (name.isNotBlank() && type.isNotBlank()) {
+                    val item = array.optJSONObject(index) ?: continue
+                    val id = item.optString("id").trim()
+                    val name = item.optString("name").trim()
+                    val type = item.optString("type").trim()
+                    if (id.isNotBlank() && name.isNotBlank() && type in setOf("Voice call", "Video call")) {
+                        val missed = item.optBoolean("missed", false)
                         add(FynxCallRecord(
-                            id = item.optString("id").ifBlank { "call-$index" },
+                            id = id,
                             name = name,
                             type = type,
-                            time = item.optString("time"),
-                            missed = item.optBoolean("missed", false),
-                            status = item.optString("status").ifBlank { if (item.optBoolean("missed", false)) "Missed" else "Completed" }
+                            time = item.optString("time").trim().ifBlank { "Recent" },
+                            missed = missed,
+                            status = item.optString("status").trim().ifBlank { if (missed) "Missed" else "Completed" }
                         ))
                     }
                 }
-            }.ifEmpty { defaultCalls() }
-        }.getOrElse { defaultCalls() }
+            }.distinctBy { it.id }.take(MAX_HISTORY)
+        }.getOrElse { emptyList() }
     }
 
     fun save(context: Context, calls: List<FynxCallRecord>) {
         val array = JSONArray()
-        calls.take(MAX_HISTORY).forEach { call ->
-            array.put(JSONObject().apply {
-                put("id", call.id)
-                put("name", call.name)
-                put("type", call.type)
-                put("time", call.time)
-                put("missed", call.missed)
-                put("status", call.status)
-            })
-        }
+        calls.asSequence()
+            .filter { it.id.isNotBlank() && it.name.isNotBlank() && it.type in setOf("Voice call", "Video call") }
+            .distinctBy { it.id }
+            .take(MAX_HISTORY)
+            .forEach { call ->
+                array.put(JSONObject().apply {
+                    put("id", call.id)
+                    put("name", call.name)
+                    put("type", call.type)
+                    put("time", call.time)
+                    put("missed", call.missed)
+                    put("status", call.status)
+                })
+            }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(CALLS_KEY, array.toString()).apply()
     }
@@ -64,15 +70,10 @@ object FynxCallsStore {
     }
 
     fun updateStatus(context: Context, id: String, status: String, missed: Boolean? = null) {
+        val safeStatus = status.trim().take(80).ifBlank { "Completed" }
         val updated = load(context).map { call ->
-            if (call.id == id) call.copy(status = status, missed = missed ?: call.missed) else call
+            if (call.id == id) call.copy(status = safeStatus, missed = missed ?: call.missed) else call
         }
         save(context, updated)
     }
-
-    private fun defaultCalls(): List<FynxCallRecord> = listOf(
-        FynxCallRecord("call-maria", "Maria", "Voice call", "Today, 10:32", status = "Completed"),
-        FynxCallRecord("call-alex", "Alex", "Video call", "Yesterday, 18:41", missed = true, status = "Missed"),
-        FynxCallRecord("call-david", "David", "Voice call", "Monday, 09:18", status = "Completed")
-    )
 }
