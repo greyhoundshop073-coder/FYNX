@@ -19,6 +19,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
 private const val FYNX_PREVIEW_MODE = false
 private data class FynxNavItem(val key: String, val label: String, val icon: ImageVector)
@@ -33,6 +34,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var callTarget by remember { mutableStateOf<String?>(null) }
     var callVideo by remember { mutableStateOf(false) }
     var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { val stored = FynxAuthStore.load(context); if (stored.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) stored else AuthSession() }) }
+    var adminRole by remember { mutableStateOf<String?>(null) }
     var notifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
     var inviteCode by remember { mutableStateOf<String?>(null) }
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
@@ -41,8 +43,17 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var aiCaptionDraft by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(deepLinkDestination) { when (val destination = deepLinkDestination) { is FynxDeepLinkDestination.Invite -> { inviteCode = destination.code; selected = "Invite" }; FynxDeepLinkDestination.Home -> selected = "Home"; null -> Unit } }
     LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context); notifications = FynxNotificationStore.load(context) }
-    LaunchedEffect(authSession.state, authSession.username) { if (!FYNX_PREVIEW_MODE && authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) FynxBackendClient.currentUserId(context).onFailure { error -> if (FynxBackendClient.isUnauthorizedFailure(error)) { FynxBackendClient.saveAccessToken(context, null); FynxAuthStore.clear(context); authSession = AuthSession(); selected = "Home"; openChat = null; openGroup = null; profileUser = null } } }
+    LaunchedEffect(authSession.state, authSession.username) {
+        adminRole = null
+        if (!FYNX_PREVIEW_MODE && authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) {
+            FynxAdminClient.dashboard(context).onSuccess { dashboard ->
+                adminRole = dashboard.role.takeIf { it == "OWNER" || it == "ADMIN" }
+            }
+            FynxBackendClient.currentUserId(context).onFailure { error -> if (FynxBackendClient.isUnauthorizedFailure(error)) { FynxBackendClient.saveAccessToken(context, null); FynxAuthStore.clear(context); authSession = AuthSession(); adminRole = null; selected = "Home"; openChat = null; openGroup = null; profileUser = null } }
+        }
+    }
     if (!FYNX_PREVIEW_MODE && authSession.state != AuthState.SIGNED_IN) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }) { FynxAuthGate { username -> FynxAuthStore.save(context, username); authSession = AuthSession(AuthState.SIGNED_IN, username) } }; return }
+    if (selected == "Admin" && adminRole == null) selected = "Features"
     val mainNav = listOf(FynxNavItem("Home", "Home", Icons.Default.Home), FynxNavItem("Chats", "Chats", Icons.Default.ChatBubbleOutline), FynxNavItem("Friends", "Friends", Icons.Default.Person), FynxNavItem("Marketplace", "Market", Icons.Default.ShoppingBag), FynxNavItem("Money Tools", "Money", Icons.Default.AccountBalanceWallet), FynxNavItem("Features", "More", Icons.Default.MoreHoriz))
     val isSecondary = selected !in mainNav.map { it.key }.toSet()
     BackHandler(enabled = profileUser != null) { profileUser = null }
@@ -67,7 +78,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Friends" -> FriendsPanel(onOpenProfile = { profileUser = it })
             "Marketplace" -> FynxMarketplaceRemotePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenChat = { username -> val normalized = username.trim().let { if (it.startsWith("@")) it else "@$it" }; openChat = FynxChatStore.loadPreviews(context).firstOrNull { it.username.equals(normalized, true) } ?: ChatPreview(normalized.removePrefix("@").ifBlank { "FYNX seller" }, normalized, "Start a conversation", "Now"); FynxChatStore.savePreview(context, openChat!!) })
             "Money Tools" -> MoneyCenterPanel()
-            "Features" -> FynxFeaturesPanel(onSelect = { selected = it })
+            "Features" -> FynxFeaturesPanel(isAdmin = adminRole != null, onSelect = { if (it != "Admin" || adminRole != null) selected = it })
             "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
             "Calendar" -> CalendarPanel()
             "Stories" -> FynxStatusHubPanel()
@@ -87,7 +98,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Advertising Dashboard" -> FynxAdvertisingDashboardPanel()
             "Advertising AI" -> FynxAdvertisingAiPanel()
             "Announcements" -> FynxAnnouncementsPanel()
-            "Admin" -> FynxAdminControlCenterPanel()
+            "Admin" -> if (adminRole != null) FynxAdminControlCenterPanel()
             "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" })
             else -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview")
         } } }
@@ -95,9 +106,25 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
 }
 
 @Composable
-private fun FynxFeaturesPanel(onSelect: (String) -> Unit) {
+private fun FynxFeaturesPanel(isAdmin: Boolean, onSelect: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
-    val features = listOf(Triple("Calls", "Voice & Video Calls", Icons.Default.Call), Triple("Notifications", "Notifications", Icons.Default.Notifications), Triple("Gifts", "Gifts", Icons.Default.CardGiftcard), Triple("Share", "Share & Invite", Icons.Default.Share), Triple("To-Do", "To-Do", Icons.Default.CheckCircle), Triple("Calendar", "Calendar", Icons.Default.DateRange), Triple("Money Tools", "Money Center", Icons.Default.AccountBalanceWallet), Triple("Extra Tools", "Extra Tools", Icons.Default.Build), Triple("Privacy", "Privacy & Safety", Icons.Default.Lock), Triple("Seller Center", "Manage Marketplace Listings", Icons.Default.Inventory2), Triple("AI", "FYNX AI Assistant", Icons.Default.AutoAwesome), Triple("AI Creation", "AI Creation Layer", Icons.Default.AutoAwesome), Triple("AI Photo Editor", "AI Photo Editor", Icons.Default.PhotoLibrary), Triple("Announcements", "Official FYNX Announcements", Icons.Default.Campaign), Triple("Admin", "Owner / Admin Control Center", Icons.Default.AdminPanelSettings))
+    val features = buildList {
+        add(Triple("Calls", "Voice & Video Calls", Icons.Default.Call))
+        add(Triple("Notifications", "Notifications", Icons.Default.Notifications))
+        add(Triple("Gifts", "Gifts", Icons.Default.CardGiftcard))
+        add(Triple("Share", "Share & Invite", Icons.Default.Share))
+        add(Triple("To-Do", "To-Do", Icons.Default.CheckCircle))
+        add(Triple("Calendar", "Calendar", Icons.Default.DateRange))
+        add(Triple("Money Tools", "Money Center", Icons.Default.AccountBalanceWallet))
+        add(Triple("Extra Tools", "Extra Tools", Icons.Default.Build))
+        add(Triple("Privacy", "Privacy & Safety", Icons.Default.Lock))
+        add(Triple("Seller Center", "Manage Marketplace Listings", Icons.Default.Inventory2))
+        add(Triple("AI", "FYNX AI Assistant", Icons.Default.AutoAwesome))
+        add(Triple("AI Creation", "AI Creation Layer", Icons.Default.AutoAwesome))
+        add(Triple("AI Photo Editor", "AI Photo Editor", Icons.Default.PhotoLibrary))
+        add(Triple("Announcements", "Official FYNX Announcements", Icons.Default.Campaign))
+        if (isAdmin) add(Triple("Admin", "Owner / Admin Control Center", Icons.Default.AdminPanelSettings))
+    }
     val visible = features.filter { it.second.contains(query.trim(), true) }
     Column(Modifier.fillMaxSize()) { Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text("Access your tools in one place. Privacy & Safety controls your visibility settings.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); FynxFeatureSearchField(query, { query = it }); Spacer(Modifier.height(8.dp)); LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) { items(visible, key = { it.first }) { feature -> Card(onClick = { onSelect(feature.first) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .5f))) { Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) { Surface(shape = FynxDesign.ControlShape, color = MaterialTheme.colorScheme.secondaryContainer) { Icon(feature.third, feature.second, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp).size(21.dp)) }; Spacer(Modifier.width(12.dp)); Text(feature.second, style = MaterialTheme.typography.titleMedium) } } } } }
 }
