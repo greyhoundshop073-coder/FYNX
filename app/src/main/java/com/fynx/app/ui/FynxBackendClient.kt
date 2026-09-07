@@ -84,7 +84,7 @@ object FynxBackendClient {
                         response = requestSemaphore.withPermit { executeRequest(context, root, method, path, body) }
                     } catch (error: Exception) {
                         val retryable = method == "GET" || method == "DELETE"
-                        if (!retryable || !isTransientNetworkFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) throw error
+                        if (!retryable || !isRetryableFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) throw error
                         attempt++
                         delay(RETRY_DELAY_MS * attempt)
                     }
@@ -125,8 +125,11 @@ object FynxBackendClient {
                 }
                 output.toString()
             }.orEmpty()
-            if (status == HttpURLConnection.HTTP_UNAUTHORIZED) { saveAccessToken(context, null); throw FynxUnauthorizedException() }
-            if (status !in 200..299) throw IllegalStateException("FYNX backend returned HTTP $status")
+            if (status == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                saveAccessToken(context, null)
+                throw FynxUnauthorizedException()
+            }
+            if (status !in 200..299) throw FynxHttpException(status, response)
             return response
         } finally {
             cancellationHandle.dispose()
@@ -141,14 +144,18 @@ object FynxBackendClient {
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
-    private fun isTransientNetworkFailure(error: Throwable): Boolean {
+    private fun isRetryableFailure(error: Throwable): Boolean {
         var current: Throwable? = error
         while (current != null) {
             if (current is SocketTimeoutException || current is ConnectException || current is UnknownHostException || current is IOException) return true
+            if (current is FynxHttpException && current.status in setOf(408, 425, 429, 500, 502, 503, 504)) return true
             current = current.cause
         }
         return false
     }
 
     private class FynxUnauthorizedException : IOException("FYNX session expired")
+    private class FynxHttpException(val status: Int, body: String) : IOException(
+        "FYNX backend returned HTTP $status${body.takeIf { it.isNotBlank() }?.let { ": $it" } ?: ""}"
+    )
 }
