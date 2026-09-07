@@ -21,6 +21,8 @@ object FynxProductionMessaging {
     private const val MAX_IMAGE_DIMENSION = 1600
     private const val IMAGE_RECOMPRESS_THRESHOLD = 2 * 1024 * 1024
     private const val IMAGE_QUALITY = 85
+    private const val MAX_MESSAGE_LENGTH = 4000
+    private const val MAX_VOICE_DURATION_MS = 60 * 60 * 1000L
 
     data class RemoteMedia(val id: String, val mimeType: String, val byteSize: Int)
     data class RemoteMessage(
@@ -156,14 +158,56 @@ object FynxProductionMessaging {
         if (normalizedRecipient.isBlank()) return Result.failure(IllegalArgumentException("A recipient is required."))
         if (currentUsername.isNotBlank() && normalizedRecipient == currentUsername) return Result.failure(IllegalArgumentException("You cannot send a message to your own account."))
         val cleanText = text.trim()
+        if (cleanText.length > MAX_MESSAGE_LENGTH) return Result.failure(IllegalArgumentException("Message is too long. Maximum is 4000 characters."))
         if (cleanText.isBlank() && mediaId == null) return Result.failure(IllegalArgumentException("Message content is required."))
+        if (mediaType != null && mediaType !in setOf("image", "video", "audio")) return Result.failure(IllegalArgumentException("Unsupported message media type."))
+        if (mediaId == null && mediaType != null) return Result.failure(IllegalArgumentException("Message media is incomplete."))
+        if (voiceDurationMs !in 0L..MAX_VOICE_DURATION_MS) return Result.failure(IllegalArgumentException("Voice message duration is invalid."))
         val body = JSONObject().apply { put("recipientUsername", normalizedRecipient); put("text", cleanText); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("voiceDurationMs", voiceDurationMs) }
-        return FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
+        val result = FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
+        if (result.isSuccess) return result
+
+        // A timed-out POST may have been committed by the server before the connection failed.
+        // Reconcile against authoritative history before reporting failure so the UI does not
+        // create a duplicate when the user retries an ambiguous send.
+        if (isAmbiguousTransportFailure(result.exceptionOrNull())) {
+            val recovered = history(context, normalizedRecipient).getOrNull()?.asReconciliationCandidate(
+                currentUsername = currentUsername,
+                text = cleanText,
+                replyToId = replyToId,
+                mediaId = mediaId,
+                mediaType = mediaType
+            )
+            if (recovered != null) return Result.success(recovered)
+        }
+        return result
+    }
+
+    private fun isAmbiguousTransportFailure(error: Throwable?): Boolean {
+        val message = error?.message.orEmpty().lowercase()
+        return message.contains("timeout") || message.contains("timed out") || message.contains("connection") ||
+            message.contains("network") || message.contains("socket") || message.contains("http 408") ||
+            message.contains("http 429") || message.contains("http 5") || message.contains("503") || message.contains("502")
+    }
+
+    private fun List<RemoteMessage>.asReconciliationCandidate(
+        currentUsername: String,
+        text: String,
+        replyToId: String?,
+        mediaId: String?,
+        mediaType: String?
+    ): RemoteMessage? {
+        val now = System.currentTimeMillis()
+        return asSequence()
+            .filter { it.senderUsername?.trim()?.removePrefix("@")?.lowercase() == currentUsername }
+            .filter { it.text == text && it.replyToId == replyToId && it.mediaId == mediaId && it.mediaType == mediaType }
+            .filter { it.timestamp == 0L || kotlin.math.abs(now - it.timestamp) <= 120_000L }
+            .maxByOrNull { it.timestamp }
     }
 
     suspend fun editMessage(context: Context, messageId: String, text: String): Result<RemoteMessage> {
         val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id")); val cleanText = text.trim()
-        if (cleanText.isBlank() || cleanText.length > 4000) return Result.failure(IllegalArgumentException("Message text is invalid."))
+        if (cleanText.isBlank() || cleanText.length > MAX_MESSAGE_LENGTH) return Result.failure(IllegalArgumentException("Message text is invalid."))
         return FynxBackendClient.patchJson(context, "/api/messages/$id", JSONObject().put("text", cleanText).toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
     }
 
