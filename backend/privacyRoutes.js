@@ -1,5 +1,6 @@
 import pg from "pg";
 import jwt from "jsonwebtoken";
+import { inspectTrustSafetyText } from "./trustSafety.js";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -136,6 +137,10 @@ function registerServerEnforcement(app) {
       const visibility = await getVisibility(recipientId, "messages_visibility");
       if (visibility === "Nobody") return res.status(403).json({ error: "this user is not accepting messages" });
       if (visibility === DEFAULT_VISIBILITY && !(await areFriends(req.user.sub, recipientId))) return res.status(403).json({ error: "you must be friends with this user to send a message" });
+      const text = typeof req.body?.text === "string" ? req.body.text : "";
+      const safety = inspectTrustSafetyText(text);
+      if (safety.shouldBlock) return res.status(422).json({ error: "message blocked for safety", code: "SAFETY_BLOCK", safety: { risk: safety.risk, scamSignals: safety.scamSignals, spamSignals: safety.spamSignals } });
+      if (safety.shouldWarn) req.fynxSafetyWarning = { risk: safety.risk, scamSignals: safety.scamSignals, spamSignals: safety.spamSignals };
       return next();
     } catch (error) {
       console.error("privacy message enforcement", error);
