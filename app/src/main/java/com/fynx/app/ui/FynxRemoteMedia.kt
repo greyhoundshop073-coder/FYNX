@@ -1,4 +1,4 @@
-package com/fynx.app.ui
+package com.fynx.app.ui
 
 import android.graphics.BitmapFactory
 import android.media.MediaPlayer
