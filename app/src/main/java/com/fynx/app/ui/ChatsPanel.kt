@@ -12,11 +12,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit = {}, onCreateGroup: () -> Unit = {}) {
     var section by remember { mutableStateOf("Chats") }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var chats by remember { mutableStateOf(FynxChatStore.loadPreviews(context)) }
     var groups by remember { mutableStateOf(FynxGroupsStore.load(context)) }
     var showNewChat by remember { mutableStateOf(false) }
@@ -82,7 +84,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                         Card(onClick = { onOpenChat(chat) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                             ListItem(
                                 headlineContent = { Text(chat.name) },
-                                leadingContent = { FynxAvatar(chat.name) },
+                                leadingContent = { FynxAvatar(chat.name, chat.avatarUri) },
                                 supportingContent = { Text(chat.lastMessage.ifBlank { "No messages yet" }, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                                 trailingContent = { Text(chat.time, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
@@ -150,11 +152,22 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 TextButton(enabled = selectedUser != null, onClick = {
                     val person = selectedUser ?: return@TextButton
                     val personUsername = person.username ?: return@TextButton
-                    val newChat = ChatPreview(person.displayName.ifBlank { personUsername }, personUsername, "", "")
-                    FynxChatStore.savePreview(context, newChat)
-                    chats = FynxChatStore.loadPreviews(context)
-                    onOpenChat(newChat)
-                    showNewChat = false
+                    scope.launch {
+                        val avatarUri = FynxProfileRemoteClient.get(context, personUsername)
+                            .getOrNull()?.profilePhotoMediaId
+                            ?.let { "/api/social/media/$it" }
+                        val newChat = ChatPreview(
+                            person.displayName.ifBlank { personUsername },
+                            personUsername,
+                            "",
+                            "",
+                            avatarUri = avatarUri
+                        )
+                        FynxChatStore.savePreview(context, newChat)
+                        chats = FynxChatStore.loadPreviews(context)
+                        onOpenChat(newChat)
+                        showNewChat = false
+                    }
                 }) { Text("Open chat") }
             },
             dismissButton = { TextButton(onClick = { showNewChat = false }) { Text("Cancel") } },
