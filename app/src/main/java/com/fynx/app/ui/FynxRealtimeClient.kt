@@ -42,7 +42,6 @@ class FynxRealtimeClient(
     private var manuallyClosed = false
     private var reconnectAttempt = 0
 
-    /** Canonical lifecycle entry point. */
     fun connect() {
         manuallyClosed = false
         reconnectAttempt = 0
@@ -61,20 +60,50 @@ class FynxRealtimeClient(
         onStateChanged(State.CONNECTING)
         socket?.cancel()
         socket = client.newWebSocket(Request.Builder().url(wsUrl).build(), object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) { reconnectAttempt = 0; onStateChanged(State.CONNECTED); flushPending(webSocket) }
-            override fun onMessage(webSocket: WebSocket, text: String) { runCatching { val root = JSONObject(text); when (root.optString("type")) {
-                "message" -> root.optJSONObject("message")?.let { onMessage(FynxProductionMessaging.fromJson(it)) }
-                "message_status" -> onEvent(Event.MessageStatus(root.optString("messageId"), when (root.optString("status")) { "read" -> Status.READ; "delivered" -> Status.DELIVERED; else -> Status.SENT }))
-                "typing" -> onEvent(Event.Typing(root.optString("userId"), root.optBoolean("isTyping")))
-                "presence" -> onEvent(Event.Presence(root.optString("userId"), root.optBoolean("online")))
-                "call" -> onEvent(parseCallEvent(root))
-            } } }
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { if (socket === webSocket) socket = null; onStateChanged(State.DISCONNECTED); if (code != 1000 && code != 1008 && code != 1003) scheduleReconnect() }
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) { if (socket === webSocket) socket = null; if (response?.code == 401 || response?.code == 403) { FynxBackendClient.saveAccessToken(context, null); onStateChanged(State.FAILED); return }; onStateChanged(State.FAILED); scheduleReconnect() }
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                if (manuallyClosed) { webSocket.close(1000, "FYNX conversation closed"); return }
+                reconnectAttempt = 0
+                onStateChanged(State.CONNECTED)
+                flushPending(webSocket)
+            }
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                runCatching { val root = JSONObject(text); when (root.optString("type")) {
+                    "message" -> root.optJSONObject("message")?.let { onMessage(FynxProductionMessaging.fromJson(it)) }
+                    "message_status" -> onEvent(Event.MessageStatus(root.optString("messageId"), when (root.optString("status")) { "read" -> Status.READ; "delivered" -> Status.DELIVERED; else -> Status.SENT }))
+                    "typing" -> onEvent(Event.Typing(root.optString("userId"), root.optBoolean("isTyping")))
+                    "presence" -> onEvent(Event.Presence(root.optString("userId"), root.optBoolean("online")))
+                    "call" -> onEvent(parseCallEvent(root))
+                } }
+            }
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                val current = socket === webSocket
+                if (current) socket = null
+                if (!current || manuallyClosed) return
+                onStateChanged(State.DISCONNECTED)
+                if (FynxCallTransportHardening.shouldRetrySocket(code)) scheduleReconnect()
+            }
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                val current = socket === webSocket
+                if (current) socket = null
+                if (!current || manuallyClosed) return
+                if (FynxCallTransportHardening.isAuthFailure(response?.code)) {
+                    FynxBackendClient.saveAccessToken(context, null)
+                    onStateChanged(State.FAILED)
+                    return
+                }
+                onStateChanged(State.FAILED)
+                scheduleReconnect()
+            }
         })
     }
 
-    private fun scheduleReconnect() { if (manuallyClosed) return; reconnectHandler.removeCallbacksAndMessages(null); reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(6); reconnectHandler.postDelayed({ connectInternal() }, (1000L shl (reconnectAttempt - 1)).coerceAtMost(30_000L)) }
+    private fun scheduleReconnect() {
+        if (manuallyClosed) return
+        reconnectHandler.removeCallbacksAndMessages(null)
+        reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(6)
+        reconnectHandler.postDelayed({ connectInternal() }, (1000L shl (reconnectAttempt - 1)).coerceAtMost(30_000L))
+    }
+
     private fun parseCallEvent(root: JSONObject): Event.Call {
         val c = root.optJSONObject("candidate")?.let { IceCandidatePayload(it.optString("candidate"), if (it.isNull("sdpMid")) null else it.optString("sdpMid"), if (it.isNull("sdpMLineIndex")) null else it.optInt("sdpMLineIndex"), if (it.isNull("usernameFragment")) null else it.optString("usernameFragment")) }
         return Event.Call(root.optString("callId"), root.optString("callType", "voice"), root.optString("fromUserId"), root.optString("toUserId"), root.optString("signalType"), root.optString("sdp").takeIf { it.isNotBlank() }, c, root.optString("fromUsername").takeIf { it.isNotBlank() }, root.optString("error").takeIf { it.isNotBlank() })
@@ -92,6 +121,5 @@ class FynxRealtimeClient(
     fun acknowledgeMessage(messageId: String) { messageId.toLongOrNull()?.let { sendJson(JSONObject().apply { put("type", "message_ack"); put("messageId", it) }) } }
     private fun sendJson(payload: JSONObject) { val value = payload.toString(); if (socket?.send(value) == true) return; synchronized(pendingLock) { if (pendingPayloads.size >= 100) pendingPayloads.removeFirst(); pendingPayloads.addLast(value) } }
     private fun flushPending(webSocket: WebSocket) { while (true) { val next = synchronized(pendingLock) { if (pendingPayloads.isEmpty()) null else pendingPayloads.removeFirst() } ?: break; if (!webSocket.send(next)) { synchronized(pendingLock) { pendingPayloads.addFirst(next) }; break } } }
-    /** Backward-compatible explicit shutdown used by existing chat/call screens. */
     fun close() { manuallyClosed = true; reconnectHandler.removeCallbacksAndMessages(null); synchronized(pendingLock) { pendingPayloads.clear() }; socket?.close(1000, "FYNX conversation closed"); socket = null; onStateChanged(State.DISCONNECTED); client.connectionPool.evictAll() }
 }
