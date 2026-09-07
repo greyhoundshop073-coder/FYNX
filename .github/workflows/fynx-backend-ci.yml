@@ -53,6 +53,7 @@ jobs:
           node --check scalability.js
           node --check privacyRoutes.js
           node --check trustSafety.js
+          node --check adminRoutes.js
           node --check reliability.js
           node --check backgroundJobs.js
           node --check securityHardening.js
@@ -61,6 +62,7 @@ jobs:
           node --check verify-stage15g-integration.mjs
           node --check verify-stage15g-final-readiness.mjs
           node --check verify-stage15g-regression.mjs
+          node --check verify-stage15h-admin.mjs
           node --check verify-stage15d-advanced.mjs
           node --check verify-stage15d-jobs.mjs
 
@@ -111,6 +113,9 @@ jobs:
 
       - name: Run Stage 15G regression verification
         run: node verify-stage15g-regression.mjs
+
+      - name: Run Stage 15H admin verification
+        run: node verify-stage15h-admin.mjs
 
       - name: Verify backend package metadata
         run: node -e "const p=require('./package.json'); if(!p.scripts || !p.scripts.start) process.exit(1); console.log('FYNX backend package OK')"
