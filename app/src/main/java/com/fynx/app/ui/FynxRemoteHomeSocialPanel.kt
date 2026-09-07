@@ -35,6 +35,7 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 private const val MARKETPLACE_AD_MARKER = "[FYNX_MARKETPLACE_AD]"
+private const val FEED_REFRESH_DEBOUNCE_MS = 1000L
 
 @Composable
 fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}) {
@@ -52,22 +53,31 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
     var composerText by remember { mutableStateOf("") }
     var visibility by remember { mutableStateOf(FynxPostVisibility.PUBLIC) }
     var busy by remember { mutableStateOf(false) }
+    var feedRequestInFlight by remember { mutableStateOf(false) }
+    var lastFeedRequestAt by remember { mutableLongStateOf(0L) }
     var commentsPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
     var likesPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> selectedMedia = uri; selectedMediaType = uri?.let { context.contentResolver.getType(it)?.substringBefore("/") } }
 
     fun reload(forceRefresh: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (feedRequestInFlight) return
+        if (forceRefresh && now - lastFeedRequestAt < FEED_REFRESH_DEBOUNCE_MS) return
+        feedRequestInFlight = true
+        lastFeedRequestAt = now
         scope.launch {
             loading = true
             FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
                 .onSuccess { page -> posts = page.posts; hasMore = page.hasMore; error = null }
                 .onFailure { error = when { it.message?.contains("HTTP 404", true) == true -> "Your FYNX feed service is temporarily unavailable. Tap refresh to try again." else -> it.message ?: "Unable to load your feed." } }
             loading = false
+            feedRequestInFlight = false
         }
     }
 
     fun loadMore() {
-        if (loading || loadingMore || !hasMore) return
+        if (loading || loadingMore || !hasMore || feedRequestInFlight) return
+        feedRequestInFlight = true
         scope.launch {
             loadingMore = true
             FynxRemoteSocialClient.feedPage(context, limit = 20, offset = posts.size, useCache = false)
@@ -79,6 +89,7 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
                 }
                 .onFailure { error = it.message ?: "Unable to load more posts." }
             loadingMore = false
+            feedRequestInFlight = false
         }
     }
 
@@ -87,7 +98,7 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column { Text("Your feed", style = MaterialTheme.typography.titleMedium); Text("Real posts from your FYNX network", style = MaterialTheme.typography.bodySmall) }
-            Row { IconButton(onClick = { reload(true) }) { Icon(Icons.Default.Refresh, "Refresh feed") }; IconButton(onClick = { composerOpen = true }) { Icon(Icons.Default.Add, "Create post") } }
+            Row { IconButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Icon(Icons.Default.Refresh, "Refresh feed") }; IconButton(onClick = { composerOpen = true }) { Icon(Icons.Default.Add, "Create post") } }
         }
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -105,7 +116,7 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
                 onShare = { sharePost(context, post) }, onOpenMarketplace = onOpenMarketplace)
         }
         if (!loading && hasMore) {
-            OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore, modifier = Modifier.fillMaxWidth()) { Text(if (loadingMore) "Loading more posts…" else "Load more posts") }
+            OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore && !feedRequestInFlight, modifier = Modifier.fillMaxWidth()) { Text(if (loadingMore) "Loading more posts…" else "Load more posts") }
         }
     }
 
