@@ -29,9 +29,6 @@ permissions:
   contents: read
   id-token: write
 
-# Prefer the newest source during rapid development instead of keeping a long
-# queue of obsolete Android builds. A new commit cancels an older queued/running
-# Android verification run so CI feedback stays focused on the current tree.
 concurrency:
   group: fynx-android-${{ github.ref }}
   cancel-in-progress: true
@@ -86,6 +83,9 @@ jobs:
 
       - name: Verify Stage 16 camera and media integration
         run: python3 scripts/verify_stage16_camera.py
+
+      - name: Verify consolidated FYNX user journey integration
+        run: python3 scripts/verify_fynx_journey.py
 
       - name: Build, test and lint
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
