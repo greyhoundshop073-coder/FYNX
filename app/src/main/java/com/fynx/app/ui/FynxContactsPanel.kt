@@ -95,11 +95,19 @@ fun FynxContactsPanel(onBack: () -> Unit = {}) {
                     val user = matched[contact.phone]
                     Card(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.People, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+                            if (user != null) {
+                                FynxRemoteProfileAvatar(
+                                    mediaId = user.profilePhotoMediaId,
+                                    contentDescription = user.displayName.ifBlank { user.username },
+                                    modifier = Modifier.size(44.dp)
+                                )
+                            } else {
+                                Icon(Icons.Default.People, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+                            }
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(contact.name.ifBlank { "Unknown contact" }, style = MaterialTheme.typography.titleSmall)
-                                Text(if (user != null) "On FYNX" else "Not on FYNX", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                                Text(if (user != null) "@${user.username.removePrefix("@")}" else "Not on FYNX", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                             }
                             if (user != null) {
                                 TextButton(onClick = {
@@ -154,6 +162,7 @@ private fun readSimContacts(context: Context): List<DeviceContact> {
     }
     return output.values.toList()
 }
+
 private fun readDeviceContacts(context: Context): List<DeviceContact> {
     val output = linkedMapOf<String, DeviceContact>()
     val projection = arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER)
