@@ -29,7 +29,8 @@ object FynxNotificationControlsBatch3 {
     )
 
     fun isTypeEnabled(preferences: FynxNotificationPreferences, type: FynxNotificationType): Boolean =
-        if (!preferences.enabled || preferences.quietMode) false else when (type) {
+        if (type == FynxNotificationType.SAFETY) true
+        else if (!preferences.enabled || preferences.quietMode) false else when (type) {
             FynxNotificationType.REACTION -> preferences.reactionsEnabled
             FynxNotificationType.COMMENT -> preferences.commentsEnabled
             FynxNotificationType.FRIEND_REQUEST -> preferences.friendRequestsEnabled
@@ -43,5 +44,6 @@ object FynxNotificationControlsBatch3 {
         }
 
     fun shouldPush(preferences: FynxNotificationPreferences, type: FynxNotificationType): Boolean =
-        preferences.pushEnabled && isTypeEnabled(preferences, type)
+        if (type == FynxNotificationType.SAFETY) true
+        else preferences.pushEnabled && isTypeEnabled(preferences, type)
 }

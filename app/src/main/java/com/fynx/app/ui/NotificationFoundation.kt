@@ -87,12 +87,16 @@ object FynxNotificationFoundation {
     }
 
     fun show(context: Context, channelId: String, id: Int, title: String, message: String, stableKey: String = "$channelId:$id:$title:$message") {
+        val type = typeForChannel(channelId)
+        val preferences = FynxNotificationPreferencesClient.cached(context)
+        if (!FynxNotificationControlsBatch3.shouldPush(preferences, type)) return
         if (!shouldShow(context, stableKey)) return
+
         FynxNotificationStore.add(
             context,
             FynxNotification(
                 id = "system-$id-${System.currentTimeMillis()}",
-                type = typeForChannel(channelId),
+                type = type,
                 title = title,
                 message = message
             )
