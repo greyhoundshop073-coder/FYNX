@@ -7,6 +7,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -34,6 +35,25 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
     var syncing by remember { mutableStateOf(false) }
     var syncError by remember { mutableStateOf<String?>(null) }
     var settings by remember { mutableStateOf(FynxPreferencesStore.loadSettings(context)) }
+    var postCount by remember { mutableStateOf(0) }
+    var followerCount by remember { mutableStateOf<Int?>(null) }
+    var followingCount by remember { mutableStateOf<Int?>(null) }
+    var connectionType by remember { mutableStateOf<String?>(null) }
+    var connections by remember { mutableStateOf<List<FynxProfileRemoteClient.ConnectionUser>>(emptyList()) }
+    var connectionsLoading by remember { mutableStateOf(false) }
+    var connectionsError by remember { mutableStateOf<String?>(null) }
+    fun openConnections(type: String) {
+        connectionType = type; connections = emptyList(); connectionsError = null; connectionsLoading = true
+        scope.launch { val result = if (type == "Followers") FynxProfileRemoteClient.followers(context) else FynxProfileRemoteClient.following(context); result.onSuccess { connections = it }.onFailure { connectionsError = it.message ?: "Could not load connections." }; connectionsLoading = false }
+    }
+    LaunchedEffect(session.username) {
+        if (session.state == AuthState.SIGNED_IN && !session.username.isNullOrBlank()) {
+            FynxProfileRemoteClient.get(context, session.username).onSuccess { remote ->
+                postCount = remote.postCount; followerCount = remote.followerCount; followingCount = remote.followingCount
+                profile = profile.copy(displayName = remote.displayName.ifBlank { profile.displayName }, username = remote.username.ifBlank { profile.username }, bio = remote.bio.ifBlank { profile.bio })
+            }.onFailure { syncError = it.message }
+        }
+    }
     if (editing) { EditProfilePanel(profile, description, photo, syncing, syncError, onPhotoChanged = { uri -> photo = uri }, onSave = { updatedProfile, updatedDescription, updatedPhoto ->
         scope.launch {
             syncing = true; syncError = null
@@ -51,7 +71,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
     }, onCancel = { editing = false }); return }
     if (settingsOpen) { SettingsPanel(settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy); return }
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .6f))) { Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) { FynxProfileImage(profile.displayName, photo, Modifier.size(108.dp)); Spacer(Modifier.height(12.dp)); Text(profile.displayName, style = MaterialTheme.typography.headlineSmall); Text("@${profile.username.removePrefix("@")}", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); Text(profile.bio.ifBlank { "Welcome to FYNX" }, color = MaterialTheme.colorScheme.onSurfaceVariant); if (description.isNotBlank()) Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(14.dp)); Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { Button(onClick = { editing = true }, shape = FynxDesign.ControlShape) { Icon(Icons.Default.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text("Edit profile") }; OutlinedButton(onClick = { settingsOpen = true }, shape = FynxDesign.ControlShape) { Icon(Icons.Default.Settings, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text("Settings") } } } } }
+        item { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .6f))) { Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) { FynxProfileImage(profile.displayName, photo, Modifier.size(108.dp)); Spacer(Modifier.height(12.dp)); Text(profile.displayName, style = MaterialTheme.typography.headlineSmall); Text("@${profile.username.removePrefix("@")}", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); Text(profile.bio.ifBlank { "Welcome to FYNX" }, color = MaterialTheme.colorScheme.onSurfaceVariant); if (description.isNotBlank()) Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(12.dp)); if (session.state == AuthState.SIGNED_IN) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) { ProfileStat("Posts", formatProfileCount(postCount)); ProfileStat("Followers", formatProfileCount(followerCount ?: 0)) { openConnections("Followers") }; ProfileStat("Following", formatProfileCount(followingCount ?: 0)) { openConnections("Following") } } } Spacer(Modifier.height(14.dp)); Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { Button(onClick = { editing = true }, shape = FynxDesign.ControlShape) { Icon(Icons.Default.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text("Edit profile") }; OutlinedButton(onClick = { settingsOpen = true }, shape = FynxDesign.ControlShape) { Icon(Icons.Default.Settings, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text("Settings") } } } } }
         item { ProfileInfoCard("Username", "@${profile.username.removePrefix("@")}") }
         item { ProfileInfoCard("Profile photo", if (photo == null) "Not set" else "Photo selected") }
         item { ProfileInfoCard("Account", if (session.state == AuthState.SIGNED_IN) "Signed in" else "Signed out") }
@@ -59,6 +79,9 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
     }
 }
 
+
+@Composable private fun ProfileStat(label:String,value:String,onClick:(()->Unit)?=null){Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally){if(onClick!=null)TextButton(onClick=onClick,contentPadding=PaddingValues(horizontal=4.dp,vertical=0.dp)){Column(horizontalAlignment=Alignment.CenterHorizontally){Text(value,style=MaterialTheme.typography.titleLarge);Text(label,color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.labelMedium)}}else{Text(value,style=MaterialTheme.typography.titleLarge);Text(label,color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.labelMedium)}}}
+private fun formatProfileCount(value:Int):String=when{value>=1_000_000->String.format("%.1fM",value/1_000_000f).replace(".0M","M");value>=1_000->String.format("%.1fK",value/1_000f).replace(".0K","K");else->value.toString()}
 @Composable private fun ProfileInfoCard(title: String, value: String) { Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) { Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) { Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f)); Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
 
 @Composable private fun EditProfilePanel(profile: FynxProfile, description: String, photoUri: String?, syncing: Boolean, syncError: String?, onPhotoChanged: (String?) -> Unit, onSave: (FynxProfile, String, String?) -> Unit, onCancel: () -> Unit) {
@@ -107,3 +130,5 @@ fun SettingsPanel(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Un
 
 @Composable private fun SettingSwitchCard(title: String, checked: Boolean, onChange: (Boolean) -> Unit) { Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f)); Switch(checked = checked, onCheckedChange = onChange) } } }
 @Composable private fun SettingsActionCard(title: String, value: String, onClick: () -> Unit) { Card(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.titleMedium); Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant) }; Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) } } }
+
+@Composable private fun ProfileConnectionsDialog(type:String,users:List<FynxProfileRemoteClient.ConnectionUser>,loading:Boolean,error:String?,onDismiss:()->Unit){AlertDialog(onDismissRequest={if(!loading)onDismiss()},title={Text(type)},text={Box(Modifier.fillMaxWidth().heightIn(min=80.dp,max=420.dp)){when{loading->Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){CircularProgressIndicator()};error!=null->Text(error,color=MaterialTheme.colorScheme.error);users.isEmpty()->Text("No ${type.lowercase()} yet.",color=MaterialTheme.colorScheme.onSurfaceVariant);else->LazyColumn(verticalArrangement=Arrangement.spacedBy(2.dp)){items(users){user->ListItem(headlineContent={Text(user.displayName.ifBlank{user.username})},supportingContent={Text("@${user.username.removePrefix("@").trim()}")})}}}}},confirmButton={TextButton(onClick=onDismiss,enabled=!loading){Text("Done")}})}
