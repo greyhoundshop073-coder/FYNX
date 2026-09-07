@@ -9,7 +9,7 @@ const checks = [
   ['buyer refund restriction', "caseType === 'REFUND_REQUEST' && !isBuyer"],
   ['payout protection gate', "status='DISPUTED'", "payoutBlocked: true"],
   ['protection idempotency', 'idempotency-key', 'idempotency_key', 'idempotent: true'],
-  ['protection route wiring', 'registerMarketplaceProtectionRoutes', 'protected settlement and buyer/seller protection routes enabled']
+  ['protection route wiring', 'registerMarketplaceProtectionRoutes({ app })']
 ];
 
 for (const [name, ...markers] of checks) {
