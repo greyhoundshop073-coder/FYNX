@@ -7,14 +7,13 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 
-private const val FYNX_SHARE_URL = "https://fynx.app"
 private const val FYNX_SHARE_TEXT =
     "Join me on FYNX — one place for your social life, tools and everyday organization."
 
 data class FynxSharePayload(
     val title: String,
     val message: String,
-    val link: String = FYNX_SHARE_URL
+    val link: String = FynxDeepLinkParser.homeWebLink()
 ) {
     val text: String
         get() = listOf(message, link).filter { it.isNotBlank() }.joinToString("\n\n")
@@ -26,13 +25,14 @@ object FynxShareActions {
         message = FYNX_SHARE_TEXT
     )
 
-    fun invitePayload(username: String): FynxSharePayload = FynxSharePayload(
+    fun invitePayload(username: String, code: String? = null): FynxSharePayload = FynxSharePayload(
         title = "Join me on FYNX",
         message = if (username.isBlank()) {
             FYNX_SHARE_TEXT
         } else {
             "$username invited you to join FYNX — one place for your social life, tools and everyday organization."
-        }
+        },
+        link = FynxDeepLinkParser.inviteWebLink(code)
     )
 
     fun share(context: Context, payload: FynxSharePayload = defaultPayload()): Boolean {
