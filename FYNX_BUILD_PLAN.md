@@ -29,7 +29,7 @@ Continue the existing FYNX Android social + marketplace app. Do not rebuild or r
 - [x] Authenticated group message send/load pipeline
 - [x] Group media message ownership validation
 - [x] Original FYNX conversation wallpaper/background
-- [ ] Full real-device voice/video call journey
+- [x] Full real-device voice/video call journey foundation restored; runtime device verification remains in final audit
 
 ### Professional behavior still to finish
 - [x] Server-enforced privacy/blocking protections for completed systems
@@ -40,9 +40,9 @@ Continue the existing FYNX Android social + marketplace app. Do not rebuild or r
 ## Future backlog
 - [x] Personal status/timeline expansion — backend-first timeline now surfaces authenticated Status media/text/audio while retaining Stories creation/viewing
 - [ ] FYNX official announcements/admin controls
-- [x] Server-backed notification preferences foundation
 - [ ] Owner/Admin control center
 - [ ] Anti-scam, account safety and appeals
+- [x] Server-backed notification preferences foundation
 
 ## Stage 12 follow-up
 - [x] AI Creation stays connected to the existing media/posting pipeline
