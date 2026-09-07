@@ -19,7 +19,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
 
 private const val FYNX_PREVIEW_MODE = false
 private data class FynxNavItem(val key: String, val label: String, val icon: ImageVector)
@@ -56,7 +55,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 }
             }
             is FynxDeepLinkDestination.Group -> openGroup = destination.id
-            FynxDeepLinkDestination.Marketplace -> selected = "Marketplace"
+            is FynxDeepLinkDestination.Marketplace -> selected = "Marketplace"
             FynxDeepLinkDestination.Stories -> selected = "Stories"
             FynxDeepLinkDestination.Money -> selected = "Money Tools"
             null -> Unit
@@ -127,21 +126,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
 private fun FynxFeaturesPanel(isAdmin: Boolean, onSelect: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
     val features = buildList {
-        add(Triple("Calls", "Voice & Video Calls", Icons.Default.Call))
-        add(Triple("Notifications", "Notifications", Icons.Default.Notifications))
-        add(Triple("Gifts", "Gifts", Icons.Default.CardGiftcard))
-        add(Triple("Share", "Share & Invite", Icons.Default.Share))
-        add(Triple("To-Do", "To-Do", Icons.Default.CheckCircle))
-        add(Triple("Calendar", "Calendar", Icons.Default.DateRange))
-        add(Triple("Money Tools", "Money Center", Icons.Default.AccountBalanceWallet))
-        add(Triple("Extra Tools", "Extra Tools", Icons.Default.Build))
-        add(Triple("Privacy", "Privacy & Safety", Icons.Default.Lock))
-        add(Triple("Seller Center", "Manage Marketplace Listings", Icons.Default.Inventory2))
-        add(Triple("AI", "FYNX AI Assistant", Icons.Default.AutoAwesome))
-        add(Triple("AI Creation", "AI Creation Layer", Icons.Default.AutoAwesome))
-        add(Triple("AI Photo Editor", "AI Photo Editor", Icons.Default.PhotoLibrary))
-        add(Triple("Announcements", "Official FYNX Announcements", Icons.Default.Campaign))
-        if (isAdmin) add(Triple("Admin", "Owner / Admin Control Center", Icons.Default.AdminPanelSettings))
+        add(Triple("Calls", "Voice & Video Calls", Icons.Default.Call)); add(Triple("Notifications", "Notifications", Icons.Default.Notifications)); add(Triple("Gifts", "Gifts", Icons.Default.CardGiftcard)); add(Triple("Share", "Share & Invite", Icons.Default.Share)); add(Triple("To-Do", "To-Do", Icons.Default.CheckCircle)); add(Triple("Calendar", "Calendar", Icons.Default.DateRange)); add(Triple("Money Tools", "Money Center", Icons.Default.AccountBalanceWallet)); add(Triple("Extra Tools", "Extra Tools", Icons.Default.Build)); add(Triple("Privacy", "Privacy & Safety", Icons.Default.Lock)); add(Triple("Seller Center", "Manage Marketplace Listings", Icons.Default.Inventory2)); add(Triple("AI", "FYNX AI Assistant", Icons.Default.AutoAwesome)); add(Triple("AI Creation", "AI Creation Layer", Icons.Default.AutoAwesome)); add(Triple("AI Photo Editor", "AI Photo Editor", Icons.Default.PhotoLibrary)); add(Triple("Announcements", "Official FYNX Announcements", Icons.Default.Campaign)); if (isAdmin) add(Triple("Admin", "Owner / Admin Control Center", Icons.Default.AdminPanelSettings))
     }
     val visible = features.filter { it.second.contains(query.trim(), true) }
     Column(Modifier.fillMaxSize()) { Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text("Access your tools in one place. Privacy & Safety controls your visibility settings.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); FynxFeatureSearchField(query, { query = it }); Spacer(Modifier.height(8.dp)); LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) { items(visible, key = { it.first }) { feature -> Card(onClick = { onSelect(feature.first) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .5f))) { Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) { Surface(shape = FynxDesign.ControlShape, color = MaterialTheme.colorScheme.secondaryContainer) { Icon(feature.third, feature.second, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp).size(21.dp)) }; Spacer(Modifier.width(12.dp)); Text(feature.second, style = MaterialTheme.typography.titleMedium) } } } } }
