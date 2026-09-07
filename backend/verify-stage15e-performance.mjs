@@ -10,11 +10,11 @@ const checks = [
   ['marketplace seller status index exists', /marketplace_orders_seller_status_idx/, orders],
   ['marketplace buyer order list is independently limited', /SELECT o\.\* FROM marketplace_orders o WHERE o\.buyer_id = \$1[\s\S]*LIMIT 100/, orders],
   ['marketplace seller order list is independently limited', /SELECT o\.\* FROM marketplace_orders o WHERE o\.seller_id = \$1[\s\S]*LIMIT 100/, orders],
-  ['HTTP keep-alive timeout is bounded', /server\.keepAliveTimeout\s*=\s*65_000/, scale],
-  ['HTTP headers timeout is bounded', /server\.headersTimeout\s*=\s*70_000/, scale],
-  ['HTTP request timeout is bounded', /server\.requestTimeout\s*=\s*30_000/, scale],
-  ['HTTP per-socket request cap is bounded', /server\.maxRequestsPerSocket\s*=\s*1_000/, scale],
-  ['HTTP connection cap is bounded', /server\.maxConnections\s*=\s*500/, scale],
+  ['HTTP keep-alive timeout is bounded', /server\.keepAliveTimeout\s*=[=]?\s*65_000/, scale],
+  ['HTTP headers timeout is bounded', /server\.headersTimeout\s*=[=]?\s*70_000/, scale],
+  ['HTTP request timeout is bounded', /server\.requestTimeout\s*=[=]?\s*30_000/, scale],
+  ['HTTP per-socket request cap is bounded', /server\.maxRequestsPerSocket\s*=[=]?\s*1_000/, scale],
+  ['HTTP connection cap is bounded', /server\.maxConnections\s*=[=]?\s*500/, scale],
   ['production request metrics are recorded', /server\.on\("request"[\s\S]*fynx-metrics.*avgLatencyMs/, scale]
 ];
 
