@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -53,6 +54,15 @@ fun FynxHomeSocialHubPanel(
     var visibility by remember { mutableStateOf(defaultPostVisibility) }
     var notice by remember { mutableStateOf<String?>(null) }
     var posting by remember { mutableStateOf(false) }
+    var networkLevel by remember { mutableStateOf(FynxNetworkQuality.current(context)) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            networkLevel = FynxNetworkQuality.current(context)
+            delay(5_000L)
+        }
+    }
+
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching { context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -73,6 +83,24 @@ fun FynxHomeSocialHubPanel(
     }
 
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (networkLevel != FynxNetworkQuality.Level.GOOD) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Text(
+                    text = if (networkLevel == FynxNetworkQuality.Level.OFFLINE) {
+                        "You are offline. FYNX will keep the app usable while you reconnect."
+                    } else {
+                        "Weak connection detected. Media uploads may take longer."
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
+        }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             HomePanel(
                 currentUsername = currentUsername,
