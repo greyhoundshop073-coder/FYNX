@@ -44,6 +44,7 @@ jobs:
         run: |
           node --check server.js
           node --check socialRoutes.js
+          node --check profileRoutes.js
           node --check marketplaceTransactions.js
           node --check marketplaceReputation.js
           node --check marketplaceSettlement.js
