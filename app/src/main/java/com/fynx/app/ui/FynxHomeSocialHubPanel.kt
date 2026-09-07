@@ -149,11 +149,18 @@ fun FynxHomeSocialHubPanel(
                         FilterChip(visibility == FynxPostVisibility.PUBLIC, { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") }, enabled = !posting && postingAllowed && configuredPostVisibility == "Everyone")
                         FilterChip(visibility == FynxPostVisibility.FRIENDS_ONLY, { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") }, enabled = !posting && postingAllowed)
                     }
+                    if (networkLevel == FynxNetworkQuality.Level.OFFLINE) {
+                        Text("You are offline. Reconnect before publishing this post.", color = MaterialTheme.colorScheme.error)
+                    }
                     notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
             confirmButton = {
-                Button(enabled = !posting && postingAllowed && (text.isNotBlank() || capturedUri != null), onClick = {
+                Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUri != null), onClick = {
+                    if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) {
+                        notice = "You are offline. Reconnect before publishing this post."
+                        return@Button
+                    }
                     posting = true
                     notice = null
                     scope.launch {
