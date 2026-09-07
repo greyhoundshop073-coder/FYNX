@@ -46,11 +46,20 @@ notification_read_ok = (
     and "/api/notifications/" in notifications
     and "/read" in notifications
 )
+notification_load_method = re.search(
+    r"\\bfun\\s+load\\s*\\(",
+    notifications
+) is not None
+notification_mark_read_method = re.search(
+    r"\\bfun\\s+markRead\\s*\\(",
+    notifications
+) is not None
 check(
     "server notification client delegates to notification API",
-    "FynxNotificationRemoteClient.load" in notifications
+    "object FynxNotificationRemoteClient" in notifications
+    and notification_load_method
     and notification_load_ok
-    and "FynxNotificationRemoteClient.markRead" in notifications
+    and notification_mark_read_method
     and notification_read_ok
 )
 check("server notification API is registered", "app.get('/api/notifications'" in notification_backend and "app.post('/api/notifications/:id/read'" in notification_backend)
