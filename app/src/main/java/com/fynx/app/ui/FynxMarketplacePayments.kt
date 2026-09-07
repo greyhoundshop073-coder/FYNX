@@ -22,30 +22,39 @@ internal suspend fun initializeMarketplacePayment(
     if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
         return Result.failure(IllegalArgumentException("Enter a valid email address."))
     }
+    if (orderId.trim().isEmpty()) {
+        return Result.failure(IllegalArgumentException("A valid order is required."))
+    }
 
     return FynxBackendClient.postJson(
         context,
-        "/api/marketplace/orders/$orderId/payment",
-        JSONObject().put("customerEmail", email).toString()
+        "/api/marketplace/orders/${Uri.encode(orderId.trim())}/payment",
+        JSONObject().put("email", email).toString()
     ).mapCatching { raw ->
         val o = JSONObject(raw)
         val authorizationUrl = o.optString("authorizationUrl").trim()
         val reference = o.optString("reference").trim()
+        val amountSubunit = o.optLong("amountSubunit", -1L)
+        val currency = o.optString("currency", "NGN").trim().uppercase()
         require(authorizationUrl.startsWith("https://")) { "Payment provider returned an invalid checkout URL." }
         require(reference.isNotBlank()) { "Payment provider returned no payment reference." }
+        require(amountSubunit > 0L) { "Payment provider returned an invalid amount." }
+        require(currency == "NGN" || currency == "USD") { "Payment provider returned an unsupported currency." }
         FynxMarketplacePayment(
             authorizationUrl = authorizationUrl,
             accessCode = o.optString("accessCode").takeIf { it.isNotBlank() },
             reference = reference,
-            amount = o.optDouble("amount"),
-            currency = o.optString("currency", "NGN")
+            amount = amountSubunit / 100.0,
+            currency = currency
         )
     }
 }
 
 internal fun openMarketplaceCheckout(context: Context, authorizationUrl: String): Result<Unit> = runCatching {
+    val url = authorizationUrl.trim()
+    require(url.startsWith("https://")) { "Invalid payment checkout URL." }
     context.startActivity(
-        Intent(Intent.ACTION_VIEW, Uri.parse(authorizationUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     )
 }
 
@@ -53,7 +62,11 @@ internal suspend fun verifyMarketplacePayment(
     context: Context,
     reference: String
 ): Result<String> {
-    val encoded = Uri.encode(reference.trim())
+    val normalizedReference = reference.trim()
+    if (normalizedReference.isEmpty()) {
+        return Result.failure(IllegalArgumentException("A payment reference is required."))
+    }
+    val encoded = Uri.encode(normalizedReference)
     return FynxBackendClient.get(
         context,
         "/api/marketplace/payments/verify/$encoded"
