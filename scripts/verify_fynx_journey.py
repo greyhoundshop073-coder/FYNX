@@ -3,19 +3,17 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 
-
 def read(path):
     return (ROOT / path).read_text(encoding="utf-8")
 
-
 checks = []
-
 def check(name, ok):
     checks.append((name, bool(ok)))
 
 app = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
 calls = read("app/src/main/java/com/fynx/app/ui/FynxCallsPanel.kt")
 notifications = read("app/src/main/java/com/fynx/app/ui/FynxNotificationRemoteClient.kt")
+notification_backend = read("backend/notificationPreferences.js")
 admin = read("app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt")
 privacy = read("app/src/main/java/com/fynx/app/ui/FynxPrivacySettings.kt")
 
@@ -36,7 +34,8 @@ check("authenticated app gate exists", "FynxAuthGate" in app and "AuthState.SIGN
 check("profile to chat and call navigation exists", "ConversationPanel" in app and "onVoiceCall" in app and "onVideoCall" in app)
 check("calls panel has permission recovery and realtime events", "RequestMultiplePermissions" in calls and "realtimeClient.connect()" in calls and '"invite"' in calls)
 check("calls panel cleans media on terminal paths", "mediaEngine.disconnect()" in calls and "FynxCallsStore.updateStatus" in calls)
-check("server notification feed is connected", "FynxNotificationRemoteClient.load" in notifications and "/api/notifications" in notifications)
+check("server notification client delegates to notification API", "FynxNotificationRemoteClient.load" in notifications and "FynxBackendClient.get(context, \"/api/notifications\")" in notifications and "FynxNotificationRemoteClient.markRead" in notifications)
+check("server notification API is registered", "app.get('/api/notifications'" in notification_backend and "app.post('/api/notifications/:id/read'" in notification_backend)
 check("admin center is server-role gated", "FynxAdminClient.dashboard" in app and "adminRole" in app and 'adminRole != null' in app)
 check("privacy/safety surface is wired", "Privacy" in app and "FynxPrivacySettingsPanel" in app)
 check("owner/admin client exposes server controls", all(x in admin for x in ["dashboard", "admins", "setAccountStatus", "grantAdmin", "revokeAdmin"]))
