@@ -118,21 +118,23 @@ fun OtherUserProfilePanel(
                             Modifier.size(104.dp)
                         )
                         Spacer(Modifier.height(14.dp))
-                        Text(
-                            person.displayName.ifBlank { person.username },
-                            style = MaterialTheme.typography.headlineSmall
-                        )
+                        Row(
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                person.displayName.ifBlank { person.username },
+                                style = MaterialTheme.typography.headlineSmall
+                            )
+                            if (person.verified) {
+                                Spacer(Modifier.width(6.dp))
+                                FynxVerifiedBadge()
+                            }
+                        }
                         Text(
                             "@${person.username.removePrefix("@").trim()}",
                             color = FynxDesign.TextSecondary
                         )
-                        if (person.verified) {
-                            Text(
-                                "Verified",
-                                color = MaterialTheme.colorScheme.primary,
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        }
                         if (person.bio.isNotBlank()) {
                             Spacer(Modifier.height(10.dp))
                             Text(person.bio, color = FynxDesign.TextSecondary)
@@ -297,11 +299,15 @@ private fun ProfilePostCard(post: FynxProfileRemoteClient.ProfilePost) {
     Card(Modifier.fillMaxWidth().padding(top = 10.dp)) {
         Column(Modifier.padding(14.dp)) {
             if (post.text.isNotBlank()) Text(post.text)
-            if (post.mediaId != null) {
-                Text(
-                    "Media attached",
-                    color = FynxDesign.TextSecondary,
-                    modifier = Modifier.padding(top = 8.dp)
+            val mediaUrl = post.mediaUrl ?: post.mediaId?.let { "/api/social/media/$it" }
+            if (!mediaUrl.isNullOrBlank()) {
+                Spacer(Modifier.height(10.dp))
+                FynxRemoteMedia(
+                    mediaUrl = mediaUrl,
+                    type = post.mediaType ?: "auto",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 180.dp, max = 420.dp)
                 )
             }
             Text(
