@@ -104,7 +104,7 @@ object FynxRemoteSocialClient {
         if (useCache && safeOffset == 0) {
             readCachedFeed(context)?.let { return Result.success(it) }
         }
-        return FynxBackendClient.get(
+        val remote = FynxBackendClient.get(
             context,
             "/api/social/feed?limit=$safeLimit&offset=$safeOffset"
         ).mapCatching { raw ->
@@ -112,6 +112,10 @@ object FynxRemoteSocialClient {
             if (safeOffset == 0) writeCachedFeed(context, raw)
             page
         }
+        if (safeOffset == 0 && remote.isFailure) {
+            readStaleCachedFeed(context)?.let { return Result.success(it) }
+        }
+        return remote
     }
 
     private fun parseFeedPage(raw: String): FeedPage {
@@ -148,6 +152,12 @@ object FynxRemoteSocialClient {
         val savedAt = prefs.getLong(FEED_CACHE_TIME_KEY, 0L)
         val raw = prefs.getString(FEED_CACHE_KEY, null) ?: return null
         if (System.currentTimeMillis() - savedAt > FEED_CACHE_TTL_MS) return null
+        parseFeedPage(raw)
+    }.getOrNull()
+
+    private fun readStaleCachedFeed(context: Context): FeedPage? = runCatching {
+        val prefs = context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE)
+        val raw = prefs.getString(FEED_CACHE_KEY, null) ?: return null
         parseFeedPage(raw)
     }.getOrNull()
 
@@ -514,8 +524,8 @@ object FynxRemoteSocialClient {
                 o.optString("text"),
                 o.optDouble("timestamp").toLong(),
                 o.optString("authorId"),
-                o.optString("authorUsername"),
-                o.optString("authorDisplayName")
+                o.optString("authorDisplayName"),
+                o.optString("authorUsername")
             )
         }
     }
