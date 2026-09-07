@@ -110,21 +110,6 @@ fun OtherUserProfilePanel(
                         if (person.country.isNotBlank()) {
                             Text(person.country, color = FynxDesign.TextSecondary)
                         }
-                        Spacer(Modifier.height(16.dp))
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            ProfileStat("Posts", formatProfileCount(person.postCount))
-                            if (person.connectionsVisible) {
-                                ProfileStat("Followers", formatProfileCount(person.followerCount ?: 0))
-                                ProfileStat("Following", formatProfileCount(person.followingCount ?: 0))
-                            } else {
-                                ProfileStat("Followers", "Hidden")
-                                ProfileStat("Following", "Hidden")
-                            }
-                        }
                         Spacer(Modifier.height(14.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
@@ -249,20 +234,6 @@ private fun RemoteProfilePhoto(mediaId: String?, name: String, modifier: Modifie
     } else {
         FynxAvatar(name, modifier)
     }
-}
-
-@Composable
-private fun ProfileStat(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.titleLarge)
-        Text(label, color = FynxDesign.TextSecondary, style = MaterialTheme.typography.labelMedium)
-    }
-}
-
-private fun formatProfileCount(value: Int): String = when {
-    value >= 1_000_000 -> String.format("%.1fM", value / 1_000_000f).replace(".0M", "M")
-    value >= 1_000 -> String.format("%.1fK", value / 1_000f).replace(".0K", "K")
-    else -> value.toString()
 }
 
 @Composable
