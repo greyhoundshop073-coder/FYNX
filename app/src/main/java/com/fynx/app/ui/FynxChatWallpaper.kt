@@ -1,6 +1,5 @@
 package com.fynx.app.ui
 
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -45,7 +44,7 @@ fun FynxChatPersonalizationDialog(onDismiss: () -> Unit) {
             Column(Modifier.fillMaxWidth().heightIn(max = 560.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 TabRow(selectedTabIndex = if (section == "Appearance") 0 else 1) {
                     Tab(selected = section == "Appearance", onClick = { section = "Appearance" }, text = { Text("Appearance") })
-                    Tab(selected = section == "Chat") { }
+                    Tab(selected = section == "Chat", onClick = { section = "Chat" }, text = { Text("Chat") })
                 }
                 if (section == "Appearance") {
                     Text("Chat wallpaper", style = MaterialTheme.typography.titleMedium)
