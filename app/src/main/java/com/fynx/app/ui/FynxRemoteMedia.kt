@@ -101,6 +101,21 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
     }
 }
 
+@Composable
+fun FynxRemoteProfileAvatar(mediaId: String?, contentDescription: String?, modifier: Modifier = Modifier) {
+    if (mediaId.isNullOrBlank()) {
+        Box(modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+            Text(contentDescription.orEmpty().trim().firstOrNull()?.uppercase() ?: "F", color = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
+    } else {
+        FynxRemoteMedia(
+            mediaUrl = "/api/media/${mediaId.trim()}",
+            type = "image",
+            modifier = modifier.clip(RoundedCornerShape(50))
+        )
+    }
+}
+
 private sealed interface MediaLoadResult {
     data class Image(val bitmap: android.graphics.Bitmap) : MediaLoadResult
     data class Video(val file: File) : MediaLoadResult
