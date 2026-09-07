@@ -6,7 +6,13 @@ import org.json.JSONObject
 
 /** Real account-scoped friends, search, and blocking API for FYNX. */
 object FynxSocialClient {
-    data class User(val username: String, val displayName: String, val phone: String, val id: String = "")
+    data class User(
+        val username: String,
+        val displayName: String,
+        val phone: String,
+        val id: String = "",
+        val profilePhotoMediaId: String? = null
+    )
     data class FriendRequest(val id: String, val username: String, val displayName: String, val status: String)
 
     suspend fun searchUsers(context: Context, query: String, phoneSearch: Boolean = false): Result<List<User>> {
@@ -16,8 +22,7 @@ object FynxSocialClient {
             val users = JSONObject(raw).getJSONArray("users")
             buildList {
                 for (index in 0 until users.length()) {
-                    val item = users.getJSONObject(index)
-                    add(User(item.getString("username"), item.optString("display_name"), item.optString("phone"), item.optString("id")))
+                    add(parseUser(users.getJSONObject(index)))
                 }
             }
         }
@@ -63,10 +68,18 @@ object FynxSocialClient {
 
     private fun parseUsers(items: JSONArray): List<User> = buildList {
         for (index in 0 until items.length()) {
-            val item = items.getJSONObject(index)
-            add(User(item.getString("username"), item.optString("display_name"), item.optString("phone"), item.optString("id")))
+            add(parseUser(items.getJSONObject(index)))
         }
     }
+
+    private fun parseUser(item: JSONObject): User = User(
+        username = item.optString("username"),
+        displayName = item.optString("display_name", item.optString("displayName")),
+        phone = item.optString("phone"),
+        id = item.optString("id"),
+        profilePhotoMediaId = item.optString("profile_photo_media_id", item.optString("profilePhotoMediaId"))
+            .takeIf { it.isNotBlank() && it != "null" }
+    )
 
     private fun encode(value: String): String = java.net.URLEncoder.encode(value.trim(), "UTF-8").replace("+", "%20")
 }
