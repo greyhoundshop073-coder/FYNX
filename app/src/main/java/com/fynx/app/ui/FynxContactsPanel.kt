@@ -37,6 +37,7 @@ fun FynxContactsPanel(onBack: () -> Unit = {}) {
     var loading by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
+    var profileUser by remember { mutableStateOf<String?>(null) }
     var searchQuery by remember { mutableStateOf("") }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -63,8 +64,31 @@ fun FynxContactsPanel(onBack: () -> Unit = {}) {
 
     LaunchedEffect(permission) { if (permission) loadContacts() }
 
+    profileUser?.let { username ->
+        OtherUserProfilePanel(
+            username = username,
+            onBack = { profileUser = null },
+            onMessage = { targetUsername ->
+                profileUser = null
+                openChat = ChatPreview(
+                    name = targetUsername.removePrefix("@").ifBlank { targetUsername },
+                    username = "@${targetUsername.removePrefix("@").lowercase()}",
+                    lastMessage = "",
+                    time = "Now"
+                )
+            }
+        )
+        return
+    }
+
     if (openChat != null) {
-        ConversationPanel(chat = openChat!!, onBack = { openChat = null }, onOpenProfile = {}, onVoiceCall = {}, onVideoCall = {})
+        ConversationPanel(
+            chat = openChat!!,
+            onBack = { openChat = null },
+            onOpenProfile = { username -> profileUser = username.removePrefix("@") },
+            onVoiceCall = {},
+            onVideoCall = {}
+        )
         return
     }
 
@@ -107,14 +131,30 @@ fun FynxContactsPanel(onBack: () -> Unit = {}) {
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(contact.name.ifBlank { "Unknown contact" }, style = MaterialTheme.typography.titleSmall)
-                                Text(if (user != null) "@${user.username.removePrefix("@")}" else "Not on FYNX", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                                Text(if (user != null) "@${user.username.removePrefix("@").lowercase()}" else "Not on FYNX", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                             }
                             if (user != null) {
                                 TextButton(onClick = {
-                                    val username = user.username.removePrefix("@")
-                                    openChat = FynxChatStore.loadPreviews(context).firstOrNull { it.username.equals("@$username", true) }
-                                        ?: ChatPreview(user.displayName.ifBlank { username }, "@$username", "Start a conversation", "Now")
-                                }) { Icon(Icons.Default.ChatBubbleOutline, null); Spacer(Modifier.width(3.dp)); Text("Chat") }
+                                    profileUser = user.username.removePrefix("@")
+                                }) {
+                                    Icon(Icons.Default.People, null)
+                                    Spacer(Modifier.width(3.dp))
+                                    Text("Profile")
+                                }
+                                TextButton(onClick = {
+                                    val username = user.username.removePrefix("@").lowercase()
+                                    openChat = ChatPreview(
+                                        name = user.displayName.ifBlank { username },
+                                        username = "@$username",
+                                        lastMessage = "",
+                                        time = "Now",
+                                        online = false
+                                    )
+                                }) {
+                                    Icon(Icons.Default.ChatBubbleOutline, null)
+                                    Spacer(Modifier.width(3.dp))
+                                    Text("Chat")
+                                }
                             } else {
                                 TextButton(onClick = {
                                     val payload = FynxShareActions.invitePayload(contact.name.ifBlank { "A friend" })
