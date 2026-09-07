@@ -34,7 +34,13 @@ check("authenticated app gate exists", "FynxAuthGate" in app and "AuthState.SIGN
 check("profile to chat and call navigation exists", "ConversationPanel" in app and "onVoiceCall" in app and "onVideoCall" in app)
 check("calls panel has permission recovery and realtime events", "RequestMultiplePermissions" in calls and "realtimeClient.connect()" in calls and '"invite"' in calls)
 check("calls panel cleans media on terminal paths", "mediaEngine.disconnect()" in calls and "FynxCallsStore.updateStatus" in calls)
-check("server notification client delegates to notification API", "FynxNotificationRemoteClient.load" in notifications and "FynxBackendClient.get(context, \"/api/notifications\")" in notifications and "FynxNotificationRemoteClient.markRead" in notifications)
+
+# The Android client intentionally delegates HTTP through FynxBackendClient.
+# Match the delegation structurally so harmless formatting/API-client refactors
+# do not create false CI failures.
+notification_load_ok = re.search(r"FynxBackendClient\.get\(\s*context\s*,\s*['\"]/?api/notifications['\"]\s*\)", notifications) is not None
+notification_read_ok = re.search(r"FynxBackendClient\.postJson\(\s*context\s*,\s*['\"]/api/notifications/\$encoded/read['\"]", notifications) is not None
+check("server notification client delegates to notification API", "FynxNotificationRemoteClient.load" in notifications and notification_load_ok and "FynxNotificationRemoteClient.markRead" in notifications and notification_read_ok)
 check("server notification API is registered", "app.get('/api/notifications'" in notification_backend and "app.post('/api/notifications/:id/read'" in notification_backend)
 check("admin center is server-role gated", "FynxAdminClient.dashboard" in app and "adminRole" in app and 'adminRole != null' in app)
 check("privacy/safety surface is wired", "Privacy" in app and "FynxPrivacySettingsPanel" in app)
