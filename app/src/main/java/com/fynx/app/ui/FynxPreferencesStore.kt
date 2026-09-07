@@ -24,6 +24,13 @@ object FynxPreferencesStore {
     private const val KEY_LANGUAGE = "language"
     private const val KEY_APPEARANCE = "appearance"
     private const val KEY_ASSET = "selected_asset_uri"
+    private const val KEY_NIGHT_MODE = "night_mode"
+    private const val KEY_NIGHT_MODE_START = "night_mode_start"
+    private const val KEY_NIGHT_MODE_END = "night_mode_end"
+    private const val KEY_CHAT_WALLPAPER = "chat_wallpaper"
+    private const val KEY_CHAT_LIST_VIEW = "chat_list_view"
+    private const val KEY_STICKER_ANIMATION = "sticker_animation"
+    private const val KEY_EMOJI_SIZE = "emoji_size"
 
     private const val DEFAULT_VISIBILITY = "My friends"
 
@@ -60,6 +67,21 @@ object FynxPreferencesStore {
     fun loadLanguage(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_LANGUAGE, "Device default") ?: "Device default"
     fun saveLanguage(context: Context, value: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_LANGUAGE, value).apply() }
     fun loadAsset(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_ASSET, null)
+
+    fun loadNightMode(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_NIGHT_MODE, "Follow system") ?: "Follow system"
+    fun saveNightMode(context: Context, value: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_NIGHT_MODE, value).apply() }
+    fun loadNightModeStart(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_NIGHT_MODE_START, "22:00") ?: "22:00"
+    fun saveNightModeStart(context: Context, value: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_NIGHT_MODE_START, value).apply() }
+    fun loadNightModeEnd(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_NIGHT_MODE_END, "07:00") ?: "07:00"
+    fun saveNightModeEnd(context: Context, value: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_NIGHT_MODE_END, value).apply() }
+    fun loadChatWallpaper(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_CHAT_WALLPAPER, "FYNX Default") ?: "FYNX Default"
+    fun saveChatWallpaper(context: Context, value: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_CHAT_WALLPAPER, value).apply() }
+    fun loadChatListView(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_CHAT_LIST_VIEW, "Comfortable") ?: "Comfortable"
+    fun saveChatListView(context: Context, value: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_CHAT_LIST_VIEW, value).apply() }
+    fun loadStickerAnimation(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_STICKER_ANIMATION, true)
+    fun saveStickerAnimation(context: Context, value: Boolean) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_STICKER_ANIMATION, value).apply() }
+    fun loadEmojiSize(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_EMOJI_SIZE, "Normal") ?: "Normal"
+    fun saveEmojiSize(context: Context, value: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_EMOJI_SIZE, value).apply() }
 
     /** Persist the selected customization image inside FYNX so the picker URI cannot expire. */
     fun saveAsset(context: Context, uri: String?) {
