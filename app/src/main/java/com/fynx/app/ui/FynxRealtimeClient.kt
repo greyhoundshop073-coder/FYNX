@@ -72,7 +72,7 @@ class FynxRealtimeClient(
                     "message_status" -> onEvent(Event.MessageStatus(root.optString("messageId"), when (root.optString("status")) { "read" -> Status.READ; "delivered" -> Status.DELIVERED; else -> Status.SENT }))
                     "typing" -> onEvent(Event.Typing(root.optString("userId"), root.optBoolean("isTyping")))
                     "presence" -> onEvent(Event.Presence(root.optString("userId"), root.optBoolean("online")))
-                    "call" -> onEvent(parseCallEvent(root))
+                    "call" -> parseCallEvent(root)?.let(onEvent)
                 } }
             }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -104,9 +104,25 @@ class FynxRealtimeClient(
         reconnectHandler.postDelayed({ connectInternal() }, (1000L shl (reconnectAttempt - 1)).coerceAtMost(30_000L))
     }
 
-    private fun parseCallEvent(root: JSONObject): Event.Call {
-        val c = root.optJSONObject("candidate")?.let { IceCandidatePayload(it.optString("candidate"), if (it.isNull("sdpMid")) null else it.optString("sdpMid"), if (it.isNull("sdpMLineIndex")) null else it.optInt("sdpMLineIndex"), if (it.isNull("usernameFragment")) null else it.optString("usernameFragment")) }
-        return Event.Call(root.optString("callId"), root.optString("callType", "voice"), root.optString("fromUserId"), root.optString("toUserId"), root.optString("signalType"), root.optString("sdp").takeIf { it.isNotBlank() }, c, root.optString("fromUsername").takeIf { it.isNotBlank() }, root.optString("error").takeIf { it.isNotBlank() })
+    private fun parseCallEvent(root: JSONObject): Event.Call? {
+        val callId = root.optString("callId").trim()
+        val callType = root.optString("callType", "voice").trim().lowercase()
+        val signalType = root.optString("signalType").trim().lowercase()
+        val fromUserId = root.optString("fromUserId").trim()
+        val toUserId = root.optString("toUserId").trim()
+        if (!FynxCallTransportHardening.isValidCallId(callId) ||
+            !FynxCallTransportHardening.isValidCallSignal(signalType) ||
+            !FynxCallTransportHardening.isValidCallType(callType) ||
+            fromUserId.isBlank() || toUserId.isBlank() || fromUserId == toUserId) return null
+        val c = root.optJSONObject("candidate")?.let {
+            val candidate = it.optString("candidate").trim()
+            if (candidate.isBlank() || candidate.length > 20_000) return@let null
+            IceCandidatePayload(candidate, if (it.isNull("sdpMid")) null else it.optString("sdpMid").take(100), if (it.isNull("sdpMLineIndex")) null else it.optInt("sdpMLineIndex"), if (it.isNull("usernameFragment")) null else it.optString("usernameFragment").take(200))
+        }
+        val sdp = root.optString("sdp").takeIf { it.isNotBlank() && it.length <= 200_000 }
+        if ((signalType == "offer" || signalType == "answer") && sdp == null) return null
+        if (signalType == "ice" && c == null) return null
+        return Event.Call(callId, callType, fromUserId, toUserId, signalType, sdp, c, root.optString("fromUsername").takeIf { it.isNotBlank() }, root.optString("error").takeIf { it.isNotBlank() })
     }
     fun sendCallInvite(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "invite")
     fun sendCallAccept(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "accept")
