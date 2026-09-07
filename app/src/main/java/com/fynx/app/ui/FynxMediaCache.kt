@@ -29,12 +29,14 @@ internal object FynxMediaCache {
             file.setLastModified(System.currentTimeMillis())
             return file
         }
+        if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) return null
         val lock = synchronized(downloadLocks) { downloadLocks.getOrPut(file.absolutePath) { Any() } }
         return synchronized(lock) {
             if (file.isFile && file.length() in 1..MAX_FYNX_MEDIA_FILE_BYTES) {
                 file.setLastModified(System.currentTimeMillis())
                 return@synchronized file
             }
+            if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) return@synchronized null
             file.delete()
             download(context, normalizedPath, file)?.also { trim(directory, it) }
         }.also {
@@ -45,19 +47,25 @@ internal object FynxMediaCache {
     }
 
     private fun download(context: Context, path: String, destination: File): File? {
-        repeat(MAX_DOWNLOAD_ATTEMPTS) { attempt ->
-            val result = downloadOnce(context, path, destination)
+        val networkLevel = FynxNetworkQuality.current(context)
+        val attempts = when (networkLevel) {
+            FynxNetworkQuality.Level.WEAK -> 1
+            FynxNetworkQuality.Level.GOOD -> MAX_DOWNLOAD_ATTEMPTS
+            FynxNetworkQuality.Level.OFFLINE -> 0
+        }
+        repeat(attempts) { attempt ->
+            val result = downloadOnce(context, path, destination, networkLevel)
             if (result != null) return result
-            if (attempt + 1 < MAX_DOWNLOAD_ATTEMPTS) Thread.sleep(300L * (1L shl attempt))
+            if (attempt + 1 < attempts) Thread.sleep(300L * (1L shl attempt))
         }
         return null
     }
 
-    private fun downloadOnce(context: Context, path: String, destination: File): File? = runCatching {
+    private fun downloadOnce(context: Context, path: String, destination: File, networkLevel: FynxNetworkQuality.Level): File? = runCatching {
         val baseUrl = FynxBackendClient.baseUrl(context).trimEnd('/')
         val connection = (URL(baseUrl + path).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 8000
-            readTimeout = 15000
+            connectTimeout = if (networkLevel == FynxNetworkQuality.Level.WEAK) 10000 else 8000
+            readTimeout = if (networkLevel == FynxNetworkQuality.Level.WEAK) 20000 else 15000
             instanceFollowRedirects = false
             setRequestProperty("Authorization", "Bearer ${FynxBackendClient.accessToken(context) ?: ""}")
             setRequestProperty("Accept", "image/*,video/*,audio/*")
