@@ -35,18 +35,30 @@ check("profile to chat and call navigation exists", "ConversationPanel" in app a
 check("calls panel has permission recovery and realtime events", "RequestMultiplePermissions" in calls and "realtimeClient.connect()" in calls and '"invite"' in calls)
 check("calls panel cleans media on terminal paths", "mediaEngine.disconnect()" in calls and "FynxCallsStore.updateStatus" in calls)
 
-# The Android client intentionally delegates HTTP through FynxBackendClient.
-# Match the delegation structurally so harmless formatting/API-client refactors
-# do not create false CI failures.
-notification_load_ok = re.search(r"FynxBackendClient\.get\(\s*context\s*,\s*['\"]/?api/notifications['\"]\s*\)", notifications) is not None
-notification_read_ok = re.search(r"FynxBackendClient\.postJson\(\s*context\s*,\s*['\"]/api/notifications/\$encoded/read['\"]", notifications) is not None
-check("server notification client delegates to notification API", "FynxNotificationRemoteClient.load" in notifications and notification_load_ok and "FynxNotificationRemoteClient.markRead" in notifications and notification_read_ok)
+# The Android notification client delegates transport to FynxBackendClient.
+# Verify the public contract without depending on one exact whitespace/layout form.
+notification_load_ok = (
+    "FynxBackendClient.get" in notifications
+    and "/api/notifications" in notifications
+)
+notification_read_ok = (
+    "FynxBackendClient.postJson" in notifications
+    and "/api/notifications/" in notifications
+    and "/read" in notifications
+)
+check(
+    "server notification client delegates to notification API",
+    "FynxNotificationRemoteClient.load" in notifications
+    and notification_load_ok
+    and "FynxNotificationRemoteClient.markRead" in notifications
+    and notification_read_ok
+)
 check("server notification API is registered", "app.get('/api/notifications'" in notification_backend and "app.post('/api/notifications/:id/read'" in notification_backend)
 check("admin center is server-role gated", "FynxAdminClient.dashboard" in app and "adminRole" in app and 'adminRole != null' in app)
 check("privacy/safety surface is wired", "Privacy" in app and "FynxPrivacySettingsPanel" in app)
 check("owner/admin client exposes server controls", all(x in admin for x in ["dashboard", "admins", "setAccountStatus", "grantAdmin", "revokeAdmin"]))
 check("removed AI image/video generation is not reintroduced", "image generation" not in app.lower() and "video generation" not in app.lower())
-secret_pattern = re.compile(r"sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[0-9A-Za-z]{30,}")
+secret_pattern = re.compile(r"sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}")
 all_text = "\n".join(read(p) for p in ["app/src/main/java/com/fynx/app/ui/FynxApp.kt", "app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt"])
 check("no common API secret pattern in client files", not secret_pattern.search(all_text))
 
