@@ -47,11 +47,11 @@ notification_read_ok = (
     and "/read" in notifications
 )
 notification_load_method = re.search(
-    r"\\bfun\\s+load\\s*\\(",
+    r"\bfun\s+load\s*\(",
     notifications
 ) is not None
 notification_mark_read_method = re.search(
-    r"\\bfun\\s+markRead\\s*\\(",
+    r"\bfun\s+markRead\s*\(",
     notifications
 ) is not None
 check(
