@@ -16,6 +16,8 @@ private const val MAX_IMAGE_DIMENSION = 1600
 private const val MAX_DOWNLOAD_ATTEMPTS = 3
 
 internal object FynxMediaCache {
+    private val downloadLocks = mutableMapOf<String, Any>()
+
     fun getOrDownload(context: Context, path: String, type: String?): File? {
         if (path.isBlank()) return null
         val normalizedPath = path.trim()
@@ -27,8 +29,19 @@ internal object FynxMediaCache {
             file.setLastModified(System.currentTimeMillis())
             return file
         }
-        file.delete()
-        return download(context, normalizedPath, file)?.also { trim(directory, it) }
+        val lock = synchronized(downloadLocks) { downloadLocks.getOrPut(file.absolutePath) { Any() } }
+        return synchronized(lock) {
+            if (file.isFile && file.length() in 1..MAX_FYNX_MEDIA_FILE_BYTES) {
+                file.setLastModified(System.currentTimeMillis())
+                return@synchronized file
+            }
+            file.delete()
+            download(context, normalizedPath, file)?.also { trim(directory, it) }
+        }.also {
+            synchronized(downloadLocks) {
+                if (!file.exists()) downloadLocks.remove(file.absolutePath)
+            }
+        }
     }
 
     private fun download(context: Context, path: String, destination: File): File? {
@@ -81,9 +94,7 @@ internal object FynxMediaCache {
             optimizeImageIfNeeded(temporary, destination)
             if (!destination.exists()) {
                 if (!temporary.renameTo(destination)) { temporary.delete(); return null }
-            } else {
-                temporary.delete()
-            }
+            } else temporary.delete()
             if (destination.length() !in 1..MAX_FYNX_MEDIA_FILE_BYTES) {
                 destination.delete()
                 return null
@@ -100,9 +111,7 @@ internal object FynxMediaCache {
         BitmapFactory.decodeFile(source.absolutePath, options)
         val width = options.outWidth
         val height = options.outHeight
-        if (width <= 0 || height <= 0) return
-        if (width <= MAX_IMAGE_DIMENSION && height <= MAX_IMAGE_DIMENSION) return
-
+        if (width <= 0 || height <= 0 || (width <= MAX_IMAGE_DIMENSION && height <= MAX_IMAGE_DIMENSION)) return
         var sample = 1
         while (width / sample > MAX_IMAGE_DIMENSION || height / sample > MAX_IMAGE_DIMENSION) sample *= 2
         val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.RGB_565 }
@@ -112,9 +121,7 @@ internal object FynxMediaCache {
                 if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 88, output)) destination.delete()
                 else output.fd.sync()
             }
-        } finally {
-            bitmap.recycle()
-        }
+        } finally { bitmap.recycle() }
         if (destination.exists()) source.delete()
     }
 
