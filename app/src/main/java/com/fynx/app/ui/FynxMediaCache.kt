@@ -40,9 +40,7 @@ internal object FynxMediaCache {
             file.delete()
             download(context, normalizedPath, file)?.also { trim(directory, it) }
         }.also {
-            synchronized(downloadLocks) {
-                if (!file.exists()) downloadLocks.remove(file.absolutePath)
-            }
+            synchronized(downloadLocks) { downloadLocks.remove(file.absolutePath) }
         }
     }
 
