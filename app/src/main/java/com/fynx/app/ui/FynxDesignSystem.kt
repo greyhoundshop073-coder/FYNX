@@ -21,8 +21,8 @@ enum class FynxAccent(val primary: Color, val secondary: Color) {
     Pink(Color(0xFFD13F91), Color(0xFFF276B7)),
     Orange(Color(0xFFE66A16), Color(0xFFF49A52)),
     Red(Color(0xFFD83A4A), Color(0xFFF16B78)),
-    Black(Color(0xFF20252D), Color(0xFF505A67)),
-    White(Color(0xFF315D8A), Color(0xFF6F9AC6))
+    Black(Color.Black, Color(0xFF303030)),
+    White(Color.White, Color(0xFFE0E0E0))
 }
 
 object FynxDesign {
@@ -74,12 +74,13 @@ fun FynxTheme(
     val context = LocalContext.current
     val amoled = FynxPreferencesStore.loadAppearance(context) == "Black AMOLED"
     val effectiveDarkMode = amoled || darkMode
+    val onAccent = if (accent.primary.luminance() > 0.5f) Color.Black else Color.White
     val scheme = if (effectiveDarkMode) {
         darkColorScheme(
             primary = accent.primary,
-            onPrimary = Color.White,
+            onPrimary = onAccent,
             secondary = accent.secondary,
-            onSecondary = Color.White,
+            onSecondary = if (accent.secondary.luminance() > 0.5f) Color.Black else Color.White,
             background = if (amoled) FynxDesign.AmoledBackground else FynxDesign.Background,
             onBackground = if (amoled) FynxDesign.AmoledTextPrimary else FynxDesign.TextPrimary,
             surface = if (amoled) FynxDesign.AmoledSurface else FynxDesign.Surface,
@@ -87,14 +88,14 @@ fun FynxTheme(
             surfaceVariant = if (amoled) FynxDesign.AmoledSurfaceRaised else FynxDesign.SurfaceRaised,
             onSurfaceVariant = if (amoled) FynxDesign.AmoledTextSecondary else FynxDesign.TextSecondary,
             outline = if (amoled) FynxDesign.AmoledOutline else FynxDesign.Outline,
-            surfaceTint = accent.primary
+            surfaceTint = if (amoled) Color.Black else accent.primary
         )
     } else {
         lightColorScheme(
             primary = accent.primary,
-            onPrimary = Color.White,
+            onPrimary = onAccent,
             secondary = accent.secondary,
-            onSecondary = Color.White,
+            onSecondary = if (accent.secondary.luminance() > 0.5f) Color.Black else Color.White,
             background = FynxDesign.LightBackground,
             onBackground = FynxDesign.LightTextPrimary,
             surface = FynxDesign.LightSurface,
