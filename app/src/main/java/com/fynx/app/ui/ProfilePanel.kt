@@ -97,7 +97,6 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
 private fun formatProfileCount(value:Int):String=when{value>=1_000_000->String.format("%.1fM",value/1_000_000f).replace(".0M","M");value>=1_000->String.format("%.1fK",value/1_000f).replace(".0K","K");else->value.toString()}
 @Composable private fun ProfileInfoCard(title: String, value: String) { Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) { Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) { Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f)); Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
 
-    connectionType?.let { type -> ProfileConnectionsDialog(type, connections, connectionsLoading, connectionsError) { connectionType = null } }
 
 @Composable private fun EditProfilePanel(profile: FynxProfile, description: String, photoUri: String?, syncing: Boolean, syncError: String?, onPhotoChanged: (String?) -> Unit, onSave: (FynxProfile, String, String?) -> Unit, onCancel: () -> Unit) {
     var displayName by remember(profile) { mutableStateOf(profile.displayName) }; var username by remember(profile) { mutableStateOf(profile.username) }; var bio by remember(profile) { mutableStateOf(profile.bio) }; var about by remember(profile, description) { mutableStateOf(description) }
