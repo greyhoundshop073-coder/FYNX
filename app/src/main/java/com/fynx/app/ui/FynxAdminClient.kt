@@ -6,7 +6,7 @@ import org.json.JSONObject
 /** Server-authoritative client for public announcements and owner/admin controls. */
 object FynxAdminClient {
     data class Announcement(val id: String, val title: String, val body: String, val priority: String, val publishedAt: String)
-    data class Dashboard(val users: Int, val openReports: Int, val openAppeals: Int, val safetyEvents24h: Int)
+    data class Dashboard(val role: String, val users: Int, val openReports: Int, val openAppeals: Int, val safetyEvents24h: Int)
 
     suspend fun announcements(context: Context): Result<List<Announcement>> =
         FynxBackendClient.get(context, "/api/announcements").mapCatching { raw ->
@@ -28,11 +28,13 @@ object FynxAdminClient {
     suspend fun dashboard(context: Context): Result<Dashboard> =
         FynxBackendClient.get(context, "/api/admin/dashboard").mapCatching { raw ->
             val value = JSONObject(raw)
+            val counts = value.optJSONObject("counts") ?: JSONObject()
             Dashboard(
-                users = value.optInt("users"),
-                openReports = value.optInt("openReports"),
-                openAppeals = value.optInt("openAppeals"),
-                safetyEvents24h = value.optInt("safetyEvents24h")
+                role = value.optString("role"),
+                users = counts.optInt("users"),
+                openReports = counts.optInt("openReports"),
+                openAppeals = counts.optInt("openAppeals"),
+                safetyEvents24h = counts.optInt("safetyEvents24h")
             )
         }
 
