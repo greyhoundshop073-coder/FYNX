@@ -87,8 +87,8 @@ fun FynxContactsPanel(onBack: () -> Unit = {}) {
                     notice = "Some contacts could not be checked. Showing the matches FYNX found."
                 }
             } catch (_: kotlinx.coroutines.CancellationException) {
-                throw CancellationException()
-            } catch (error: Exception) {
+                throw kotlinx.coroutines.CancellationException()
+            } catch (_: Exception) {
                 matched = emptyMap()
                 notice = "FYNX could not load your contacts right now. Check your connection and try again."
             } finally {
