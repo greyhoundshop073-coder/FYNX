@@ -34,8 +34,13 @@ fun NotificationPanel(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var localNotifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
+    var remoteNotifications by remember { mutableStateOf<List<FynxNotification>>(emptyList()) }
     var notificationPreferences by remember { mutableStateOf(FynxNotificationPreferencesClient.cached(context)) }
-    val current = if (localNotifications.isNotEmpty()) localNotifications else notifications
+    val current = remember(localNotifications, remoteNotifications, notifications) {
+        (remoteNotifications + localNotifications + notifications)
+            .distinctBy { it.id }
+            .sortedByDescending { it.timestamp }
+    }
     var selectedType by remember { mutableStateOf<FynxNotificationType?>(null) }
     var unreadOnly by remember { mutableStateOf(false) }
     var speakNotifications by remember { mutableStateOf(FynxNotificationFoundation.isSpeakNotificationsEnabled(context)) }
@@ -45,6 +50,7 @@ fun NotificationPanel(
 
     LaunchedEffect(Unit) {
         FynxNotificationPreferencesClient.load(context).onSuccess { notificationPreferences = it }
+        FynxNotificationRemoteClient.load(context).onSuccess { remoteNotifications = it }
     }
 
     fun savePreferences(next: FynxNotificationPreferences) {
@@ -71,6 +77,10 @@ fun NotificationPanel(
                 onClick = {
                     FynxNotificationStore.markAllRead(context)
                     localNotifications = FynxNotificationStore.load(context)
+                    scope.launch {
+                        current.filter { !it.read }.forEach { FynxNotificationRemoteClient.markRead(context, it.id) }
+                        FynxNotificationRemoteClient.load(context).onSuccess { remoteNotifications = it }
+                    }
                     onMarkAllRead()
                 }, enabled = current.any { !it.read }
             ) { Text("Read all") }
@@ -157,6 +167,10 @@ fun NotificationPanel(
                             if (!notification.read) {
                                 FynxNotificationStore.markRead(context, notification.id)
                                 localNotifications = FynxNotificationStore.load(context)
+                                scope.launch {
+                                    FynxNotificationRemoteClient.markRead(context, notification.id)
+                                    FynxNotificationRemoteClient.load(context).onSuccess { remoteNotifications = it }
+                                }
                                 onNotificationRead(notification.id)
                             }
                             onNotificationOpen(notification)
