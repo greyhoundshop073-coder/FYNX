@@ -28,6 +28,8 @@ object FynxBackendClient {
     private const val RETRY_DELAY_MS = 500L
     private const val CONNECT_TIMEOUT_MS = 8_000
     private const val READ_TIMEOUT_MS = 15_000
+    private const val WEAK_CONNECT_TIMEOUT_MS = 12_000
+    private const val WEAK_READ_TIMEOUT_MS = 25_000
     private const val MAX_RESPONSE_BYTES = 4 * 1024 * 1024
     private const val MAX_CONCURRENT_REQUESTS = 6
 
@@ -94,10 +96,11 @@ object FynxBackendClient {
         }
 
     private suspend fun executeRequest(context: Context, root: String, method: String, path: String, body: String?): String {
+        val weakNetwork = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK
         val connection = (URL(root + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = READ_TIMEOUT_MS
+            connectTimeout = if (weakNetwork) WEAK_CONNECT_TIMEOUT_MS else CONNECT_TIMEOUT_MS
+            readTimeout = if (weakNetwork) WEAK_READ_TIMEOUT_MS else READ_TIMEOUT_MS
             useCaches = false
             setRequestProperty("Accept", "application/json")
             setRequestProperty("Connection", "keep-alive")
