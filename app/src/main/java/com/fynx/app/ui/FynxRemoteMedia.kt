@@ -15,7 +15,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -28,17 +27,29 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
+private fun resolveFynxMediaUrl(context: android.content.Context, mediaUrl: String): String {
+    val value = mediaUrl.trim()
+    if (value.isBlank()) return value
+    if (value.startsWith("https://", ignoreCase = true) || value.startsWith("http://", ignoreCase = true)) return value
+    return if (value.startsWith("/")) {
+        FynxBackendClient.baseUrl(context) + value
+    } else {
+        FynxBackendClient.baseUrl(context) + "/" + value
+    }
+}
+
 @Composable
 fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    var kind by remember(mediaUrl, type) { mutableStateOf("loading") }
-    var bitmap by remember(mediaUrl, type) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var localFile by remember(mediaUrl, type) { mutableStateOf<File?>(null) }
-    LaunchedEffect(mediaUrl, type) {
+    val resolvedUrl = remember(mediaUrl) { resolveFynxMediaUrl(context, mediaUrl) }
+    var kind by remember(resolvedUrl, type) { mutableStateOf("loading") }
+    var bitmap by remember(resolvedUrl, type) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var localFile by remember(resolvedUrl, type) { mutableStateOf<File?>(null) }
+    LaunchedEffect(resolvedUrl, type) {
         try {
             val loaded = withContext(Dispatchers.IO) {
                 runCatching {
-                    val connection = (URL(mediaUrl).openConnection() as HttpURLConnection).apply {
+                    val connection = (URL(resolvedUrl).openConnection() as HttpURLConnection).apply {
                         connectTimeout = 10_000
                         readTimeout = 20_000
                         useCaches = false
@@ -54,7 +65,7 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
                                 contentType.contains("3gpp") -> ".3gp"
                                 else -> ".mp4"
                             }
-                            val file = File(context.cacheDir, "fynx_media_${mediaUrl.hashCode()}$extension")
+                            val file = File(context.cacheDir, "fynx_media_${resolvedUrl.hashCode()}$extension")
                             if (!file.exists() || file.length() == 0L) {
                                 val temp = File(context.cacheDir, "${file.name}.part")
                                 temp.delete()
@@ -101,10 +112,11 @@ private sealed interface MediaLoadResult {
 @Composable
 fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    var player by remember(mediaUrl) { mutableStateOf<MediaPlayer?>(null) }
-    var playing by remember(mediaUrl) { mutableStateOf(false) }
-    var loading by remember(mediaUrl) { mutableStateOf(false) }
-    DisposableEffect(mediaUrl) { onDispose { player?.release(); player = null } }
+    val resolvedUrl = remember(mediaUrl) { resolveFynxMediaUrl(context, mediaUrl) }
+    var player by remember(resolvedUrl) { mutableStateOf<MediaPlayer?>(null) }
+    var playing by remember(resolvedUrl) { mutableStateOf(false) }
+    var loading by remember(resolvedUrl) { mutableStateOf(false) }
+    DisposableEffect(resolvedUrl) { onDispose { player?.release(); player = null } }
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         IconButton(enabled = !loading, onClick = {
             if (playing) { player?.pause(); playing = false; return@IconButton }
@@ -113,7 +125,7 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier) {
                 val p = MediaPlayer()
                 player = p
                 runCatching {
-                    p.setDataSource(context, Uri.parse(mediaUrl), mapOf("Authorization" to "Bearer ${FynxBackendClient.accessToken(context).orEmpty()}"))
+                    p.setDataSource(context, Uri.parse(resolvedUrl), mapOf("Authorization" to "Bearer ${FynxBackendClient.accessToken(context).orEmpty()}"))
                     p.setOnPreparedListener { loading = false; playing = true; it.start() }
                     p.setOnCompletionListener { playing = false }
                     p.setOnErrorListener { _, _, _ -> loading = false; playing = false; true }
