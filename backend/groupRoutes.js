@@ -1,5 +1,6 @@
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
+import { inspectTrustSafetyText } from './trustSafety.js';
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
@@ -35,6 +36,15 @@ export function registerGroupRoutes({ app }) {
         attachment_type TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS fynx_account_safety (
+        user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        message_safety BOOLEAN NOT NULL DEFAULT TRUE,
+        marketplace_safety BOOLEAN NOT NULL DEFAULT TRUE,
+        login_alerts BOOLEAN NOT NULL DEFAULT TRUE,
+        account_status TEXT NOT NULL DEFAULT 'ACTIVE',
+        status_note TEXT NOT NULL DEFAULT '',
+        CHECK(account_status IN ('ACTIVE','LIMITED','LOCKED'))
+      );
       CREATE INDEX IF NOT EXISTS fynx_group_members_user_idx ON fynx_group_members(user_id,group_id);
       CREATE INDEX IF NOT EXISTS fynx_group_messages_group_idx ON fynx_group_messages(group_id,created_at DESC);
       CREATE INDEX IF NOT EXISTS fynx_group_messages_media_idx ON fynx_group_messages(attachment_media_id);
@@ -64,8 +74,7 @@ export function registerGroupRoutes({ app }) {
     attachmentUrl:row.attachment_media_id==null?null:`/api/media/${row.attachment_media_id}`
   });
 
-  app.post('/api/groups/:groupId/sync',auth,async(req,res)=>{
-    const client=await pool.connect();
+  app.post('/api/groups/:groupId/sync',auth,async(req,res)=>{const client=await pool.connect();
     try{
       await ensureSchema();
       const groupId=String(req.params?.groupId||'');
@@ -120,6 +129,13 @@ export function registerGroupRoutes({ app }) {
     if(!text && attachmentMediaId==null)return res.status(400).json({error:'message content is required'});
     if(attachmentMediaId!==null&&(!Number.isInteger(attachmentMediaId)||attachmentMediaId<1))return res.status(400).json({error:'invalid attachment'});
     if(attachmentMediaId!==null){const owned=await pool.query(`SELECT id FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1`,[attachmentMediaId,req.user.sub]);if(!owned.rows[0])return res.status(403).json({error:'attachment is not owned by this account'});}
+    const safety=(await pool.query(`SELECT message_safety,account_status FROM fynx_account_safety WHERE user_id=$1 LIMIT 1`,[req.user.sub])).rows[0]||{message_safety:true,account_status:'ACTIVE'};
+    if(String(safety.account_status)==='LOCKED')return res.status(403).json({error:'account is locked',code:'ACCOUNT_LOCKED'});
+    if(String(safety.account_status)==='LIMITED')return res.status(403).json({error:'account is temporarily limited from sending group messages',code:'ACCOUNT_LIMITED'});
+    if(safety.message_safety && text){
+      const safetyResult=inspectTrustSafetyText(text);
+      if(safetyResult.shouldBlock)return res.status(422).json({error:'message blocked by safety protection',code:'SAFETY_BLOCK',safety:{risk:safetyResult.risk,scamSignals:safetyResult.scamSignals,spamSignals:safetyResult.spamSignals}});
+    }
     await pool.query(`INSERT INTO fynx_group_messages(id,group_id,sender_id,text,attachment_media_id,attachment_type) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO NOTHING`,[id,groupId,req.user.sub,text,attachmentMediaId,attachmentType]);
     const row=(await pool.query(`SELECT m.id,m.text,m.attachment_media_id,m.attachment_type,m.created_at,u.username AS sender_username FROM fynx_group_messages m JOIN users u ON u.id=m.sender_id WHERE m.id=$1 AND m.group_id=$2 LIMIT 1`,[id,groupId])).rows[0];
     res.status(201).json({message:messageJson(row)});
