@@ -1,11 +1,10 @@
 package com.fynx.app.ui
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -14,7 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/** Keeps the existing Stories viewer while making the full Status composer reachable. */
+/** Backend-first Status hub while preserving the existing Stories creation/viewer surface. */
 @Composable
 fun FynxStatusHubPanel() {
     var composing by remember { mutableStateOf(false) }
@@ -24,7 +23,11 @@ fun FynxStatusHubPanel() {
         }
     } else {
         Box(Modifier.fillMaxSize()) {
-            StoriesPanel()
+            Column(Modifier.fillMaxSize()) {
+                Box(Modifier.weight(1f).fillMaxWidth()) { FynxStatusTimelinePanel() }
+                HorizontalDivider()
+                Box(Modifier.weight(1f).fillMaxWidth()) { StoriesPanel() }
+            }
             FloatingActionButton(
                 onClick = { composing = true },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(18.dp)
