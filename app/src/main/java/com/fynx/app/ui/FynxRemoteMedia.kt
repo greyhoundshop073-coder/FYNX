@@ -15,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -31,11 +32,7 @@ private fun resolveFynxMediaUrl(context: android.content.Context, mediaUrl: Stri
     val value = mediaUrl.trim()
     if (value.isBlank()) return value
     if (value.startsWith("https://", ignoreCase = true) || value.startsWith("http://", ignoreCase = true)) return value
-    return if (value.startsWith("/")) {
-        FynxBackendClient.baseUrl(context) + value
-    } else {
-        FynxBackendClient.baseUrl(context) + "/" + value
-    }
+    return if (value.startsWith("/")) FynxBackendClient.baseUrl(context) + value else FynxBackendClient.baseUrl(context) + "/" + value
 }
 
 @Composable
