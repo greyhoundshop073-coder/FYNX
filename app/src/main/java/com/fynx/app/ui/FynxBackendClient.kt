@@ -32,8 +32,10 @@ object FynxBackendClient {
     private const val WEAK_READ_TIMEOUT_MS = 25_000
     private const val MAX_RESPONSE_BYTES = 4 * 1024 * 1024
     private const val MAX_CONCURRENT_REQUESTS = 6
+    private const val MAX_WEAK_CONCURRENT_REQUESTS = 2
 
     private val requestSemaphore = Semaphore(MAX_CONCURRENT_REQUESTS)
+    private val weakRequestSemaphore = Semaphore(MAX_WEAK_CONCURRENT_REQUESTS)
 
     fun availability(context: Context): FynxBackendAvailability =
         if (baseUrl(context).isBlank()) FynxBackendAvailability.DISABLED else FynxBackendAvailability.CONFIGURED
@@ -83,7 +85,13 @@ object FynxBackendClient {
                 var response: String? = null
                 while (response == null) {
                     try {
-                        response = requestSemaphore.withPermit { executeRequest(context, root, method, path, body) }
+                        response = requestSemaphore.withPermit {
+                            if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK) {
+                                weakRequestSemaphore.withPermit { executeRequest(context, root, method, path, body) }
+                            } else {
+                                executeRequest(context, root, method, path, body)
+                            }
+                        }
                     } catch (error: Exception) {
                         val retryable = method == "GET" || method == "DELETE"
                         if (!retryable || !isRetryableFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) throw error
