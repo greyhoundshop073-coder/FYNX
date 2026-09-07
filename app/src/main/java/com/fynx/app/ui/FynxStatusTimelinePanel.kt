@@ -48,7 +48,7 @@ fun FynxStatusTimelinePanel() {
                                 Text(status.ownerDisplayName.ifBlank { status.ownerUsername }, style = MaterialTheme.typography.titleMedium)
                                 Text("@${status.ownerUsername.removePrefix("@")} • ${status.type.name.lowercase()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            Text(formatRemaining(status.createdAtMillis, System.currentTimeMillis()), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(statusTimelineRemaining(status.createdAtMillis), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         when (status.type) {
                             FynxStatusType.TEXT -> Text(status.text.orEmpty(), Modifier.fillMaxWidth().padding(vertical = 8.dp))
@@ -61,4 +61,13 @@ fun FynxStatusTimelinePanel() {
             }
         }
     }
+}
+
+private const val STATUS_EXPIRY_MS = 24L * 60L * 60L * 1000L
+
+private fun statusTimelineRemaining(createdAt: Long, now: Long = System.currentTimeMillis()): String {
+    val remaining = (createdAt + STATUS_EXPIRY_MS - now).coerceAtLeast(0L)
+    val hours = remaining / 3_600_000L
+    val minutes = (remaining / 60_000L) % 60L
+    return if (hours > 0L) "${hours}h ${minutes}m left" else "${minutes}m left"
 }
