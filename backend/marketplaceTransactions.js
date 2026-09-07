@@ -1,3 +1,6 @@
+import crypto from 'node:crypto';
+import { inspectTrustSafetyText } from './trustSafety.js';
+
 export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
   let schemaPromise;
   const ensureMarketplaceTransactionSchema = async () => {
@@ -17,6 +20,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       CREATE INDEX IF NOT EXISTS marketplace_order_disputes_order_idx ON marketplace_order_disputes (order_id, created_at DESC);
       CREATE TABLE IF NOT EXISTS marketplace_order_evidence (id BIGSERIAL PRIMARY KEY,order_id UUID NOT NULL REFERENCES marketplace_orders(id) ON DELETE CASCADE,submitted_by BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,kind TEXT NOT NULL CHECK (kind IN ('PHOTO','VIDEO','DOCUMENT','MESSAGE_REFERENCE','TRACKING_REFERENCE','NOTE')),value TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
       CREATE INDEX IF NOT EXISTS marketplace_order_evidence_order_idx ON marketplace_order_evidence (order_id, created_at ASC);
+      CREATE TABLE IF NOT EXISTS fynx_account_safety (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,message_safety BOOLEAN NOT NULL DEFAULT TRUE,marketplace_safety BOOLEAN NOT NULL DEFAULT TRUE,login_alerts BOOLEAN NOT NULL DEFAULT TRUE,account_status TEXT NOT NULL DEFAULT 'ACTIVE',status_note TEXT NOT NULL DEFAULT '',CHECK(account_status IN ('ACTIVE','LIMITED','LOCKED')));
     `).catch((error) => { schemaPromise = undefined; throw error; });
     return schemaPromise;
   };
@@ -30,19 +34,27 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
     if (!listingId || !quantity) return res.status(400).json({error:'valid listingId and quantity are required'});
     const client=await pool.connect();
     try {
-      await ensureMarketplaceTransactionSchema(); await client.query('BEGIN');
+      await ensureMarketplaceTransactionSchema();
+      const safety=(await client.query(`SELECT marketplace_safety,account_status FROM fynx_account_safety WHERE user_id=$1 LIMIT 1`,[req.user.sub])).rows[0]||{marketplace_safety:true,account_status:'ACTIVE'};
+      if(String(safety.account_status)==='LOCKED')return res.status(403).json({error:'account is locked',code:'ACCOUNT_LOCKED'});
+      if(String(safety.account_status)==='LIMITED')return res.status(403).json({error:'account is temporarily limited from marketplace purchases',code:'ACCOUNT_LIMITED'});
+      await client.query('BEGIN');
       const listing=(await client.query(`SELECT l.*,u.username AS seller_username,u.display_name AS seller_display_name FROM marketplace_listings l JOIN users u ON u.id=l.seller_id WHERE l.id=$1 AND l.active=TRUE FOR UPDATE`,[listingId])).rows[0];
       if(!listing){await client.query('ROLLBACK');return res.status(404).json({error:'listing not found or no longer available'});}
       if(String(listing.seller_id)===String(req.user.sub)){await client.query('ROLLBACK');return res.status(400).json({error:'you cannot purchase your own listing'});}
       const blocked=await client.query(`SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1) LIMIT 1`,[req.user.sub,listing.seller_id]);
       if(blocked.rowCount){await client.query('ROLLBACK');return res.status(403).json({error:'listing unavailable'});}
+      if(safety.marketplace_safety){
+        const listingSafety=inspectTrustSafetyText([listing.title,listing.description,listing.location].filter(Boolean).join(' '));
+        if(listingSafety.shouldBlock){await client.query('ROLLBACK');return res.status(422).json({error:'listing blocked by marketplace safety protection',code:'SAFETY_BLOCK'});}
+      }
       const available=Number(listing.quantity)-Number(listing.reserved_quantity||0); if(quantity>available){await client.query('ROLLBACK');return res.status(409).json({error:'requested quantity is not available'});}
       if(clientOrderId){const existing=(await client.query('SELECT * FROM marketplace_orders WHERE id=$1 AND buyer_id=$2',[clientOrderId,req.user.sub])).rows[0];if(existing){await client.query('ROLLBACK');return res.status(200).json({order:publicOrder(existing),idempotent:true});}}
       const orderId=clientOrderId||crypto.randomUUID(), unitPrice=Number(listing.price), deliveryFee=listing.delivery_fee==null?0:Number(listing.delivery_fee), totalAmount=(unitPrice*quantity)+deliveryFee;
       const snapshot={listingId:String(listing.id),sellerId:String(listing.seller_id),sellerUsername:listing.seller_username,sellerDisplayName:listing.seller_display_name,storeName:listing.store_name,title:listing.title,description:listing.description,price:unitPrice,currency:listing.currency,category:listing.category,condition:listing.condition,location:listing.location,deliveryAvailable:Boolean(listing.delivery_available),pickupAvailable:Boolean(listing.pickup_available),deliveryFee,mediaIds:Array.isArray(listing.media_ids)?listing.media_ids.map(String):[]};
       const inserted=await client.query(`INSERT INTO marketplace_orders (id,buyer_id,seller_id,listing_id,quantity,unit_price,delivery_fee,total_amount,currency,product_snapshot,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,'PAYMENT_PENDING') RETURNING *`,[orderId,req.user.sub,listing.seller_id,listing.id,quantity,unitPrice,deliveryFee,totalAmount,listing.currency,JSON.stringify(snapshot)]);
       await client.query('UPDATE marketplace_listings SET reserved_quantity=reserved_quantity+$1,updated_at=NOW() WHERE id=$2',[quantity,listing.id]);
-      await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'ORDER_CREATED',NULL,'PAYMENT_PENDING',$3::jsonb)`,[orderId,req.user.sub,JSON.stringify({quantity,protected:true})]);
+      await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'ORDER_CREATED',NULL,'PAYMENT_PENDING',$3::jsonb)`,[orderId,req.user.sub,JSON.stringify({quantity,protected:true,safetyChecked:Boolean(safety.marketplace_safety)})]);
       await client.query('COMMIT'); return res.status(201).json({order:publicOrder(inserted.rows[0]),protection:{enabled:true,payment:'provider_required',payout:'not_released'}});
     }catch(error){try{await client.query('ROLLBACK');}catch{} if(error?.code==='23505')return res.status(409).json({error:'order already exists'});console.error('marketplace order create',error);return res.status(500).json({error:'protected order creation failed'});}finally{client.release();}
   });
