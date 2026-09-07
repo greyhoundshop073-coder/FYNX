@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun FynxVerifiedBadge(modifier: Modifier = Modifier) {
@@ -33,7 +34,8 @@ fun FynxVerifiedBadge(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun FynxAvatar(name: String, modifier: Modifier = Modifier) {
+fun FynxAvatar(name: String, avatarUri: String? = null, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     val initials = name.trim()
         .split(Regex("\\s+"))
         .filter { it.isNotEmpty() }
@@ -47,11 +49,19 @@ fun FynxAvatar(name: String, modifier: Modifier = Modifier) {
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = initials.ifBlank { "F" },
-            color = MaterialTheme.colorScheme.primary,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
+        if (!avatarUri.isNullOrBlank()) {
+            FynxRemoteMedia(
+                mediaUrl = avatarUri,
+                mediaType = "image",
+                modifier = Modifier.fillMaxSize().clip(CircleShape)
+            )
+        } else {
+            Text(
+                text = initials.ifBlank { "F" },
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
