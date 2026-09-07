@@ -28,8 +28,10 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     var searchBusy by remember { mutableStateOf(false) }
     var searchError by remember { mutableStateOf<String?>(null) }
     var selfUsername by remember { mutableStateOf("") }
+    var listView by remember { mutableStateOf(FynxPreferencesStore.loadChatListView(context)) }
 
     LaunchedEffect(Unit) {
+        listView = FynxPreferencesStore.loadChatListView(context)
         selfUsername = (FynxAuthStore.load(context).username ?: "").removePrefix("@").trim().lowercase()
         val stored = FynxChatStore.loadPreviews(context)
         val refreshed = stored.map { chat ->
@@ -65,6 +67,9 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         searchBusy = false
     }
 
+    val rowSpacing = when (listView) { "Compact" -> 2.dp; "Large" -> 14.dp; else -> 8.dp }
+    val avatarSize = when (listView) { "Compact" -> 38.dp; "Large" -> 54.dp; else -> 42.dp }
+
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
@@ -88,7 +93,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                     }
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(rowSpacing), contentPadding = PaddingValues(bottom = 12.dp)) {
                     items(chats.filterNot { chat ->
                         val candidate = chat.username.removePrefix("@").trim().lowercase()
                         selfUsername.isNotBlank() && candidate == selfUsername
@@ -97,11 +102,11 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                             ListItem(
                                 headlineContent = { Text(chat.name) },
                                 leadingContent = {
-                                    if (chat.avatarUri.isNullOrBlank()) FynxAvatar(chat.name, null)
+                                    if (chat.avatarUri.isNullOrBlank()) FynxAvatar(chat.name, null, Modifier.size(avatarSize))
                                     else FynxRemoteProfileAvatar(
                                         mediaId = chat.avatarUri?.substringAfterLast("/api/media/")?.takeIf { it != chat.avatarUri },
                                         contentDescription = chat.name,
-                                        modifier = Modifier.size(42.dp)
+                                        modifier = Modifier.size(avatarSize)
                                     )
                                 },
                                 supportingContent = { Text(chat.lastMessage.ifBlank { "No messages yet" }, color = MaterialTheme.colorScheme.onSurfaceVariant) },
@@ -121,12 +126,12 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 Text("No groups yet", style = MaterialTheme.typography.titleMedium)
                 Text("Create a group to start a shared conversation.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(rowSpacing), contentPadding = PaddingValues(bottom = 12.dp)) {
                     items(groups, key = { it.id }) { group ->
                         Card(onClick = { onOpenGroup(group.id) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                             ListItem(
                                 headlineContent = { Text(group.name) },
-                                leadingContent = { FynxAvatar(group.name) },
+                                leadingContent = { FynxAvatar(group.name, modifier = Modifier.size(avatarSize)) },
                                 supportingContent = { Text("${group.members.size} members${group.description.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
                             )
