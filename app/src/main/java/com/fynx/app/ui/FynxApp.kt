@@ -41,14 +41,32 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var appearance by remember { mutableStateOf(FynxPreferencesStore.loadAppearance(context)) }
     var openProfileSettings by remember { mutableStateOf(false) }
     var aiCaptionDraft by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(deepLinkDestination) { when (val destination = deepLinkDestination) { is FynxDeepLinkDestination.Invite -> { inviteCode = destination.code; selected = "Invite" }; FynxDeepLinkDestination.Home -> selected = "Home"; null -> Unit } }
+
+    LaunchedEffect(deepLinkDestination) {
+        when (val destination = deepLinkDestination) {
+            is FynxDeepLinkDestination.Invite -> { inviteCode = destination.code; selected = "Invite" }
+            FynxDeepLinkDestination.Home -> selected = "Home"
+            is FynxDeepLinkDestination.Profile -> { profileUser = destination.username; selected = "Home" }
+            is FynxDeepLinkDestination.Chat -> {
+                val normalized = destination.username.removePrefix("@").trim()
+                if (normalized.isNotBlank()) {
+                    openChat = FynxChatStore.loadPreviews(context).firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
+                        ?: ChatPreview(normalized, normalized, "Start a conversation", "Now")
+                    FynxChatStore.savePreview(context, openChat!!)
+                }
+            }
+            is FynxDeepLinkDestination.Group -> openGroup = destination.id
+            FynxDeepLinkDestination.Marketplace -> selected = "Marketplace"
+            FynxDeepLinkDestination.Stories -> selected = "Stories"
+            FynxDeepLinkDestination.Money -> selected = "Money Tools"
+            null -> Unit
+        }
+    }
     LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context); notifications = FynxNotificationStore.load(context) }
     LaunchedEffect(authSession.state, authSession.username) {
         adminRole = null
         if (!FYNX_PREVIEW_MODE && authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) {
-            FynxAdminClient.dashboard(context).onSuccess { dashboard ->
-                adminRole = dashboard.role.takeIf { it == "OWNER" || it == "ADMIN" }
-            }
+            FynxAdminClient.dashboard(context).onSuccess { dashboard -> adminRole = dashboard.role.takeIf { it == "OWNER" || it == "ADMIN" } }
             FynxBackendClient.currentUserId(context).onFailure { error -> if (FynxBackendClient.isUnauthorizedFailure(error)) { FynxBackendClient.saveAccessToken(context, null); FynxAuthStore.clear(context); authSession = AuthSession(); adminRole = null; selected = "Home"; openChat = null; openGroup = null; profileUser = null } }
         }
     }
