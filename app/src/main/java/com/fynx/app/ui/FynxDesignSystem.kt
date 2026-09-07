@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import java.time.LocalTime
 
 /** Central visual language for FYNX. */
 enum class FynxAccent(val primary: Color, val secondary: Color) {
@@ -43,7 +44,6 @@ object FynxDesign {
     val LightOutline = Color(0xFFD2DAE5)
     val LightSelectedContainer = Color(0xFFE4EFFC)
 
-    // True AMOLED mode: surfaces/backgrounds are pure #000000 and text is pure white.
     val AmoledBackground = Color.Black
     val AmoledSurface = Color.Black
     val AmoledSurfaceRaised = Color.Black
@@ -66,6 +66,14 @@ private fun fynxTypography(): Typography = Typography().run {
     )
 }
 
+private fun scheduledNightModeActive(context: android.content.Context): Boolean {
+    if (FynxPreferencesStore.loadNightMode(context) != "Scheduled") return false
+    val start = runCatching { LocalTime.parse(FynxPreferencesStore.loadNightModeStart(context)) }.getOrDefault(LocalTime.of(22, 0))
+    val end = runCatching { LocalTime.parse(FynxPreferencesStore.loadNightModeEnd(context)) }.getOrDefault(LocalTime.of(7, 0))
+    val now = LocalTime.now()
+    return if (start == end) true else if (start < end) now >= start && now < end else now >= start || now < end
+}
+
 @Composable
 fun FynxTheme(
     accent: FynxAccent = FynxAccent.Blue,
@@ -73,8 +81,10 @@ fun FynxTheme(
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
-    val amoled = FynxPreferencesStore.loadAppearance(context) == "Black AMOLED"
-    val effectiveDarkMode = amoled || darkMode
+    val appearance = FynxPreferencesStore.loadAppearance(context)
+    val amoled = appearance == "Black AMOLED"
+    val scheduledNight = appearance == "System" && scheduledNightModeActive(context)
+    val effectiveDarkMode = amoled || darkMode || scheduledNight
     val onAccent = if (accent.primary.luminance() > 0.5f) Color.Black else Color.White
     val scheme = if (effectiveDarkMode) {
         darkColorScheme(
@@ -115,8 +125,6 @@ fun FynxTheme(
             medium = FynxDesign.CardShape,
             large = FynxDesign.LargeCardShape
         ),
-        content = {
-            FynxCustomizationBackground(content)
-        }
+        content = { FynxCustomizationBackground(content) }
     )
 }
