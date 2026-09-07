@@ -40,7 +40,7 @@ Continue the existing FYNX Android social + marketplace app. Do not rebuild or r
 ## Future backlog
 - [ ] Personal status/timeline expansion
 - [ ] FYNX official announcements/admin controls
-- [ ] Server-backed notification preferences
+- [x] Server-backed notification preferences foundation
 - [ ] Owner/Admin control center
 - [ ] Anti-scam, account safety and appeals
 
