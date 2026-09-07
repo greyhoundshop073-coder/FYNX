@@ -51,6 +51,9 @@ fun FynxAdminControlCenterPanel() {
     var error by remember { mutableStateOf<String?>(null) }
     var title by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
+    var targetQuery by remember { mutableStateOf("") }
+    var targets by remember { mutableStateOf<List<FynxSocialClient.User>>(emptyList()) }
+    var targetMessage by remember { mutableStateOf<String?>(null) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         FynxAdminClient.dashboard(context).onSuccess { dashboard = it; error = null }.onFailure { error = it.message ?: "Admin access required." }
@@ -63,11 +66,41 @@ fun FynxAdminControlCenterPanel() {
         else if (dashboard == null) Text(error ?: "Admin access required.", color = MaterialTheme.colorScheme.error)
         else {
             val d = dashboard!!
-            Text("Server-authorized administration overview", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Role: ${d.role}", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Users", d.users); StatCard("Reports", d.openReports) }
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Appeals", d.openAppeals); StatCard("Safety / 24h", d.safetyEvents24h) }
+            Spacer(Modifier.height(20.dp))
+            Text("Manage an account", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(targetQuery, { targetQuery = it }, Modifier.fillMaxWidth(), label = { Text("Search username") }, singleLine = true)
+            Spacer(Modifier.height(6.dp))
+            Button(enabled = targetQuery.isNotBlank(), onClick = {
+                targetMessage = "Searching..."
+                scope.launch { FynxSocialClient.searchUsers(context, targetQuery).onSuccess { targets = it; targetMessage = if (it.isEmpty()) "No users found." else null }.onFailure { targetMessage = it.message ?: "User search failed." } }
+            }) { Text("Find user") }
+            targetMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            targets.take(5).forEach { user ->
+                Card(Modifier.fillMaxWidth().padding(top = 8.dp)) { Column(Modifier.padding(12.dp)) {
+                    Text(user.displayName.ifBlank { "FYNX user" }, style = MaterialTheme.typography.titleMedium)
+                    Text("@${user.username}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = {
+                            statusMessage = "Locking @${user.username}..."
+                            scope.launch { FynxAdminClient.setAccountStatus(context, user.id, "LOCKED").onSuccess { statusMessage = "@${user.username} locked." }.onFailure { statusMessage = it.message ?: "Action failed." } }
+                        }) { Text("Lock") }
+                        OutlinedButton(onClick = {
+                            statusMessage = "Restoring @${user.username}..."
+                            scope.launch { FynxAdminClient.setAccountStatus(context, user.id, "ACTIVE").onSuccess { statusMessage = "@${user.username} restored." }.onFailure { statusMessage = it.message ?: "Action failed." } }
+                        }) { Text("Activate") }
+                        if (d.role == "OWNER") OutlinedButton(onClick = {
+                            statusMessage = "Granting Admin..."
+                            scope.launch { FynxAdminClient.grantAdmin(context, user.id).onSuccess { statusMessage = "@${user.username} is now an Admin." }.onFailure { statusMessage = it.message ?: "Admin grant failed." } }
+                        }) { Text("Make Admin") }
+                    }
+                } }
+            }
             Spacer(Modifier.height(20.dp))
             Text("Publish official announcement", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
