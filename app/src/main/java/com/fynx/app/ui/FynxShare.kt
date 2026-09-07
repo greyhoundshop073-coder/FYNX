@@ -27,12 +27,33 @@ object FynxShareActions {
 
     fun invitePayload(username: String, code: String? = null): FynxSharePayload = FynxSharePayload(
         title = "Join me on FYNX",
-        message = if (username.isBlank()) {
-            FYNX_SHARE_TEXT
-        } else {
-            "$username invited you to join FYNX — one place for your social life, tools and everyday organization."
-        },
+        message = if (username.isBlank()) FYNX_SHARE_TEXT else
+            "$username invited you to join FYNX — one place for your social life, tools and everyday organization.",
         link = FynxDeepLinkParser.inviteWebLink(code)
+    )
+
+    fun profilePayload(username: String): FynxSharePayload = FynxSharePayload(
+        title = "FYNX profile",
+        message = "Check out @$username on FYNX.",
+        link = FynxDeepLinkParser.profileWebLink(username)
+    )
+
+    fun chatPayload(username: String): FynxSharePayload = FynxSharePayload(
+        title = "Message on FYNX",
+        message = "Open this FYNX conversation with @$username.",
+        link = FynxDeepLinkParser.chatWebLink(username)
+    )
+
+    fun marketplacePayload(listingId: String? = null, title: String = "FYNX Marketplace"): FynxSharePayload = FynxSharePayload(
+        title = title,
+        message = "See this on FYNX Marketplace.",
+        link = FynxDeepLinkParser.marketplaceWebLink(listingId)
+    )
+
+    fun groupPayload(groupId: String): FynxSharePayload = FynxSharePayload(
+        title = "FYNX group",
+        message = "Join this FYNX group.",
+        link = FynxDeepLinkParser.groupWebLink(groupId)
     )
 
     fun share(context: Context, payload: FynxSharePayload = defaultPayload()): Boolean {
@@ -41,12 +62,10 @@ object FynxShareActions {
             putExtra(Intent.EXTRA_TITLE, payload.title)
             putExtra(Intent.EXTRA_TEXT, payload.text)
         }
-
         if (sendIntent.resolveActivity(context.packageManager) == null) {
             Toast.makeText(context, "No sharing app is available", Toast.LENGTH_SHORT).show()
             return false
         }
-
         return try {
             context.startActivity(Intent.createChooser(sendIntent, payload.title))
             true
@@ -57,18 +76,12 @@ object FynxShareActions {
     }
 
     fun copy(context: Context, payload: FynxSharePayload = defaultPayload()): Boolean {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-            ?: return false
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return false
         clipboard.setPrimaryClip(ClipData.newPlainText(payload.title, payload.text))
         Toast.makeText(context, "FYNX invite copied", Toast.LENGTH_SHORT).show()
         return true
     }
 }
 
-fun shareFynx(context: Context) {
-    FynxShareActions.share(context)
-}
-
-fun copyFynxInvite(context: Context) {
-    FynxShareActions.copy(context)
-}
+fun shareFynx(context: Context) { FynxShareActions.share(context) }
+fun copyFynxInvite(context: Context) { FynxShareActions.copy(context) }
