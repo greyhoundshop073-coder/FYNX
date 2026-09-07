@@ -105,7 +105,11 @@ class FynxRealtimeClient(
     }
 
     private fun parseCallEvent(root: JSONObject): Event.Call? {
-        val callId = root.optString("callId").trim()
+        val rawCallId = root.optString("callId").trim()
+        val callId = when {
+            rawCallId.startsWith("call_") -> rawCallId.replaceFirst("call_", "call-")
+            else -> rawCallId
+        }
         val callType = root.optString("callType", "voice").trim().lowercase()
         val signalType = root.optString("signalType").trim().lowercase()
         val fromUserId = root.optString("fromUserId").trim()
@@ -131,7 +135,7 @@ class FynxRealtimeClient(
     fun sendCallOffer(callId: String, targetUserId: String, sdp: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "offer", JSONObject().put("sdp", sdp))
     fun sendCallAnswer(callId: String, targetUserId: String, sdp: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "answer", JSONObject().put("sdp", sdp))
     fun sendCallIce(callId: String, targetUserId: String, candidate: IceCandidate, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "ice", JSONObject().put("candidate", JSONObject().apply { put("candidate", candidate.sdp); put("sdpMid", candidate.sdpMid); put("sdpMLineIndex", candidate.sdpMLineIndex) }))
-    private fun sendCall(callId: String, targetUserId: String, callType: String, signalType: String, extra: JSONObject? = null) { sendJson(JSONObject().apply { put("type", "call"); put("callId", callId); put("toUserId", targetUserId); put("callType", callType); put("signalType", signalType); extra?.keys()?.forEach { put(it, extra.get(it)) } }) }
+    private fun sendCall(callId: String, targetUserId: String, callType: String, signalType: String, extra: JSONObject? = null) { sendJson(JSONObject().apply { put("type", "call"); put("callId", callId.replaceFirst("call-", "call_").take(80)); put("toUserId", targetUserId); put("callType", callType); put("signalType", signalType); extra?.keys()?.forEach { put(it, extra.get(it)) } }) }
     fun sendTyping(recipientId: String, isTyping: Boolean) = sendJson(JSONObject().apply { put("type", "typing"); put("recipientId", recipientId); put("isTyping", isTyping) })
     fun sendRead(messageIds: List<String>) { val ids = messageIds.mapNotNull { it.toLongOrNull() }.take(100); if (ids.isNotEmpty()) sendJson(JSONObject().apply { put("type", "read"); put("messageIds", JSONArray(ids)) }) }
     fun acknowledgeMessage(messageId: String) { messageId.toLongOrNull()?.let { sendJson(JSONObject().apply { put("type", "message_ack"); put("messageId", it) }) } }
