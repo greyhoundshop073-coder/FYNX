@@ -33,7 +33,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
-    val fallbackMessage = remember(chat.lastMessage) { chat.lastMessage.takeIf { it.isNotBlank() }?.let { ChatMessage(it, false, id = "initial", delivered = true, read = true) } }
+    val fallbackMessage = remember(chat.lastMessage) { chat.lastMessage.takeIf { it.isNotBlank() }?.let { ChatMessage(it, false, id = "initial", delivered = true, read = true, senderName = chat.name, senderUsername = chat.username, senderAvatarUri = chat.avatarUri) } }
     var text by remember(chat.username) { mutableStateOf("") }
     var messages by remember(chat.username) { mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage)) }
     var replyToId by remember { mutableStateOf<String?>(null) }
@@ -67,7 +67,9 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             onMessage = { remote ->
                 val myId = currentUserId ?: return@FynxRealtimeClient
                 if (remote.senderId != myId && remote.recipientId != myId) return@FynxRealtimeClient
-                val converted = FynxProductionMessaging.toChatMessage(remote, myId)
+                val converted = FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
+                    if (message.fromMe) message else message.copy(senderAvatarUri = chat.avatarUri)
+                }
                 messages = (messages.filterNot { it.id == remote.id } + converted).sortedBy { it.timestamp }
                 if (remote.recipientId == myId) {
                     FynxInChatSound.play(context)
@@ -125,7 +127,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         FynxProductionMessaging.history(context, chat.username.removePrefix("@"))
             .onSuccess { remoteMessages ->
                 val myId = currentUserId
-                if (myId != null) messages = remoteMessages.map { FynxProductionMessaging.toChatMessage(it, myId) }
+                if (myId != null) messages = remoteMessages.map { remote ->
+                    FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
+                        if (message.fromMe) message else message.copy(senderAvatarUri = chat.avatarUri)
+                    }
+                }
                 val unread = remoteMessages.filter { it.recipientId == myId && !it.read }.map { it.id }
                 if (unread.isNotEmpty()) {
                     realtimeClient.sendRead(unread)
@@ -254,7 +260,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = onBack) { Text("‹", style = MaterialTheme.typography.headlineSmall) }
-                    IconButton(onClick = { onOpenProfile(chat.username) }) { FynxAvatar(chat.name, modifier = Modifier.size(46.dp)) }
+                    IconButton(onClick = { onOpenProfile(chat.username) }) { FynxAvatar(chat.name, chat.avatarUri, Modifier.size(46.dp)) }
                     Column(Modifier.weight(1f).padding(start = 10.dp)) {
                         TextButton(onClick = { onOpenProfile(chat.username) }, contentPadding = PaddingValues(0.dp)) { Text(chat.name, style = MaterialTheme.typography.titleMedium) }
                         Text(when { otherIsTyping -> "typing…"; isOnline -> "● Online"; else -> chat.username }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -275,7 +281,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 Column(Modifier.fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
                         if (!message.fromMe) {
-                            FynxAvatar(message.senderName ?: chat.name, modifier = Modifier.size(30.dp))
+                            FynxAvatar(message.senderName ?: chat.name, message.senderAvatarUri ?: chat.avatarUri, Modifier.size(30.dp))
                             Spacer(Modifier.width(6.dp))
                         }
                         Surface(
@@ -303,13 +309,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                     }
                                 } else {
                                     if (message.attachmentUri != null) {
-                                        Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth().padding(bottom = if (message.text.isBlank()) 0.dp else 7.dp)) {
-                                            Row(Modifier.padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(if (message.attachmentType == "video") Icons.Default.Videocam else Icons.Default.Image, "Media attachment")
-                                                Spacer(Modifier.width(8.dp))
-                                                Text(if (message.attachmentType == "video") "Video attached" else "Photo attached", style = MaterialTheme.typography.bodySmall)
-                                            }
-                                        }
+                                        FynxRemoteMedia(
+                                            mediaUrl = message.attachmentUri,
+                                            type = message.attachmentType ?: "image",
+                                            modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 7.dp)
+                                        )
                                     }
                                     if (message.text.isNotBlank()) SelectionContainer { Text(message.text) }
                                 }
