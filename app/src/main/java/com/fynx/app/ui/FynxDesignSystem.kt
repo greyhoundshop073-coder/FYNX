@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
@@ -7,9 +8,9 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
 
 /** Central visual language for FYNX. */
 enum class FynxAccent(val primary: Color, val secondary: Color) {
@@ -41,6 +42,15 @@ object FynxDesign {
     val LightOutline = Color(0xFFD2DAE5)
     val LightSelectedContainer = Color(0xFFE4EFFC)
 
+    // True AMOLED mode: surfaces/backgrounds are pure #000000 and text is pure white.
+    val AmoledBackground = Color.Black
+    val AmoledSurface = Color.Black
+    val AmoledSurfaceRaised = Color.Black
+    val AmoledTextPrimary = Color.White
+    val AmoledTextSecondary = Color(0xFFE0E0E0)
+    val AmoledOutline = Color(0xFF303030)
+    val AmoledSelectedContainer = Color(0xFF111111)
+
     val CardShape = RoundedCornerShape(16.dp)
     val LargeCardShape = RoundedCornerShape(20.dp)
     val ControlShape = RoundedCornerShape(14.dp)
@@ -61,19 +71,23 @@ fun FynxTheme(
     darkMode: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val scheme = if (darkMode) {
+    val context = LocalContext.current
+    val amoled = FynxPreferencesStore.loadAppearance(context) == "Black AMOLED"
+    val effectiveDarkMode = amoled || darkMode
+    val scheme = if (effectiveDarkMode) {
         darkColorScheme(
             primary = accent.primary,
             onPrimary = Color.White,
             secondary = accent.secondary,
             onSecondary = Color.White,
-            background = FynxDesign.Background,
-            onBackground = FynxDesign.TextPrimary,
-            surface = FynxDesign.Surface,
-            onSurface = FynxDesign.TextPrimary,
-            surfaceVariant = FynxDesign.SurfaceRaised,
-            onSurfaceVariant = FynxDesign.TextSecondary,
-            outline = FynxDesign.Outline
+            background = if (amoled) FynxDesign.AmoledBackground else FynxDesign.Background,
+            onBackground = if (amoled) FynxDesign.AmoledTextPrimary else FynxDesign.TextPrimary,
+            surface = if (amoled) FynxDesign.AmoledSurface else FynxDesign.Surface,
+            onSurface = if (amoled) FynxDesign.AmoledTextPrimary else FynxDesign.TextPrimary,
+            surfaceVariant = if (amoled) FynxDesign.AmoledSurfaceRaised else FynxDesign.SurfaceRaised,
+            onSurfaceVariant = if (amoled) FynxDesign.AmoledTextSecondary else FynxDesign.TextSecondary,
+            outline = if (amoled) FynxDesign.AmoledOutline else FynxDesign.Outline,
+            surfaceTint = accent.primary
         )
     } else {
         lightColorScheme(
