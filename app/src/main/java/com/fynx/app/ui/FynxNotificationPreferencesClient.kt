@@ -3,33 +3,26 @@ package com.fynx.app.ui
 import android.content.Context
 import org.json.JSONObject
 
-data class FynxNotificationPreferences(
-    val enabled: Boolean = true,
-    val messages: Boolean = true,
-    val friends: Boolean = true,
-    val groups: Boolean = true,
-    val marketplace: Boolean = true,
-    val reminders: Boolean = true,
-    val sound: Boolean = true,
-    val vibration: Boolean = true
-)
-
 object FynxNotificationPreferencesClient {
     suspend fun load(context: Context): Result<FynxNotificationPreferences> =
         FynxBackendClient.get(context, "/api/notification-preferences").mapCatching { raw -> parse(JSONObject(raw).optJSONObject("preferences") ?: JSONObject()) }
 
     suspend fun update(context: Context, preferences: FynxNotificationPreferences): Result<FynxNotificationPreferences> {
         val body = JSONObject().apply {
-            put("enabled", preferences.enabled); put("messages", preferences.messages); put("friends", preferences.friends)
-            put("groups", preferences.groups); put("marketplace", preferences.marketplace); put("reminders", preferences.reminders)
-            put("sound", preferences.sound); put("vibration", preferences.vibration)
+            put("enabled", preferences.enabled); put("pushEnabled", preferences.pushEnabled); put("reactionsEnabled", preferences.reactionsEnabled)
+            put("commentsEnabled", preferences.commentsEnabled); put("friendRequestsEnabled", preferences.friendRequestsEnabled); put("messagesEnabled", preferences.messagesEnabled)
+            put("storiesEnabled", preferences.storiesEnabled); put("remindersEnabled", preferences.remindersEnabled); put("groupEnabled", preferences.groupEnabled)
+            put("marketplaceEnabled", preferences.marketplaceEnabled); put("walletEnabled", preferences.walletEnabled); put("quietMode", preferences.quietMode)
         }
         return FynxBackendClient.patchJson(context, "/api/notification-preferences", body.toString()).mapCatching { raw -> parse(JSONObject(raw).optJSONObject("preferences") ?: JSONObject()) }
     }
 
     private fun parse(json: JSONObject) = FynxNotificationPreferences(
-        enabled = json.optBoolean("enabled", true), messages = json.optBoolean("messages", true), friends = json.optBoolean("friends", true),
-        groups = json.optBoolean("groups", true), marketplace = json.optBoolean("marketplace", true), reminders = json.optBoolean("reminders", true),
-        sound = json.optBoolean("sound", true), vibration = json.optBoolean("vibration", true)
+        enabled = json.optBoolean("enabled", true), pushEnabled = json.optBoolean("pushEnabled", true),
+        reactionsEnabled = json.optBoolean("reactionsEnabled", true), commentsEnabled = json.optBoolean("commentsEnabled", true),
+        friendRequestsEnabled = json.optBoolean("friendRequestsEnabled", true), messagesEnabled = json.optBoolean("messagesEnabled", true),
+        storiesEnabled = json.optBoolean("storiesEnabled", true), remindersEnabled = json.optBoolean("remindersEnabled", true),
+        groupEnabled = json.optBoolean("groupEnabled", true), marketplaceEnabled = json.optBoolean("marketplaceEnabled", true),
+        walletEnabled = json.optBoolean("walletEnabled", true), quietMode = json.optBoolean("quietMode", false)
     )
 }
