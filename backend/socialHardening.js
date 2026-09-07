@@ -44,14 +44,37 @@ export function installSocialHardening(app) {
 
   const hardening = async (req, res, next) => {
     const path = req.path || "";
-    const privateGet = req.method === "GET" && (
-      path === "/api/friends" ||
-      path === "/api/friends/requests" ||
-      path === "/api/blocks" ||
-      path === "/api/marketplace/listings" ||
-      path === "/api/marketplace/my-listings"
-    );
-    if (privateGet || path.startsWith("/api/blocks/")) res.set("Cache-Control", "no-store");
+
+    if (
+      (req.method === "GET" && path === "/api/social/feed") ||
+      (req.method === "POST" && path === "/api/social/posts") ||
+      path.startsWith("/api/social/posts/")
+    ) {
+      res.set("Cache-Control", "no-store");
+    }
+
+    if (req.method === "POST" && path === "/api/social/posts") {
+      const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+      const visibility = typeof req.body?.visibility === "string" ? req.body.visibility.trim().toUpperCase() : "";
+      const mediaId = req.body?.mediaId;
+      const mediaType = req.body?.mediaType == null ? "" : String(req.body.mediaType).trim().toLowerCase();
+
+      if (text.length > 4000) return res.status(413).json({ error: "post text is too long" });
+      if (!["PUBLIC", "FRIENDS", "ONLY_ME"].includes(visibility)) {
+        return res.status(400).json({ error: "invalid post visibility" });
+      }
+      if (mediaId != null && mediaId !== "") {
+        const numericMediaId = Number(mediaId);
+        if (!Number.isInteger(numericMediaId) || numericMediaId < 1) {
+          return res.status(400).json({ error: "invalid media id" });
+        }
+        if (!["image", "video", "audio"].includes(mediaType)) {
+          return res.status(400).json({ error: "invalid media type" });
+        }
+      } else if (mediaType) {
+        return res.status(400).json({ error: "media id is required when media type is provided" });
+      }
+    }
 
     if (req.method === "POST" && path === "/api/friends/request") {
       const userId = viewerId(req);
@@ -81,6 +104,8 @@ export function installSocialHardening(app) {
     app,
     hardening,
     (layer) => [
+      "/api/social/feed",
+      "/api/social/posts",
       "/api/users/search",
       "/api/friends",
       "/api/friends/requests",
@@ -88,7 +113,7 @@ export function installSocialHardening(app) {
       "/api/blocks",
       "/api/marketplace/listings",
       "/api/marketplace/my-listings"
-    ].includes(layer.route?.path),
+    ].includes(layer.route?.path) || layer.route?.path === "/api/social/posts/:id",
     "fynxSocialHardening"
   );
 }
