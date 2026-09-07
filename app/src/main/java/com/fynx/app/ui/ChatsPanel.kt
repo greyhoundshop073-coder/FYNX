@@ -31,6 +31,18 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
 
     LaunchedEffect(Unit) {
         selfUsername = (FynxAuthStore.load(context).username ?: "").removePrefix("@").trim().lowercase()
+        val stored = FynxChatStore.loadPreviews(context)
+        val refreshed = stored.map { chat ->
+            val normalized = chat.username.removePrefix("@").trim()
+            if (normalized.isBlank()) chat else FynxProfileRemoteClient.get(context, normalized).getOrNull()?.let { profile ->
+                val mediaId = profile.profilePhotoMediaId
+                if (!mediaId.isNullOrBlank()) chat.copy(avatarUri = "/api/media/${mediaId.trim()}") else chat
+            } ?: chat
+        }
+        if (refreshed != stored) {
+            refreshed.forEach { FynxChatStore.savePreview(context, it) }
+            chats = refreshed
+        }
     }
 
     LaunchedEffect(showNewChat, username, selfUsername) {
@@ -84,7 +96,14 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                         Card(onClick = { onOpenChat(chat) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                             ListItem(
                                 headlineContent = { Text(chat.name) },
-                                leadingContent = { FynxAvatar(chat.name, chat.avatarUri) },
+                                leadingContent = {
+                                    if (chat.avatarUri.isNullOrBlank()) FynxAvatar(chat.name, null)
+                                    else FynxRemoteProfileAvatar(
+                                        mediaId = chat.avatarUri?.substringAfterLast("/api/media/")?.takeIf { it != chat.avatarUri },
+                                        contentDescription = chat.name,
+                                        modifier = Modifier.size(42.dp)
+                                    )
+                                },
                                 supportingContent = { Text(chat.lastMessage.ifBlank { "No messages yet" }, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                                 trailingContent = { Text(chat.time, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
@@ -124,14 +143,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Search for a real FYNX username to start a private conversation.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedTextField(
-                        value = username,
-                        onValueChange = { username = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Username") },
-                        singleLine = true,
-                        placeholder = { Text("@username") },
-                    )
+                    OutlinedTextField(value = username, onValueChange = { username = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Username") }, singleLine = true, placeholder = { Text("@username") })
                     if (searchBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
                     searchError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     searchResults.forEach { person ->
@@ -140,7 +152,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                             headlineContent = { Text(person.displayName.ifBlank { personUsername }) },
                             supportingContent = { Text("@$personUsername") },
                             modifier = Modifier.fillMaxWidth().clickable { selectedUser = person },
-                            leadingContent = { FynxAvatar(person.displayName.ifBlank { personUsername }) },
+                            leadingContent = { FynxRemoteProfileAvatar(person.profilePhotoMediaId, person.displayName.ifBlank { personUsername }, Modifier.size(42.dp)) },
                             trailingContent = { if (selectedUser?.username == person.username) Text("✓", color = MaterialTheme.colorScheme.primary) },
                             colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         )
@@ -153,16 +165,9 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                     val person = selectedUser ?: return@TextButton
                     val personUsername = person.username ?: return@TextButton
                     scope.launch {
-                        val avatarUri = FynxProfileRemoteClient.get(context, personUsername)
-                            .getOrNull()?.profilePhotoMediaId
-                            ?.let { "/api/social/media/$it" }
-                        val newChat = ChatPreview(
-                            person.displayName.ifBlank { personUsername },
-                            personUsername,
-                            "",
-                            "",
-                            avatarUri = avatarUri
-                        )
+                        val avatarUri = person.profilePhotoMediaId?.let { "/api/media/${it.trim()}" }
+                            ?: FynxProfileRemoteClient.get(context, personUsername).getOrNull()?.profilePhotoMediaId?.let { "/api/media/${it.trim()}" }
+                        val newChat = ChatPreview(person.displayName.ifBlank { personUsername }, personUsername, "", "", avatarUri = avatarUri)
                         FynxChatStore.savePreview(context, newChat)
                         chats = FynxChatStore.loadPreviews(context)
                         onOpenChat(newChat)
