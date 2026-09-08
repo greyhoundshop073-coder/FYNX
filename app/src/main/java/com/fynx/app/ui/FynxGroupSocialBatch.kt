@@ -39,14 +39,14 @@ fun FynxGroupMediaPicker(context: Context, onMediaSelected: (Uri, String) -> Uni
                 uploading = false
                 return@launch
             }
-            FynxProductionMessaging.uploadMedia(context, uri, mime)
-                .onSuccess { media -> onMediaSelected(Uri.parse("${FynxBackendClient.baseUrl(context).trimEnd('/')}/api/media/${media.id}"), type) }
-                .onFailure { error = it.message ?: "Unable to upload group media." }
+            // Return the original content URI. The authenticated group message client
+            // owns the upload so media is uploaded exactly once and then persisted remotely.
+            onMediaSelected(uri, type)
             uploading = false
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        IconButton(enabled = !uploading, onClick = { launcher.launch("image/* video/*") }) {
+        IconButton(enabled = !uploading, onClick = { launcher.launch("*/*") }) {
             Icon(Icons.Default.PhotoLibrary, contentDescription = "Add group photo or video")
         }
         if (uploading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -68,18 +68,9 @@ fun FynxGroupCameraPicker(context: Context, onMediaSelected: (Uri, String) -> Un
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 FynxCameraCapturePanel(
                     onCaptured = { uri, type ->
-                        scope.launch {
-                            uploading = true
-                            error = null
-                            val mime = if (type == "video") "video/mp4" else "image/jpeg"
-                            FynxProductionMessaging.uploadMedia(context, uri, mime)
-                                .onSuccess { media ->
-                                    onMediaSelected(Uri.parse("${FynxBackendClient.baseUrl(context).trimEnd('/')}/api/media/${media.id}"), type)
-                                    openCamera = false
-                                }
-                                .onFailure { error = it.message ?: "Unable to upload captured media." }
-                            uploading = false
-                        }
+                        // Return the local captured URI to the same authenticated upload path used by gallery media.
+                        onMediaSelected(uri, type)
+                        openCamera = false
                     },
                     onDismiss = { if (!uploading) openCamera = false }
                 )
@@ -119,8 +110,8 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (St
                 OutlinedButton(onClick = onStoryShare, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Share, null); Spacer(Modifier.width(8.dp)); Text("Share a story to group") }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Group camera", modifier = Modifier.weight(1f)); FynxGroupCameraPicker(context) { uri, type -> handleCaptured(uri, type) } }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Group media", modifier = Modifier.weight(1f)); FynxGroupMediaPicker(context) { uri, type -> handleCaptured(uri, type) } }
-                if (selectedMedia != null) Text(if (mediaType == "video") "Video uploaded to FYNX media storage." else "Photo uploaded to FYNX media storage.", style = MaterialTheme.typography.bodySmall)
-                Text("Media is uploaded through the authenticated FYNX media pipeline; group message synchronization remains the next backend step.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (selectedMedia != null) Text(if (mediaType == "video") "Video selected for secure group upload." else "Photo selected for secure group upload.", style = MaterialTheme.typography.bodySmall)
+                Text("Group media uses the authenticated FYNX media pipeline and is persisted with the group message.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
     }
