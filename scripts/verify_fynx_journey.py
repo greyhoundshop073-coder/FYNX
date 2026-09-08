@@ -20,6 +20,11 @@ profile_backend = read("backend/profileRoutes.js")
 profile_client = read("app/src/main/java/com/fynx/app/ui/FynxProfileRemoteClient.kt")
 profile_panel = read("app/src/main/java/com/fynx/app/ui/ProfilePanel.kt")
 other_profile_panel = read("app/src/main/java/com/fynx/app/ui/OtherUserProfilePanel.kt")
+deep_link = read("app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt")
+share = read("app/src/main/java/com/fynx/app/ui/FynxShare.kt")
+gifts = read("app/src/main/java/com/fynx/app/ui/GiftsPanel.kt")
+conversation = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
+marketplace = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt")
 
 required_files = [
     "app/src/main/java/com/fynx/app/ui/FynxApp.kt",
@@ -27,6 +32,8 @@ required_files = [
     "app/src/main/java/com/fynx/app/ui/FynxNotificationRemoteClient.kt",
     "app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt",
     "app/src/main/java/com/fynx/app/ui/FynxPrivacySettings.kt",
+    "app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt",
+    "app/src/main/java/com/fynx/app/ui/FynxShare.kt",
     "backend/adminRoutes.js",
     "backend/notificationPreferences.js",
     "backend/privacyRoutes.js",
@@ -39,25 +46,10 @@ check("profile to chat and call navigation exists", "ConversationPanel" in app a
 check("calls panel has permission recovery and realtime events", "RequestMultiplePermissions" in calls and "realtimeClient.connect()" in calls and '"invite"' in calls)
 check("calls panel cleans media on terminal paths", "mediaEngine.disconnect()" in calls and "FynxCallsStore.updateStatus" in calls)
 
-# The Android notification client delegates transport to FynxBackendClient.
-# Verify the public contract without depending on one exact whitespace/layout form.
-notification_load_ok = (
-    "FynxBackendClient.get" in notifications
-    and "/api/notifications" in notifications
-)
-notification_read_ok = (
-    "FynxBackendClient.postJson" in notifications
-    and "/api/notifications/" in notifications
-    and "/read" in notifications
-)
-notification_load_method = re.search(
-    r"\bfun\s+load\s*\(",
-    notifications
-) is not None
-notification_mark_read_method = re.search(
-    r"\bfun\s+markRead\s*\(",
-    notifications
-) is not None
+notification_load_ok = "FynxBackendClient.get" in notifications and "/api/notifications" in notifications
+notification_read_ok = "FynxBackendClient.postJson" in notifications and "/api/notifications/" in notifications and "/read" in notifications
+notification_load_method = re.search(r"\bfun\s+load\s*\(", notifications) is not None
+notification_mark_read_method = re.search(r"\bfun\s+markRead\s*\(", notifications) is not None
 check(
     "server notification client delegates to notification API",
     "object FynxNotificationRemoteClient" in notifications
@@ -93,6 +85,48 @@ check(
     and 'ProfileStat("Following"' not in other_profile_panel
     and "followerCount" not in other_profile_panel
     and "followingCount" not in other_profile_panel
+)
+
+# Production contract: shared links must resolve only to FYNX routes and preserve route values.
+check(
+    "shareable deep-link routes cover social, chat, group, marketplace, stories and money",
+    all(x in deep_link for x in [
+        "homeWebLink", "profileWebLink", "chatWebLink", "groupWebLink",
+        "marketplaceWebLink", "storiesWebLink", "moneyWebLink", "fun parse"
+    ])
+    and "FynxDeepLinkParser.homeWebLink()" in share
+    and "FynxDeepLinkParser.inviteWebLink(code)" in share
+)
+check(
+    "deep-link destination routing is connected to the live app",
+    "FynxDeepLinkDestination.Profile" in app
+    and "FynxDeepLinkDestination.Chat" in app
+    and "FynxDeepLinkDestination.Group" in app
+    and "FynxDeepLinkDestination.Marketplace" in app
+    and "FynxDeepLinkDestination.Stories" in app
+    and "FynxDeepLinkDestination.Money" in app
+)
+
+# Marketplace must remain a real remote listing surface and expose protected transaction infrastructure.
+check(
+    "marketplace uses real remote listings and seller contact",
+    "FynxMarketplaceClient.listings" in marketplace
+    and "FynxMarketplaceClient.createListing" in marketplace
+    and "onContact" in marketplace
+    and "FynxMarketplaceSafety.analyze" in marketplace
+)
+check(
+    "protected marketplace transaction backend remains present",
+    (ROOT / "backend/marketplaceTransactions.js").is_file()
+    and (ROOT / "backend/marketplaceDisputes.js").is_file()
+)
+
+# Gifts must remain reachable from an actual conversation, not just a standalone placeholder screen.
+check(
+    "Send a Gift remains connected to conversations",
+    "GiftsPanel" in conversation
+    and "showGifts" in conversation
+    and "onGiftSelected" in gifts
 )
 
 check("owner/admin client exposes server controls", all(x in admin for x in ["dashboard", "admins", "setAccountStatus", "grantAdmin", "revokeAdmin"]))
