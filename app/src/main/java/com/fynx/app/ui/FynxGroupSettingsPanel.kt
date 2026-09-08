@@ -28,9 +28,7 @@ fun FynxGroupSettingsPanel(
     onBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val prefs = remember(groupId) {
-        context.getSharedPreferences("fynx_group_settings_$groupId", Context.MODE_PRIVATE)
-    }
+    val prefs = remember(groupId) { FynxConversationPreferences.group(context, groupId) }
     var notifications by remember(groupId) { mutableStateOf(prefs.getBoolean("notifications", true)) }
     var mute by remember(groupId) { mutableStateOf(prefs.getBoolean("mute", false)) }
     var sendMessages by remember(groupId) { mutableStateOf(prefs.getBoolean("send_messages", true)) }
@@ -81,7 +79,8 @@ fun FynxGroupSettingsPanel(
                     showResetDialog = false
                 }) { Text("Reset") }
             },
-            dismissButton = { TextButton(onClick = { showResetDialog = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { showResetDialog = false }) { Text("Cancel") }
+            }
         )
     }
 
