@@ -6,8 +6,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -29,18 +31,59 @@ fun FynxGroupSettingsPanel(
     val prefs = remember(groupId) {
         context.getSharedPreferences("fynx_group_settings_$groupId", Context.MODE_PRIVATE)
     }
-    var notifications by remember { mutableStateOf(prefs.getBoolean("notifications", true)) }
-    var mute by remember { mutableStateOf(prefs.getBoolean("mute", false)) }
-    var sendMessages by remember { mutableStateOf(prefs.getBoolean("send_messages", true)) }
-    var sendMedia by remember { mutableStateOf(prefs.getBoolean("send_media", true)) }
-    var addMembers by remember { mutableStateOf(prefs.getBoolean("add_members", true)) }
-    var inviteLinks by remember { mutableStateOf(prefs.getBoolean("invite_links", true)) }
-    var saveMedia by remember { mutableStateOf(prefs.getBoolean("save_media", false)) }
-    var chatHistory by remember { mutableStateOf(prefs.getBoolean("chat_history", true)) }
-    var appearance by remember { mutableStateOf(prefs.getString("appearance", "FYNX Default") ?: "FYNX Default") }
+    var notifications by remember(groupId) { mutableStateOf(prefs.getBoolean("notifications", true)) }
+    var mute by remember(groupId) { mutableStateOf(prefs.getBoolean("mute", false)) }
+    var sendMessages by remember(groupId) { mutableStateOf(prefs.getBoolean("send_messages", true)) }
+    var sendMedia by remember(groupId) { mutableStateOf(prefs.getBoolean("send_media", true)) }
+    var addMembers by remember(groupId) { mutableStateOf(prefs.getBoolean("add_members", true)) }
+    var inviteLinks by remember(groupId) { mutableStateOf(prefs.getBoolean("invite_links", true)) }
+    var saveMedia by remember(groupId) { mutableStateOf(prefs.getBoolean("save_media", false)) }
+    var chatHistory by remember(groupId) { mutableStateOf(prefs.getBoolean("chat_history", true)) }
+    var appearance by remember(groupId) { mutableStateOf(prefs.getString("appearance", "FYNX Default") ?: "FYNX Default") }
     var showWallpaper by remember { mutableStateOf(false) }
+    var showClearDialog by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
 
     fun save(key: String, value: Boolean) = prefs.edit().putBoolean(key, value).apply()
+
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Clear local group history?") },
+            text = { Text("This removes the saved copy of this group's conversation on this device. It does not delete messages from the FYNX server.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    FynxChatStore.clear(context, "group_$groupId")
+                    showClearDialog = false
+                }) { Text("Clear") }
+            },
+            dismissButton = { TextButton(onClick = { showClearDialog = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Reset group settings?") },
+            text = { Text("All settings for this group will return to their FYNX defaults.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    prefs.edit().clear().apply()
+                    notifications = true
+                    mute = false
+                    sendMessages = true
+                    sendMedia = true
+                    addMembers = true
+                    inviteLinks = true
+                    saveMedia = false
+                    chatHistory = true
+                    appearance = "FYNX Default"
+                    showResetDialog = false
+                }) { Text("Reset") }
+            },
+            dismissButton = { TextButton(onClick = { showResetDialog = false }) { Text("Cancel") } }
+        )
+    }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp)
@@ -92,6 +135,19 @@ fun FynxGroupSettingsPanel(
             }
         }
 
+        GroupSettingsSection("Group management", Icons.Default.Settings) {
+            GroupActionRow(
+                "Clear local group history",
+                "Remove the saved conversation from this device",
+                Icons.Default.DeleteOutline
+            ) { showClearDialog = true }
+            GroupActionRow(
+                "Reset group settings",
+                "Restore FYNX defaults for this group",
+                Icons.Default.RestartAlt
+            ) { showResetDialog = true }
+        }
+
         if (!isAdmin) {
             Text(
                 "Admin-only permissions are locked for members.",
@@ -134,5 +190,23 @@ private fun GroupSwitchRow(
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
         Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
+    }
+}
+
+@Composable
+private fun GroupActionRow(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null)
+            Column(Modifier.weight(1f).padding(start = 12.dp), horizontalAlignment = Alignment.Start) {
+                Text(title, style = MaterialTheme.typography.bodyLarge)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
