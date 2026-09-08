@@ -79,8 +79,12 @@ object FynxBackendClient {
             runCatching {
                 val root = baseUrl(context)
                 require(root.isNotBlank()) { "FYNX backend is not configured." }
-                require(hasNetwork(context)) { "No network connection available. FYNX will work again when you reconnect." }
                 require(path.startsWith("/")) { "Backend path must start with /." }
+
+                // ConnectivityManager is only a hint. During Wi-Fi/mobile handoff Android can
+                // briefly report no usable active network even though the socket can succeed.
+                // Let the HTTPS request be authoritative instead of rejecting a valid request
+                // before it is attempted. Real transport failures are still surfaced below.
                 var attempt = 0
                 var response: String? = null
                 while (response == null) {
@@ -152,11 +156,6 @@ object FynxBackendClient {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
         val network = manager.activeNetwork ?: return false
         val capabilities = manager.getNetworkCapabilities(network) ?: return false
-        // INTERNET describes a network that is configured for internet access. Requiring
-        // VALIDATED here caused false "no network" failures during normal Wi-Fi/mobile
-        // handoffs while Android was still validating the newly selected network. The
-        // actual HTTPS request is the authoritative connectivity test; transient failures
-        // are handled by the bounded retry logic above.
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
