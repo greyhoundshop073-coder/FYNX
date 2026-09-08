@@ -56,4 +56,13 @@ object FynxGroupsStore {
         save(context, groups.map { if (it.id == updated.id) updated else it })
         return true
     }
+
+    fun removeGroup(context: Context, groupId: String): Boolean {
+        if (groupId.isBlank()) return false
+        val groups = load(context)
+        if (groups.none { it.id == groupId }) return false
+        save(context, groups.filterNot { it.id == groupId })
+        FynxChatStore.clear(context, "group_$groupId")
+        return true
+    }
 }
