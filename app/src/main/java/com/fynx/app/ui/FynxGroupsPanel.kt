@@ -107,6 +107,20 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }.onFailure { if (FynxBackendClient.hasAccessToken(context)) syncMessage = it.message ?: "Unable to sync group messages." }
     }
 
+    if (showSettings) {
+        val selectedGroup = currentGroup
+        if (selectedGroup != null) {
+            val isAdmin = selectedGroup.members.firstOrNull { it.username.equals(currentUsername, true) }?.role == FynxGroupRole.ADMIN
+            FynxGroupSettingsPanel(
+                groupId = selectedGroup.id,
+                groupName = selectedGroup.name,
+                isAdmin = isAdmin,
+                onBack = { showSettings = false }
+            )
+            return
+        }
+    }
+
     Column(Modifier.fillMaxSize().background(FynxDesign.Background)) {
         Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -178,7 +192,6 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 scope.launch { FynxGroupRemoteClient.syncGroup(context, updated).onFailure { syncMessage = it.message } }
             }
         }
-        if (showSettings) FynxGroupSettingsDialog(selectedGroup.id, { showSettings = false })
         if (showTools) FynxGroupSocialDialog(selectedGroup, { showTools = false }, onInvite = { username -> val updated = if (selectedGroup.members.any { it.username.equals(username, true) }) selectedGroup else selectedGroup.copy(members = selectedGroup.members + FynxGroupMember(username)); if (FynxGroupsBatch1.validate(updated).isEmpty()) { FynxGroupsStore.updateGroup(context, updated); currentGroup = updated; scope.launch { FynxGroupRemoteClient.syncGroup(context, updated).onFailure { syncMessage = it.message } } } }, onMedia = { uri -> val next = messages + createGroupMediaMessage(uri); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = it.message } } }, onStoryShare = { val next = messages + ChatMessage("Story shared to $groupTitle", true, UUID.randomUUID().toString(), delivered = true, read = true); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = it.message } } })
     }
 }
