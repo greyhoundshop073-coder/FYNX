@@ -21,6 +21,15 @@ Final certification checklist for the existing FYNX Android social and marketpla
 - [ ] Owner/admin controls
 - [ ] Sharing and deep links
 
+## Camera and media placement
+
+- [ ] Camera capture opens as the intended full-screen FYNX surface.
+- [ ] Camera preview fills the available capture area without unintended clipping.
+- [ ] Camera controls remain positioned in the bottom safe area and respect navigation bars.
+- [ ] Front/back camera, flash, zoom, exposure, photo/video mode, capture, retake, rotate and use controls are present and reachable.
+- [ ] Captured photo/video returns to the post composer correctly.
+- [ ] Group and chat camera entry points use the same existing camera capture surface.
+
 ## Deep-link contract
 
 - [ ] `fynx://` routes remain supported.
