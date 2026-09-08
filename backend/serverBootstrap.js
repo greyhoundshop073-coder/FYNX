@@ -18,13 +18,22 @@ const rateLimitReplacements = [
   ['app.use("/api/messages", rateLimit("messages", RATE_LIMITS.messages));', 'app.use("/api/messages", rateLimit("messages", 120));']
 ];
 for (const [from, to] of rateLimitReplacements) source = source.replace(from, to);
-source = source.replace('from "./socialRoutes.js";', 'from "./.fynx-runtime-socialRoutes.js";');
+source = source.replace('from "./socialRoutes.js";', 'from "./.fynx-runtime-socialRoutes.js";\nimport { registerDiscoveryRoutes } from "./discoveryRoutes.js";');
+source = source.replace('registerSocialRoutes(app, { pool, auth, findUserByUsername });', 'registerSocialRoutes(app, { pool, auth, findUserByUsername });\nif (pool) registerDiscoveryRoutes({ app, pool, auth });');
 
 let social = await readFile(socialSourcePath, "utf8");
 const signature = 'export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {';
 const compatibleSignature = 'export function registerSocialRoutes(config, legacyConfig) {\n  const { app, pool, auth, findUserByUsername } = legacyConfig ? { app: config, ...legacyConfig } : config;';
 if (!social.includes(signature)) throw new Error("FYNX bootstrap could not locate social route signature");
 social = social.replace(signature, compatibleSignature);
+
+// Group 3 discovery ranking: preserve the existing feed contract while replacing
+// chronological-only ordering with engagement velocity + freshness. The query still
+// enforces the existing visibility/block rules before ranking.
+social = social.replace(
+  'ORDER BY p.created_at DESC LIMIT $2',
+  `ORDER BY (\n    COALESCE((SELECT COUNT(*) FROM social_post_likes l2 WHERE l2.post_id=p.id),0) * 3\n    + COALESCE((SELECT COUNT(*) FROM social_post_comments c2 WHERE c2.post_id=p.id),0) * 5\n    + GREATEST(0, 72 - EXTRACT(EPOCH FROM (NOW()-p.created_at))/3600.0)\n  ) DESC, p.created_at DESC LIMIT $2`
+);
 
 await writeFile(runtimeSocialPath, social, "utf8");
 await writeFile(runtimePath, source, "utf8");
