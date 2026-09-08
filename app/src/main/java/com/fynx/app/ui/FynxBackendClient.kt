@@ -152,7 +152,12 @@ object FynxBackendClient {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
         val network = manager.activeNetwork ?: return false
         val capabilities = manager.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        // INTERNET describes a network that is configured for internet access. Requiring
+        // VALIDATED here caused false "no network" failures during normal Wi-Fi/mobile
+        // handoffs while Android was still validating the newly selected network. The
+        // actual HTTPS request is the authoritative connectivity test; transient failures
+        // are handled by the bounded retry logic above.
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     private fun isRetryableFailure(error: Throwable): Boolean {
