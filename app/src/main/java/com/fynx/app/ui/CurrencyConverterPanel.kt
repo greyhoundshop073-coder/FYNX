@@ -14,7 +14,7 @@ import java.net.URL
 import java.util.Locale
 
 private val supportedCurrencies = listOf("USD", "NGN", "EUR", "GBP", "AED", "JPY", "CAD", "AUD", "INR", "CNY", "ZAR", "GHS", "KES")
-private val fallbackRatesFromUsd = linkedMapOf(
+private val fallbackRatesFromUsd: Map<String, Double> = linkedMapOf(
     "USD" to 1.0, "NGN" to 1650.0, "EUR" to 0.86, "GBP" to 0.75,
     "AED" to 3.67, "JPY" to 147.0, "CAD" to 1.38, "AUD" to 1.53,
     "INR" to 88.0, "CNY" to 7.15, "ZAR" to 17.5, "GHS" to 12.5, "KES" to 129.0
@@ -27,7 +27,7 @@ fun CurrencyConverterPanel() {
     var from by remember { mutableStateOf("USD") }
     var to by remember { mutableStateOf("NGN") }
     var converted by remember { mutableStateOf<Double?>(null) }
-    var rates by remember { mutableStateOf(fallbackRatesFromUsd) }
+    var rates by remember { mutableStateOf<Map<String, Double>>(fallbackRatesFromUsd) }
     var ratesUpdated by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
