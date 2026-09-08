@@ -31,6 +31,7 @@ object FynxPreferencesStore {
     private const val KEY_CHAT_LIST_VIEW = "chat_list_view"
     private const val KEY_STICKER_ANIMATION = "sticker_animation"
     private const val KEY_EMOJI_SIZE = "emoji_size"
+    private const val KEY_CHAT_LIST_STATE = "chat_list_state"
 
     private const val DEFAULT_VISIBILITY = "My friends"
 
@@ -82,6 +83,15 @@ object FynxPreferencesStore {
     fun saveStickerAnimation(context: Context, value: Boolean) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_STICKER_ANIMATION, value).apply() }
     fun loadEmojiSize(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_EMOJI_SIZE, "Normal") ?: "Normal"
     fun saveEmojiSize(context: Context, value: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_EMOJI_SIZE, value).apply() }
+
+    fun isChatPinned(context: Context, username: String): Boolean = chatState(context, username).getBoolean("pinned", false)
+    fun isChatMuted(context: Context, username: String): Boolean = chatState(context, username).getBoolean("muted", false)
+    fun isChatArchived(context: Context, username: String): Boolean = chatState(context, username).getBoolean("archived", false)
+    fun setChatPinned(context: Context, username: String, value: Boolean) { saveChatState(context, username, "pinned", value) }
+    fun setChatMuted(context: Context, username: String, value: Boolean) { saveChatState(context, username, "muted", value) }
+    fun setChatArchived(context: Context, username: String, value: Boolean) { saveChatState(context, username, "archived", value) }
+    private fun chatState(context: Context, username: String) = context.getSharedPreferences("${KEY_CHAT_LIST_STATE}_${username.removePrefix("@").trim().lowercase()}", Context.MODE_PRIVATE)
+    private fun saveChatState(context: Context, username: String, key: String, value: Boolean) { chatState(context, username).edit().putBoolean(key, value).apply() }
 
     /** Persist the selected customization image inside FYNX so the picker URI cannot expire. */
     fun saveAsset(context: Context, uri: String?) {
