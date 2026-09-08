@@ -81,10 +81,6 @@ object FynxBackendClient {
                 require(root.isNotBlank()) { "FYNX backend is not configured." }
                 require(path.startsWith("/")) { "Backend path must start with /." }
 
-                // ConnectivityManager is only a hint. During Wi-Fi/mobile handoff Android can
-                // briefly report no usable active network even though the socket can succeed.
-                // Let the HTTPS request be authoritative instead of rejecting a valid request
-                // before it is attempted. Real transport failures are still surfaced below.
                 var attempt = 0
                 var response: String? = null
                 while (response == null) {
@@ -115,6 +111,8 @@ object FynxBackendClient {
             readTimeout = if (weakNetwork) WEAK_READ_TIMEOUT_MS else READ_TIMEOUT_MS
             useCaches = false
             setRequestProperty("Accept", "application/json")
+            setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0")
+            setRequestProperty("Pragma", "no-cache")
             setRequestProperty("Connection", "keep-alive")
             setRequestProperty("User-Agent", "FYNX-Android/1")
             accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
