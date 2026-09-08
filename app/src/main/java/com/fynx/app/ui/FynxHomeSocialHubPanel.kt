@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -112,18 +110,6 @@ fun FynxHomeSocialHubPanel(
                 onOpenFindPeople = onOpenFindPeople,
                 onOpenAi = onOpenAi
             )
-            Row(
-                modifier = Modifier.align(Alignment.BottomEnd).padding(18.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                SmallFloatingActionButton(
-                    onClick = { context.startActivity(Intent(context, FynxContactsActivity::class.java)) }
-                ) { Icon(Icons.Default.People, "Phone contacts") }
-                FloatingActionButton(
-                    onClick = { showComposer = true; capturedUri = null; text = ""; notice = null; visibility = defaultPostVisibility }
-                ) { Icon(Icons.Default.AddAPhoto, "Create post") }
-            }
         }
     }
 
