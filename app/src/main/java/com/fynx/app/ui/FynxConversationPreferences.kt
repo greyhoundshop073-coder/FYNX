@@ -15,6 +15,15 @@ object FynxConversationPreferences {
     fun chatNotifications(context: Context, username: String): Boolean =
         chat(context, username).getBoolean("notifications_$username", true)
 
+    fun chatMessagePreviews(context: Context, username: String): Boolean =
+        chat(context, username).getBoolean("previews_$username", true)
+
+    fun chatSounds(context: Context, username: String): Boolean =
+        chat(context, username).getBoolean("sounds_$username", true)
+
+    fun chatVibration(context: Context, username: String): Boolean =
+        chat(context, username).getBoolean("vibration_$username", true)
+
     fun chatReadReceipts(context: Context, username: String): Boolean =
         chat(context, username).getBoolean("read_$username", true)
 
@@ -29,6 +38,15 @@ object FynxConversationPreferences {
 
     fun chatAnimations(context: Context, username: String): Boolean =
         chat(context, username).getBoolean("animations_$username", true)
+
+    fun chatLastSeen(context: Context, username: String): String =
+        chat(context, username).getString("lastseen_$username", "Everybody") ?: "Everybody"
+
+    fun chatWallpaper(context: Context, username: String): String =
+        chat(context, username).getString("wallpaper_$username", "FYNX Default") ?: "FYNX Default"
+
+    fun chatTextSize(context: Context, username: String): String =
+        chat(context, username).getString("textsize_$username", "Medium") ?: "Medium"
 
     fun groupNotifications(context: Context, groupId: String): Boolean =
         group(context, groupId).getBoolean("notifications", true)
@@ -53,4 +71,7 @@ object FynxConversationPreferences {
 
     fun groupChatHistoryEnabled(context: Context, groupId: String): Boolean =
         group(context, groupId).getBoolean("chat_history", true)
+
+    fun groupAppearance(context: Context, groupId: String): String =
+        group(context, groupId).getString("appearance", "FYNX Default") ?: "FYNX Default"
 }
