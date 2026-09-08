@@ -120,16 +120,21 @@ fun SettingsPanel(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Un
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onBack) { Text("‹ Back") }; Spacer(Modifier.width(4.dp)); Text("Settings & privacy", style = MaterialTheme.typography.titleLarge) }
         HorizontalDivider()
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { SettingsSectionTitle("Account & privacy") }
             item { SettingSwitchCard("Private profile", settings.privateProfile) { onSettingsChange(settings.copy(privateProfile = it)) } }
             item { SettingSwitchCard("Read receipts", settings.readReceipts) { onSettingsChange(settings.copy(readReceipts = it)) } }
             item { SettingSwitchCard("Story replies", settings.storyReplies) { onSettingsChange(settings.copy(storyReplies = it)) } }
             item { SettingSwitchCard("FYNX notifications", settings.notifications) { onSettingsChange(settings.copy(notifications = it)) } }
             item { SettingsActionCard("Privacy & Safety", "Profile, online, posts, Status and photo visibility") { onOpenPrivacy() } }
+
+            item { SettingsSectionTitle("Look & feel") }
             item { SettingsActionCard("Appearance", appearance) { showAppearance = true } }
             item { SettingsActionCard("Colors & accent", accent.name) { showColors = true } }
-            item { SettingsActionCard("Chat & personalization", "Wallpapers, night mode, chat list, stickers, emoji and languages") { showChatPersonalization = true } }
-            item { SettingsActionCard("Assets & media", FynxPreferencesStore.loadAsset(context)?.let { "1 selected asset" } ?: "Choose a device asset") { showAssets = true } }
             item { SettingsActionCard("Language", language) { showLanguage = true } }
+
+            item { SettingsSectionTitle("Chats & media") }
+            item { SettingsActionCard("Chat & personalization", "Wallpapers, night mode, chat list, stickers and emoji") { showChatPersonalization = true } }
+            item { SettingsActionCard("Assets & media", FynxPreferencesStore.loadAsset(context)?.let { "1 selected asset" } ?: "Choose a device asset") { showAssets = true } }
         }
     }
     if (showAppearance) AlertDialog(onDismissRequest = { showAppearance = false }, title = { Text("Appearance") }, text = { Column { listOf("System", "Light", "Dark", "Black AMOLED").forEach { option -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = appearance == option, onClick = { appearance = option; FynxPreferencesStore.saveAppearance(context, option); onAppearanceChanged(option) }); Text(option) } } } }, confirmButton = { TextButton(onClick = { showAppearance = false }) { Text("Done") } })
@@ -137,6 +142,10 @@ fun SettingsPanel(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Un
     if (showLanguage) AlertDialog(onDismissRequest = { showLanguage = false }, title = { Text("Language") }, text = { Column { listOf("Device default", "English", "French", "Arabic", "Portuguese", "Spanish", "German", "Italian", "Dutch", "Turkish", "Hindi", "Hausa", "Yoruba", "Igbo", "Swahili", "Chinese", "Japanese", "Korean", "Russian").forEach { option -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = language == option, onClick = { language = option; FynxPreferencesStore.saveLanguage(context, option) }); Text(option) } } } }, confirmButton = { TextButton(onClick = { showLanguage = false }) { Text("Done") } })
     if (showAssets) AlertDialog(onDismissRequest = { showAssets = false }, title = { Text("Assets & media") }, text = { Text("Choose a personal image asset for FYNX customization.") }, confirmButton = { TextButton(onClick = { assetPicker.launch("image/*") }) { Text("Choose image") } }, dismissButton = { TextButton(onClick = { showAssets = false }) { Text("Done") } })
     if (showChatPersonalization) FynxChatPersonalizationDialog { showChatPersonalization = false }
+}
+
+@Composable private fun SettingsSectionTitle(title: String) {
+    Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp))
 }
 
 @Composable private fun SettingSwitchCard(title: String, checked: Boolean, onChange: (Boolean) -> Unit) { Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f)); Switch(checked = checked, onCheckedChange = onChange) } } }
