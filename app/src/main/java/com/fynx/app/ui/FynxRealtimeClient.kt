@@ -11,7 +11,9 @@ import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.IceCandidate
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
+import kotlin.random.Random
 
 /** Authenticated realtime transport for messages and ephemeral chat/call signals. */
 class FynxRealtimeClient(
@@ -34,7 +36,13 @@ class FynxRealtimeClient(
     }
 
     enum class Status { SENT, DELIVERED, READ }
-    private val client = OkHttpClient.Builder().readTimeout(0, TimeUnit.MILLISECONDS).pingInterval(30, TimeUnit.SECONDS).build()
+
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.MILLISECONDS)
+        .pingInterval(30, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
     private val reconnectHandler = Handler(Looper.getMainLooper())
     private val pendingLock = Any()
     private val pendingPayloads = ArrayDeque<String>()
@@ -55,7 +63,7 @@ class FynxRealtimeClient(
         if (token.isNullOrBlank()) { onStateChanged(State.FAILED); return }
         val httpBase = FynxBackendClient.baseUrl(context)
         if (!httpBase.startsWith("https://")) { onStateChanged(State.FAILED); return }
-        val encodedToken = java.net.URLEncoder.encode(token, Charsets.UTF_8.name())
+        val encodedToken = URLEncoder.encode(token, Charsets.UTF_8.name())
         val wsUrl = "wss://${httpBase.removePrefix("https://")}/realtime?token=$encodedToken"
         onStateChanged(State.CONNECTING)
         socket?.cancel()
@@ -101,7 +109,9 @@ class FynxRealtimeClient(
         if (manuallyClosed) return
         reconnectHandler.removeCallbacksAndMessages(null)
         reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(6)
-        reconnectHandler.postDelayed({ connectInternal() }, (1000L shl (reconnectAttempt - 1)).coerceAtMost(30_000L))
+        val exponentialDelay = (1000L shl (reconnectAttempt - 1)).coerceAtMost(30_000L)
+        val jitter = Random.nextLong(0L, 501L)
+        reconnectHandler.postDelayed({ connectInternal() }, exponentialDelay + jitter)
     }
 
     private fun parseCallEvent(root: JSONObject): Event.Call? {
@@ -128,6 +138,7 @@ class FynxRealtimeClient(
         if (signalType == "ice" && c == null) return null
         return Event.Call(callId, callType, fromUserId, toUserId, signalType, sdp, c, root.optString("fromUsername").takeIf { it.isNotBlank() }, root.optString("error").takeIf { it.isNotBlank() })
     }
+
     fun sendCallInvite(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "invite")
     fun sendCallAccept(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "accept")
     fun sendCallReject(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "reject")
