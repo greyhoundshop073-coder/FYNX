@@ -53,6 +53,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var searchOpen by remember { mutableStateOf(false) }
     var menuMessageId by remember { mutableStateOf<String?>(null) }
     var showGifts by remember { mutableStateOf(false) }
+    var showChatMenu by remember { mutableStateOf(false) }
+    var showChatSettings by remember { mutableStateOf(false) }
     var currentUserId by remember { mutableStateOf<String?>(null) }
     var recipientUserId by remember { mutableStateOf<String?>(null) }
     var isOnline by remember(chat.username) { mutableStateOf(chat.online) }
@@ -255,6 +257,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, ignoreCase = true) }
 
+    if (showChatSettings) {
+        FynxChatSettingsPanel(chatUsername = chat.username, onBack = { showChatSettings = false })
+        return
+    }
+
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
             Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))) {
@@ -268,7 +275,13 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     IconButton(onClick = onVoiceCall) { Icon(Icons.Default.Call, "Voice call") }
                     IconButton(onClick = onVideoCall) { Icon(Icons.Default.Videocam, "Video call") }
                     IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search") }
-                    IconButton(onClick = { showGifts = true }) { Icon(Icons.Default.CardGiftcard, "Send gift") }
+                    Box {
+                        IconButton(onClick = { showChatMenu = true }) { Icon(Icons.Default.MoreVert, "More") }
+                        DropdownMenu(expanded = showChatMenu, onDismissRequest = { showChatMenu = false }) {
+                            DropdownMenuItem(text = { Text("Chat settings") }, onClick = { showChatMenu = false; showChatSettings = true }, leadingIcon = { Icon(Icons.Default.Settings, null) })
+                            DropdownMenuItem(text = { Text("Send gift") }, onClick = { showChatMenu = false; showGifts = true }, leadingIcon = { Icon(Icons.Default.CardGiftcard, null) })
+                        }
+                    }
                 }
             }
         }
@@ -284,37 +297,20 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             FynxAvatar(message.senderName ?: chat.name, message.senderAvatarUri ?: chat.avatarUri, Modifier.size(30.dp))
                             Spacer(Modifier.width(6.dp))
                         }
-                        Surface(
-                            color = if (message.fromMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = if (message.fromMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            shape = RoundedCornerShape(18.dp),
-                            tonalElevation = 1.dp,
-                            modifier = Modifier.widthIn(max = 320.dp)
-                        ) {
+                        Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant, contentColor = if (message.fromMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, shape = RoundedCornerShape(18.dp), tonalElevation = 1.dp, modifier = Modifier.widthIn(max = 320.dp)) {
                             Column(Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) {
                                 if (!message.fromMe && !message.senderName.isNullOrBlank()) Text(message.senderName!!, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(bottom = 3.dp))
                                 if (message.replyToId != null) {
                                     val replied = messages.firstOrNull { it.id == message.replyToId }
-                                    Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 7.dp)) {
-                                        Text("↳ ${replied?.text?.take(80) ?: "Original message"}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(8.dp))
-                                    }
+                                    Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 7.dp)) { Text("↳ ${replied?.text?.take(80) ?: "Original message"}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(8.dp)) }
                                 }
                                 if (message.voiceUri != null) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         IconButton(onClick = { playVoice(message) }) { Text(if (playingVoiceId == message.id) "Ⅱ" else "▶") }
-                                        Column(Modifier.weight(1f)) {
-                                            LinearProgressIndicator(progress = { if (playingVoiceId == message.id) 0.45f else 0f })
-                                            Text((message.voiceDurationMs / 1000).toString() + "s", style = MaterialTheme.typography.labelSmall)
-                                        }
+                                        Column(Modifier.weight(1f)) { LinearProgressIndicator(progress = { if (playingVoiceId == message.id) 0.45f else 0f }); Text((message.voiceDurationMs / 1000).toString() + "s", style = MaterialTheme.typography.labelSmall) }
                                     }
                                 } else {
-                                    if (message.attachmentUri != null) {
-                                        FynxRemoteMedia(
-                                            mediaUrl = message.attachmentUri,
-                                            type = message.attachmentType ?: "image",
-                                            modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 7.dp)
-                                        )
-                                    }
+                                    if (message.attachmentUri != null) FynxRemoteMedia(mediaUrl = message.attachmentUri, type = message.attachmentType ?: "image", modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 7.dp))
                                     if (message.text.isNotBlank()) SelectionContainer { Text(message.text) }
                                 }
                                 if (message.edited) Text("Edited", style = MaterialTheme.typography.labelSmall)
@@ -323,9 +319,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             }
                         }
                     }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) {
-                        TextButton(onClick = { menuMessageId = if (menuMessageId == message.id) null else message.id }) { Text("More") }
-                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) { TextButton(onClick = { menuMessageId = if (menuMessageId == message.id) null else message.id }) { Text("More") } }
                     if (menuMessageId == message.id) {
                         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) {
                             if (message.voiceUri == null && message.text.isNotBlank()) IconButton(onClick = { clipboardManager.setText(AnnotatedString(message.text)); menuMessageId = null }) { Icon(Icons.Default.ContentCopy, "Copy") }
@@ -350,34 +344,20 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     }
                 }
                 if (replyToId != null) {
-                    Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Replying to message", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); IconButton(onClick = { replyToId = null }) { Icon(Icons.Default.Close, "Cancel reply") }
-                    }
+                    Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) { Text("Replying to message", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); IconButton(onClick = { replyToId = null }) { Icon(Icons.Default.Close, "Cancel reply") } }
                 }
                 if (isRecording) {
                     Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(9.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)))
-                            Spacer(Modifier.width(8.dp)); Text(if (isRecordingPaused) "Paused" else "Recording", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
-                            Spacer(Modifier.width(8.dp)); Text(formatRecordingTime(recordingElapsed), style = MaterialTheme.typography.labelLarge)
-                            Spacer(Modifier.width(10.dp))
-                            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-                                repeat(18) { index ->
-                                    val height = 5.dp + (((recordingElapsed / 100L + index * 7L) % 20L).toInt()).dp
-                                    Box(Modifier.width(3.dp).height(height).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)))
-                                }
-                            }
+                            Box(Modifier.size(9.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50))); Spacer(Modifier.width(8.dp)); Text(if (isRecordingPaused) "Paused" else "Recording", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge); Spacer(Modifier.width(8.dp)); Text(formatRecordingTime(recordingElapsed), style = MaterialTheme.typography.labelLarge); Spacer(Modifier.width(10.dp))
+                            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) { repeat(18) { index -> val height = 5.dp + (((recordingElapsed / 100L + index * 7L) % 20L).toInt()).dp; Box(Modifier.width(3.dp).height(height).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))) } }
                         }
                     }
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                     IconButton(onClick = { showCamera = true }, enabled = !isRecording) { Icon(Icons.Default.CameraAlt, "Camera") }
                     IconButton(onClick = { imagePicker.launch("image/*") }, enabled = !isRecording) { Icon(Icons.Default.AttachFile, "Attach") }
-                    OutlinedTextField(value = text, onValueChange = { value ->
-                        val wasBlank = text.isBlank(); text = value
-                        if (value.isBlank() && typingSent) { recipientUserId?.let { realtimeClient.sendTyping(it, false) }; typingSent = false }
-                        else if (wasBlank && value.isNotBlank()) recipientUserId?.let { realtimeClient.sendTyping(it, true); typingSent = true }
-                    }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), placeholder = { Text(if (editingId == null) "Message" else "Edit message…") }, maxLines = 5, enabled = !isRecording)
+                    OutlinedTextField(value = text, onValueChange = { value -> val wasBlank = text.isBlank(); text = value; if (value.isBlank() && typingSent) { recipientUserId?.let { realtimeClient.sendTyping(it, false) }; typingSent = false } else if (wasBlank && value.isNotBlank()) recipientUserId?.let { realtimeClient.sendTyping(it, true); typingSent = true } }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), placeholder = { Text(if (editingId == null) "Message" else "Edit message…") }, maxLines = 5, enabled = !isRecording)
                     if (isRecording) {
                         IconButton(onClick = { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) runCatching { if (isRecordingPaused) { recorder?.resume(); isRecordingPaused = false } else { recorder?.pause(); isRecordingPaused = true } } }) { Icon(if (isRecordingPaused) Icons.Default.PlayArrow else Icons.Default.Pause, if (isRecordingPaused) "Resume recording" else "Pause recording") }
                         IconButton(onClick = { stopRecording() }) { Icon(Icons.Default.Stop, "Stop recording") }
@@ -423,9 +403,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     if (showCamera) {
         Dialog(onDismissRequest = { showCamera = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-            Surface(Modifier.fillMaxSize()) {
-                FynxCameraCapturePanel(onCaptured = { uri, type -> attachment = uri; attachmentType = type; showCamera = false })
-            }
+            Surface(Modifier.fillMaxSize()) { FynxCameraCapturePanel(onCaptured = { uri, type -> attachment = uri; attachmentType = type; showCamera = false }) }
         }
     }
 
@@ -450,5 +428,4 @@ private fun formatChatTime(timestamp: Long): String {
 }
 
 @Suppress("DEPRECATION")
-private fun createCompatibleMediaRecorder(context: android.content.Context): MediaRecorder =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
+private fun createCompatibleMediaRecorder(context: android.content.Context): MediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
