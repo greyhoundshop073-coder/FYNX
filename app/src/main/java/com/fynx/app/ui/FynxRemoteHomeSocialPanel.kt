@@ -168,14 +168,36 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
     val mine = post.authorUsername.equals(currentUsername.removePrefix("@"), true)
     val marketplaceAd = post.text.startsWith(MARKETPLACE_AD_MARKER)
     val displayText = if (marketplaceAd) post.text.removePrefix(MARKETPLACE_AD_MARKER).trim() else post.text
-    Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
-        Column {
-            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) { FynxAvatar(post.authorUsername, Modifier.size(46.dp).clip(CircleShape)); Spacer(Modifier.width(10.dp)); Column(Modifier.weight(1f)) { Text(post.authorDisplayName.ifBlank { post.authorUsername }, style = MaterialTheme.typography.titleSmall); Text("@${post.authorUsername.removePrefix("@")} • ${relative(post.timestamp)}", style = MaterialTheme.typography.labelSmall) }; if (mine) IconButton(onClick = onDelete) { Icon(Icons.Default.DeleteOutline, "Delete post") } else TextButton(onClick = { onFollow(post.followedByCurrentUser) }) { Text(if (post.followedByCurrentUser) "Following" else "Follow") } }
-            if (marketplaceAd) Text("MARKETPLACE", Modifier.padding(horizontal = 14.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            if (displayText.isNotBlank()) Text(displayText, Modifier.padding(horizontal = 14.dp, vertical = 4.dp))
+    Card(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraSmall, colors = CardDefaults.cardColors(FynxDesign.Surface), border = null) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                FynxAvatar(post.authorUsername, Modifier.size(46.dp).clip(CircleShape))
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(post.authorDisplayName.ifBlank { post.authorUsername }, style = MaterialTheme.typography.titleSmall)
+                        Spacer(Modifier.width(4.dp))
+                        Text("✓", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+                    }
+                    Text("${post.authorUsername.removePrefix("@")} • ${relative(post.timestamp)}", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
+                }
+                if (mine) IconButton(onClick = onDelete) { Icon(Icons.Default.MoreHoriz, "Post options") }
+                else TextButton(onClick = { onFollow(post.followedByCurrentUser) }) { Text(if (post.followedByCurrentUser) "Following" else "Follow") }
+            }
+            if (marketplaceAd) Text("MARKETPLACE", Modifier.padding(horizontal = 12.dp, vertical = 3.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            if (displayText.isNotBlank()) Text(displayText, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.bodyLarge)
             post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType) }
-            if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = onOpenMarketplace) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = { onLike(post.id) }) { Icon(if (post.likedByCurrentUser) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null); Spacer(Modifier.width(4.dp)); Text(post.likeCount.toString()) }; TextButton(onClick = onLikes) { Text("Likes") }; TextButton(onClick = onComment) { Icon(Icons.Default.ChatBubbleOutline, null); Spacer(Modifier.width(4.dp)); Text(post.commentCount.toString()) }; TextButton(onClick = onShare) { Icon(Icons.Default.Share, null); Spacer(Modifier.width(4.dp)); Text("Share") } }
+            if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = onOpenMarketplace) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { onLike(post.id) }) { Icon(if (post.likedByCurrentUser) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Like", tint = if (post.likedByCurrentUser) MaterialTheme.colorScheme.error else FynxDesign.TextPrimary) }
+                Text("${post.likeCount}", style = MaterialTheme.typography.labelMedium)
+                IconButton(onClick = onComment) { Icon(Icons.Default.ChatBubbleOutline, "Comment") }
+                Text("${post.commentCount}", style = MaterialTheme.typography.labelMedium)
+                IconButton(onClick = onShare) { Icon(Icons.Default.Share, "Share") }
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onLikes) { Icon(Icons.Default.People, "People who liked this") }
+                IconButton(onClick = onShare) { Icon(Icons.Default.BookmarkBorder, "Save") }
+            }
         }
     }
 }
@@ -193,11 +215,11 @@ private fun RemoteSocialMedia(path: String, type: String?) {
     LaunchedEffect(path) { file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, path, type) } }
     if (file == null) Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     else if (type == "audio") AudioPostPlayer(file!!)
-    else if (type == "video") AndroidView(factory = { ctx -> VideoView(ctx).apply { layoutParams = ViewGroup.LayoutParams(-1, 640); setMediaController(MediaController(ctx)); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxWidth().height(320.dp))
+    else if (type == "video") AndroidView(factory = { ctx -> VideoView(ctx).apply { layoutParams = ViewGroup.LayoutParams(-1, 640); setMediaController(MediaController(ctx)); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxWidth().height(520.dp))
     else {
         var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
         LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }
-        bitmap?.let { Image(it.asImageBitmap(), "Post media", Modifier.fillMaxWidth().heightIn(min = 240.dp, max = 520.dp), contentScale = ContentScale.Crop) }
+        bitmap?.let { Image(it.asImageBitmap(), "Post media", Modifier.fillMaxWidth().heightIn(min = 300.dp, max = 720.dp), contentScale = ContentScale.Crop) }
     }
 }
 
