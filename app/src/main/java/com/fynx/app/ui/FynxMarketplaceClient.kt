@@ -26,12 +26,12 @@ object FynxMarketplaceClient {
         val active: Boolean = true
     )
 
-    suspend fun listings(context: Context, query: String = "", category: String = ""): Result<List<Listing>> =
-        FynxDiscoveryClient.marketplaceDiscovery(context, query, category).recoverCatching {
-            FynxBackendClient.get(context, "/api/marketplace/listings?q=${encode(query)}&category=${encode(category)}")
-                .getOrThrow()
-                .let(::parseListings)
-        }
+    suspend fun listings(context: Context, query: String = "", category: String = ""): Result<List<Listing>> {
+        val discovery = FynxDiscoveryClient.marketplaceDiscovery(context, query, category)
+        if (discovery.isSuccess) return discovery
+        return FynxBackendClient.get(context, "/api/marketplace/listings?q=${encode(query)}&category=${encode(category)}")
+            .mapCatching(::parseListings)
+    }
 
     data class SellerReputation(val rank: Int, val sellerCount: Int, val successfulSales: Int, val totalOrders: Int, val completionRate: Double, val averageRating: Double, val reviewCount: Int, val tier: String)
 
@@ -64,86 +64,31 @@ object FynxMarketplaceClient {
         FynxMarketplaceSafety.publishDecision(assessment).getOrElse { return Result.failure(it) }
         if (!price.isFinite() || price <= 0.0) return Result.failure(IllegalArgumentException("Enter a valid product price."))
         if (quantity <= 0) return Result.failure(IllegalArgumentException("Product quantity must be at least 1."))
-        if (deliveryFee != null && (!deliveryFee.isFinite() || deliveryFee < 0.0)) {
-            return Result.failure(IllegalArgumentException("Enter a valid delivery fee."))
-        }
+        if (deliveryFee != null && (!deliveryFee.isFinite() || deliveryFee < 0.0)) return Result.failure(IllegalArgumentException("Enter a valid delivery fee."))
         val distinctMediaIds = mediaIds.distinct().take(12)
         val media = JSONArray().apply { distinctMediaIds.forEach { put(it) } }
-        val body = JSONObject()
-            .put("title", title.trim())
-            .put("description", description.trim())
-            .put("storeName", storeName.trim())
-            .put("price", price)
-            .put("currency", currency.trim().uppercase())
-            .put("category", category.trim())
-            .put("condition", condition.trim().uppercase())
-            .put("quantity", quantity)
-            .put("location", location.trim())
-            .put("deliveryAvailable", deliveryAvailable)
-            .put("pickupAvailable", pickupAvailable)
-            .put("mediaIds", media)
+        val body = JSONObject().put("title", title.trim()).put("description", description.trim()).put("storeName", storeName.trim()).put("price", price).put("currency", currency.trim().uppercase()).put("category", category.trim()).put("condition", condition.trim().uppercase()).put("quantity", quantity).put("location", location.trim()).put("deliveryAvailable", deliveryAvailable).put("pickupAvailable", pickupAvailable).put("mediaIds", media)
         if (deliveryFee != null) body.put("deliveryFee", deliveryFee)
-        return FynxBackendClient.postJson(context, "/api/marketplace/listings", body.toString()).mapCatching {
-            JSONObject(it).getJSONObject("listing").getString("id")
-        }.also { result ->
+        return FynxBackendClient.postJson(context, "/api/marketplace/listings", body.toString()).mapCatching { JSONObject(it).getJSONObject("listing").getString("id") }.also { result ->
             result.onSuccess { listingId ->
-                val cleanTitle = title.trim().take(120)
-                val cleanDescription = description.trim().take(1000)
-                val cleanStore = storeName.trim().take(120)
+                val cleanTitle = title.trim().take(120); val cleanDescription = description.trim().take(1000); val cleanStore = storeName.trim().take(120)
                 val priceText = "${currency.trim().uppercase()} ${String.format(java.util.Locale.US, "%,.2f", price)}"
-                val adText = buildString {
-                    append("[FYNX_MARKETPLACE_AD]\n")
-                    append("🛍️ $cleanTitle\n")
-                    append("Price: $priceText\n")
-                    if (cleanStore.isNotBlank()) append("Store: $cleanStore\n")
-                    if (cleanDescription.isNotBlank()) append(cleanDescription)
-                    append("\nListing ID: $listingId")
-                }
-                FynxRemoteSocialClient.createPost(
-                    context = context,
-                    text = adText.take(4000),
-                    visibility = FynxPostVisibility.PUBLIC,
-                    uri = null
-                )
+                val adText = buildString { append("[FYNX_MARKETPLACE_AD]\n"); append("🛍️ $cleanTitle\n"); append("Price: $priceText\n"); if (cleanStore.isNotBlank()) append("Store: $cleanStore\n"); if (cleanDescription.isNotBlank()) append(cleanDescription); append("\nListing ID: $listingId") }
+                FynxRemoteSocialClient.createPost(context = context, text = adText.take(4000), visibility = FynxPostVisibility.PUBLIC, uri = null)
             }
         }
     }
 
-    suspend fun deleteListing(context: Context, listingId: String): Result<Unit> =
-        FynxBackendClient.delete(context, "/api/marketplace/listings/${encode(listingId)}").map { }
-
-    fun safetyAssessment(listing: Listing): FynxMarketplaceSafetyAssessment =
-        FynxMarketplaceSafety.analyze(listing.title, listing.description, listing.storeName, listing.location)
-
-    fun mediaUrl(context: Context, mediaId: String): String =
-        "${FynxBackendClient.baseUrl(context)}/api/media/${encode(mediaId)}"
+    suspend fun deleteListing(context: Context, listingId: String): Result<Unit> = FynxBackendClient.delete(context, "/api/marketplace/listings/${encode(listingId)}").map { }
+    fun safetyAssessment(listing: Listing): FynxMarketplaceSafetyAssessment = FynxMarketplaceSafety.analyze(listing.title, listing.description, listing.storeName, listing.location)
+    fun mediaUrl(context: Context, mediaId: String): String = "${FynxBackendClient.baseUrl(context)}/api/media/${encode(mediaId)}"
 
     private fun parseListings(raw: String): List<Listing> {
         val array = JSONObject(raw).getJSONArray("listings")
         return buildList {
             for (i in 0 until array.length()) {
-                val o = array.getJSONObject(i)
-                val media = o.optJSONArray("media_ids") ?: JSONArray()
-                val ids = buildList { for (j in 0 until media.length()) add(media.getString(j)) }
-                add(Listing(
-                    id = o.getString("id"),
-                    sellerUsername = o.optString("seller_username"),
-                    sellerDisplayName = o.optString("seller_display_name"),
-                    storeName = o.optString("store_name"),
-                    title = o.optString("title"),
-                    description = o.optString("description"),
-                    price = o.optDouble("price", 0.0),
-                    currency = o.optString("currency", "NGN"),
-                    category = o.optString("category"),
-                    condition = o.optString("condition", "NEW"),
-                    quantity = o.optInt("quantity", 0),
-                    location = o.optString("location"),
-                    deliveryAvailable = o.optBoolean("delivery_available", false),
-                    pickupAvailable = o.optBoolean("pickup_available", true),
-                    deliveryFee = if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"),
-                    mediaIds = ids,
-                    active = o.optBoolean("active", true)
-                ))
+                val o = array.getJSONObject(i); val media = o.optJSONArray("media_ids") ?: JSONArray(); val ids = buildList { for (j in 0 until media.length()) add(media.getString(j)) }
+                add(Listing(o.getString("id"), o.optString("seller_username"), o.optString("seller_display_name"), o.optString("store_name"), o.optString("title"), o.optString("description"), o.optDouble("price", 0.0), o.optString("currency", "NGN"), o.optString("category"), o.optString("condition", "NEW"), o.optInt("quantity", 0), o.optString("location"), o.optBoolean("delivery_available", false), o.optBoolean("pickup_available", true), if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"), ids, o.optBoolean("active", true)))
             }
         }
     }
