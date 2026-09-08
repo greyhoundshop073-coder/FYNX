@@ -125,7 +125,7 @@ export function registerGroupRoutes({ app }) {
     const id=String(req.body?.id||''); if(!validId(id))return res.status(400).json({error:'invalid message id'});
     const text=typeof req.body?.text==='string'?req.body.text.trim().slice(0,4000):'';
     const attachmentMediaId=req.body?.attachmentMediaId==null?null:Number(req.body.attachmentMediaId);
-    const attachmentType=req.body?.attachmentType==null?null:String(req.body.attachmentType).slice(0,20):null;
+    const attachmentType=req.body?.attachmentType==null?null:String(req.body.attachmentType).slice(0,20);
     if(!text && attachmentMediaId==null)return res.status(400).json({error:'message content is required'});
     if(attachmentMediaId!==null&&(!Number.isInteger(attachmentMediaId)||attachmentMediaId<1))return res.status(400).json({error:'invalid attachment'});
     if(attachmentMediaId!==null){const owned=await pool.query(`SELECT id FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1`,[attachmentMediaId,req.user.sub]);if(!owned.rows[0])return res.status(403).json({error:'attachment is not owned by this account'});}
