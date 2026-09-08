@@ -99,7 +99,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) {
         attachment = it
-        attachmentType = if (it == null) null else "image"
+        attachmentType = if (it == null) null else context.contentResolver.getType(it)?.substringBefore("/")?.lowercase().takeIf { type -> type == "video" } ?: "image"
     }
     val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted && !isRecording) {
@@ -330,7 +330,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             IconButton(onClick = { replyToId = message.id; menuMessageId = null }) { Icon(Icons.Default.Reply, "Reply") }
                             if (message.fromMe && message.voiceUri == null && message.text.isNotBlank()) {
                                 IconButton(onClick = { editingId = message.id; text = message.text; menuMessageId = null }) { Icon(Icons.Default.Edit, "Edit") }
-                                IconButton(onClick = { messages = messages.filterNot { it.id == message.id }; menuMessageId = null }) { Icon(Icons.Default.Delete, "Delete") }
+                                IconButton(onClick = { scope.launch {\n                                    FynxProductionMessaging.deleteMessage(context, message.id)\n                                        .onSuccess { messages = messages.filterNot { it.id == message.id }; menuMessageId = null }\n                                        .onFailure { networkError = it.message ?: "Message could not be deleted" }\n                                } }) { Icon(Icons.Default.Delete, "Delete") }
                             }
                         }
                     }
@@ -360,7 +360,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                     IconButton(onClick = { showCamera = true }, enabled = !isRecording) { Icon(Icons.Default.CameraAlt, "Camera") }
-                    IconButton(onClick = { imagePicker.launch("image/*") }, enabled = !isRecording) { Icon(Icons.Default.AttachFile, "Attach") }
+                    IconButton(onClick = { imagePicker.launch("image/*,video/*") }, enabled = !isRecording) { Icon(Icons.Default.AttachFile, "Attach") }
                     OutlinedTextField(value = text, onValueChange = { value -> val wasBlank = text.isBlank(); text = value; if (value.isBlank() && typingSent) { recipientUserId?.let { realtimeClient.sendTyping(it, false) }; typingSent = false } else if (wasBlank && value.isNotBlank()) recipientUserId?.let { realtimeClient.sendTyping(it, true); typingSent = true } }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), placeholder = { Text(if (editingId == null) "Message" else "Edit message…") }, maxLines = 5, enabled = !isRecording)
                     if (isRecording) {
                         IconButton(onClick = { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) runCatching { if (isRecordingPaused) { recorder?.resume(); isRecordingPaused = false } else { recorder?.pause(); isRecordingPaused = true } } }) { Icon(if (isRecordingPaused) Icons.Default.PlayArrow else Icons.Default.Pause, if (isRecordingPaused) "Resume recording" else "Pause recording") }
@@ -373,7 +373,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             val value = text.trim()
                             if (value.isNotEmpty() || attachment != null) {
                                 if (editingId != null) {
-                                    messages = messages.map { if (it.id == editingId) it.copy(text = value, edited = true) else it }
+                                    val messageId = editingId\n                                    messages = messages.map { if (it.id == messageId) it.copy(text = value, edited = true) else it }\n                                    if (messageId != null) scope.launch { FynxProductionMessaging.editMessage(context, messageId, value).onFailure { networkError = it.message ?: "Message could not be edited" } }
                                     text = ""; editingId = null; replyToId = null
                                 } else {
                                     val recipient = recipientUserId
