@@ -32,4 +32,8 @@ await writeFile(runtimePath, source, "utf8");
 // Keep the original scalability preload active so realtime AI, privacy, groups,
 // admin and production resource guards are installed on the live HTTP server.
 await import("./scalability.js");
+// scalability.js installs several compatibility routes from a setImmediate callback.
+// Wait for that callback before importing the runtime server so the first real request
+// cannot race route registration and receive a false HTTP 404.
+await new Promise((resolve) => setImmediate(resolve));
 await import(`${pathToFileURL(runtimePath).href}?boot=${Date.now()}`);
