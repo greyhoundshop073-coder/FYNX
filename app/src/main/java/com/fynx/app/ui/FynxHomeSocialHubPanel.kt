@@ -21,7 +21,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Keeps the existing Home experience intact while routing captured media into the real FYNX social backend. */
+/** Home social surface. Media and publishing use the authenticated FYNX social backend. */
 @Composable
 fun FynxHomeSocialHubPanel(
     currentUsername: String,
@@ -37,15 +37,9 @@ fun FynxHomeSocialHubPanel(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val configuredPostVisibility = remember {
-        FynxPreferencesStore.loadVisibility(context, "privacy_posts_visibility")
-    }
+    val configuredPostVisibility = remember { FynxPreferencesStore.loadVisibility(context, "privacy_posts_visibility") }
     val postingAllowed = configuredPostVisibility != "Nobody"
-    val defaultPostVisibility = if (configuredPostVisibility == "Everyone") {
-        FynxPostVisibility.PUBLIC
-    } else {
-        FynxPostVisibility.FRIENDS_ONLY
-    }
+    val defaultPostVisibility = if (configuredPostVisibility == "Everyone") FynxPostVisibility.PUBLIC else FynxPostVisibility.FRIENDS_ONLY
     var showComposer by remember { mutableStateOf(false) }
     var showCamera by remember { mutableStateOf(false) }
     var capturedUri by remember { mutableStateOf<Uri?>(null) }
@@ -65,7 +59,7 @@ fun FynxHomeSocialHubPanel(
 
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
-            runCatching { context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
             capturedUri = uri
             capturedType = if (context.contentResolver.getType(uri)?.startsWith("video/") == true) "video" else "image"
             showComposer = true
@@ -84,17 +78,9 @@ fun FynxHomeSocialHubPanel(
 
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (networkLevel != FynxNetworkQuality.Level.GOOD) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = MaterialTheme.shapes.medium
-            ) {
+            Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) {
                 Text(
-                    text = if (networkLevel == FynxNetworkQuality.Level.OFFLINE) {
-                        "You are offline. FYNX will keep the app usable while you reconnect."
-                    } else {
-                        "Weak connection detected. Media uploads may take longer."
-                    },
+                    text = if (networkLevel == FynxNetworkQuality.Level.OFFLINE) "You are offline. FYNX will keep the app usable while you reconnect." else "Weak connection detected. Media uploads may take longer.",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
@@ -110,19 +96,16 @@ fun FynxHomeSocialHubPanel(
                 onOpenMarketplace = onOpenMarketplace,
                 onOpenNotifications = onOpenNotifications,
                 onOpenFindPeople = onOpenFindPeople,
-                onOpenAi = onOpenAi
+                onOpenAi = onOpenAi,
+                onCreatePost = { showComposer = true; capturedUri = null; text = ""; notice = null; visibility = defaultPostVisibility }
             )
             Row(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(18.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SmallFloatingActionButton(
-                    onClick = { context.startActivity(Intent(context, FynxContactsActivity::class.java)) }
-                ) { Icon(Icons.Default.People, "Phone contacts") }
-                FloatingActionButton(
-                    onClick = { showComposer = true; capturedUri = null; text = ""; notice = null; visibility = defaultPostVisibility }
-                ) { Icon(Icons.Default.AddAPhoto, "Create post") }
+                SmallFloatingActionButton(onClick = { context.startActivity(Intent(context, FynxContactsActivity::class.java)) }) { Icon(Icons.Default.People, "Phone contacts") }
+                FloatingActionButton(onClick = { showComposer = true; capturedUri = null; text = ""; notice = null; visibility = defaultPostVisibility }) { Icon(Icons.Default.AddAPhoto, "Create post") }
             }
         }
     }
@@ -133,46 +116,36 @@ fun FynxHomeSocialHubPanel(
             title = { Text("Create a FYNX post") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (!postingAllowed) {
-                        Text("Posting is disabled by your Posts privacy setting.", color = MaterialTheme.colorScheme.error)
-                    }
+                    if (!postingAllowed) Text("Posting is disabled by your Posts privacy setting.", color = MaterialTheme.colorScheme.error)
                     OutlinedTextField(value = text, onValueChange = { text = it.take(4000) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 7, placeholder = { Text("Share something with your FYNX circle…") }, enabled = !posting && postingAllowed)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { showComposer = false; showCamera = true }, modifier = Modifier.weight(1f), enabled = !posting && postingAllowed) { Icon(Icons.Default.CameraAlt, null); Spacer(Modifier.width(4.dp)); Text("Camera") }
                         OutlinedButton(onClick = { gallery.launch(arrayOf("image/*", "video/*")) }, modifier = Modifier.weight(1f), enabled = !posting && postingAllowed) { Icon(Icons.Default.VideoLibrary, null); Spacer(Modifier.width(4.dp)); Text("Gallery") }
                     }
-                    capturedUri?.let {
-                        Text(if (capturedType == "video") "Video captured and ready" else "Photo captured and ready", color = MaterialTheme.colorScheme.primary)
-                    }
+                    capturedUri?.let { Text(if (capturedType == "video") "Video captured and ready" else "Photo captured and ready", color = MaterialTheme.colorScheme.primary) }
                     Text("Who can see this?", style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(visibility == FynxPostVisibility.PUBLIC, { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") }, enabled = !posting && postingAllowed && configuredPostVisibility == "Everyone")
                         FilterChip(visibility == FynxPostVisibility.FRIENDS_ONLY, { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") }, enabled = !posting && postingAllowed)
                     }
-                    if (networkLevel == FynxNetworkQuality.Level.OFFLINE) {
-                        Text("You are offline. Reconnect before publishing this post.", color = MaterialTheme.colorScheme.error)
-                    }
+                    if (networkLevel == FynxNetworkQuality.Level.OFFLINE) Text("You are offline. Reconnect before publishing this post.", color = MaterialTheme.colorScheme.error)
                     notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
             confirmButton = {
-                Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUri != null), onClick = {
-                    if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) {
-                        notice = "You are offline. Reconnect before publishing this post."
-                        return@Button
+                Button(
+                    enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUri != null),
+                    onClick = {
+                        if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) { notice = "You are offline. Reconnect before publishing this post."; return@Button }
+                        posting = true
+                        notice = null
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) { FynxRemoteSocialClient.createPost(context, text, visibility, capturedUri) }
+                            result.onSuccess { showComposer = false; capturedUri = null; text = "" }.onFailure { notice = it.message ?: "Post could not be published." }
+                            posting = false
+                        }
                     }
-                    posting = true
-                    notice = null
-                    scope.launch {
-                        val result = withContext(Dispatchers.IO) { FynxRemoteSocialClient.createPost(context, text, visibility, capturedUri) }
-                        result.onSuccess {
-                            showComposer = false
-                            capturedUri = null
-                            text = ""
-                        }.onFailure { notice = it.message ?: "Post could not be published." }
-                        posting = false
-                    }
-                }) { Text(if (posting) "Publishing…" else "Post") }
+                ) { Text(if (posting) "Publishing…" else "Post") }
             },
             dismissButton = { TextButton(onClick = { if (!posting) { showComposer = false; capturedUri = null } }, enabled = !posting) { Text("Cancel") } }
         )

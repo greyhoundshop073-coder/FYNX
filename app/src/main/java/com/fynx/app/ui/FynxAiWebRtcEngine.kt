@@ -3,7 +3,6 @@ package com.fynx.app.ui
 import android.content.Context
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
-import org.json.JSONObject
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
 import org.webrtc.DataChannel
@@ -12,15 +11,9 @@ import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpReceiver
 import org.webrtc.SessionDescription
-import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
-/**
- * WebRTC transport for FYNX AI realtime voice.
- *
- * The OpenAI credential never enters this class. The authenticated FYNX backend
- * exchanges the SDP offer for the provider SDP answer.
- */
+/** WebRTC transport for FYNX AI realtime voice. The provider credential remains server-side. */
 class FynxAiWebRtcEngine(
     context: Context,
     private val iceServers: List<PeerConnection.IceServer> = emptyList()
@@ -86,6 +79,7 @@ class FynxAiWebRtcEngine(
         )
 
         setState(State.CONNECTED, null)
+        sendEvent("{\"type\":\"response.create\"}")
     }.onFailure { error ->
         setState(State.FAILED, error.message ?: "FYNX AI voice connection failed")
         close()
@@ -93,6 +87,12 @@ class FynxAiWebRtcEngine(
 
     fun setMicrophoneEnabled(enabled: Boolean) {
         audioTrack?.setEnabled(enabled)
+    }
+
+    fun sendEvent(json: String): Boolean {
+        val channel = eventsChannel ?: return false
+        if (channel.state() != DataChannel.State.OPEN) return false
+        return channel.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(json.toByteArray(StandardCharsets.UTF_8)), false))
     }
 
     fun close() {
@@ -117,31 +117,20 @@ class FynxAiWebRtcEngine(
     private suspend fun createOffer(connection: PeerConnection): SessionDescription =
         CompletableDeferred<SessionDescription>().also { deferred ->
             connection.createOffer(object : SdpObserverAdapter() {
-                override fun onCreateSuccess(description: SessionDescription) {
-                    deferred.complete(description)
-                }
-
-                override fun onCreateFailure(error: String) {
-                    deferred.completeExceptionally(IllegalStateException(error))
-                }
+                override fun onCreateSuccess(description: SessionDescription) { deferred.complete(description) }
+                override fun onCreateFailure(error: String) { deferred.completeExceptionally(IllegalStateException(error)) }
             }, MediaConstraints())
         }.awaitWithTimeout()
 
     private suspend fun awaitLocalDescription() {
-        localDescriptionReady?.awaitWithTimeout()
-            ?: error("Local FYNX AI SDP was not prepared")
+        localDescriptionReady?.awaitWithTimeout() ?: error("Local FYNX AI SDP was not prepared")
     }
 
     private fun PeerConnection.setLocalDescriptionAwait(description: SessionDescription) {
         localDescriptionReady = CompletableDeferred()
         setLocalDescription(object : SdpObserverAdapter() {
-            override fun onSetSuccess() {
-                localDescriptionReady?.complete(description.description)
-            }
-
-            override fun onSetFailure(error: String) {
-                localDescriptionReady?.completeExceptionally(IllegalStateException(error))
-            }
+            override fun onSetSuccess() { localDescriptionReady?.complete(description.description) }
+            override fun onSetFailure(error: String) { localDescriptionReady?.completeExceptionally(IllegalStateException(error)) }
         }, description)
     }
 
@@ -149,18 +138,14 @@ class FynxAiWebRtcEngine(
         CompletableDeferred<Unit>().also { deferred ->
             setRemoteDescription(object : SdpObserverAdapter() {
                 override fun onSetSuccess() { deferred.complete(Unit) }
-                override fun onSetFailure(error: String) {
-                    deferred.completeExceptionally(IllegalStateException(error))
-                }
+                override fun onSetFailure(error: String) { deferred.completeExceptionally(IllegalStateException(error)) }
             }, description)
         }.awaitWithTimeout()
     }
 
     private fun dataChannelObserver() = object : DataChannel.Observer {
         override fun onBufferedAmountChange(previousAmount: Long) = Unit
-
         override fun onStateChange() = Unit
-
         override fun onMessage(buffer: DataChannel.Buffer) {
             if (buffer.binary) return
             val bytes = ByteArray(buffer.data.remaining())
@@ -170,21 +155,16 @@ class FynxAiWebRtcEngine(
         }
     }
 
-    private suspend fun <T> CompletableDeferred<T>.awaitWithTimeout(): T =
-        withTimeout(15_000) { await() }
+    private suspend fun <T> CompletableDeferred<T>.awaitWithTimeout(): T = withTimeout(15_000) { await() }
 
     private fun observer() = object : PeerConnection.Observer {
         override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
         override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
-            if (state == PeerConnection.IceConnectionState.FAILED) {
-                setState(State.FAILED, "FYNX AI network connection failed")
-            }
+            if (state == PeerConnection.IceConnectionState.FAILED) setState(State.FAILED, "FYNX AI network connection failed")
         }
         override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
         override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) {
-            if (state == PeerConnection.IceGatheringState.COMPLETE) {
-                iceGatheringReady?.complete(Unit)
-            }
+            if (state == PeerConnection.IceGatheringState.COMPLETE) iceGatheringReady?.complete(Unit)
         }
         override fun onIceCandidate(candidate: org.webrtc.IceCandidate) = Unit
         override fun onIceCandidatesRemoved(candidates: Array<out org.webrtc.IceCandidate>) = Unit
