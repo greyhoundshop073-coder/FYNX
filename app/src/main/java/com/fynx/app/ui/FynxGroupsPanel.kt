@@ -93,6 +93,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var showMembers by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showTools by remember { mutableStateOf(false) }
+    var showMore by remember { mutableStateOf(false) }
     var syncMessage by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
 
@@ -110,9 +111,20 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) { Text("‹", style = MaterialTheme.typography.headlineSmall) }
-                Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                    Text(groupTitle, style = MaterialTheme.typography.titleLarge)
+                Box(Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Group, "Group", tint = MaterialTheme.colorScheme.primary)
+                }
+                Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                    Text(groupTitle, style = MaterialTheme.typography.titleLarge, maxLines = 1)
                     Text("${currentGroup?.members?.size ?: 0} members", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Box {
+                    IconButton(onClick = { showMore = true }, enabled = currentGroup != null) { Icon(Icons.Default.MoreVert, "More") }
+                    DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+                        DropdownMenuItem(text = { Text("Members") }, onClick = { showMore = false; showMembers = true }, leadingIcon = { Icon(Icons.Default.Group, null) })
+                        DropdownMenuItem(text = { Text("Group tools") }, onClick = { showMore = false; showTools = true }, leadingIcon = { Icon(Icons.Default.MoreVert, null) })
+                        DropdownMenuItem(text = { Text("Group settings") }, onClick = { showMore = false; showSettings = true }, leadingIcon = { Icon(Icons.Default.Settings, null) })
+                    }
                 }
             }
         }
@@ -130,39 +142,32 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
 
         Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp, modifier = Modifier.navigationBarsPadding().imePadding()) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = { showTools = true }, enabled = currentGroup != null) { Icon(Icons.Default.MoreVert, null); Spacer(Modifier.width(4.dp)); Text("Tools") }
-                    TextButton(onClick = { showMembers = true }, enabled = currentGroup != null) { Icon(Icons.Default.Group, null); Spacer(Modifier.width(4.dp)); Text("Members") }
-                    TextButton(onClick = { showSettings = true }, enabled = currentGroup != null) { Icon(Icons.Default.Settings, null); Spacer(Modifier.width(4.dp)); Text("Settings") }
-                }
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                    OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.weight(1f), placeholder = { Text("Write a message…") }, maxLines = 4, shape = MaterialTheme.shapes.large, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Default))
-                    Spacer(Modifier.width(6.dp))
-                    IconButton(enabled = text.trim().isNotEmpty() && !sending && currentGroup != null, onClick = {
-                        val trimmed = text.trim()
-                        val optimistic = ChatMessage(trimmed, true, UUID.randomUUID().toString(), delivered = true, read = true)
-                        messages = messages + optimistic
-                        FynxChatStore.save(context, "group_$groupId", messages)
-                        text = ""
-                        sending = true
-                        scope.launch {
-                            FynxGroupRemoteClient.sendMessage(context, groupId, optimistic)
-                                .onSuccess { remote ->
-                                    val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
-                                    messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
-                                    FynxChatStore.save(context, "group_$groupId", messages)
-                                    syncMessage = null
-                                }
-                                .onFailure { error ->
-                                    messages = messages.filterNot { it.id == optimistic.id }
-                                    FynxChatStore.save(context, "group_$groupId", messages)
-                                    syncMessage = error.message ?: "Message could not be sent."
-                                }
-                            sending = false
-                        }
-                    }) { Icon(Icons.Default.Send, "Send") }
-                }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
+                OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.weight(1f), placeholder = { Text("Write a message…") }, maxLines = 4, shape = MaterialTheme.shapes.large, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Default))
+                Spacer(Modifier.width(6.dp))
+                IconButton(enabled = text.trim().isNotEmpty() && !sending && currentGroup != null, onClick = {
+                    val trimmed = text.trim()
+                    val optimistic = ChatMessage(trimmed, true, UUID.randomUUID().toString(), delivered = true, read = true)
+                    messages = messages + optimistic
+                    FynxChatStore.save(context, "group_$groupId", messages)
+                    text = ""
+                    sending = true
+                    scope.launch {
+                        FynxGroupRemoteClient.sendMessage(context, groupId, optimistic)
+                            .onSuccess { remote ->
+                                val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
+                                messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
+                                FynxChatStore.save(context, "group_$groupId", messages)
+                                syncMessage = null
+                            }
+                            .onFailure { error ->
+                                messages = messages.filterNot { it.id == optimistic.id }
+                                FynxChatStore.save(context, "group_$groupId", messages)
+                                syncMessage = error.message ?: "Message could not be sent."
+                            }
+                        sending = false
+                    }
+                }) { Icon(Icons.Default.Send, "Send") }
             }
         }
     }
