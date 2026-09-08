@@ -35,7 +35,6 @@ object FynxDesign {
     val TextSecondary = Color(0xFFB9C6D8)
     val Outline = Color(0xFF31445F)
     val SelectedContainer = Color(0xFF132B49)
-
     val LightBackground = Color(0xFFF5F7FB)
     val LightSurface = Color(0xFFFFFFFF)
     val LightSurfaceRaised = Color(0xFFEAF0F7)
@@ -43,7 +42,6 @@ object FynxDesign {
     val LightTextSecondary = Color(0xFF5E6B78)
     val LightOutline = Color(0xFFD2DAE5)
     val LightSelectedContainer = Color(0xFFE4EFFC)
-
     val AmoledBackground = Color.Black
     val AmoledSurface = Color.Black
     val AmoledSurfaceRaised = Color.Black
@@ -51,7 +49,6 @@ object FynxDesign {
     val AmoledTextSecondary = Color(0xFFE0E0E0)
     val AmoledOutline = Color(0xFF303030)
     val AmoledSelectedContainer = Color(0xFF111111)
-
     val CardShape = RoundedCornerShape(16.dp)
     val LargeCardShape = RoundedCornerShape(20.dp)
     val ControlShape = RoundedCornerShape(14.dp)
@@ -76,22 +73,29 @@ private fun scheduledNightModeActive(context: android.content.Context): Boolean 
 
 @Composable
 fun FynxTheme(
-    accent: FynxAccent = FynxAccent.Blue,
+    accent: FynxAccent? = null,
     darkMode: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
     val appearance = FynxPreferencesStore.loadAppearance(context)
+    val effectiveAccent = accent ?: FynxPreferencesStore.loadAccent(context)
     val amoled = appearance == "Black AMOLED"
     val scheduledNight = appearance == "System" && scheduledNightModeActive(context)
-    val effectiveDarkMode = amoled || darkMode || scheduledNight
-    val onAccent = if (accent.primary.luminance() > 0.5f) Color.Black else Color.White
+    val effectiveDarkMode = when (appearance) {
+        "Light" -> false
+        "Dark" -> true
+        "Black AMOLED" -> true
+        "System" -> darkMode || scheduledNight
+        else -> darkMode || scheduledNight
+    }
+    val onAccent = if (effectiveAccent.primary.luminance() > 0.5f) Color.Black else Color.White
     val scheme = if (effectiveDarkMode) {
         darkColorScheme(
-            primary = accent.primary,
+            primary = effectiveAccent.primary,
             onPrimary = onAccent,
-            secondary = accent.secondary,
-            onSecondary = if (accent.secondary.luminance() > 0.5f) Color.Black else Color.White,
+            secondary = effectiveAccent.secondary,
+            onSecondary = if (effectiveAccent.secondary.luminance() > 0.5f) Color.Black else Color.White,
             background = if (amoled) FynxDesign.AmoledBackground else FynxDesign.Background,
             onBackground = if (amoled) FynxDesign.AmoledTextPrimary else FynxDesign.TextPrimary,
             surface = if (amoled) FynxDesign.AmoledSurface else FynxDesign.Surface,
@@ -99,14 +103,14 @@ fun FynxTheme(
             surfaceVariant = if (amoled) FynxDesign.AmoledSurfaceRaised else FynxDesign.SurfaceRaised,
             onSurfaceVariant = if (amoled) FynxDesign.AmoledTextSecondary else FynxDesign.TextSecondary,
             outline = if (amoled) FynxDesign.AmoledOutline else FynxDesign.Outline,
-            surfaceTint = if (amoled) Color.Black else accent.primary
+            surfaceTint = if (amoled) Color.Black else effectiveAccent.primary
         )
     } else {
         lightColorScheme(
-            primary = accent.primary,
+            primary = effectiveAccent.primary,
             onPrimary = onAccent,
-            secondary = accent.secondary,
-            onSecondary = if (accent.secondary.luminance() > 0.5f) Color.Black else Color.White,
+            secondary = effectiveAccent.secondary,
+            onSecondary = if (effectiveAccent.secondary.luminance() > 0.5f) Color.Black else Color.White,
             background = FynxDesign.LightBackground,
             onBackground = FynxDesign.LightTextPrimary,
             surface = FynxDesign.LightSurface,
@@ -116,15 +120,10 @@ fun FynxTheme(
             outline = FynxDesign.LightOutline
         )
     }
-
     MaterialTheme(
         colorScheme = scheme,
         typography = fynxTypography(),
-        shapes = Shapes(
-            small = FynxDesign.ControlShape,
-            medium = FynxDesign.CardShape,
-            large = FynxDesign.LargeCardShape
-        ),
+        shapes = Shapes(small = FynxDesign.ControlShape, medium = FynxDesign.CardShape, large = FynxDesign.LargeCardShape),
         content = { FynxCustomizationBackground(content) }
     )
 }
