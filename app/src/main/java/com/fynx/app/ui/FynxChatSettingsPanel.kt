@@ -37,10 +37,7 @@ private const val CHAT_PREFS = "fynx_chat_settings"
 private fun chatPrefs(context: Context) = context.getSharedPreferences(CHAT_PREFS, Context.MODE_PRIVATE)
 
 @Composable
-fun FynxChatSettingsPanel(
-    chatUsername: String,
-    onBack: () -> Unit = {}
-) {
+fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val prefs = remember(chatUsername) { chatPrefs(context) }
     var notifications by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("notifications_$chatUsername", true)) }
@@ -49,16 +46,17 @@ fun FynxChatSettingsPanel(
     var vibration by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("vibration_$chatUsername", true)) }
     var autoDownload by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("autodownload_$chatUsername", true)) }
     var saveGallery by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("gallery_$chatUsername", false)) }
+    var linkPreviews by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("linkpreviews_$chatUsername", true)) }
     var readReceipts by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("read_$chatUsername", true)) }
+    var animations by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("animations_$chatUsername", true)) }
     var lastSeen by rememberSaveable(chatUsername) { mutableStateOf(prefs.getString("lastseen_$chatUsername", "Everybody") ?: "Everybody") }
     var wallpaper by rememberSaveable(chatUsername) { mutableStateOf(prefs.getString("wallpaper_$chatUsername", "FYNX Default") ?: "FYNX Default") }
+    var textSize by rememberSaveable(chatUsername) { mutableStateOf(prefs.getString("textsize_$chatUsername", "Medium") ?: "Medium") }
 
     fun put(key: String, value: Boolean) = prefs.edit().putBoolean(key, value).apply()
     fun put(key: String, value: String) = prefs.edit().putString(key, value).apply()
 
-    Column(
-        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-    ) {
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         Surface(tonalElevation = 2.dp) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") }
@@ -70,7 +68,7 @@ fun FynxChatSettingsPanel(
         }
 
         ChatSettingsSection("Notifications", Icons.Default.Notifications) {
-            ChatSwitchRow("Notifications", "Receive alerts for this chat", notifications) { notifications = it; put("notifications_$chatUsername", it) }
+            ChatSwitchRow("Notifications", "Messages from this chat", notifications) { notifications = it; put("notifications_$chatUsername", it) }
             ChatSwitchRow("Message previews", "Show message text in notifications", previews) { previews = it; put("previews_$chatUsername", it) }
             ChatSwitchRow("Sound", "Play notification sounds", sounds) { sounds = it; put("sounds_$chatUsername", it) }
             ChatSwitchRow("Vibration", "Vibrate for new messages", vibration) { vibration = it; put("vibration_$chatUsername", it) }
@@ -92,10 +90,20 @@ fun FynxChatSettingsPanel(
         ChatSettingsSection("Data & Storage", Icons.Default.Storage) {
             ChatSwitchRow("Automatic media download", "Download shared photos and videos automatically", autoDownload) { autoDownload = it; put("autodownload_$chatUsername", it) }
             ChatSwitchRow("Save to gallery", "Save received media to the device gallery", saveGallery) { saveGallery = it; put("gallery_$chatUsername", it) }
+            ChatSwitchRow("Link previews", "Show previews for shared links", linkPreviews) { linkPreviews = it; put("linkpreviews_$chatUsername", it) }
         }
 
         ChatSettingsSection("Chat Appearance", Icons.Default.Palette) {
-            Text("Wallpaper", style = MaterialTheme.typography.titleSmall)
+            Text("Text size", style = MaterialTheme.typography.titleSmall)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                listOf("Small", "Medium", "Large").forEach { option ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        RadioButton(textSize == option, { textSize = option; put("textsize_$chatUsername", option) })
+                        Text(option, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+            Text("Wallpaper", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 listOf("FYNX Default", "Light", "Dark").forEach { option ->
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -104,7 +112,7 @@ fun FynxChatSettingsPanel(
                     }
                 }
             }
-            Text("The controls are intentionally grouped into simple sections so common chat changes take one or two taps, following the usability pattern Telegram uses for private-chat settings.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+            ChatSwitchRow("Animations", "Use smooth chat animations", animations) { animations = it; put("animations_$chatUsername", it) }
         }
 
         HorizontalDivider(Modifier.padding(top = 8.dp))
@@ -112,11 +120,7 @@ fun FynxChatSettingsPanel(
 }
 
 @Composable
-private fun ChatSettingsSection(
-    title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    content: @Composable () -> Unit
-) {
+private fun ChatSettingsSection(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, content: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
@@ -128,12 +132,7 @@ private fun ChatSettingsSection(
 }
 
 @Composable
-private fun ChatSwitchRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
+private fun ChatSwitchRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
