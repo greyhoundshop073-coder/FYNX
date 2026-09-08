@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -51,6 +52,7 @@ fun FynxGroupSettingsPanel(
     var editDescription by remember { mutableStateOf(currentGroup?.description.orEmpty()) }
     var infoMessage by remember { mutableStateOf<String?>(null) }
     var savingInfo by remember { mutableStateOf(false) }
+    var inviteMessage by remember { mutableStateOf<String?>(null) }
 
     fun save(key: String, value: Boolean) = prefs.edit().putBoolean(key, value).apply()
 
@@ -86,6 +88,7 @@ fun FynxGroupSettingsPanel(
                     saveMedia = false
                     chatHistory = true
                     appearance = "FYNX Default"
+                    inviteMessage = null
                     showResetDialog = false
                 }) { Text("Reset") }
             },
@@ -100,77 +103,46 @@ fun FynxGroupSettingsPanel(
             title = { Text("Group information") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = editName,
-                        onValueChange = { editName = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        label = { Text("Group name") }
-                    )
-                    OutlinedTextField(
-                        value = editDescription,
-                        onValueChange = { editDescription = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 2,
-                        maxLines = 4,
-                        label = { Text("Description") }
-                    )
-                    infoMessage?.let {
-                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    }
+                    OutlinedTextField(value = editName, onValueChange = { editName = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("Group name") })
+                    OutlinedTextField(value = editDescription, onValueChange = { editDescription = it }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 4, label = { Text("Description") })
+                    infoMessage?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 }
             },
             confirmButton = {
-                TextButton(
-                    enabled = !savingInfo,
-                    onClick = {
-                        val existing = currentGroup ?: return@TextButton
-                        val name = editName.trim()
-                        val description = editDescription.trim()
-                        if (name.length < 2 || description.length < 2) {
-                            infoMessage = "Group name and description must be at least 2 characters."
-                            return@TextButton
-                        }
-                        val updated = existing.copy(name = name, description = description)
-                        if (FynxGroupsBatch1.validate(updated).isNotEmpty()) {
-                            infoMessage = "The group information could not be saved."
-                            return@TextButton
-                        }
-                        savingInfo = true
-                        infoMessage = null
-                        if (!FynxGroupsStore.updateGroup(context, updated)) {
-                            savingInfo = false
-                            infoMessage = "Could not save group information on this device."
-                            return@TextButton
-                        }
-                        currentGroup = updated
-                        scope.launch {
-                            FynxGroupRemoteClient.syncGroup(context, updated)
-                                .onSuccess {
-                                    savingInfo = false
-                                    showEditInfo = false
-                                }
-                                .onFailure {
-                                    savingInfo = false
-                                    infoMessage = it.message ?: "Group information saved locally but could not sync."
-                                }
-                        }
+                TextButton(enabled = !savingInfo, onClick = {
+                    val existing = currentGroup ?: return@TextButton
+                    val name = editName.trim()
+                    val description = editDescription.trim()
+                    if (name.length < 2 || description.length < 2) {
+                        infoMessage = "Group name and description must be at least 2 characters."
+                        return@TextButton
                     }
-                ) { Text(if (savingInfo) "Saving…" else "Save") }
+                    val updated = existing.copy(name = name, description = description)
+                    if (FynxGroupsBatch1.validate(updated).isNotEmpty()) {
+                        infoMessage = "The group information could not be saved."
+                        return@TextButton
+                    }
+                    savingInfo = true
+                    infoMessage = null
+                    if (!FynxGroupsStore.updateGroup(context, updated)) {
+                        savingInfo = false
+                        infoMessage = "Could not save group information on this device."
+                        return@TextButton
+                    }
+                    currentGroup = updated
+                    scope.launch {
+                        FynxGroupRemoteClient.syncGroup(context, updated)
+                            .onSuccess { savingInfo = false; showEditInfo = false }
+                            .onFailure { savingInfo = false; infoMessage = it.message ?: "Group information saved locally but could not sync." }
+                    }
+                }) { Text(if (savingInfo) "Saving…" else "Save") }
             },
-            dismissButton = {
-                TextButton(enabled = !savingInfo, onClick = { showEditInfo = false }) { Text("Cancel") }
-            }
+            dismissButton = { TextButton(enabled = !savingInfo, onClick = { showEditInfo = false }) { Text("Cancel") } }
         )
     }
 
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-        Row(
-            Modifier.fillMaxWidth().statusBarsPadding().padding(bottom = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") }
             Column(Modifier.weight(1f)) {
                 Text(currentGroup?.name ?: groupName, style = MaterialTheme.typography.titleLarge)
@@ -182,11 +154,7 @@ fun FynxGroupSettingsPanel(
         GroupSettingsSection("Group information", Icons.Default.Edit) {
             Text(currentGroup?.name ?: groupName, style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(3.dp))
-            Text(
-                currentGroup?.description ?: "Group information",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text(currentGroup?.description ?: "Group information", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (isAdmin && currentGroup != null) {
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = {
@@ -211,7 +179,7 @@ fun FynxGroupSettingsPanel(
             GroupSwitchRow("Members can send messages", sendMessages, isAdmin) { sendMessages = it; save("send_messages", it) }
             GroupSwitchRow("Members can send media and files", sendMedia, isAdmin) { sendMedia = it; save("send_media", it) }
             GroupSwitchRow("Members can add people", addMembers, isAdmin) { addMembers = it; save("add_members", it) }
-            GroupSwitchRow("Invite links", inviteLinks, isAdmin) { inviteLinks = it; save("invite_links", it) }
+            GroupSwitchRow("Invite links", inviteLinks, isAdmin) { inviteLinks = it; save("invite_links", it); if (!it) inviteMessage = null }
         }
 
         GroupSettingsSection("Media & history", Icons.Default.Settings) {
@@ -224,39 +192,44 @@ fun FynxGroupSettingsPanel(
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("FYNX Default", "Light", "Dark").forEach { option ->
-                    FilterChip(
-                        selected = appearance == option,
-                        onClick = { appearance = option; prefs.edit().putString("appearance", option).apply() },
-                        label = { Text(option) }
-                    )
+                    FilterChip(selected = appearance == option, onClick = { appearance = option; prefs.edit().putString("appearance", option).apply() }, label = { Text(option) })
                 }
             }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { showWallpaper = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("Group wallpaper")
-            }
+            OutlinedButton(onClick = { showWallpaper = true }, modifier = Modifier.fillMaxWidth()) { Text("Group wallpaper") }
         }
 
         GroupSettingsSection("Group management", Icons.Default.Settings) {
-            GroupActionRow(
-                "Clear local group history",
-                "Remove the saved conversation from this device",
-                Icons.Default.DeleteOutline
-            ) { showClearDialog = true }
-            GroupActionRow(
-                "Reset group settings",
-                "Restore FYNX defaults for this group",
-                Icons.Default.RestartAlt
-            ) { showResetDialog = true }
+            if (isAdmin && inviteLinks) {
+                GroupActionRow("Create invite link", "Generate a shareable link for this group", Icons.Default.Group) {
+                    val group = currentGroup
+                    if (group == null) {
+                        inviteMessage = "This group is no longer available."
+                    } else {
+                        val link = FynxGroupsBatch3.createInviteLink(group, group.ownerUsername)
+                        if (link == null) {
+                            inviteMessage = "Only a group admin or moderator can create invite links."
+                        } else {
+                            inviteMessage = link.asShareText()
+                            runCatching {
+                                context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, link.asShareText())
+                                }, "Share group invite"))
+                            }.onFailure { inviteMessage = "Invite link created: ${link.asShareText()}" }
+                        }
+                    }
+                }
+                inviteMessage?.let {
+                    Text(it, Modifier.padding(horizontal = 4.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            GroupActionRow("Clear local group history", "Remove the saved conversation from this device", Icons.Default.DeleteOutline) { showClearDialog = true }
+            GroupActionRow("Reset group settings", "Restore FYNX defaults for this group", Icons.Default.RestartAlt) { showResetDialog = true }
         }
 
         if (!isAdmin) {
-            Text(
-                "Admin-only permissions are locked for members.",
-                Modifier.padding(horizontal = 4.dp, vertical = 10.dp),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text("Admin-only permissions are locked for members.", Modifier.padding(horizontal = 4.dp, vertical = 10.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 
@@ -264,11 +237,7 @@ fun FynxGroupSettingsPanel(
 }
 
 @Composable
-private fun GroupSettingsSection(
-    title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    content: @Composable ColumnScope.() -> Unit
-) {
+private fun GroupSettingsSection(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, content: @Composable ColumnScope.() -> Unit) {
     Card(Modifier.fillMaxWidth().padding(bottom = 12.dp), shape = MaterialTheme.shapes.large) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -283,12 +252,7 @@ private fun GroupSettingsSection(
 }
 
 @Composable
-private fun GroupSwitchRow(
-    title: String,
-    checked: Boolean,
-    enabled: Boolean = true,
-    onCheckedChange: (Boolean) -> Unit
-) {
+private fun GroupSwitchRow(title: String, checked: Boolean, enabled: Boolean = true, onCheckedChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
         Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
@@ -296,12 +260,7 @@ private fun GroupSwitchRow(
 }
 
 @Composable
-private fun GroupActionRow(
-    title: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit
-) {
+private fun GroupActionRow(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
     TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null)
