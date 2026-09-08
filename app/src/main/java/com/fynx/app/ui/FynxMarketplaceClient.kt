@@ -27,7 +27,11 @@ object FynxMarketplaceClient {
     )
 
     suspend fun listings(context: Context, query: String = "", category: String = ""): Result<List<Listing>> =
-        FynxBackendClient.get(context, "/api/marketplace/listings?q=${encode(query)}&category=${encode(category)}").mapCatching(::parseListings)
+        FynxDiscoveryClient.marketplaceDiscovery(context, query, category).recoverCatching {
+            FynxBackendClient.get(context, "/api/marketplace/listings?q=${encode(query)}&category=${encode(category)}")
+                .getOrThrow()
+                .let(::parseListings)
+        }
 
     data class SellerReputation(val rank: Int, val sellerCount: Int, val successfulSales: Int, val totalOrders: Int, val completionRate: Double, val averageRating: Double, val reviewCount: Int, val tier: String)
 
@@ -83,9 +87,6 @@ object FynxMarketplaceClient {
             JSONObject(it).getJSONObject("listing").getString("id")
         }.also { result ->
             result.onSuccess { listingId ->
-                // Publish the real listing as a normal public social post. Use the existing
-                // createPost path here so Marketplace does not depend on a separately resolved
-                // ad helper during Kotlin compilation. No fake engagement is created.
                 val cleanTitle = title.trim().take(120)
                 val cleanDescription = description.trim().take(1000)
                 val cleanStore = storeName.trim().take(120)
