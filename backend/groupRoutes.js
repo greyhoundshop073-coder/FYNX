@@ -58,12 +58,19 @@ export function registerGroupRoutes({ app }) {
     try{req.user=jwt.verify(token,JWT_SECRET);return next();}catch{return res.status(401).json({error:'invalid or expired token'});}
   };
   const validId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{8,80}$/.test(value);
-  const findUsernames = async usernames => {
-    const clean=[...new Set((Array.isArray(usernames)?usernames:[]).map(v=>String(v||'').trim().toLowerCase()).filter(Boolean))];
+  const findUsers = async members => {
+    const entries=[...new Map((Array.isArray(members)?members:[]).map(value=>{
+      const username=typeof value==='object'&&value!==null?String(value.username||''):String(value||'');
+      return [username.trim().toLowerCase(),{username:username.trim(),requestedRole:typeof value==='object'&&value!==null?String(value.role||'MEMBER').toUpperCase():'MEMBER'}];
+    }).filter(([key])=>Boolean(key.replace(/^@+/,'').trim()))).values()];
+    const clean=entries.map(entry=>entry.username.toLowerCase().replace(/^@+/,'')).filter(Boolean);
     if(!clean.length)return [];
-    return (await pool.query(`SELECT id,username FROM users WHERE lower(username)=ANY($1::text[])`,[clean])).rows;
+    const rows=(await pool.query(`SELECT id,username FROM users WHERE lower(username)=ANY($1::text[])`,[clean])).rows;
+    return rows.map(user=>({...user,requestedRole:entries.find(entry=>entry.username.toLowerCase().replace(/^@+/,'')===String(user.username).toLowerCase())?.requestedRole||'MEMBER'}));
   };
-  const member = async (groupId,userId) => Boolean((await pool.query(`SELECT 1 FROM fynx_group_members WHERE group_id=$1 AND user_id=$2 LIMIT 1`,[groupId,userId])).rowCount);
+  const member = async (groupId,userId) => (await pool.query(`SELECT role FROM fynx_group_members WHERE group_id=$1 AND user_id=$2 LIMIT 1`,[groupId,userId])).rows[0] || null;
+  const canManageMembers = role => role === 'ADMIN' || role === 'MODERATOR';
+  const normalizeRole = role => ['MEMBER','MODERATOR'].includes(String(role||'').toUpperCase()) ? String(role).toUpperCase() : 'MEMBER';
   const messageJson = row => ({
     id:String(row.id),
     text:row.text||'',
@@ -81,33 +88,35 @@ export function registerGroupRoutes({ app }) {
       if(!validId(groupId))return res.status(400).json({error:'invalid group id'});
       const owner=(await pool.query(`SELECT id,username FROM users WHERE id=$1 LIMIT 1`,[req.user.sub])).rows[0];
       if(!owner)return res.status(401).json({error:'account not found'});
+      const groupAccess=await member(groupId,req.user.sub);
       const ownerUsername=String(req.body?.ownerUsername||'').trim().toLowerCase().replace(/^@+/,'');
-      if(ownerUsername!==String(owner.username||'').toLowerCase())return res.status(403).json({error:'group owner must be the authenticated account'});
+      if(!groupAccess && ownerUsername!==String(owner.username||'').toLowerCase())return res.status(403).json({error:'group membership required'});
+      if(groupAccess && !canManageMembers(groupAccess.role))return res.status(403).json({error:'group management permission required'});
       const name=String(req.body?.name||'').trim().slice(0,120);
       const description=String(req.body?.description||'').trim().slice(0,500);
       const visibility=String(req.body?.visibility||'PRIVATE').toUpperCase()==='PUBLIC'?'PUBLIC':'PRIVATE';
       if(name.length<2)return res.status(400).json({error:'group name is required'});
-      const users=await findUsernames(req.body?.members);
+      const users=await findUsers(req.body?.members);
       const requested=new Map(users.map(u=>[String(u.username).toLowerCase(),u]));
-      requested.set(String(owner.username).toLowerCase(),owner);
+      requested.set(String(owner.username).toLowerCase(),{...owner,requestedRole:'ADMIN'});
       await client.query('BEGIN');
       const existing=(await client.query(`SELECT id,owner_id FROM fynx_groups WHERE id=$1 FOR UPDATE`,[groupId])).rows[0];
-      if(existing && String(existing.owner_id)!==String(req.user.sub)){
+      if(existing && String(existing.owner_id)!==String(req.user.sub) && !groupAccess){
         await client.query('ROLLBACK');
-        return res.status(403).json({error:'only the group owner can synchronize membership'});
+        return res.status(403).json({error:'group management permission required'});
       }
       if(existing){
         await client.query(`UPDATE fynx_groups SET name=$1,description=$2,visibility=$3,updated_at=NOW() WHERE id=$4`,[name,description,visibility,groupId]);
-        await client.query(`DELETE FROM fynx_group_members WHERE group_id=$1 AND user_id<>$2`,[groupId,req.user.sub]);
+        await client.query(`DELETE FROM fynx_group_members WHERE group_id=$1 AND user_id<>$2 AND user_id<>ALL($3::bigint[])`,[groupId,req.user.sub,users.map(u=>u.id)]);
       }else{
         await client.query(`INSERT INTO fynx_groups(id,owner_id,name,description,visibility) VALUES($1,$2,$3,$4,$5)`,[groupId,req.user.sub,name,description,visibility]);
       }
       for(const user of requested.values()){
-        const role=String(user.id)===String(req.user.sub)?'ADMIN':'MEMBER';
+        const role=String(user.id)===String(req.user.sub)?'ADMIN':normalizeRole(user.requestedRole);
         await client.query(`INSERT INTO fynx_group_members(group_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT(group_id,user_id) DO UPDATE SET role=EXCLUDED.role`,[groupId,user.id,role]);
       }
       await client.query('COMMIT');
-      return res.json({group:{id:groupId,name,description,visibility,ownerUsername:owner.username,members:[...requested.values()].map(u=>({username:u.username,role:String(u.id)===String(req.user.sub)?'ADMIN':'MEMBER'}))}});
+      return res.json({group:{id:groupId,name,description,visibility,ownerUsername:owner.username,members:[...requested.values()].map(u=>({username:u.username,role:String(u.id)===String(req.user.sub)?'ADMIN':normalizeRole(u.requestedRole)}))}});
     }catch(error){await client.query('ROLLBACK').catch(()=>{});console.error('group sync',error);return res.status(500).json({error:'group synchronization failed'});}finally{client.release();}
   });
 
