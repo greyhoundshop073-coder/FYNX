@@ -5,23 +5,27 @@ on:
     branches: ["main"]
     paths:
       - "app/**"
+      - "backend/**"
       - "gradle/**"
       - "*.gradle.kts"
       - "gradle.properties"
       - "gradlew"
       - "gradlew.bat"
       - "scripts/**"
+      - "docs/**"
       - ".github/workflows/android-build.yml"
   pull_request:
     branches: ["main"]
     paths:
       - "app/**"
+      - "backend/**"
       - "gradle/**"
       - "*.gradle.kts"
       - "gradle.properties"
       - "gradlew"
       - "gradlew.bat"
       - "scripts/**"
+      - "docs/**"
       - ".github/workflows/android-build.yml"
   workflow_dispatch:
 
@@ -44,52 +48,41 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-
       - name: Set up Gradle with CI caching
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-provider: basic
-
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-
       - name: Authenticate to Google Cloud with Workload Identity Federation
         uses: google-github-actions/auth@v3
         with:
           project_id: fynx-f0868
           workload_identity_provider: ${{ env.FYNX_WIF_PROVIDER }}
           service_account: ${{ env.FYNX_GCP_SERVICE_ACCOUNT }}
-
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v3
-
       - name: Verify Google Cloud authentication
         run: |
           gcloud auth list --filter=status:ACTIVE --format="value(account)"
           gcloud config get-value project
-
       - name: Verify Stage 15D reliability foundations
         run: |
           node backend/verify-stage15d-reliability.mjs
           node backend/verify-stage15d-advanced.mjs
-
       - name: Verify Stage 16 camera and media integration
         run: python3 scripts/verify_stage16_camera.py
-
       - name: Verify consolidated FYNX user journey integration
         run: python3 scripts/verify_fynx_journey.py
-
       - name: Build, test and lint
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
-
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         if: always()
@@ -97,7 +90,6 @@ jobs:
           name: FYNX-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: ignore
-
       - name: Upload instrumentation test APK
         uses: actions/upload-artifact@v4
         if: always()
@@ -105,7 +97,6 @@ jobs:
           name: FYNX-debug-androidTest-apk
           path: app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
           if-no-files-found: ignore
-
       - name: Upload lint report
         uses: actions/upload-artifact@v4
         if: always()
