@@ -14,7 +14,9 @@ private val FynxChatWallpaperOptions = listOf("FYNX Default", "Midnight", "Auror
 @Composable
 fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val wallpaper = remember { FynxPreferencesStore.loadChatWallpaper(context) }
+    // Read the preference on every recomposition so closing the personalization
+    // dialog immediately applies the newly selected wallpaper.
+    val wallpaper = FynxPreferencesStore.loadChatWallpaper(context)
     val brush = when (wallpaper) {
         "Midnight" -> Brush.verticalGradient(listOf(Color(0xFF090D18), Color(0xFF1A2338)))
         "Aurora" -> Brush.verticalGradient(listOf(Color(0xFF092B2A), Color(0xFF14243D)))
@@ -94,6 +96,7 @@ fun FynxChatPersonalizationDialog(onDismiss: () -> Unit) {
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") }
+        }
     )
 }
