@@ -11,7 +11,8 @@ export function installRequestResourceGuard(app) {
     const url = String(req.originalUrl || req.url || "");
     if (url.length > MAX_URL_LENGTH) return res.status(414).json({ error: "request target too long" });
 
-    const contentLength = Number.parseInt(req.get("content-length") || "", 10);
+    const rawContentLength = typeof req.get === "function" ? req.get("content-length") : req.headers?.["content-length"];
+    const contentLength = Number.parseInt(rawContentLength || "", 10);
     if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
       return res.status(413).json({ error: "request body is too large" });
     }
