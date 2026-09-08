@@ -76,8 +76,9 @@ fun FynxCameraCapturePanel(
         if (missing.isNotEmpty()) permissionLauncher.launch(missing.toTypedArray())
     }
 
-    var lens by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
-    var mode by remember { mutableStateOf(CameraMode.PHOTO) }
+    // Chat camera opens ready for selfie/video capture, matching the fast Telegram-style flow.
+    var lens by remember { mutableStateOf(CameraSelector.LENS_FACING_FRONT) }
+    var mode by remember { mutableStateOf(CameraMode.VIDEO) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var videoCapture by remember { mutableStateOf<VideoCapture<Recorder>?>(null) }
     var cameraControl by remember { mutableStateOf<androidx.camera.core.CameraControl?>(null) }
@@ -108,14 +109,9 @@ fun FynxCameraCapturePanel(
         val generation = bindGeneration + 1
         bindGeneration = generation
         if (!hasCamera || pendingUri != null) {
-            cameraProvider?.unbindAll()
-            imageCapture = null
-            videoCapture = null
-            cameraControl = null
-            cameraInfo = null
+            cameraProvider?.unbindAll(); imageCapture = null; videoCapture = null; cameraControl = null; cameraInfo = null
             return@LaunchedEffect
         }
-
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             if (generation != bindGeneration || !hasCamera || pendingUri != null) return@addListener
@@ -127,307 +123,67 @@ fun FynxCameraCapturePanel(
                     if (lens == CameraSelector.LENS_FACING_FRONT) lens = CameraSelector.LENS_FACING_BACK
                     return@runCatching
                 }
-
-                val preview = Preview.Builder().build().also { useCase ->
-                    previewView.post { useCase.surfaceProvider = previewView.surfaceProvider }
-                }
-                val capture = ImageCapture.Builder()
-                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                    .build()
-                val recorder = Recorder.Builder()
-                    .setQualitySelector(QualitySelector.from(Quality.HD, FallbackStrategy.lowerQualityOrHigherThan(Quality.SD)))
-                    .build()
+                val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
+                val capture = ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build()
+                val recorder = Recorder.Builder().setQualitySelector(QualitySelector.from(Quality.HD, FallbackStrategy.lowerQualityOrHigherThan(Quality.SD))).build()
                 val video = VideoCapture.withOutput(recorder)
-
                 provider.unbindAll()
                 if (generation != bindGeneration || pendingUri != null) return@runCatching
-                val camera = if (mode == CameraMode.PHOTO) {
-                    provider.bindToLifecycle(lifecycleOwner, selector, preview, capture)
-                } else {
-                    provider.bindToLifecycle(lifecycleOwner, selector, preview, video)
-                }
-
-                cameraProvider = provider
-                imageCapture = capture
-                videoCapture = video
-                cameraControl = camera.cameraControl
-                cameraInfo = camera.cameraInfo
+                val camera = if (mode == CameraMode.PHOTO) provider.bindToLifecycle(lifecycleOwner, selector, preview, capture) else provider.bindToLifecycle(lifecycleOwner, selector, preview, video)
+                cameraProvider = provider; imageCapture = capture; videoCapture = video; cameraControl = camera.cameraControl; cameraInfo = camera.cameraInfo
                 cameraControl?.setZoomRatio(zoomRatio.coerceIn(1f, 4f))
                 val range = cameraInfo?.exposureState?.exposureCompensationRange
-                exposure = exposure.coerceIn(range?.lower ?: -2, range?.upper ?: 2)
-                cameraControl?.setExposureCompensationIndex(exposure)
-                if (torchEnabled && cameraInfo?.hasFlashUnit() == true) {
-                    cameraControl?.enableTorch(true)
-                } else if (torchEnabled) {
-                    torchEnabled = false
-                }
+                exposure = exposure.coerceIn(range?.lower ?: -2, range?.upper ?: 2); cameraControl?.setExposureCompensationIndex(exposure)
+                if (torchEnabled && cameraInfo?.hasFlashUnit() == true) cameraControl?.enableTorch(true) else if (torchEnabled) torchEnabled = false
                 error = null
-            }.onFailure {
-                if (generation == bindGeneration) error = it.message ?: "Camera could not start"
-            }
+            }.onFailure { if (generation == bindGeneration) error = it.message ?: "Camera could not start" }
         }, ContextCompat.getMainExecutor(context))
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            recording?.stop()
-            cameraProvider?.unbindAll()
-        }
-    }
-
-    fun deleteUri(uri: Uri?) {
-        if (uri?.scheme == "file") File(uri.path ?: "").delete()
-    }
-
-    fun retake() {
-        deleteUri(pendingUri)
-        deleteUri(pendingOriginalUri)
-        pendingUri = null
-        pendingOriginalUri = null
-        pendingType = null
-        filter = CameraFilter.NATURAL
-        enhancing = false
-        error = null
-    }
-
+    DisposableEffect(Unit) { onDispose { recording?.stop(); cameraProvider?.unbindAll() } }
+    fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
+    fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; enhancing = false; error = null }
     fun rotatePhoto() {
-        val uri = pendingUri ?: return
-        if (pendingType != "image") return
-        val source = uri.path?.let { File(it) } ?: return
-        runCatching {
-            val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo")
-            val matrix = Matrix().apply { postRotate(90f) }
-            val rotated = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-            FileOutputStream(source).use { output -> check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, output)) { "Unable to save rotated photo" } }
-            bitmap.recycle()
-            rotated.recycle()
-        }.onFailure { error = it.message ?: "Photo rotation failed" }
+        val uri = pendingUri ?: return; if (pendingType != "image") return; val source = uri.path?.let { File(it) } ?: return
+        runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val matrix = Matrix().apply { postRotate(90f) }; val rotated = android.graphics.Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,true); FileOutputStream(source).use { check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); rotated.recycle() }.onFailure { error = it.message ?: "Photo rotation failed" }
     }
-
     fun applyFilterToPhoto(selected: CameraFilter) {
-        val current = pendingUri ?: return
-        val original = pendingOriginalUri ?: current
-        if (pendingType != "image") return
-        val source = original.path?.let { File(it) } ?: return
-        val target = current.path?.let { File(it) } ?: return
-        runCatching {
-            val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo")
-            val matrix = ColorMatrix().apply { setFynxFilter(selected.saturation, selected.brightness, selected.contrast, 1f) }
-            val outputBitmap = android.graphics.Bitmap.createBitmap(bitmap.width, bitmap.height, android.graphics.Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(outputBitmap)
-            val paint = android.graphics.Paint().apply { colorFilter = ColorMatrixColorFilter(matrix) }
-            canvas.drawBitmap(bitmap, 0f, 0f, paint)
-            FileOutputStream(target).use { output -> check(outputBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, output)) { "Unable to save filtered photo" } }
-            bitmap.recycle()
-            outputBitmap.recycle()
-            filter = selected
-            error = null
-        }.onFailure { error = it.message ?: "Filter could not be applied" }
+        val current = pendingUri ?: return; val original = pendingOriginalUri ?: current; if (pendingType != "image") return; val source = original.path?.let { File(it) } ?: return; val target = current.path?.let { File(it) } ?: return
+        runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val matrix = ColorMatrix().apply { setFynxFilter(selected.saturation,selected.brightness,selected.contrast,1f) }; val outputBitmap=android.graphics.Bitmap.createBitmap(bitmap.width,bitmap.height,android.graphics.Bitmap.Config.ARGB_8888); android.graphics.Canvas(outputBitmap).drawBitmap(bitmap,0f,0f,android.graphics.Paint().apply { colorFilter=ColorMatrixColorFilter(matrix) }); FileOutputStream(target).use { check(outputBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); outputBitmap.recycle(); filter=selected; error=null }.onFailure { error=it.message ?: "Filter could not be applied" }
     }
-
     fun enhancePhoto() {
-        val source = pendingUri ?: return
-        if (pendingType != "image" || enhancing) return
-        enhancing = true
-        error = null
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                FynxAiPhotoEnhancer.enhance(context, source)
-            }
-            result.onSuccess { enhancedUri ->
-                deleteUri(source)
-                pendingUri = enhancedUri
-                filter = CameraFilter.NATURAL
-                error = null
-            }.onFailure { throwable ->
-                error = throwable.message ?: "AI photo enhancement failed"
-            }
-            enhancing = false
-        }
+        val source=pendingUri ?: return; if(pendingType!="image" || enhancing)return; enhancing=true; error=null
+        scope.launch { val result=withContext(Dispatchers.IO){FynxAiPhotoEnhancer.enhance(context,source)}; result.onSuccess { enhancedUri -> deleteUri(source); pendingUri=enhancedUri; filter=CameraFilter.NATURAL; error=null }.onFailure { error=it.message ?: "AI photo enhancement failed" }; enhancing=false }
     }
 
     if (!hasCamera) {
-        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("FYNX needs camera access to capture photos and videos.")
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = { permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)) }) { Text("Allow camera") }
-                TextButton(onClick = onDismiss) { Text("Close") }
-            }
-        }
-        return
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return
     }
-
-    val previewUri = pendingUri
-    val previewType = pendingType
-    if (previewUri != null && previewType != null) {
-        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            if (previewType == "image") {
-                AndroidView(
-                    factory = { android.widget.ImageView(it).apply { scaleType = android.widget.ImageView.ScaleType.FIT_CENTER } },
-                    update = { view -> view.setImageURI(previewUri) },
-                    modifier = Modifier.fillMaxSize().padding(18.dp)
-                )
-            } else {
-                AndroidView(
-                    factory = { android.widget.VideoView(it).apply { setVideoURI(previewUri); setOnPreparedListener { player -> player.isLooping = true; start() } } },
-                    update = { view -> if (view.tag != previewUri.toString()) { view.tag = previewUri.toString(); view.setVideoURI(previewUri); view.start() } },
-                    modifier = Modifier.fillMaxSize().padding(18.dp)
-                )
+    val previewUri=pendingUri; val previewType=pendingType
+    if(previewUri!=null && previewType!=null){
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
+            if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.FIT_CENTER}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize().padding(18.dp))
+            else AndroidView(factory={android.widget.VideoView(it).apply{setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()}}},update={view->if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.start()}},modifier=Modifier.fillMaxSize().padding(18.dp))
+            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(18.dp)){
+                error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))}
+                if(previewType=="image"){Text("Edit photo",style=MaterialTheme.typography.labelLarge);Row(Modifier.fillMaxWidth().padding(vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)){CameraFilter.values().forEach{option->FilterChip(selected=filter==option,enabled=!enhancing,onClick={applyFilterToPhoto(option)},label={Text(option.label)})}};OutlinedButton(onClick={::enhancePhoto},enabled=!enhancing,modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){Text(if(enhancing)"Enhancing…" else "✨ AI Enhance")}}
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){OutlinedButton(onClick={if(!enhancing)retake()},enabled=!enhancing,modifier=Modifier.weight(1f)){Text("Retake")};if(previewType=="image")OutlinedButton(onClick={if(!enhancing)rotatePhoto()},enabled=!enhancing,modifier=Modifier.weight(1f)){Icon(Icons.Default.RotateRight,null);Spacer(Modifier.width(4.dp));Text("Rotate")};Button(onClick={if(!enhancing)onCaptured(previewUri,previewType)},enabled=!enhancing,modifier=Modifier.weight(1f)){Icon(Icons.Default.Send,null);Spacer(Modifier.width(4.dp));Text("Send")}}
             }
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(18.dp)) {
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp)) }
-                if (previewType == "image") {
-                    Text("Edit photo", style = MaterialTheme.typography.labelLarge)
-                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        CameraFilter.values().forEach { option ->
-                            FilterChip(selected = filter == option, enabled = !enhancing, onClick = { applyFilterToPhoto(option) }, label = { Text(option.label) })
-                        }
-                    }
-                    OutlinedButton(
-                        onClick = { enhancePhoto() },
-                        enabled = !enhancing,
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-                    ) {
-                        Text(if (enhancing) "Enhancing…" else "✨ AI Enhance")
-                    }
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = { if (!enhancing) retake() }, enabled = !enhancing, modifier = Modifier.weight(1f)) { Text("Retake") }
-                    if (previewType == "image") {
-                        OutlinedButton(onClick = { if (!enhancing) rotatePhoto() }, enabled = !enhancing, modifier = Modifier.weight(1f)) {
-                            Icon(Icons.Default.RotateRight, null)
-                            Spacer(Modifier.width(4.dp))
-                            Text("Rotate")
-                        }
-                    }
-                    Button(onClick = { if (!enhancing) onCaptured(previewUri, previewType) }, enabled = !enhancing, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Default.Send, null)
-                        Spacer(Modifier.width(4.dp))
-                        Text("Use")
-                    }
-                }
-            }
-        }
-        return
+        };return
     }
-
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
-        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { if (recording == null) onDismiss() }) { Icon(Icons.Default.Close, "Close camera") }
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = {
-                    if (recording == null) {
-                        error = null
-                        lens = if (lens == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
-                    }
-                }) { Icon(Icons.Default.Cameraswitch, "Switch front/back camera") }
-                IconButton(onClick = {
-                    if (recording == null) {
-                        if (cameraInfo?.hasFlashUnit() == true) {
-                            torchEnabled = !torchEnabled
-                            cameraControl?.enableTorch(torchEnabled)
-                        } else error = "Flash is not available on this camera."
-                    }
-                }) { Icon(Icons.Default.FlashOn, if (torchEnabled) "Turn flash off" else "Turn flash on") }
-            }
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp)) }
-            if (recording != null) Text("Recording ${formatCameraRecordingTime(recordingElapsed)}", style = MaterialTheme.typography.titleMedium)
-            if (recording == null) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Zoom", style = MaterialTheme.typography.labelSmall)
-                    Slider(value = zoomRatio.coerceIn(1f, 4f), onValueChange = { zoomRatio = it; cameraControl?.setZoomRatio(it) }, valueRange = 1f..4f, modifier = Modifier.weight(1f))
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Exposure", style = MaterialTheme.typography.labelSmall)
-                    val exposureRange = cameraInfo?.exposureState?.exposureCompensationRange
-                    val lower = (exposureRange?.lower ?: -2).toFloat()
-                    val upper = (exposureRange?.upper ?: 2).toFloat()
-                    Slider(value = exposure.toFloat().coerceIn(lower, upper), onValueChange = { exposure = it.toInt(); cameraControl?.setExposureCompensationIndex(exposure) }, valueRange = lower..upper, steps = ((upper - lower).toInt() - 1).coerceAtLeast(0), modifier = Modifier.weight(1f))
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
-                FilterChip(selected = mode == CameraMode.PHOTO, onClick = { if (recording == null) mode = CameraMode.PHOTO }, label = { Text("Photo") }, leadingIcon = { Icon(Icons.Default.PhotoCamera, null) })
-                FilledIconButton(onClick = {
-                    if (mode == CameraMode.PHOTO) {
-                        val capture = imageCapture ?: run { error = "Camera is still starting"; return@FilledIconButton }
-                        val file = File(context.cacheDir, "fynx_photo_${System.currentTimeMillis()}.jpg")
-                        val original = File(context.cacheDir, "fynx_photo_original_${System.currentTimeMillis()}.jpg")
-                        val output = ImageCapture.OutputFileOptions.Builder(file).build()
-                        capture.takePicture(output, ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageSavedCallback {
-                            override fun onImageSaved(result: ImageCapture.OutputFileResults) {
-                                runCatching { file.copyTo(original, overwrite = true) }.onSuccess {
-                                    pendingUri = Uri.fromFile(file)
-                                    pendingOriginalUri = Uri.fromFile(original)
-                                    pendingType = "image"
-                                    filter = CameraFilter.NATURAL
-                                    error = null
-                                }.onFailure {
-                                    file.delete()
-                                    original.delete()
-                                    error = it.message ?: "Photo could not be prepared"
-                                }
-                            }
-                            override fun onError(exception: ImageCaptureException) { error = exception.message ?: "Photo capture failed" }
-                        })
-                    } else {
-                        val active = recording
-                        if (active != null) active.stop() else {
-                            val capture = videoCapture ?: run { error = "Video camera is still starting"; return@FilledIconButton }
-                            val file = File(context.cacheDir, "fynx_video_${System.currentTimeMillis()}.mp4")
-                            val output = FileOutputOptions.Builder(file).build()
-                            val pending = capture.output.prepareRecording(context, output)
-                            val withAudio = if (hasAudio) pending.withAudioEnabled() else pending
-                            recordingStartedAt = System.currentTimeMillis()
-                            recording = withAudio.start(ContextCompat.getMainExecutor(context)) { event ->
-                                if (event is VideoRecordEvent.Finalize) {
-                                    if (!event.hasError() && file.exists() && file.length() > 0L) {
-                                        pendingUri = Uri.fromFile(file)
-                                        pendingType = "video"
-                                        error = null
-                                    } else {
-                                        file.delete()
-                                        error = "Video capture failed (${event.error})"
-                                    }
-                                    recording = null
-                                }
-                            }
-                        }
-                    }
-                }, modifier = Modifier.size(72.dp)) {
-                    Icon(if (mode == CameraMode.PHOTO) Icons.Default.PhotoCamera else if (recording != null) Icons.Default.Stop else Icons.Default.Videocam, if (recording != null) "Stop video" else if (mode == CameraMode.PHOTO) "Take photo" else "Record video")
-                }
-                FilterChip(selected = mode == CameraMode.VIDEO, onClick = { if (recording == null) mode = CameraMode.VIDEO }, label = { Text("Video") }, leadingIcon = { Icon(Icons.Default.Videocam, null) })
-            }
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
+        AndroidView(factory={previewView},modifier=Modifier.fillMaxSize())
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(18.dp),horizontalAlignment=Alignment.CenterHorizontally){
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){IconButton(onClick={if(recording==null)onDismiss()}){Icon(Icons.Default.Close,"Close camera")};Spacer(Modifier.weight(1f));IconButton(onClick={if(recording==null){error=null;lens=if(lens==CameraSelector.LENS_FACING_BACK)CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK}}){Icon(Icons.Default.Cameraswitch,"Switch front/back camera")};IconButton(onClick={if(recording==null){if(cameraInfo?.hasFlashUnit()==true){torchEnabled=!torchEnabled;cameraControl?.enableTorch(torchEnabled)}else error="Flash is not available on this camera."}}){Icon(Icons.Default.FlashOn,if(torchEnabled)"Turn flash off" else "Turn flash on")}}
+            error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};if(recording!=null)Text("Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium)
+            if(recording==null){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Zoom",style=MaterialTheme.typography.labelSmall);Slider(value=zoomRatio.coerceIn(1f,4f),onValueChange={zoomRatio=it;cameraControl?.setZoomRatio(it)},valueRange=1f..4f,modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Exposure",style=MaterialTheme.typography.labelSmall);val r=cameraInfo?.exposureState?.exposureCompensationRange;val lower=(r?.lower ?: -2).toFloat();val upper=(r?.upper ?: 2).toFloat();Slider(value=exposure.toFloat().coerceIn(lower,upper),onValueChange={exposure=it.toInt();cameraControl?.setExposureCompensationIndex(exposure)},valueRange=lower..upper,steps=((upper-lower).toInt()-1).coerceAtLeast(0),modifier=Modifier.weight(1f))}}
+            Row(horizontalArrangement=Arrangement.spacedBy(18.dp),verticalAlignment=Alignment.CenterVertically){FilterChip(selected=mode==CameraMode.PHOTO,onClick={if(recording==null)mode=CameraMode.PHOTO},label={Text("Photo")},leadingIcon={Icon(Icons.Default.PhotoCamera,null)});FilledIconButton(onClick={
+                if(mode==CameraMode.PHOTO){val capture=imageCapture?:run{error="Camera is still starting";return@FilledIconButton};val file=File(context.cacheDir,"fynx_photo_${System.currentTimeMillis()}.jpg");val original=File(context.cacheDir,"fynx_photo_original_${System.currentTimeMillis()}.jpg");capture.takePicture(ImageCapture.OutputFileOptions.Builder(file).build(),ContextCompat.getMainExecutor(context),object:ImageCapture.OnImageSavedCallback{override fun onImageSaved(result:ImageCapture.OutputFileResults){runCatching{file.copyTo(original,overwrite=true)}.onSuccess{pendingUri=Uri.fromFile(file);pendingOriginalUri=Uri.fromFile(original);pendingType="image";filter=CameraFilter.NATURAL;error=null}.onFailure{file.delete();original.delete();error=it.message ?: "Photo could not be prepared"}};override fun onError(exception:ImageCaptureException){error=exception.message ?: "Photo capture failed"}})}else{val active=recording;if(active!=null)active.stop()else{val capture=videoCapture?:run{error="Video camera is still starting";return@FilledIconButton};val file=File(context.cacheDir,"fynx_video_${System.currentTimeMillis()}.mp4");val pending=capture.output.prepareRecording(context,FileOutputOptions.Builder(file).build());val withAudio=if(hasAudio)pending.withAudioEnabled() else pending;recordingStartedAt=System.currentTimeMillis();recording=withAudio.start(ContextCompat.getMainExecutor(context)){event->if(event is VideoRecordEvent.Finalize){if(!event.hasError()&&file.exists()&&file.length()>0L){pendingUri=Uri.fromFile(file);pendingType="video";error=null}else{file.delete();error="Video capture failed (${event.error})"};recording=null}}}}},modifier=Modifier.size(72.dp)){Icon(if(mode==CameraMode.PHOTO)Icons.Default.PhotoCamera else if(recording!=null)Icons.Default.Stop else Icons.Default.Videocam,if(recording!=null)"Stop video" else if(mode==CameraMode.PHOTO)"Take photo" else "Record video")};FilterChip(selected=mode==CameraMode.VIDEO,onClick={if(recording==null)mode=CameraMode.VIDEO},label={Text("Video")},leadingIcon={Icon(Icons.Default.Videocam,null)})}
         }
     }
 }
 
-private fun formatCameraRecordingTime(milliseconds: Long): String {
-    val totalSeconds = milliseconds / 1000L
-    return "%02d:%02d".format(totalSeconds / 60L, totalSeconds % 60L)
-}
-
-enum class CameraMode { PHOTO, VIDEO }
-
-enum class CameraFilter(val label: String, val saturation: Float, val brightness: Float, val contrast: Float) {
-    NATURAL("Natural", 1f, 0f, 1f),
-    VIVID("Vivid", 1.35f, 0f, 1.08f),
-    WARM("Warm", 1.1f, 0.04f, 1.02f),
-    COOL("Cool", 0.9f, 0.02f, 1.02f),
-    BW("B&W", 0f, 0f, 1.08f)
-}
-
-private fun ColorMatrix.setFynxFilter(saturation: Float, brightness: Float, contrast: Float, alpha: Float) {
-    setSaturation(saturation)
-    val scale = contrast
-    val translate = brightness * 255f
-    postConcat(ColorMatrix(floatArrayOf(
-        scale, 0f, 0f, 0f, translate,
-        0f, scale, 0f, 0f, translate,
-        0f, 0f, scale, 0f, translate,
-        0f, 0f, 0f, alpha, 0f
-    )))
-}
+private fun formatCameraRecordingTime(milliseconds:Long):String{val totalSeconds=milliseconds/1000L;return "%02d:%02d".format(totalSeconds/60L,totalSeconds%60L)}
+enum class CameraMode{PHOTO,VIDEO}
+enum class CameraFilter(val label:String,val saturation:Float,val brightness:Float,val contrast:Float){NATURAL("Natural",1f,0f,1f),VIVID("Vivid",1.35f,0f,1.08f),WARM("Warm",1.1f,0.04f,1.02f),COOL("Cool",0.9f,0.02f,1.02f),BW("B&W",0f,0f,1.08f)}
+private fun ColorMatrix.setFynxFilter(saturation:Float,brightness:Float,contrast:Float,alpha:Float){setSaturation(saturation);val scale=contrast;val translate=brightness*255f;postConcat(ColorMatrix(floatArrayOf(scale,0f,0f,0f,translate,0f,scale,0f,0f,translate,0f,0f,scale,0f,translate,0f,0f,0f,alpha,0f)))}
