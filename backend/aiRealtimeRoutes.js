@@ -4,8 +4,13 @@ import { createRealtimeAnswer } from "./aiVoiceSession.js";
 const JWT_SECRET = process.env.JWT_SECRET || "";
 const MAX_SDP_LENGTH = 200_000;
 
+function authorizationHeader(req) {
+  if (typeof req?.get === "function") return req.get("authorization") || "";
+  return req?.headers?.authorization || req?.headers?.Authorization || "";
+}
+
 function authenticate(req, res) {
-  const header = req.get("authorization") || "";
+  const header = authorizationHeader(req);
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token || !JWT_SECRET) {
     res.status(401).json({ error: "authentication required" });
