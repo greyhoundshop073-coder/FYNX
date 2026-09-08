@@ -17,7 +17,9 @@ const pool = DATABASE_URL ? new Pool({
 }) : null;
 
 function viewerId(req) {
-  const header = req.get("authorization") || "";
+  const header = req.get
+    ? (req.get("authorization") || "")
+    : (req.headers?.authorization || "");
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token || !JWT_SECRET) return null;
   try { return String(jwt.verify(token, JWT_SECRET).sub); } catch { return null; }
