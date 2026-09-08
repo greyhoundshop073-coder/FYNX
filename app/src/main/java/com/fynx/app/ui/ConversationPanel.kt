@@ -319,7 +319,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             }
                         }
                     }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) { TextButton(onClick = { menuMessageId = if (menuMessageId == message.id) null else message.id }) { Text("More") } }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) {
+                        IconButton(onClick = { menuMessageId = if (menuMessageId == message.id) null else message.id }) {
+                            Icon(Icons.Default.MoreVert, "Message actions")
+                        }
+                    }
                     if (menuMessageId == message.id) {
                         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) {
                             if (message.voiceUri == null && message.text.isNotBlank()) IconButton(onClick = { clipboardManager.setText(AnnotatedString(message.text)); menuMessageId = null }) { Icon(Icons.Default.ContentCopy, "Copy") }
