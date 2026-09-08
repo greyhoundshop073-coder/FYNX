@@ -25,11 +25,11 @@ object FynxBackendClient {
     private const val LEGACY_ACCESS_TOKEN = "access_token"
     private const val PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"
     private const val MAX_IDEMPOTENT_RETRIES = 2
-    private const val RETRY_DELAY_MS = 500L
-    private const val CONNECT_TIMEOUT_MS = 8_000
-    private const val READ_TIMEOUT_MS = 15_000
-    private const val WEAK_CONNECT_TIMEOUT_MS = 12_000
-    private const val WEAK_READ_TIMEOUT_MS = 25_000
+    private const val RETRY_DELAY_MS = 750L
+    private const val CONNECT_TIMEOUT_MS = 15_000
+    private const val READ_TIMEOUT_MS = 30_000
+    private const val WEAK_CONNECT_TIMEOUT_MS = 20_000
+    private const val WEAK_READ_TIMEOUT_MS = 45_000
     private const val MAX_RESPONSE_BYTES = 4 * 1024 * 1024
     private const val MAX_CONCURRENT_REQUESTS = 6
     private const val MAX_WEAK_CONCURRENT_REQUESTS = 2
@@ -116,6 +116,7 @@ object FynxBackendClient {
             useCaches = false
             setRequestProperty("Accept", "application/json")
             setRequestProperty("Connection", "keep-alive")
+            setRequestProperty("User-Agent", "FYNX-Android/1")
             accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
         }
         val cancellationHandle = currentCoroutineContext().job.invokeOnCompletion { connection.disconnect() }
