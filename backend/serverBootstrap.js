@@ -2,8 +2,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 
-// Production bootstrap compatibility guard. It keeps the existing backend modules
-// intact while normalizing two startup-order/signature issues before server import.
+// Production bootstrap compatibility guard. It preserves the existing Stage 14
+// scalability preload while normalizing the current server startup/signature issues.
 const backendDir = path.dirname(fileURLToPath(import.meta.url));
 const sourcePath = path.join(backendDir, "server.js");
 const socialSourcePath = path.join(backendDir, "socialRoutes.js");
@@ -28,4 +28,8 @@ social = social.replace(signature, compatibleSignature);
 
 await writeFile(runtimeSocialPath, social, "utf8");
 await writeFile(runtimePath, source, "utf8");
+
+// Keep the original scalability preload active so realtime AI, privacy, groups,
+// admin and production resource guards are installed on the live HTTP server.
+await import("./scalability.js");
 await import(`${pathToFileURL(runtimePath).href}?boot=${Date.now()}`);
