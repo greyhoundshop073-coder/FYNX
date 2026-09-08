@@ -17,11 +17,13 @@ fun FynxBusinessAccountPanel(onBack: () -> Unit = {}, onOpenAdvertising: () -> U
     var description by remember { mutableStateOf("") }; var location by remember { mutableStateOf("") }; var phone by remember { mutableStateOf("") }; var website by remember { mutableStateOf("") }
     var verified by remember { mutableStateOf(false) }; var loading by remember { mutableStateOf(true) }; var saving by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }; var activeListings by remember { mutableStateOf(0) }; var campaigns by remember { mutableStateOf(0) }; var budget by remember { mutableStateOf(0L) }; var spent by remember { mutableStateOf(0L) }
+    var products by remember { mutableStateOf<List<FynxMarketplaceClient.Listing>>(emptyList()) }
 
     fun load() = scope.launch {
         loading = true
         FynxBusinessClient.load(context).onSuccess { p -> if (p != null) { name=p.businessName; username=p.businessUsername; category=p.category; description=p.description; location=p.location; phone=p.phone; website=p.website; verified=p.verified } }
         FynxBusinessClient.overview(context).onSuccess { o -> activeListings=o.optInt("activeListings"); campaigns=o.optInt("campaigns"); budget=o.optLong("budgetKobo"); spent=o.optLong("spentKobo") }
+        FynxMarketplaceClient.myListings(context).onSuccess { products = it }
         loading = false
     }
     LaunchedEffect(Unit) { load() }
@@ -44,6 +46,23 @@ fun FynxBusinessAccountPanel(onBack: () -> Unit = {}, onOpenAdvertising: () -> U
             Text("Business overview",style=MaterialTheme.typography.titleMedium)
             Text("Active Marketplace listings: $activeListings"); Text("Advertising campaigns: $campaigns")
             Text("Campaign budget: ₦${budget / 100.0}"); Text("Campaign spend: ₦${spent / 100.0}")
+        }}
+        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
+            Text("Business products",style=MaterialTheme.typography.titleMedium)
+            if (products.isEmpty()) {
+                Text("No Marketplace products are currently linked to this account.", color=MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                products.take(5).forEach { product ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween) {
+                        Column(Modifier.weight(1f)) {
+                            Text(product.title, style=MaterialTheme.typography.bodyLarge)
+                            Text("${product.category.ifBlank { "Product" }} • ${product.quantity} available", color=MaterialTheme.colorScheme.onSurfaceVariant, style=MaterialTheme.typography.bodySmall)
+                        }
+                        Text("${product.currency} ${String.format(java.util.Locale.US, "%,.2f", product.price)}", style=MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                if (products.size > 5) Text("+${products.size - 5} more products", color=MaterialTheme.colorScheme.primary)
+            }
         }}
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             Button(onClick=onBack,modifier=Modifier.weight(1f)){Text("Back")}

@@ -43,6 +43,13 @@ fun FynxAdvertisingDashboardPanel() {
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
         dashboard?.let {
+            val impressions = it.optLong("impressions")
+            val clicks = it.optLong("clicks")
+            val engagements = it.optLong("engagements")
+            val conversions = it.optLong("conversions")
+            val clickRate = if (impressions > 0) clicks.toDouble() * 100.0 / impressions else 0.0
+            val engagementRate = if (impressions > 0) engagements.toDouble() * 100.0 / impressions else 0.0
+            val conversionRate = if (clicks > 0) conversions.toDouble() * 100.0 / clicks else 0.0
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text("Overview", style = MaterialTheme.typography.titleMedium)
@@ -50,10 +57,14 @@ fun FynxAdvertisingDashboardPanel() {
                     Text("Active: " + it.optInt("active_campaigns"))
                     Text("Budget: ₦" + it.optLong("budget_kobo") / 100.0)
                     Text("Spent: ₦" + it.optLong("spent_kobo") / 100.0)
-                    Text("Impressions: " + it.optLong("impressions"))
-                    Text("Clicks: " + it.optLong("clicks"))
-                    Text("Engagements: " + it.optLong("engagements"))
-                    Text("Conversions: " + it.optLong("conversions"))
+                    Text("Impressions: $impressions")
+                    Text("Clicks: $clicks")
+                    Text("Engagements: $engagements")
+                    Text("Conversions: $conversions")
+                    HorizontalDivider(Modifier.padding(vertical = 5.dp))
+                    Text("Click-through rate: " + String.format(java.util.Locale.US, "%.2f%%", clickRate))
+                    Text("Engagement rate: " + String.format(java.util.Locale.US, "%.2f%%", engagementRate))
+                    Text("Conversion rate: " + String.format(java.util.Locale.US, "%.2f%%", conversionRate))
                 }
             }
         }
