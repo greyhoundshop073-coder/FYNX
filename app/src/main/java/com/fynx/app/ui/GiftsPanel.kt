@@ -1,8 +1,8 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -95,7 +95,10 @@ fun GiftsPanel(
         remoteRecipient?.let { remote -> if (none { it.username.equals(remote.username, true) }) add(remote) }
     }
 
-    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(
+        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("🎁", style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.width(10.dp))
@@ -115,17 +118,17 @@ fun GiftsPanel(
         if (recipients.isEmpty()) {
             Text("No real FYNX user could be found for this chat yet. Keep the chat connected and try again.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            LazyColumn(modifier = Modifier.heightIn(max = 150.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(recipients, key = { it.username }) { person ->
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                recipients.forEach { person ->
                     Card(
                         onClick = { selectedRecipient = person; selectedGift = null; preparedTransfer = null; deliveryMessage = null },
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = if (selectedRecipient?.username == person.username) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
                     ) {
-                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            FynxAvatar(person.username, Modifier.size(40.dp))
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) { Text(person.displayName, style = MaterialTheme.typography.titleSmall); Text(person.username, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            FynxAvatar(person.username, Modifier.size(38.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) { Text(person.displayName, style = MaterialTheme.typography.titleSmall); Text(person.username, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                             if (selectedRecipient?.username == person.username) Text("✓", color = MaterialTheme.colorScheme.primary)
                         }
                     }
@@ -134,17 +137,17 @@ fun GiftsPanel(
         }
 
         Text("Choose a gift", style = MaterialTheme.typography.titleMedium)
-        LazyColumn(modifier = Modifier.heightIn(max = 290.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(fynxGiftCatalog, key = { it.id }) { gift ->
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            fynxGiftCatalog.forEach { gift ->
                 Card(
                     onClick = { selectedGift = gift; preparedTransfer = null; deliveryMessage = null },
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = if (selectedGift?.id == gift.id) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(gift.emoji, style = MaterialTheme.typography.headlineSmall)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) { Text(gift.name, style = MaterialTheme.typography.titleSmall); Text(gift.description, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) { Text(gift.name, style = MaterialTheme.typography.titleSmall); Text(gift.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                         Column(horizontalAlignment = Alignment.End) { Text("${gift.value} FYNX", style = MaterialTheme.typography.labelLarge); Text(gift.rarity, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
                     }
                 }
@@ -153,7 +156,7 @@ fun GiftsPanel(
 
         selectedGift?.let { gift ->
             Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Text("${gift.emoji} ${gift.name}", style = MaterialTheme.typography.titleMedium)
                     Text("Value: ${gift.value} FYNX • ${gift.rarity}", color = MaterialTheme.colorScheme.primary)
                     Text(selectedRecipient?.let { "Recipient: ${it.displayName} (${it.username})" } ?: "Select a recipient before continuing", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -164,7 +167,7 @@ fun GiftsPanel(
 
         preparedTransfer?.let { transfer ->
             Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text("Gift sent", style = MaterialTheme.typography.titleSmall)
                     Text("${transfer.gift.emoji} ${transfer.gift.name} • ${transfer.transaction.amount.toInt()} FYNX")
                     Text("To: ${transfer.recipientName} (${transfer.recipientUsername})")
