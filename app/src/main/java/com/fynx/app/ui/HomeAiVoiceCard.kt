@@ -21,6 +21,39 @@ import org.json.JSONObject
 
 /** Real conversational voice entry point for Home. This replaces the old Android speech recognizer widget. */
 @Composable
+fun HomeAiVoiceInlineControl(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val engine = remember { FynxAiWebRtcEngine(context) }
+    var connected by remember { mutableStateOf(false) }
+    var connecting by remember { mutableStateOf(false) }
+    var muted by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("Talk to FYNX AI") }
+    var transcript by remember { mutableStateOf<String?>(null) }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startHomeVoice(engine, scope, { connecting = it }, { connected = it }, { status = it }, { transcript = it })
+        else status = "Microphone permission required"
+    }
+    DisposableEffect(Unit) { onDispose { engine.close() } }
+    Row(modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("✨", style = MaterialTheme.typography.titleMedium)
+        Column(Modifier.weight(1f)) {
+            Text("FYNX AI", style = MaterialTheme.typography.titleSmall)
+            Text(if (connecting) "Connecting…" else if (connected) "Listening • voice replies enabled" else status, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary, maxLines = 1)
+            transcript?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.labelSmall, maxLines = 1, color = FynxDesign.TextSecondary) }
+        }
+        if (connected) {
+            IconButton(onClick = { muted = !muted; engine.setMicrophoneEnabled(!muted) }) { Icon(if (muted) Icons.Default.MicOff else Icons.Default.Mic, if (muted) "Unmute FYNX AI" else "Mute FYNX AI") }
+            IconButton(onClick = { engine.close(); connected = false; muted = false; status = "Voice session ended" }) { Icon(Icons.Default.PhoneDisabled, "End FYNX AI voice") }
+        } else {
+            IconButton(enabled = !connecting, onClick = {
+                if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) startHomeVoice(engine, scope, { connecting = it }, { connected = it }, { status = it }, { transcript = it }) else permission.launch(Manifest.permission.RECORD_AUDIO)
+            }) { Icon(Icons.Default.Mic, if (connecting) "Connecting" else "Start FYNX AI voice") }
+        }
+    }
+}
+
+@Composable
 fun HomeAiVoiceCard() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
