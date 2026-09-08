@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -225,51 +226,206 @@ fun FynxActiveCallPanel(
     val incoming = session.state == FynxCallState.RINGING
     val connected = session.state == FynxCallState.CONNECTED
     val video = session.type == FynxCallType.VIDEO
-    Column(Modifier.fillMaxSize().background(FynxDesign.Background), horizontalAlignment = Alignment.CenterHorizontally) {
-        Spacer(Modifier.height(30.dp))
-        Text(name, style = MaterialTheme.typography.headlineSmall)
-        Text(when (session.state) {
-            FynxCallState.IDLE -> "Ready"
-            FynxCallState.RINGING -> "Incoming ${if (video) "video" else "voice"} call"
-            FynxCallState.CONNECTING -> if (realtimeState == FynxRealtimeClient.State.CONNECTED) "Connecting media…" else "Connecting…"
-            FynxCallState.CONNECTED -> if (video) "Video call" else "Voice call"
-            FynxCallState.ENDED -> "Call ended"
-        }, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(18.dp))
-        if (video) {
-            Box(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 10.dp)) {
-                FynxCallVideoSurface(remoteVideoTrack, Modifier.fillMaxSize(), mirror = false)
-                Box(Modifier.align(Alignment.TopEnd).padding(12.dp).size(120.dp, 170.dp).clip(MaterialTheme.shapes.medium)) {
-                    FynxCallVideoSurface(localVideoTrack, Modifier.fillMaxSize(), mirror = true)
+    val callStatus = when (session.state) {
+        FynxCallState.IDLE -> "Ready"
+        FynxCallState.RINGING -> "Incoming ${if (video) "video" else "voice"} call"
+        FynxCallState.CONNECTING -> if (realtimeState == FynxRealtimeClient.State.CONNECTED) "Connecting…" else "Reconnecting…"
+        FynxCallState.CONNECTED -> "${if (video) "Video" else "Voice"} call"
+        FynxCallState.ENDED -> "Call ended"
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(FynxDesign.Background)
+            .safeDrawingPadding()
+    ) {
+        if (video && connected) {
+            Box(Modifier.fillMaxSize()) {
+                if (remoteVideoTrack != null) {
+                    FynxCallVideoSurface(remoteVideoTrack, Modifier.fillMaxSize(), mirror = false)
+                } else {
+                    FynxCallRemotePlaceholder(name, Modifier.fillMaxSize())
                 }
-                if (remoteVideoTrack == null) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Box(Modifier.size(110.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Text(name.take(1).uppercase(), style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary) }
+
+                // Local camera preview stays in a small floating window, matching the
+                // familiar two-person video-call pattern used by major messengers.
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 12.dp, end = 12.dp)
+                        .size(width = 112.dp, height = 158.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                ) {
+                    if (localVideoTrack != null && session.cameraEnabled) {
+                        FynxCallVideoSurface(localVideoTrack, Modifier.fillMaxSize(), mirror = true)
+                    } else {
+                        FynxCallRemotePlaceholder("You", Modifier.fillMaxSize())
                     }
                 }
             }
         } else {
-            Box(Modifier.size(190.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Text(name.take(1).uppercase(), style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.primary) }
-            Spacer(Modifier.weight(1f))
-        }
-        if (incoming) {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) { OutlinedButton(onClick = onEnd) { Text("Decline") }; Button(onClick = onAnswer) { Icon(Icons.Default.Call, null); Spacer(Modifier.width(6.dp)); Text("Answer") } }
-            Spacer(Modifier.height(24.dp))
-        } else if (session.state == FynxCallState.CONNECTING) {
-            OutlinedButton(onClick = onRetry) { Text("Retry call") }
-            Spacer(Modifier.height(18.dp))
-        }
-        if (connected) {
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                FilledTonalIconButton(onClick = onToggleMicrophone) { Icon(if (session.microphoneEnabled) Icons.Default.Mic else Icons.Default.MicOff, "Mute") }
-                if (video) {
-                    FilledTonalIconButton(onClick = onToggleCamera) { Icon(if (session.cameraEnabled) Icons.Default.Videocam else Icons.Default.VideocamOff, "Camera") }
-                    FilledTonalIconButton(onClick = onSwitchCamera) { Icon(Icons.Default.Videocam, "Switch camera") }
+            Column(
+                Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(Modifier.height(52.dp))
+                Box(
+                    Modifier
+                        .size(108.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(name.take(1).uppercase(), style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
                 }
-                FilledTonalIconButton(onClick = onToggleSpeaker) { Icon(if (session.speakerEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff, "Speaker") }
-                FilledTonalIconButton(onClick = onEnd) { Icon(Icons.Default.CallEnd, "End call") }
+                Spacer(Modifier.height(18.dp))
+                Text(name, style = MaterialTheme.typography.headlineSmall)
+                Spacer(Modifier.height(6.dp))
+                Text(callStatus, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (video && !incoming) {
+                    Spacer(Modifier.height(28.dp))
+                    Text("Your camera is ready", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
-            Spacer(Modifier.height(28.dp))
         }
+
+        if (video && connected) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(12.dp),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)
+            ) {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Text(name, style = MaterialTheme.typography.titleMedium)
+                    Text(callStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        if (incoming) {
+            Column(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 28.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("${if (video) "Video" else "Voice"} call from $name", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FynxCallActionButton(onClick = onEnd, icon = Icons.Default.CallEnd, label = "Decline", destructive = true)
+                    FynxCallActionButton(onClick = onAnswer, icon = Icons.Default.Call, label = "Answer")
+                }
+            }
+        } else if (!connected) {
+            Column(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 28.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(callStatus, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(14.dp))
+                if (session.state == FynxCallState.CONNECTING) {
+                    FynxCallActionButton(onClick = onEnd, icon = Icons.Default.CallEnd, label = "Cancel", destructive = true)
+                }
+            }
+        } else {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                tonalElevation = 8.dp
+            ) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FynxCallActionButton(
+                            onClick = onToggleMicrophone,
+                            icon = if (session.microphoneEnabled) Icons.Default.Mic else Icons.Default.MicOff,
+                            label = if (session.microphoneEnabled) "Mute" else "Unmute"
+                        )
+                        if (video) {
+                            FynxCallActionButton(
+                                onClick = onToggleCamera,
+                                icon = if (session.cameraEnabled) Icons.Default.Videocam else Icons.Default.VideocamOff,
+                                label = if (session.cameraEnabled) "Camera" else "Camera off"
+                            )
+                            FynxCallActionButton(onClick = onSwitchCamera, icon = Icons.Default.Cameraswitch, label = "Flip")
+                        }
+                        FynxCallActionButton(
+                            onClick = onToggleSpeaker,
+                            icon = if (session.speakerEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
+                            label = if (session.speakerEnabled) "Speaker" else "Earpiece"
+                        )
+                        FynxCallActionButton(onClick = onEnd, icon = Icons.Default.CallEnd, label = "End", destructive = true)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FynxCallRemotePlaceholder(name: String, modifier: Modifier) {
+    Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier
+                    .size(116.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surface),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(name.take(1).uppercase(), style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
+            }
+            Spacer(Modifier.height(10.dp))
+            Text("Waiting for video…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun FynxCallActionButton(
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    destructive: Boolean = false
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        FilledTonalIconButton(
+            onClick = onClick,
+            modifier = Modifier.size(58.dp),
+            colors = if (destructive) {
+                IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
+                )
+            } else {
+                IconButtonDefaults.filledTonalIconButtonColors()
+            }
+        ) {
+            Icon(icon, contentDescription = label, modifier = Modifier.size(25.dp))
+        }
+        Spacer(Modifier.height(5.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall)
     }
 }
