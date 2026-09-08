@@ -24,13 +24,16 @@ http.createServer = function fynxCreateServer(...args) {
   const server = originalCreateServer.apply(this, args);
   const app = args[0];
   if (app && typeof app.use === "function") {
+    // Register the realtime voice endpoint synchronously. Critical API routes must not
+    // depend on a later setImmediate callback, otherwise the first request after boot
+    // can arrive while the route table is still being installed and receive HTTP 404.
+    registerRealtimeAssistantRoutes({ app });
     setImmediate(() => {
       installSecurityHardening({ app });
       installRequestResourceGuard(app);
       installApiAbuseGuard(app);
       registerMarketplaceSettlementRoutes({ app });
       registerMarketplaceProtectionRoutes({ app });
-      registerRealtimeAssistantRoutes({ app });
       registerPrivacyRoutes({ app });
       registerProfileRoutes({ app });
       registerGroupRoutes({ app });
