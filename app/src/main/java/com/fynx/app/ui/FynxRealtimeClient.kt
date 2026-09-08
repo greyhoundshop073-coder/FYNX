@@ -1,6 +1,8 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Handler
 import android.os.Looper
 import okhttp3.OkHttpClient
@@ -57,8 +59,22 @@ class FynxRealtimeClient(
         connectInternal()
     }
 
+    private fun hasUsableNetwork(): Boolean = runCatching {
+        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return@runCatching true
+        val network = manager.activeNetwork ?: return@runCatching false
+        val capabilities = manager.getNetworkCapabilities(network) ?: return@runCatching false
+        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }.getOrDefault(true)
+
     private fun connectInternal() {
         if (manuallyClosed) return
+        if (!hasUsableNetwork()) {
+            onStateChanged(State.DISCONNECTED)
+            scheduleReconnect()
+            return
+        }
         val token = FynxBackendClient.accessToken(context)
         if (token.isNullOrBlank()) { onStateChanged(State.FAILED); return }
         val httpBase = FynxBackendClient.baseUrl(context)
