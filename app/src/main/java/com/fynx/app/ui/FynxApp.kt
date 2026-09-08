@@ -39,7 +39,21 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
     var appearance by remember { mutableStateOf(FynxPreferencesStore.loadAppearance(context)) }
     var openProfileSettings by remember { mutableStateOf(false) }
+    var profileVersion by remember { mutableIntStateOf(0) }
     var aiCaptionDraft by remember { mutableStateOf<String?>(null) }
+
+    DisposableEffect(context) {
+        val prefs = context.getSharedPreferences("fynx_preferences", android.content.Context.MODE_PRIVATE)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            when (key) {
+                "appearance" -> appearance = FynxPreferencesStore.loadAppearance(context)
+                "accent" -> accent = FynxPreferencesStore.loadAccent(context)
+                "display_name", "username", "bio", "profile_photo_uri" -> profileVersion++
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
 
     LaunchedEffect(deepLinkDestination) {
         when (val destination = deepLinkDestination) {
@@ -51,15 +65,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 if (normalized.isNotBlank()) {
                     val local = FynxChatStore.loadPreviews(context).firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
                     val remote = if (local == null) FynxSocialClient.searchUsers(context, normalized).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) } else null
-                    openChat = local ?: remote?.let { user ->
-                        ChatPreview(
-                            name = user.displayName.ifBlank { normalized },
-                            username = user.username.removePrefix("@").let { "@$it" },
-                            lastMessage = "Start a conversation",
-                            time = "Now",
-                            avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
-                        )
-                    }
+                    openChat = local ?: remote?.let { user -> ChatPreview(name = user.displayName.ifBlank { normalized }, username = user.username.removePrefix("@").let { "@$it" }, lastMessage = "Start a conversation", time = "Now", avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }) }
                     if (openChat != null) FynxChatStore.savePreview(context, openChat!!)
                 }
             }
@@ -92,10 +98,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }) {
         val mainIndex = mainNav.indexOfFirst { it.key == selected }.coerceAtLeast(0)
         val unread = notifications.unreadNotificationCount()
-        val myProfile = remember(authSession.username) { FynxPreferencesStore.loadProfile(context, authSession.username) }
+        val myProfile = remember(authSession.username, profileVersion) { FynxPreferencesStore.loadProfile(context, authSession.username) }
         val myPhoto = FynxPreferencesStore.loadProfilePhoto(context)
         Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (selected == "Home") { IconButton(onClick = { selected = "Profile"; openProfileSettings = false }) { FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp)) }; Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) }; IconButton(onClick = { selected = "Profile"; openProfileSettings = true }) { Icon(Icons.Default.Settings, "Settings") }; BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) { IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") } } }
+            if (selected == "Home") { IconButton(onClick = { selected = "Profile"; openProfileSettings = false }) { FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp)) }; Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Row(verticalAlignment = Alignment.CenterVertically) { Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge); Spacer(Modifier.width(4.dp)); Icon(Icons.Default.CheckCircle, "Verified FYNX", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)) } }; IconButton(onClick = { selected = "Profile"; openProfileSettings = true }) { Icon(Icons.Default.Settings, "Settings") }; BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) { IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") } } }
             else if (selected == "Friends") { IconButton(onClick = { selected = "Profile"; openProfileSettings = false }) { FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp)) }; Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text("Friends", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) }; Spacer(Modifier.size(48.dp)) }
             else { if (isSecondary) IconButton(onClick = { selected = "Home" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } else Spacer(Modifier.size(48.dp)); Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text(when (selected) { "Marketplace" -> "Marketplace"; "Money Tools" -> "Money Center"; "Privacy" -> "Privacy & Safety"; "Seller Center" -> "Seller Center"; "AI" -> "FYNX AI"; "AI Creation" -> "AI Creation"; "AI Photo Editor" -> "AI Photo Editor"; "Announcements" -> "Official Announcements"; "Admin" -> "Admin Control Center"; else -> selected }, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) }; Spacer(Modifier.size(48.dp)) }
         } }, bottomBar = { NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 8.dp) { mainNav.forEach { item -> NavigationBarItem(selected = selected == item.key, onClick = { selected = item.key }, icon = { Icon(item.icon, item.label) }, label = { Text(item.label) }, colors = NavigationBarItemDefaults.colors(selectedIconColor = MaterialTheme.colorScheme.primary, selectedTextColor = MaterialTheme.colorScheme.primary, indicatorColor = MaterialTheme.colorScheme.secondaryContainer, unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant, unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant)) } } }) { padding -> Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 6.dp).pointerInput(selected) { var drag = 0f; detectHorizontalDragGestures(onDragStart = { drag = 0f }, onHorizontalDrag = { _, amount -> drag += amount }, onDragEnd = { if (kotlin.math.abs(drag) >= 80f) { val next = if (drag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex) else (mainIndex - 1).coerceAtLeast(0); selected = mainNav[next].key } }) }) { when (selected) {
@@ -125,7 +131,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Advertising AI" -> FynxAdvertisingAiPanel()
             "Announcements" -> FynxAnnouncementsPanel()
             "Admin" -> if (adminRole != null) FynxAdminControlCenterPanel()
-            "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" })
+            "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" })
             else -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview")
         } } }
     }
