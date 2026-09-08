@@ -2,19 +2,30 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 
-// Bootstrap guard for the production backend. The current server defines RATE_LIMITS
-// below its middleware registration; generate a startup copy with the fixed literal
-// limits so the service cannot enter the TDZ before the main server is initialized.
+// Production bootstrap compatibility guard. It keeps the existing backend modules
+// intact while normalizing two startup-order/signature issues before server import.
 const backendDir = path.dirname(fileURLToPath(import.meta.url));
 const sourcePath = path.join(backendDir, "server.js");
+const socialSourcePath = path.join(backendDir, "socialRoutes.js");
 const runtimePath = path.join(backendDir, ".fynx-runtime-server.js");
+const runtimeSocialPath = path.join(backendDir, ".fynx-runtime-socialRoutes.js");
+
 let source = await readFile(sourcePath, "utf8");
-const replacements = [
+const rateLimitReplacements = [
   ['app.use("/api/auth", rateLimit("auth", RATE_LIMITS.auth));', 'app.use("/api/auth", rateLimit("auth", 20));'],
   ['app.use("/api/assistant", rateLimit("assistant", RATE_LIMITS.assistant));', 'app.use("/api/assistant", rateLimit("assistant", 20));'],
   ['app.use("/api/media", rateLimit("media", RATE_LIMITS.media));', 'app.use("/api/media", rateLimit("media", 30));'],
   ['app.use("/api/messages", rateLimit("messages", RATE_LIMITS.messages));', 'app.use("/api/messages", rateLimit("messages", 120));']
 ];
-for (const [from, to] of replacements) source = source.replace(from, to);
+for (const [from, to] of rateLimitReplacements) source = source.replace(from, to);
+source = source.replace('from "./socialRoutes.js";', 'from "./.fynx-runtime-socialRoutes.js";');
+
+let social = await readFile(socialSourcePath, "utf8");
+const signature = 'export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {';
+const compatibleSignature = 'export function registerSocialRoutes(config, legacyConfig) {\n  const { app, pool, auth, findUserByUsername } = legacyConfig ? { app: config, ...legacyConfig } : config;';
+if (!social.includes(signature)) throw new Error("FYNX bootstrap could not locate social route signature");
+social = social.replace(signature, compatibleSignature);
+
+await writeFile(runtimeSocialPath, social, "utf8");
 await writeFile(runtimePath, source, "utf8");
 await import(`${pathToFileURL(runtimePath).href}?boot=${Date.now()}`);
