@@ -47,9 +47,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val voiceEngine = remember { FynxAiWebRtcEngine(context) }
-    val requestMicPermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
+    val requestMicPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
             scope.launch {
                 voiceConnecting = true
@@ -61,22 +59,14 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                         if (error != null) errorMessage = error
                     },
                     onEvent = { rawEvent ->
-                        parseRealtimeAssistantEvent(rawEvent)?.let { text ->
-                            messages = messages + AiMessage(text, false)
-                        }
+                        parseRealtimeAssistantEvent(rawEvent)?.let { text -> messages = messages + AiMessage(text, false) }
                     }
                 )
                 voiceConnecting = false
             }
-        } else {
-            errorMessage = "Microphone permission is required for FYNX AI voice."
-        }
+        } else errorMessage = "Microphone permission is required for FYNX AI voice."
     }
-
-    DisposableEffect(Unit) {
-        onDispose { voiceEngine.close() }
-    }
-
+    DisposableEffect(Unit) { onDispose { voiceEngine.close() } }
     val toolLinks = remember {
         listOf(
             "To-Do" to "Daily Planning",
@@ -87,175 +77,91 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
             "AI Creation" to "AI Creation"
         )
     }
-
     fun copyText(text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("FYNX AI", text))
     }
-
     fun shareText(text: String) {
-        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, text)
-        }, "Share FYNX AI response"))
+        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text) }, "Share FYNX AI response"))
     }
-
     fun toggleVoice() {
         if (voiceConnected) {
-            voiceEngine.close()
-            voiceConnected = false
-            voiceMuted = false
-            return
+            voiceEngine.close(); voiceConnected = false; voiceMuted = false; return
         }
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             scope.launch {
-                voiceConnecting = true
-                errorMessage = null
+                voiceConnecting = true; errorMessage = null
                 voiceEngine.connect(
                     onStateChanged = { state, error ->
                         voiceConnecting = state == FynxAiWebRtcEngine.State.CONNECTING
                         voiceConnected = state == FynxAiWebRtcEngine.State.CONNECTED
                         if (error != null) errorMessage = error
                     },
-                    onEvent = { rawEvent ->
-                        parseRealtimeAssistantEvent(rawEvent)?.let { text ->
-                            messages = messages + AiMessage(text, false)
-                        }
-                    }
+                    onEvent = { rawEvent -> parseRealtimeAssistantEvent(rawEvent)?.let { text -> messages = messages + AiMessage(text, false) } }
                 )
                 voiceConnecting = false
             }
-        } else {
-            requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
-        }
+        } else requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
-
     Column(
-        Modifier.fillMaxSize().padding(12.dp),
+        Modifier.fillMaxSize().imePadding().padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(
-                shape = FynxDesign.ControlShape,
-                color = MaterialTheme.colorScheme.secondaryContainer
-            ) {
-                Icon(
-                    Icons.Default.AutoAwesome,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(9.dp).size(22.dp)
-                )
+            Surface(shape = FynxDesign.ControlShape, color = MaterialTheme.colorScheme.secondaryContainer) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(9.dp).size(22.dp))
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text("FYNX AI", style = MaterialTheme.typography.headlineSmall)
-                Text(
-                    if (voiceConnected) "Voice connected" else "Connected to your FYNX tools",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(if (voiceConnected) "Voice connected" else "Connected to your FYNX tools", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            IconButton(
-                enabled = !loading && messages.size > 1,
-                onClick = { messages = listOf(welcome); errorMessage = null }
-            ) {
+            IconButton(enabled = !loading && messages.size > 1, onClick = { messages = listOf(welcome); errorMessage = null }) {
                 Icon(Icons.Default.DeleteSweep, contentDescription = "Clear chat")
             }
-            IconButton(
-                enabled = !voiceConnecting,
-                onClick = { toggleVoice() }
-            ) {
-                Icon(
-                    if (voiceConnected && !voiceMuted) Icons.Default.Mic else Icons.Default.MicOff,
-                    contentDescription = if (voiceConnected) "Mute FYNX AI microphone" else "Start FYNX AI voice"
-                )
+            IconButton(enabled = !voiceConnecting, onClick = { toggleVoice() }) {
+                Icon(if (voiceConnected && !voiceMuted) Icons.Default.Mic else Icons.Default.MicOff, contentDescription = if (voiceConnected) "Mute FYNX AI microphone" else "Start FYNX AI voice")
             }
         }
-
         if (voiceConnected) {
             AssistChip(
-                onClick = {
-                    voiceMuted = !voiceMuted
-                    voiceEngine.setMicrophoneEnabled(!voiceMuted)
-                },
+                onClick = { voiceMuted = !voiceMuted; voiceEngine.setMicrophoneEnabled(!voiceMuted) },
                 label = { Text(if (voiceMuted) "Voice muted" else "Speak naturally — tap to mute") },
-                leadingIcon = {
-                    Icon(
-                        if (voiceMuted) Icons.Default.MicOff else Icons.Default.Mic,
-                        contentDescription = null
-                    )
-                }
+                leadingIcon = { Icon(if (voiceMuted) Icons.Default.MicOff else Icons.Default.Mic, contentDescription = null) }
             )
         }
-
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        LazyRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(toolLinks) { (destination, label) ->
-                AssistChip(
-                    onClick = { onOpenDestination(destination) },
-                    label = { Text(label) },
-                    leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) }
-                )
+                AssistChip(onClick = { onOpenDestination(destination) }, label = { Text(label) }, leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) })
             }
         }
-
         if (errorMessage != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-            ) {
-                Text(
-                    errorMessage!!,
-                    modifier = Modifier.padding(12.dp),
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                Text(errorMessage!!, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onErrorContainer)
             }
         }
-
-        LazyColumn(
-            Modifier.weight(1f).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(messages) { message ->
                 Card(
                     Modifier.fillMaxWidth(),
                     shape = FynxDesign.CardShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (message.fromUser) {
-                            MaterialTheme.colorScheme.secondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surface
-                        }
-                    ),
+                    colors = CardDefaults.cardColors(containerColor = if (message.fromUser) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .45f))
                 ) {
                     Column(Modifier.fillMaxWidth().padding(12.dp)) {
                         Text(message.text, Modifier.padding(2.dp))
-                        if (!message.fromUser) {
-                            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                                IconButton(onClick = { copyText(message.text) }) {
-                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy response")
-                                }
-                                IconButton(onClick = { shareText(message.text) }) {
-                                    Icon(Icons.Default.Share, contentDescription = "Share response")
-                                }
-                            }
+                        if (!message.fromUser) Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                            IconButton(onClick = { copyText(message.text) }) { Icon(Icons.Default.ContentCopy, contentDescription = "Copy response") }
+                            IconButton(onClick = { shareText(message.text) }) { Icon(Icons.Default.Share, contentDescription = "Share response") }
                         }
                     }
                 }
             }
-            if (loading || voiceConnecting) {
-                item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-            }
+            if (loading || voiceConnecting) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         }
-
         OutlinedTextField(
             value = input,
-            onValueChange = {
-                input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH)
-                errorMessage = null
-            },
+            onValueChange = { input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH); errorMessage = null },
             modifier = Modifier.fillMaxWidth(),
             enabled = !loading,
             minLines = 2,
@@ -263,50 +169,21 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
             shape = FynxDesign.ControlShape,
             placeholder = { Text("Ask FYNX AI…") },
             trailingIcon = {
-                IconButton(
-                    enabled = !loading && input.trim().isNotEmpty(),
-                    onClick = {
-                        val prompt = input.trim()
-                        if (prompt.isEmpty()) return@IconButton
-
-                        val decision = FynxFutureIntelligencePolicy.authorize(
-                            permissions = listOf(
-                                FynxAiPermission(
-                                    capability = FynxAiCapability.ASSISTANT,
-                                    allowedScopes = setOf(FynxAiDataScope.NONE),
-                                    enabled = true
-                                )
-                            ),
-                            request = FynxAiRequest(
-                                capability = FynxAiCapability.ASSISTANT,
-                                prompt = prompt,
-                                requestedScopes = setOf(FynxAiDataScope.NONE)
-                            )
-                        )
-                        if (!decision.allowed) {
-                            errorMessage = "I couldn't process that request safely."
-                            return@IconButton
-                        }
-
-                        messages = messages + AiMessage(prompt, true)
-                        input = ""
-                        loading = true
-                        errorMessage = null
-                        scope.launch {
-                            val result = withContext(Dispatchers.IO) {
-                                AiAssistantClient.sendMessage(context, prompt)
-                            }
-                            result.onSuccess { reply ->
-                                messages = messages + AiMessage(reply, false)
-                            }.onFailure {
-                                errorMessage = "FYNX AI is temporarily unavailable. Please try again."
-                            }
-                            loading = false
-                        }
+                IconButton(enabled = !loading && input.trim().isNotEmpty(), onClick = {
+                    val prompt = input.trim()
+                    if (prompt.isEmpty()) return@IconButton
+                    val decision = FynxFutureIntelligencePolicy.authorize(
+                        permissions = listOf(FynxAiPermission(capability = FynxAiCapability.ASSISTANT, allowedScopes = setOf(FynxAiDataScope.NONE), enabled = true)),
+                        request = FynxAiRequest(capability = FynxAiCapability.ASSISTANT, prompt = prompt, requestedScopes = setOf(FynxAiDataScope.NONE))
+                    )
+                    if (!decision.allowed) { errorMessage = "I couldn't process that request safely."; return@IconButton }
+                    messages = messages + AiMessage(prompt, true); input = ""; loading = true; errorMessage = null
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) { AiAssistantClient.sendMessage(context, prompt) }
+                        result.onSuccess { reply -> messages = messages + AiMessage(reply, false) }.onFailure { errorMessage = "FYNX AI is temporarily unavailable. Please try again." }
+                        loading = false
                     }
-                ) {
-                    Icon(Icons.Default.Send, contentDescription = "Send")
-                }
+                }) { Icon(Icons.Default.Send, contentDescription = "Send") }
             }
         )
     }
@@ -317,8 +194,7 @@ private fun parseRealtimeAssistantEvent(rawEvent: String): String? = runCatching
     when (event.optString("type")) {
         "response.output_text.done" -> event.optString("text").takeIf { it.isNotBlank() }
         "response.audio_transcript.done" -> event.optString("transcript").takeIf { it.isNotBlank() }
-        "conversation.item.input_audio_transcription.completed" ->
-            event.optString("transcript").takeIf { it.isNotBlank() }?.let { "You: $it" }
+        "conversation.item.input_audio_transcription.completed" -> event.optString("transcript").takeIf { it.isNotBlank() }?.let { "You: $it" }
         else -> null
     }
 }.getOrNull()
