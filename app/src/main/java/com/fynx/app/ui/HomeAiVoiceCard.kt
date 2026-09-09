@@ -159,3 +159,5 @@ private fun parseHomeVoiceEvent(raw: String, setTranscript: (String) -> Unit) {
         }
     }
 }
+
+// CI verification marker: Push 6 correction revalidated from current main.
