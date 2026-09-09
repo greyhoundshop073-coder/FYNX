@@ -4,6 +4,7 @@ import { createBackgroundJobQueue } from "./backgroundJobs.js";
 import { registerMarketplaceSettlementRoutes } from "./marketplaceSettlement.js";
 import { registerMarketplaceSettlementWorker } from "./marketplaceSettlementWorker.js";
 import { registerMarketplaceProtectionRoutes } from "./marketplaceProtection.js";
+import { registerMarketplaceProtectionResolutionRoutes } from "./marketplaceProtectionResolution.js";
 import { installSecurityHardening } from "./securityHardening.js";
 import { registerRealtimeAssistantRoutes } from "./aiRealtimeRoutes.js";
 import { registerPrivacyRoutes } from "./privacyRoutes.js";
@@ -25,16 +26,15 @@ http.createServer = function fynxCreateServer(...args) {
   const server = originalCreateServer.apply(this, args);
   const app = args[0];
   if (app && typeof app.use === "function") {
-    // Register the realtime voice endpoint synchronously. Critical API routes must not
-    // depend on a later setImmediate callback, otherwise the first request after boot
-    // can arrive while the route table is still being installed and receive HTTP 404.
     registerRealtimeAssistantRoutes({ app });
     setImmediate(() => {
       installSecurityHardening({ app });
       installRequestResourceGuard(app);
       installApiAbuseGuard(app);
       registerMarketplaceSettlementRoutes({ app });
+      registerMarketplaceSettlementWorker({ jobs: globalThis.__fynxBackgroundJobs, logger: console });
       registerMarketplaceProtectionRoutes({ app });
+      registerMarketplaceProtectionResolutionRoutes({ app });
       registerPrivacyRoutes({ app });
       registerProfileRoutes({ app });
       registerGroupRoutes({ app });
