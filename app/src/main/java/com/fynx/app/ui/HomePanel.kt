@@ -1,17 +1,27 @@
 package com.fynx.app.ui
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Production Home shell. Real social content is rendered by FynxRemoteHomeSocialPanel;
@@ -59,11 +69,7 @@ fun HomePanel(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(
-                                "FYNX",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text("FYNX", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                             Text(
                                 if (displayUsername.isBlank()) "Your people. Your moments. Your world."
                                 else "Welcome back, $displayUsername",
@@ -114,5 +120,32 @@ fun HomePanel(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun FynxProfileImage(name: String, uriString: String?, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var bitmap by remember(uriString) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(uriString) {
+        bitmap = withContext(Dispatchers.IO) {
+            uriString?.let {
+                runCatching {
+                    context.contentResolver.openInputStream(Uri.parse(it)).use { input ->
+                        BitmapFactory.decodeStream(input)
+                    }
+                }.getOrNull()
+            }
+        }
+    }
+    if (bitmap != null) {
+        Image(
+            bitmap!!.asImageBitmap(),
+            contentDescription = name,
+            modifier = modifier.clip(CircleShape),
+            contentScale = ContentScale.Crop
+        )
+    } else {
+        FynxAvatar(name, modifier.clip(CircleShape))
     }
 }
