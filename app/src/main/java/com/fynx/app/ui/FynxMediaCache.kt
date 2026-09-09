@@ -47,14 +47,14 @@ internal object FynxMediaCache {
     private fun download(context: Context, path: String, destination: File): File? {
         val networkLevel = FynxNetworkQuality.current(context)
         val attempts = when (networkLevel) {
-            FynxNetworkQuality.Level.WEAK -> 1
+            FynxNetworkQuality.Level.WEAK -> 2
             FynxNetworkQuality.Level.GOOD -> MAX_DOWNLOAD_ATTEMPTS
             FynxNetworkQuality.Level.OFFLINE -> 0
         }
         repeat(attempts) { attempt ->
             val result = downloadOnce(context, path, destination, networkLevel)
             if (result != null) return result
-            if (attempt + 1 < attempts) Thread.sleep(300L * (1L shl attempt))
+            if (attempt + 1 < attempts) Thread.sleep(500L * (1L shl attempt))
         }
         return null
     }
@@ -62,16 +62,21 @@ internal object FynxMediaCache {
     private fun downloadOnce(context: Context, path: String, destination: File, networkLevel: FynxNetworkQuality.Level): File? = runCatching {
         val baseUrl = FynxBackendClient.baseUrl(context).trimEnd('/')
         val connection = (URL(baseUrl + path).openConnection() as HttpURLConnection).apply {
-            connectTimeout = if (networkLevel == FynxNetworkQuality.Level.WEAK) 10000 else 8000
-            readTimeout = if (networkLevel == FynxNetworkQuality.Level.WEAK) 20000 else 15000
+            connectTimeout = if (networkLevel == FynxNetworkQuality.Level.WEAK) 30_000 else 15_000
+            readTimeout = if (networkLevel == FynxNetworkQuality.Level.WEAK) 60_000 else 30_000
+            useCaches = false
             instanceFollowRedirects = false
             setRequestProperty("Authorization", "Bearer ${FynxBackendClient.accessToken(context) ?: ""}")
             setRequestProperty("Accept", "image/*,video/*,audio/*")
-            setRequestProperty("Connection", "keep-alive")
+            setRequestProperty("Connection", "close")
         }
         val temporary = File(destination.parentFile, ".${destination.name}.part")
         try {
             val status = connection.responseCode
+            if (status == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                FynxBackendClient.saveAccessToken(context, null)
+                return null
+            }
             if (status !in 200..299) return null
             temporary.delete()
             var total = 0L
