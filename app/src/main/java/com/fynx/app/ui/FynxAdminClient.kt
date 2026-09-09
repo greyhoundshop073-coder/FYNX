@@ -45,7 +45,12 @@ object FynxAdminClient {
     suspend fun admins(context: Context): Result<List<Admin>> =
         FynxBackendClient.get(context, "/api/admin/admins").mapCatching { raw ->
             val array = JSONObject(raw).optJSONArray("admins") ?: return@mapCatching emptyList()
-            buildList { for (i in 0 until array.length()) { val item = array.optJSONObject(i) ?: continue; add(Admin(item.optString("id"), item.optString("username"), item.optString("displayName"), item.optString("grantedAt"))) }
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    add(Admin(item.optString("id"), item.optString("username"), item.optString("displayName"), item.optString("grantedAt")))
+                }
+            }
         }
 
     suspend fun marketplaceProtectionCases(context: Context, status: String? = null): Result<List<ProtectionCase>> {
@@ -80,7 +85,7 @@ object FynxAdminClient {
     suspend fun resolveMarketplaceProtectionCase(context: Context, caseId: String, resolution: String, note: String = ""): Result<String> =
         FynxBackendClient.postJson(
             context,
-            "/api/admin/marketplace/protection/cases/${encode(caseId)}//resolve".replace("//", "/"),
+            "/api/admin/marketplace/protection/cases/${encode(caseId)}/resolve",
             JSONObject().put("resolution", resolution.trim().uppercase()).put("note", note.trim()).toString()
         ).mapCatching { raw ->
             val value = JSONObject(raw)
