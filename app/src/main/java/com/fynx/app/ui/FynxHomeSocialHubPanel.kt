@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,7 +20,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Keeps the existing Home experience intact while adding real multi-media creation to the existing composer. */
+/** Keeps the existing Home experience intact while adding real multi-media creation and sound attachment. */
 @Composable
 fun FynxHomeSocialHubPanel(
     currentUsername: String,
@@ -57,8 +58,26 @@ fun FynxHomeSocialHubPanel(
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) {
             uris.take(12).forEach { uri -> runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
-            capturedUris = uris.distinct().take(12)
-            capturedTypes = capturedUris.map { if (context.contentResolver.getType(it)?.startsWith("video/") == true) "video" else "image" }
+            val selected = uris.distinct().take(12)
+            capturedUris = (capturedUris.filterNot { it in selected } + selected).take(12)
+            capturedTypes = capturedUris.map { uri ->
+                if (context.contentResolver.getType(uri)?.startsWith("video/") == true) "video" else "image"
+            }
+            showComposer = true
+        }
+    }
+
+    val soundPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            capturedUris = (capturedUris.filterNot { it == uri } + uri).take(12)
+            capturedTypes = capturedUris.map { item ->
+                when {
+                    context.contentResolver.getType(item)?.startsWith("video/") == true -> "video"
+                    context.contentResolver.getType(item)?.startsWith("audio/") == true -> "audio"
+                    else -> "image"
+                }
+            }
             showComposer = true
         }
     }
@@ -83,6 +102,16 @@ fun FynxHomeSocialHubPanel(
         }
     }
 
+    fun recomputeTypes() {
+        capturedTypes = capturedUris.map { item ->
+            when {
+                context.contentResolver.getType(item)?.startsWith("video/") == true -> "video"
+                context.contentResolver.getType(item)?.startsWith("audio/") == true -> "audio"
+                else -> "image"
+            }
+        }
+    }
+
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (networkLevel != FynxNetworkQuality.Level.GOOD) Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) {
             Text(if (networkLevel == FynxNetworkQuality.Level.OFFLINE) "You are offline. FYNX will keep the app usable while you reconnect." else "Weak connection detected. Media uploads may take longer.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
@@ -104,11 +133,17 @@ fun FynxHomeSocialHubPanel(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { showComposer = false; showCamera = true }, modifier = Modifier.weight(1f), enabled = !posting && !aiCaptionLoading && postingAllowed) { Icon(Icons.Default.CameraAlt, null); Spacer(Modifier.width(4.dp)); Text("Camera") }
                         OutlinedButton(onClick = { gallery.launch(arrayOf("image/*", "video/*")) }, modifier = Modifier.weight(1f), enabled = !posting && !aiCaptionLoading && postingAllowed) { Icon(Icons.Default.VideoLibrary, null); Spacer(Modifier.width(4.dp)); Text("Gallery") }
+                        OutlinedButton(onClick = { soundPicker.launch(arrayOf("audio/*")) }, modifier = Modifier.weight(1f), enabled = !posting && !aiCaptionLoading && postingAllowed) { Icon(Icons.Default.MusicNote, null); Spacer(Modifier.width(4.dp)); Text("Sound") }
                     }
                     if (capturedUris.isNotEmpty()) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("${capturedUris.size} media item${if (capturedUris.size == 1) "" else "s"} ready", color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
-                            if (capturedUris.size == 1 && capturedTypes.firstOrNull() == "image") TextButton(onClick = { showComposer = false; showPhotoEditor = true }, enabled = !posting && !aiCaptionLoading) { Icon(Icons.Default.AutoAwesome, null); Spacer(Modifier.width(4.dp)); Text("AI edit") }
+                            val audioCount = capturedTypes.count { it == "audio" }
+                            val visualCount = capturedTypes.count { it == "image" || it == "video" }
+                            Text("${capturedUris.size} media item${if (capturedUris.size == 1) "" else "s"} ready${if (audioCount > 0) " • $audioCount sound${if (audioCount == 1) "" else "s"}" else ""}", color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                            if (visualCount == 1 && audioCount == 0 && capturedTypes.firstOrNull() == "image") TextButton(onClick = { showComposer = false; showPhotoEditor = true }, enabled = !posting && !aiCaptionLoading) { Icon(Icons.Default.AutoAwesome, null); Spacer(Modifier.width(4.dp)); Text("AI edit") }
+                        }
+                        if (audioCountLabel(capturedTypes) > 0) {
+                            Text("Sound is attached as a real audio item and will be published with this post.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     Text("Who can see this?", style = MaterialTheme.typography.labelLarge)
@@ -140,6 +175,8 @@ fun FynxHomeSocialHubPanel(
     }
 
     if (showCamera) Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        FynxCameraCapturePanel(onCaptured = { uri, type -> capturedUris = listOf(uri); capturedTypes = listOf(type); showCamera = false; showComposer = true }, onDismiss = { showCamera = false; showComposer = true })
+        FynxCameraCapturePanel(onCaptured = { uri, type -> capturedUris = (capturedUris + uri).take(12); recomputeTypes(); showCamera = false; showComposer = true }, onDismiss = { showCamera = false; showComposer = true })
     }
 }
+
+private fun audioCountLabel(types: List<String>): Int = types.count { it == "audio" }
