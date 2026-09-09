@@ -51,6 +51,60 @@ async function reconcileRefundEvent(client, eventName, refund) {
   return true;
 }
 
+async function reconcileTransferEvent(client, eventName, transfer) {
+  const reference = typeof transfer?.reference === 'string' ? transfer.reference.trim() : '';
+  const transferCode = typeof transfer?.transfer_code === 'string' ? transfer.transfer_code.trim() : '';
+  if (!reference && !transferCode) return false;
+
+  const operationResult = await client.query(`
+    SELECT f.id,f.order_id,f.status,f.amount,f.currency,f.provider_reference,f.metadata,o.seller_id,o.status AS order_status
+    FROM marketplace_financial_operations f
+    JOIN marketplace_orders o ON o.id=f.order_id
+    WHERE f.operation_type='PAYOUT_RELEASE'
+      AND (f.provider_reference=$1 OR f.provider_reference=$2)
+    ORDER BY f.created_at DESC
+    LIMIT 1
+    FOR UPDATE
+  `, [reference || null, transferCode || null]);
+  const operation = operationResult.rows[0];
+  if (!operation) return false;
+
+  const providerStatus = String(transfer?.status || '').toLowerCase();
+  const eventReference = reference || transferCode;
+  const metadata = {
+    ...(operation.metadata || {}),
+    transferEvent: eventName,
+    transferStatus: providerStatus,
+    transferReference: reference || null,
+    transferCode: transferCode || null,
+    transferUpdatedAt: new Date().toISOString()
+  };
+  const providerAmount = Number(transfer?.amount);
+  const expectedAmount = amountSubunit(operation.amount, operation.currency);
+  const providerCurrency = String(transfer?.currency || '').toUpperCase();
+  const amountMatches = Number.isFinite(providerAmount) && expectedAmount !== null && providerAmount === expectedAmount;
+  const currencyMatches = providerCurrency === String(operation.currency || '').toUpperCase();
+
+  if (!amountMatches || !currencyMatches) {
+    await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, ['Paystack transfer webhook amount or currency does not match payout operation', JSON.stringify({ ...metadata, providerAmount, expectedAmount, providerCurrency }), operation.id]);
+    await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE order_id=$1 AND status='RELEASE_PENDING'`, [operation.order_id]);
+    return true;
+  }
+
+  if (eventName === 'transfer.success') {
+    await client.query(`UPDATE marketplace_financial_operations SET status='SUCCEEDED',provider_reference=COALESCE($1,provider_reference),failure_reason=NULL,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, [eventReference || null, JSON.stringify(metadata), operation.id]);
+    const escrow = (await client.query(`SELECT id,amount,currency,status FROM marketplace_escrows WHERE order_id=$1 FOR UPDATE`, [operation.order_id])).rows[0];
+    if (escrow?.status === 'RELEASE_PENDING') {
+      await client.query(`UPDATE marketplace_escrows SET status='RELEASED',released_at=COALESCE(released_at,NOW()),updated_at=NOW() WHERE id=$1 AND status='RELEASE_PENDING'`, [escrow.id]);
+      await client.query(`INSERT INTO marketplace_ledger_entries (escrow_id,order_id,account,entry_type,amount,currency,idempotency_key,metadata) VALUES ($1,$2,'seller_payout','RELEASE',$3,$4,$5,$6::jsonb) ON CONFLICT (idempotency_key) DO NOTHING`, [escrow.id, operation.order_id, escrow.amount, escrow.currency, `PAYOUT-RELEASE-${operation.order_id}`, JSON.stringify({ provider: 'paystack', providerReference: eventReference, providerStatus })]);
+    }
+  } else if (eventName === 'transfer.failed' || eventName === 'transfer.reversed') {
+    await client.query(`UPDATE marketplace_financial_operations SET status='FAILED',provider_reference=COALESCE($1,provider_reference),failure_reason=$2,metadata=$3::jsonb,updated_at=NOW() WHERE id=$4 AND status='PENDING'`, [eventReference || null, `Paystack transfer ${eventName === 'transfer.reversed' ? 'reversed' : 'failed'}`, JSON.stringify(metadata), operation.id]);
+    await client.query(`UPDATE marketplace_escrows SET status='RELEASE_ELIGIBLE',updated_at=NOW() WHERE order_id=$1 AND status='RELEASE_PENDING'`, [operation.order_id]);
+  }
+  return true;
+}
+
 export function registerMarketplacePaystackWebhook({ app, pool }) {
   app.post('/api/marketplace/payments/paystack/webhook', async (req, res) => {
     const secret = process.env.PAYSTACK_SECRET_KEY || '';
@@ -71,6 +125,19 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
         try { await client.query('ROLLBACK'); } catch {}
         console.error('marketplace Paystack refund webhook', error);
         return res.status(500).json({ error: 'refund webhook processing failed' });
+      } finally { client.release(); }
+    }
+    if (eventName.startsWith('transfer.')) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const matched = await reconcileTransferEvent(client, eventName, event.data || {});
+        await client.query('COMMIT');
+        return res.status(200).json({ received: true, matched, transferEvent: eventName });
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch {}
+        console.error('marketplace Paystack transfer webhook', error);
+        return res.status(500).json({ error: 'transfer webhook processing failed' });
       } finally { client.release(); }
     }
     if (eventName !== 'charge.success') return res.status(200).json({ received: true, ignored: true });
