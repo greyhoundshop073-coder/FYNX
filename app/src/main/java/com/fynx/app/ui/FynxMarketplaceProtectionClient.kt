@@ -15,21 +15,11 @@ object FynxMarketplaceProtectionClient {
         val updatedAt: String
     )
 
-    suspend fun openDispute(
-        context: Context,
-        orderId: String,
-        reason: String,
-        details: String,
-        idempotencyKey: String
-    ): Result<ProtectionCase> = open(context, orderId, "dispute", reason, details, idempotencyKey)
+    suspend fun openDispute(context: Context, orderId: String, reason: String, details: String): Result<ProtectionCase> =
+        open(context, orderId, "dispute", reason, details)
 
-    suspend fun requestRefund(
-        context: Context,
-        orderId: String,
-        reason: String,
-        details: String,
-        idempotencyKey: String
-    ): Result<ProtectionCase> = open(context, orderId, "refund-request", reason, details, idempotencyKey)
+    suspend fun requestRefund(context: Context, orderId: String, reason: String, details: String): Result<ProtectionCase> =
+        open(context, orderId, "refund-request", reason, details)
 
     suspend fun cases(context: Context, orderId: String): Result<List<ProtectionCase>> =
         FynxBackendClient.get(context, "/api/marketplace/protection/order/$orderId/cases")
@@ -53,25 +43,16 @@ object FynxMarketplaceProtectionClient {
                 }
             }
 
-    private suspend fun open(
-        context: Context,
-        orderId: String,
-        action: String,
-        reason: String,
-        details: String,
-        idempotencyKey: String
-    ): Result<ProtectionCase> {
+    private suspend fun open(context: Context, orderId: String, action: String, reason: String, details: String): Result<ProtectionCase> {
         val safeReason = reason.trim().take(160)
         if (safeReason.length < 3) return Result.failure(IllegalArgumentException("A short reason is required."))
-        val key = idempotencyKey.trim().take(160).ifBlank { "FYNX-PROTECTION-$orderId-${System.currentTimeMillis()}" }
         return FynxBackendClient.postJson(
             context,
             "/api/marketplace/protection/order/$orderId/$action",
             JSONObject().apply {
                 put("reason", safeReason)
                 put("details", details.trim().take(2000))
-            }.toString(),
-            mapOf("Idempotency-Key" to key)
+            }.toString()
         ).mapCatching { raw ->
             val item = JSONObject(raw).getJSONObject("case")
             ProtectionCase(
