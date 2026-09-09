@@ -33,6 +33,15 @@ object FynxMarketplaceClient {
             .mapCatching(::parseListings)
     }
 
+    suspend fun listingById(context: Context, listingId: String): Result<Listing> {
+        val normalized = listingId.trim()
+        if (normalized.isEmpty() || normalized.toLongOrNull() == null || normalized.toLong() <= 0L) {
+            return Result.failure(IllegalArgumentException("invalid listing id"))
+        }
+        return FynxBackendClient.get(context, "/api/marketplace/listing/${encode(normalized)}")
+            .mapCatching { raw -> parseListingObject(JSONObject(raw).getJSONObject("listing")) }
+    }
+
     data class SellerReputation(val rank: Int, val sellerCount: Int, val successfulSales: Int, val totalOrders: Int, val completionRate: Double, val averageRating: Double, val reviewCount: Int, val tier: String)
 
     suspend fun sellerReputation(context: Context, username: String): Result<SellerReputation> =
@@ -86,11 +95,21 @@ object FynxMarketplaceClient {
     private fun parseListings(raw: String): List<Listing> {
         val array = JSONObject(raw).getJSONArray("listings")
         return buildList {
-            for (i in 0 until array.length()) {
-                val o = array.getJSONObject(i); val media = o.optJSONArray("media_ids") ?: JSONArray(); val ids = buildList { for (j in 0 until media.length()) add(media.getString(j)) }
-                add(Listing(o.getString("id"), o.optString("seller_username"), o.optString("seller_display_name"), o.optString("store_name"), o.optString("title"), o.optString("description"), o.optDouble("price", 0.0), o.optString("currency", "NGN"), o.optString("category"), o.optString("condition", "NEW"), o.optInt("quantity", 0), o.optString("location"), o.optBoolean("delivery_available", false), o.optBoolean("pickup_available", true), if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"), ids, o.optBoolean("active", true)))
-            }
+            for (i in 0 until array.length()) add(parseListingObject(array.getJSONObject(i)))
         }
+    }
+
+    private fun parseListingObject(o: JSONObject): Listing {
+        val media = o.optJSONArray("media_ids") ?: JSONArray()
+        val ids = buildList { for (j in 0 until media.length()) add(media.getString(j)) }
+        return Listing(
+            o.getString("id"), o.optString("seller_username"), o.optString("seller_display_name"),
+            o.optString("store_name"), o.optString("title"), o.optString("description"),
+            o.optDouble("price", 0.0), o.optString("currency", "NGN"), o.optString("category"),
+            o.optString("condition", "NEW"), o.optInt("quantity", 0), o.optString("location"),
+            o.optBoolean("delivery_available", false), o.optBoolean("pickup_available", true),
+            if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"), ids, o.optBoolean("active", true)
+        )
     }
 
     private fun encode(value: String): String = java.net.URLEncoder.encode(value.trim(), "UTF-8")
