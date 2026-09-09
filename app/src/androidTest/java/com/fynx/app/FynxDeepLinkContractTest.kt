@@ -20,6 +20,17 @@ class FynxDeepLinkContractTest {
     }
 
     @Test
+    fun appRoutesRoundTripToExpectedDestinations() {
+        assertEquals(FynxDeepLinkDestination.Home, FynxDeepLinkParser.parse(Uri.parse(FynxDeepLinkParser.homeAppLink())))
+        assertEquals(FynxDeepLinkDestination.Profile("alice"), FynxDeepLinkParser.parse(Uri.parse(FynxDeepLinkParser.profileAppLink("@alice"))))
+        assertEquals(FynxDeepLinkDestination.Chat("bob"), FynxDeepLinkParser.parse(Uri.parse(FynxDeepLinkParser.chatAppLink("@bob"))))
+        assertEquals(FynxDeepLinkDestination.Group("42"), FynxDeepLinkParser.parse(Uri.parse(FynxDeepLinkParser.groupAppLink("42"))))
+        assertEquals(FynxDeepLinkDestination.Marketplace("listing-7"), FynxDeepLinkParser.parse(Uri.parse(FynxDeepLinkParser.marketplaceAppLink("listing-7"))))
+        assertEquals(FynxDeepLinkDestination.Stories, FynxDeepLinkParser.parse(Uri.parse(FynxDeepLinkParser.storiesAppLink())))
+        assertEquals(FynxDeepLinkDestination.Money, FynxDeepLinkParser.parse(Uri.parse(FynxDeepLinkParser.moneyAppLink())))
+    }
+
+    @Test
     fun inviteCodeSurvivesWebRoute() {
         val destination = FynxDeepLinkParser.parse(Uri.parse(FynxDeepLinkParser.inviteWebLink("ABC123")))
         assertEquals(FynxDeepLinkDestination.Invite("ABC123"), destination)
@@ -29,5 +40,14 @@ class FynxDeepLinkContractTest {
     fun invalidExternalHostIsRejected() {
         val destination = FynxDeepLinkParser.parse(Uri.parse("https://example.com/profile/alice"))
         assertTrue(destination == null)
+    }
+
+    @Test
+    fun malformedKnownRoutesAreRejected() {
+        assertTrue(FynxDeepLinkParser.parse(Uri.parse("https://fynx.app/profile")) == null)
+        assertTrue(FynxDeepLinkParser.parse(Uri.parse("https://fynx.app/profile/alice/extra")) == null)
+        assertTrue(FynxDeepLinkParser.parse(Uri.parse("https://fynx.app/home/extra")) == null)
+        assertTrue(FynxDeepLinkParser.parse(Uri.parse("fynx://profile/@")) == null)
+        assertTrue(FynxDeepLinkParser.parse(Uri.parse("fynx://unknown/alice")) == null)
     }
 }
