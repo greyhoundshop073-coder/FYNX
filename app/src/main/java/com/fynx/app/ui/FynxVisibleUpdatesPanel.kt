@@ -1,6 +1,5 @@
 package com.fynx.app.ui
 
-import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -16,7 +15,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,11 +39,14 @@ fun FynxVisibleUpdatesPanel(
     val context = androidx.compose.ui.platform.LocalContext.current
     var statuses by remember { mutableStateOf<List<FynxStatus>>(emptyList()) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(currentUsername) {
         statuses = FynxStatusClient.list(context).getOrDefault(emptyList())
     }
 
-    val grouped = statuses
+    val activeStatuses = statuses.filter {
+        it.expiresAtMillis <= 0L || it.expiresAtMillis > System.currentTimeMillis()
+    }
+    val grouped = activeStatuses
         .groupBy { it.ownerUsername }
         .mapNotNull { (_, list) ->
             list.maxByOrNull { it.createdAtMillis }?.let { it to list.size }
