@@ -1,7 +1,6 @@
 package com.fynx.app.ui
 
 import android.Manifest
-import android.content.Context
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -9,14 +8,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.PhoneDisabled
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -24,7 +23,13 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-/** Real conversational voice entry point for Home. This replaces the old Android speech recognizer widget. */
+/**
+ * FYNX Home voice entry point.
+ *
+ * The compact inline control is the single source of truth for Home so the
+ * microphone, connection state and voice interaction do not appear twice or
+ * drift into two different implementations.
+ */
 @Composable
 fun HomeAiVoiceInlineControl(modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -103,53 +108,15 @@ fun HomeAiVoiceInlineControl(modifier: Modifier = Modifier) {
     }
 }
 
+/** Legacy/card entry point now delegates to the same Home control. */
 @Composable
 fun HomeAiVoiceCard() {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val engine = remember { FynxAiWebRtcEngine(context) }
-    var connected by remember { mutableStateOf(false) }
-    var connecting by remember { mutableStateOf(false) }
-    var muted by remember { mutableStateOf(false) }
-    var status by remember { mutableStateOf("Tap the microphone and talk naturally") }
-    var transcript by remember { mutableStateOf<String?>(null) }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) startHomeVoice(engine, scope, { connecting = it }, { connected = it }, { status = it }, { transcript = it })
-        else status = "Microphone permission is required for FYNX AI voice."
-    }
-
-    DisposableEffect(Unit) { onDispose { engine.close() } }
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = FynxDesign.SurfaceRaised),
         shape = FynxDesign.ControlShape
     ) {
-        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(Modifier.weight(1f)) {
-                    Text("FYNX AI Voice", style = MaterialTheme.typography.titleMedium)
-                    Text(if (connecting) "Connecting…" else if (connected) "Listening and ready to respond" else status, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
-                }
-                IconButton(enabled = !connecting, onClick = {
-                    if (connected) {
-                        engine.close(); connected = false; muted = false; status = "Voice session ended"; return@IconButton
-                    }
-                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                        startHomeVoice(engine, scope, { connecting = it }, { connected = it }, { status = it }, { transcript = it })
-                    } else permission.launch(Manifest.permission.RECORD_AUDIO)
-                }) {
-                    Icon(if (connected) Icons.Default.PhoneDisabled else Icons.Default.Mic, if (connected) "End FYNX AI voice" else "Start FYNX AI voice")
-                }
-            }
-            if (connected) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AssistChip(onClick = { muted = !muted; engine.setMicrophoneEnabled(!muted) }, label = { Text(if (muted) "Unmute" else "Mute") }, leadingIcon = { Icon(if (muted) Icons.Default.MicOff else Icons.Default.Mic, null) })
-                    AssistChip(onClick = { engine.sendEvent(JSONObject().put("type", "response.create").toString()) }, label = { Text("Ask FYNX to respond") })
-                }
-            }
-            transcript?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-        }
+        HomeAiVoiceInlineControl(Modifier.padding(12.dp))
     }
 }
 
