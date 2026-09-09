@@ -3,6 +3,7 @@ package com.fynx.app.ui
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -94,7 +95,16 @@ object FynxNotificationFoundation {
         }
     }
 
-    fun show(context: Context, channelId: String, id: Int, title: String, message: String, stableKey: String = "$channelId:$id:$title:$message") {
+    fun show(
+        context: Context,
+        channelId: String,
+        id: Int,
+        title: String,
+        message: String,
+        stableKey: String = "$channelId:$id:$title:$message",
+        contentIntent: PendingIntent? = null
+    ) {
+        createChannels(context)
         val type = typeForChannel(channelId)
         val preferences = FynxNotificationPreferencesClient.cached(context)
         if (!FynxNotificationControlsBatch3.shouldPush(preferences, type)) return
@@ -122,6 +132,7 @@ object FynxNotificationFoundation {
             .setAutoCancel(channelId != CALLS_CHANNEL)
             .setCategory(if (channelId == CALLS_CHANNEL) NotificationCompat.CATEGORY_CALL else NotificationCompat.CATEGORY_MESSAGE)
             .setDefaults(if (channelId == CALLS_CHANNEL) NotificationCompat.DEFAULT_ALL else 0)
+        if (contentIntent != null) builder.setContentIntent(contentIntent)
         if (channelId == CALLS_CHANNEL) builder.setTimeoutAfter(60_000L)
         NotificationManagerCompat.from(context).notify(id, builder.build())
         speak(context, title, message)
