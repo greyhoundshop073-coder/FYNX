@@ -32,7 +32,6 @@ http.createServer = function fynxCreateServer(...args) {
       installRequestResourceGuard(app);
       installApiAbuseGuard(app);
       registerMarketplaceSettlementRoutes({ app });
-      registerMarketplaceSettlementWorker({ jobs: globalThis.__fynxBackgroundJobs, logger: console });
       registerMarketplaceProtectionRoutes({ app });
       registerMarketplaceProtectionResolutionRoutes({ app });
       registerPrivacyRoutes({ app });
