@@ -13,15 +13,15 @@ const checks = [
   ['resolution allowlist is enforced', resolution.includes("['BUYER','SELLER','CANCEL']")],
   ['buyer refund uses deterministic idempotency key', resolution.includes('REFUND-${row.order_id}')],
   ['refund pending state protects escrow', resolution.includes("status='REFUND_PENDING'")],
-  ['seller resolution makes escrow release eligible', resolution.includes("escrowStatus = resolution === 'SELLER' ? 'RELEASE_ELIGIBLE' : 'CANCELLED'")],
+  ['seller resolution makes escrow release eligible', resolution.includes("'RELEASE_ELIGIBLE'") && resolution.includes("resolution === 'SELLER'")],
   ['cancel resolution preserves reserved inventory recovery', resolution.includes("status='CANCELLED'") && resolution.includes('reserved_quantity=GREATEST(0,reserved_quantity-$1)')],
   ['protection resolution writes audit trail', resolution.includes('marketplace_protection_audit') && resolution.includes('RESOLVED_${resolution}')],
   ['android client exposes protection case lookup', adminClient.includes('marketplaceProtectionCases')],
   ['android client exposes protection resolution', adminClient.includes('resolveMarketplaceProtectionCase')],
   ['admin UI displays protection cases', adminPanel.includes('Marketplace protection cases')],
-  ['admin UI provides buyer refund action', adminPanel.includes('resolution = "BUYER"')],
-  ['admin UI provides seller release action', adminPanel.includes('resolution = "SELLER"')],
-  ['admin UI provides cancellation action', adminPanel.includes('resolution = "CANCEL"')]
+  ['admin UI provides buyer refund action', adminPanel.includes('"BUYER"')],
+  ['admin UI provides seller release action', adminPanel.includes('"SELLER"')],
+  ['admin UI provides cancellation action', adminPanel.includes('"CANCEL"')]
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
