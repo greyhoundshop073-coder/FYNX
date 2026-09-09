@@ -66,6 +66,9 @@ object FynxBackendClient {
     fun isNetworkAvailable(context: Context): Boolean = hasNetwork(context)
     fun isUnauthorizedFailure(error: Throwable): Boolean = generateSequence(error) { it.cause }.any { it is FynxUnauthorizedException }
 
+    /** Lightweight authenticated-independent health probe used to distinguish backend outages from UI failures. */
+    suspend fun health(context: Context): Result<String> = get(context, "/health")
+
     suspend fun get(context: Context, path: String): Result<String> = request(context, "GET", path, null)
     suspend fun postJson(context: Context, path: String, body: String): Result<String> = request(context, "POST", path, body)
     suspend fun patchJson(context: Context, path: String, body: String): Result<String> = request(context, "PATCH", path, body)
@@ -79,7 +82,9 @@ object FynxBackendClient {
             runCatching {
                 val root = baseUrl(context)
                 require(root.isNotBlank()) { "FYNX backend is not configured." }
+                require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }
                 require(path.startsWith("/")) { "Backend path must start with /." }
+                if (!hasNetwork(context)) throw FynxNetworkUnavailableException()
 
                 var attempt = 0
                 var response: String? = null
@@ -168,8 +173,9 @@ object FynxBackendClient {
         return false
     }
 
+    private class FynxNetworkUnavailableException : IOException("FYNX network connection is unavailable")
     private class FynxUnauthorizedException : IOException("FYNX session expired")
     private class FynxHttpException(val status: Int, body: String) : IOException(
-        "FYNX backend returned HTTP $status${body.takeIf { it.isNotBlank() }?.let { ": $it" } ?: ""}"
+        "FYNX backend returned HTTP $status${body.takeIf { it.isNotBlank() }?.let { ": ${it.take(600)}" } ?: ""}"
     )
 }
