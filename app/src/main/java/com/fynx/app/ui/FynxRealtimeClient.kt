@@ -130,7 +130,21 @@ class FynxRealtimeClient(
                     "message_status" -> onEvent(Event.MessageStatus(root.optString("messageId"), when (root.optString("status")) { "read" -> Status.READ; "delivered" -> Status.DELIVERED; else -> Status.SENT }))
                     "typing" -> onEvent(Event.Typing(root.optString("userId"), root.optBoolean("isTyping")))
                     "presence" -> onEvent(Event.Presence(root.optString("userId"), root.optBoolean("online")))
-                    "call" -> parseCallEvent(root)?.let(onEvent)
+                    "call" -> parseCallEvent(root)?.let { callEvent ->
+                        if (callEvent.signalType == "invite") {
+                            val caller = callEvent.fromUsername?.removePrefix("@").orEmpty().ifBlank { callEvent.fromUserId }
+                            val kind = if (callEvent.callType == "video") "Video call" else "Voice call"
+                            FynxNotificationFoundation.show(
+                                context,
+                                FynxNotificationFoundation.MESSAGES_CHANNEL,
+                                callEvent.callId.hashCode(),
+                                "Incoming $kind 📞",
+                                "@$caller is calling you.",
+                                stableKey = "incoming-call:${callEvent.callId}"
+                            )
+                        }
+                        onEvent(callEvent)
+                    }
                 } }
             }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
