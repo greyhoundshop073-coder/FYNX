@@ -53,6 +53,14 @@ if (!social.includes("/api/social/posts/:id/media")) {
 }
 
 await writeFile(runtimeSocialPath, social, "utf8");
+
+// Do not let Render advertise a live API while its database initialization is
+// still failing in the background. Waiting here makes startup fail fast instead
+// of leaving Android clients connected to a server that cannot serve real data.
+source = source.replace(
+  'initDatabase().catch((error) => { console.error("database initialization failed", error); process.exitCode = 1; });',
+  'await initDatabase();'
+);
 await writeFile(runtimePath, source, "utf8");
 
 await import("./scalability.js");
