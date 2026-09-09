@@ -2,6 +2,7 @@ import http from "node:http";
 import { installFailureRecovery, createIdempotencyStore } from "./reliability.js";
 import { createBackgroundJobQueue } from "./backgroundJobs.js";
 import { registerMarketplaceSettlementRoutes } from "./marketplaceSettlement.js";
+import { registerMarketplaceSettlementWorker } from "./marketplaceSettlementWorker.js";
 import { registerMarketplaceProtectionRoutes } from "./marketplaceProtection.js";
 import { installSecurityHardening } from "./securityHardening.js";
 import { registerRealtimeAssistantRoutes } from "./aiRealtimeRoutes.js";
@@ -60,6 +61,7 @@ http.createServer = function fynxCreateServer(...args) {
   globalThis.__fynxJobHandlers=globalThis.__fynxJobHandlers||{};
   const jobs=createBackgroundJobQueue({logger:console});
   globalThis.__fynxBackgroundJobs=jobs;
+  registerMarketplaceSettlementWorker({ jobs, logger: console });
   void jobs.start().catch(error=>console.error("[fynx-jobs] startup failed",error?.message||error));
   return server;
 };
