@@ -3,7 +3,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 
 // Production bootstrap compatibility guard. It preserves the existing Stage 14
-// scalability preload while normalizing the current server startup/signature issues.
+// scalability preload while making Render startup deterministic. The runtime
+// server is prepared completely before it is imported, so API requests cannot
+// race route installation during cold start.
 const backendDir = path.dirname(fileURLToPath(import.meta.url));
 const sourcePath = path.join(backendDir, "server.js");
 const socialSourcePath = path.join(backendDir, "socialRoutes.js");
@@ -27,16 +29,6 @@ const compatibleSignature = 'export function registerSocialRoutes(config, legacy
 if (!social.includes(signature)) throw new Error("FYNX bootstrap could not locate social route signature");
 social = social.replace(signature, compatibleSignature);
 
-// Group 3 discovery ranking: preserve the existing feed contract while replacing
-// chronological-only ordering with engagement velocity + freshness. The query still
-// enforces the existing visibility/block rules before ranking.
-social = social.replace(
-  'ORDER BY p.created_at DESC LIMIT $2',
-  `ORDER BY (\n    COALESCE((SELECT COUNT(*) FROM social_post_likes l2 WHERE l2.post_id=p.id),0) * 3\n    + COALESCE((SELECT COUNT(*) FROM social_post_comments c2 WHERE c2.post_id=p.id),0) * 5\n    + GREATEST(0, 72 - EXTRACT(EPOCH FROM (NOW()-p.created_at))/3600.0)\n  ) DESC, p.created_at DESC LIMIT $2`
-);
-
-// Group 25: keep the existing single-media contract intact while adding a real
-// multi-media post endpoint. Each media id is verified against the authenticated owner.
 const socialSchemaNeedle = 'CREATE INDEX IF NOT EXISTS social_posts_created_idx ON social_posts(created_at DESC);';
 if (!social.includes('CREATE TABLE IF NOT EXISTS social_post_media')) {
   social = social.replace(
@@ -52,16 +44,6 @@ if (!social.includes("/api/social/posts/multi")) {
   social = social.replace(socialRouteMarker, multiMediaRoute + socialRouteMarker);
 }
 
-const feedMapNeedle = "mediaUrl:x.media_id==null?null:`/api/social/media/${x.media_id}`,timestamp:Number(x.timestamp)";
-if (!social.includes('mediaIds') && social.includes(feedMapNeedle)) {
-  social = social.replace(
-    feedMapNeedle,
-    "mediaUrl:x.media_id==null?null:`/api/social/media/${x.media_id}`,mediaIds:x.media_id==null?[]:[],timestamp:Number(x.timestamp)"
-  );
-}
-
-// Expose all media belonging to a multi-media post without changing the existing
-// feed contract. The first media remains the legacy primary media for old clients.
 if (!social.includes("/api/social/posts/:id/media")) {
   const mediaRoute = `  app.get('/api/social/posts/:id/media',auth,async(req,res)=>{try{await ensureSocialSchema();const id=Number(req.params.id);if(!Number.isInteger(id)||!(await visibleSocialPost(id,req.user.sub)))return res.status(404).json({error:'post not found'});const r=await pool.query('SELECT spm.media_id,spm.media_type,spm.position FROM social_post_media spm WHERE spm.post_id=$1 ORDER BY spm.position ASC',[id]);res.json({media:r.rows.map(x=>({mediaId:String(x.media_id),mediaType:x.media_type,position:Number(x.position),mediaUrl:`/api/social/media/${x.media_id}`}))})}catch(e){res.status(500).json({error:'post media lookup failed'})}});\n`;
   const finalMarker = "\n}\n";
@@ -73,11 +55,6 @@ if (!social.includes("/api/social/posts/:id/media")) {
 await writeFile(runtimeSocialPath, social, "utf8");
 await writeFile(runtimePath, source, "utf8");
 
-// Keep the original scalability preload active so realtime AI, privacy, groups,
-// admin and production resource guards are installed on the live HTTP server.
 await import("./scalability.js");
-// scalability.js installs several compatibility routes from a setImmediate callback.
-// Wait for that callback before importing the runtime server so the first real request
-// cannot race route registration and receive a false HTTP 404.
 await new Promise((resolve) => setImmediate(resolve));
 await import(`${pathToFileURL(runtimePath).href}?boot=${Date.now()}`);
