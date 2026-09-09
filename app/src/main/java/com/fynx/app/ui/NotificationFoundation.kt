@@ -16,6 +16,7 @@ import java.util.UUID
 object FynxNotificationFoundation {
     const val FRIENDS_CHANNEL = "fynx_friends"
     const val MESSAGES_CHANNEL = "fynx_messages"
+    const val CALLS_CHANNEL = "fynx_calls"
     const val GIFTS_CHANNEL = "fynx_gifts"
     const val MONEY_CHANNEL = "fynx_money"
     const val REMINDERS_CHANNEL = "fynx_reminders"
@@ -27,14 +28,17 @@ object FynxNotificationFoundation {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
         val values = prefs.getStringSet(KEY_DEDUPE, emptySet()).orEmpty()
-        val fresh = values.filter { entry -> val parts = entry.split("|", limit = 2); parts.size == 2 && now - parts[1].toLongOrNull().orZero() < 30_000 }.toMutableSet()
+        val fresh = values.mapNotNull { entry ->
+            val parts = entry.split("|", limit = 2)
+            if (parts.size != 2) return@mapNotNull null
+            val timestamp = parts[1].toLongOrNull() ?: return@mapNotNull null
+            if (now - timestamp < 30_000L) entry else null
+        }.toMutableSet()
         if (fresh.any { it.startsWith("$stableKey|") }) return false
         fresh.add("$stableKey|$now")
         prefs.edit().putStringSet(KEY_DEDUPE, fresh).apply()
         return true
     }
-
-    private fun Long?.orZero() = this ?: 0L
 
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -42,6 +46,11 @@ object FynxNotificationFoundation {
         val channels = listOf(
             NotificationChannel(FRIENDS_CHANNEL, "Friends", NotificationManager.IMPORTANCE_DEFAULT),
             NotificationChannel(MESSAGES_CHANNEL, "Messages", NotificationManager.IMPORTANCE_DEFAULT),
+            NotificationChannel(CALLS_CHANNEL, "Calls", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Incoming FYNX voice and video calls"
+                enableVibration(true)
+                setShowBadge(true)
+            },
             NotificationChannel(GIFTS_CHANNEL, "Gifts", NotificationManager.IMPORTANCE_DEFAULT),
             NotificationChannel(MONEY_CHANNEL, "Money", NotificationManager.IMPORTANCE_DEFAULT),
             NotificationChannel(REMINDERS_CHANNEL, "Reminders", NotificationManager.IMPORTANCE_DEFAULT)
@@ -54,12 +63,12 @@ object FynxNotificationFoundation {
 
     fun setSpeakNotificationsEnabled(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_SPEAK, enabled).apply()
-        if (!enabled) stopSpeaking(context)
+        if (!enabled) stopSpeaking()
     }
 
     private var activeTts: TextToSpeech? = null
 
-    private fun stopSpeaking(context: Context) {
+    private fun stopSpeaking() {
         activeTts?.stop()
         activeTts?.shutdown()
         activeTts = null
@@ -67,20 +76,19 @@ object FynxNotificationFoundation {
 
     private fun speak(context: Context, title: String, message: String) {
         if (!isSpeakNotificationsEnabled(context)) return
-        stopSpeaking(context)
+        stopSpeaking()
         val text = "$title. $message"
         val utteranceId = UUID.randomUUID().toString()
         activeTts = TextToSpeech(context.applicationContext) { status ->
             if (status != TextToSpeech.SUCCESS) {
-                activeTts?.shutdown()
-                activeTts = null
+                stopSpeaking()
                 return@TextToSpeech
             }
             activeTts?.language = Locale.getDefault()
             activeTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) = Unit
-                override fun onError(utteranceId: String?) { stopSpeaking(context) }
-                override fun onDone(utteranceId: String?) { stopSpeaking(context) }
+                override fun onError(utteranceId: String?) { stopSpeaking() }
+                override fun onDone(utteranceId: String?) { stopSpeaking() }
             })
             activeTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         }
@@ -106,19 +114,25 @@ object FynxNotificationFoundation {
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return
 
-        val notification = NotificationCompat.Builder(context, channelId)
+        val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(message)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(true)
-            .build()
-        NotificationManagerCompat.from(context).notify(id, notification)
+            .setPriority(if (channelId == CALLS_CHANNEL) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(channelId != CALLS_CHANNEL)
+            .setCategory(if (channelId == CALLS_CHANNEL) NotificationCompat.CATEGORY_CALL else NotificationCompat.CATEGORY_MESSAGE)
+            .setDefaults(if (channelId == CALLS_CHANNEL) NotificationCompat.DEFAULT_ALL else 0)
+        if (channelId == CALLS_CHANNEL) builder.setTimeoutAfter(60_000L)
+        NotificationManagerCompat.from(context).notify(id, builder.build())
         speak(context, title, message)
     }
 
+    fun cancel(context: Context, id: Int) {
+        NotificationManagerCompat.from(context).cancel(id)
+    }
+
     private fun typeForChannel(channelId: String): FynxNotificationType = when (channelId) {
-        MESSAGES_CHANNEL -> FynxNotificationType.MESSAGE
+        MESSAGES_CHANNEL, CALLS_CHANNEL -> FynxNotificationType.MESSAGE
         FRIENDS_CHANNEL -> FynxNotificationType.FRIEND_REQUEST
         GIFTS_CHANNEL -> FynxNotificationType.REACTION
         MONEY_CHANNEL -> FynxNotificationType.WALLET_ACTIVITY
