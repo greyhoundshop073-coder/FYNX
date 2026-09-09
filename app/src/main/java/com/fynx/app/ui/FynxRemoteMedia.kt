@@ -28,6 +28,8 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
+private const val MAX_REMOTE_MEDIA_BYTES = 12 * 1024 * 1024
+
 private fun resolveFynxMediaUrl(context: android.content.Context, mediaUrl: String): String {
     val value = mediaUrl.trim()
     if (value.isBlank()) return value
@@ -42,7 +44,11 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
     var kind by remember(resolvedUrl, type) { mutableStateOf("loading") }
     var bitmap by remember(resolvedUrl, type) { mutableStateOf<android.graphics.Bitmap?>(null) }
     var localFile by remember(resolvedUrl, type) { mutableStateOf<File?>(null) }
-    LaunchedEffect(resolvedUrl, type) {
+    var reloadNonce by remember(resolvedUrl, type) { mutableIntStateOf(0) }
+    LaunchedEffect(resolvedUrl, type, reloadNonce) {
+        kind = "loading"
+        bitmap = null
+        localFile = null
         try {
             val loaded = withContext(Dispatchers.IO) {
                 runCatching {
@@ -50,10 +56,13 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
                         connectTimeout = 10_000
                         readTimeout = 20_000
                         useCaches = false
-                        setRequestProperty("Authorization", "Bearer ${FynxBackendClient.accessToken(context).orEmpty()}")
+                        setRequestProperty("Accept", "image/*,video/*,*/*")
+                        FynxBackendClient.accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
                     }
                     try {
                         if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
+                        val contentLength = connection.contentLengthLong
+                        if (contentLength > MAX_REMOTE_MEDIA_BYTES) error("Media is too large")
                         val contentType = connection.contentType.orEmpty().lowercase()
                         val isVideo = type.equals("video", true) || (type.equals("auto", true) && contentType.startsWith("video/"))
                         if (isVideo) {
@@ -66,7 +75,19 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
                             if (!file.exists() || file.length() == 0L) {
                                 val temp = File(context.cacheDir, "${file.name}.part")
                                 temp.delete()
-                                connection.inputStream.use { input -> temp.outputStream().use { output -> input.copyTo(output) } }
+                                connection.inputStream.use { input ->
+                                    temp.outputStream().use { output ->
+                                        val buffer = ByteArray(32 * 1024)
+                                        var total = 0L
+                                        while (true) {
+                                            val read = input.read(buffer)
+                                            if (read <= 0) break
+                                            total += read
+                                            if (total > MAX_REMOTE_MEDIA_BYTES) error("Media is too large")
+                                            output.write(buffer, 0, read)
+                                        }
+                                    }
+                                }
                                 if (!temp.renameTo(file)) {
                                     temp.delete()
                                     error("Unable to cache media")
@@ -96,8 +117,14 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
     when (kind) {
         "image" -> bitmap?.let { Image(it.asImageBitmap(), "Media", modifier.clip(RoundedCornerShape(14.dp)), contentScale = ContentScale.Crop) }
         "video" -> localFile?.let { file -> AndroidView(factory = { ctx -> android.widget.VideoView(ctx).apply { setVideoPath(file.absolutePath); setOnPreparedListener { player -> player.isLooping = true; start() } } }, modifier = modifier.clip(RoundedCornerShape(14.dp))) }
-        "error" -> Box(modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { Icon(Icons.Default.BrokenImage, "Media unavailable") }
-        else -> Box(modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { CircularProgressIndicator() }
+        "error" -> Box(modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Icon(Icons.Default.BrokenImage, "Media unavailable")
+                Text("Media unavailable", style = MaterialTheme.typography.labelSmall)
+                TextButton(onClick = { reloadNonce++ }) { Text("Retry") }
+            }
+        }
+        else -> Box(modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     }
 }
 
