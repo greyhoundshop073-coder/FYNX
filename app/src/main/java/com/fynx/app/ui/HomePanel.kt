@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.NotificationsNone
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -67,19 +68,21 @@ fun HomePanel(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("FYNX", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                            Text(
-                                if (displayUsername.isBlank()) "Your people. Your moments. Your world."
-                                else "Welcome back, $displayUsername",
-                                color = FynxDesign.TextSecondary
-                            )
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                            Text("FYNX", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
+                            Spacer(Modifier.width(4.dp))
+                            Icon(Icons.Default.Verified, contentDescription = "FYNX verified", tint = androidx.compose.ui.graphics.Color(0xFF3B82F6), modifier = Modifier.size(18.dp))
                         }
                         IconButton(onClick = onOpenNotifications) {
-                            Icon(Icons.Default.NotificationsNone, "Notifications")
+                            Icon(Icons.Default.NotificationsNone, contentDescription = "Notifications")
                         }
                     }
+                    Text(
+                        if (displayUsername.isBlank()) "Your people. Your moments. Your world."
+                        else "Welcome back, $displayUsername",
+                        color = FynxDesign.TextSecondary
+                    )
                     HomeAiVoiceInlineControl()
                 }
             }
