@@ -53,3 +53,5 @@ for name, ok in checks:
 if failed:
     raise SystemExit("FYNX production certification gate failed: " + "; ".join(failed))
 print(f"FYNX production certification gate passed ({len(checks)} checks)")
+
+# Keep this gate intentionally tied to the existing marketplace transaction architecture.
