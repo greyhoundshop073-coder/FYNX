@@ -25,10 +25,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/**
- * Production Home shell. Real social content is rendered by FynxRemoteHomeSocialPanel;
- * this screen deliberately contains no hard-coded users, posts, engagement or marketplace data.
- */
+/** Production Home shell. Real social content is rendered by FynxRemoteHomeSocialPanel. */
 @Composable
 fun HomePanel(
     currentUsername: String = "",
@@ -45,9 +42,35 @@ fun HomePanel(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
+        // Master reference: FYNX header is first.
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    Text("FYNX", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        Icons.Default.Verified,
+                        contentDescription = "FYNX verified",
+                        tint = androidx.compose.ui.graphics.Color(0xFF3B82F6),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                IconButton(onClick = onCreatePost) {
+                    Icon(Icons.Default.AddCircle, contentDescription = "Create post")
+                }
+                IconButton(onClick = onOpenNotifications) {
+                    Icon(Icons.Default.NotificationsNone, contentDescription = "Notifications")
+                }
+            }
+        }
+
+        // Status/Stories directly follows the header like the master reference.
         item {
             FynxVisibleUpdatesPanel(
                 currentUsername = displayUsername,
@@ -56,6 +79,7 @@ fun HomePanel(
             )
         }
 
+        // One consolidated AI voice control; no duplicate microphone/AI controls.
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -67,71 +91,27 @@ fun HomePanel(
                 border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                            Text("FYNX", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
-                            Spacer(Modifier.width(4.dp))
-                            Icon(Icons.Default.Verified, contentDescription = "FYNX verified", tint = androidx.compose.ui.graphics.Color(0xFF3B82F6), modifier = Modifier.size(18.dp))
-                        }
-                        IconButton(onClick = onCreatePost) {
-                            Icon(Icons.Default.AddCircle, contentDescription = "Create a FYNX post")
-                        }
-                        IconButton(onClick = onOpenNotifications) {
-                            Icon(Icons.Default.NotificationsNone, contentDescription = "Notifications")
-                        }
-                    }
-                    Text(
-                        "Welcome to FYNX AI",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
                     Text(
                         if (displayUsername.isBlank()) "Your people. Your moments. Your world."
                         else "Welcome back, $displayUsername",
-                        color = FynxDesign.TextSecondary
+                        color = FynxDesign.TextSecondary,
+                        style = MaterialTheme.typography.bodyMedium
                     )
-                    HomeAiVoiceInlineControl()
+                    HomeAiVoiceInlineControl(Modifier.fillMaxWidth())
                 }
             }
         }
 
+        // Real remote feed owns captions, full media, engagement and marketplace posts.
         item {
             FynxRemoteHomeSocialPanel(
                 currentUsername = displayUsername,
                 onOpenFindPeople = onOpenFindPeople,
                 onOpenMarketplace = onOpenMarketplace
             )
-        }
-
-        item {
-            Card(
-                onClick = onOpenProfile,
-                modifier = Modifier.fillMaxWidth(),
-                shape = FynxDesign.CardShape,
-                colors = CardDefaults.cardColors(
-                    containerColor = FynxDesign.Surface,
-                    contentColor = FynxDesign.TextPrimary
-                ),
-                border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .45f))
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Your profile", fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "Photo, bio and account details",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = FynxDesign.TextSecondary
-                        )
-                    }
-                    Text("›", style = MaterialTheme.typography.titleLarge, color = FynxDesign.TextSecondary)
-                }
-            }
         }
     }
 }
