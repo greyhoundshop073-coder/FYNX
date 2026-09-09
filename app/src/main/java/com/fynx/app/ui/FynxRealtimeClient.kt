@@ -2,6 +2,7 @@ package com.fynx.app.ui
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.Handler
 import android.os.Looper
@@ -48,6 +49,8 @@ class FynxRealtimeClient(
     private val reconnectHandler = Handler(Looper.getMainLooper())
     private val pendingLock = Any()
     private val pendingPayloads = ArrayDeque<String>()
+    private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var socket: WebSocket? = null
     private var manuallyClosed = false
     private var reconnectAttempt = 0
@@ -56,12 +59,43 @@ class FynxRealtimeClient(
         manuallyClosed = false
         reconnectAttempt = 0
         reconnectHandler.removeCallbacksAndMessages(null)
+        registerNetworkCallback()
         connectInternal()
     }
 
+    private fun registerNetworkCallback() {
+        val manager = connectivityManager ?: return
+        if (networkCallback != null) return
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                if (manuallyClosed) return
+                reconnectHandler.removeCallbacksAndMessages(null)
+                reconnectAttempt = 0
+                if (socket == null) connectInternal()
+            }
+
+            override fun onLost(network: Network) {
+                if (manuallyClosed) return
+                if (!hasUsableNetwork()) {
+                    socket?.cancel()
+                    socket = null
+                    onStateChanged(State.DISCONNECTED)
+                }
+            }
+        }
+        runCatching { manager.registerNetworkCallback(NetworkRequestFactory.create(), callback) }
+            .onSuccess { networkCallback = callback }
+    }
+
+    private fun unregisterNetworkCallback() {
+        val manager = connectivityManager
+        val callback = networkCallback ?: return
+        networkCallback = null
+        runCatching { manager?.unregisterNetworkCallback(callback) }
+    }
+
     private fun hasUsableNetwork(): Boolean = runCatching {
-        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return@runCatching true
+        val manager = connectivityManager ?: return@runCatching true
         val network = manager.activeNetwork ?: return@runCatching false
         val capabilities = manager.getNetworkCapabilities(network) ?: return@runCatching false
         capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
@@ -168,5 +202,11 @@ class FynxRealtimeClient(
     fun acknowledgeMessage(messageId: String) { messageId.toLongOrNull()?.let { sendJson(JSONObject().apply { put("type", "message_ack"); put("messageId", it) }) } }
     private fun sendJson(payload: JSONObject) { val value = payload.toString(); if (socket?.send(value) == true) return; synchronized(pendingLock) { if (pendingPayloads.size >= 100) pendingPayloads.removeFirst(); pendingPayloads.addLast(value) } }
     private fun flushPending(webSocket: WebSocket) { while (true) { val next = synchronized(pendingLock) { if (pendingPayloads.isEmpty()) null else pendingPayloads.removeFirst() } ?: break; if (!webSocket.send(next)) { synchronized(pendingLock) { pendingPayloads.addFirst(next) }; break } } }
-    fun close() { manuallyClosed = true; reconnectHandler.removeCallbacksAndMessages(null); synchronized(pendingLock) { pendingPayloads.clear() }; socket?.close(1000, "FYNX conversation closed"); socket = null; onStateChanged(State.DISCONNECTED); client.connectionPool.evictAll() }
+    fun close() { manuallyClosed = true; reconnectHandler.removeCallbacksAndMessages(null); unregisterNetworkCallback(); synchronized(pendingLock) { pendingPayloads.clear() }; socket?.close(1000, "FYNX conversation closed"); socket = null; onStateChanged(State.DISCONNECTED); client.connectionPool.evictAll() }
+}
+
+private object NetworkRequestFactory {
+    fun create(): android.net.NetworkRequest = android.net.NetworkRequest.Builder()
+        .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        .build()
 }
