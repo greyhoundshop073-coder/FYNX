@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -53,16 +54,10 @@ fun HomePanel(
             ) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     Text("FYNX", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
-                    Spacer(Modifier.width(4.dp))
-                    Icon(
-                        Icons.Default.Verified,
-                        contentDescription = "FYNX verified",
-                        tint = androidx.compose.ui.graphics.Color(0xFF3B82F6),
-                        modifier = Modifier.size(18.dp)
-                    )
                 }
+                // The reference uses the camera/create action in this top position.
                 IconButton(onClick = onCreatePost) {
-                    Icon(Icons.Default.AddCircle, contentDescription = "Create post")
+                    Icon(Icons.Default.PhotoCamera, contentDescription = "Create photo or video post")
                 }
                 IconButton(onClick = onOpenNotifications) {
                     Icon(Icons.Default.NotificationsNone, contentDescription = "Notifications")
@@ -70,7 +65,6 @@ fun HomePanel(
             }
         }
 
-        // Status/Stories directly follows the header like the master reference.
         item {
             FynxVisibleUpdatesPanel(
                 currentUsername = displayUsername,
@@ -79,7 +73,6 @@ fun HomePanel(
             )
         }
 
-        // One consolidated AI voice control; no duplicate microphone/AI controls.
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -105,7 +98,6 @@ fun HomePanel(
             }
         }
 
-        // Real remote feed owns captions, full media, engagement and marketplace posts.
         item {
             FynxRemoteHomeSocialPanel(
                 currentUsername = displayUsername,
