@@ -35,25 +35,34 @@ function uuid(value) {
 async function ensureProtectionSchema() {
   if (!pool) return;
   if (!schemaPromise) {
-    schemaPromise = pool.query(`
-      ALTER TABLE marketplace_protection_cases ADD COLUMN IF NOT EXISTS dispute_id UUID;
-      DO $$ BEGIN
-        ALTER TABLE marketplace_protection_cases
-          ADD CONSTRAINT marketplace_protection_cases_dispute_fk
-          FOREIGN KEY (dispute_id) REFERENCES marketplace_order_disputes(id) ON DELETE SET NULL;
-      EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-      CREATE INDEX IF NOT EXISTS marketplace_protection_cases_dispute_idx ON marketplace_protection_cases (dispute_id);
-      CREATE TABLE IF NOT EXISTS marketplace_protection_audit (
-        id BIGSERIAL PRIMARY KEY,
-        case_id UUID NOT NULL REFERENCES marketplace_protection_cases(id) ON DELETE CASCADE,
-        order_id UUID NOT NULL REFERENCES marketplace_orders(id) ON DELETE CASCADE,
-        actor_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
-        action TEXT NOT NULL,
-        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS marketplace_protection_audit_case_idx ON marketplace_protection_audit (case_id, created_at ASC);
-    `).catch((error) => {
+    schemaPromise = (async () => {
+      const tables = await pool.query(`SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('marketplace_protection_cases','marketplace_order_disputes')`);
+      const names = new Set(tables.rows.map((row) => row.table_name));
+      if (!names.has('marketplace_protection_cases')) return;
+      if (names.has('marketplace_order_disputes')) {
+        await pool.query(`
+          ALTER TABLE marketplace_protection_cases ADD COLUMN IF NOT EXISTS dispute_id UUID;
+          DO $$ BEGIN
+            ALTER TABLE marketplace_protection_cases
+              ADD CONSTRAINT marketplace_protection_cases_dispute_fk
+              FOREIGN KEY (dispute_id) REFERENCES marketplace_order_disputes(id) ON DELETE SET NULL;
+          EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+          CREATE INDEX IF NOT EXISTS marketplace_protection_cases_dispute_idx ON marketplace_protection_cases (dispute_id);
+        `);
+      }
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS marketplace_protection_audit (
+          id BIGSERIAL PRIMARY KEY,
+          case_id UUID NOT NULL REFERENCES marketplace_protection_cases(id) ON DELETE CASCADE,
+          order_id UUID NOT NULL REFERENCES marketplace_orders(id) ON DELETE CASCADE,
+          actor_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+          action TEXT NOT NULL,
+          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS marketplace_protection_audit_case_idx ON marketplace_protection_audit (case_id, created_at ASC);
+      `);
+    })().catch((error) => {
       schemaPromise = undefined;
       throw error;
     });
@@ -63,15 +72,22 @@ async function ensureProtectionSchema() {
 
 async function reconcileOpenDisputes() {
   if (!pool) return;
+  const client = await pool.connect();
   try {
-    const tables = await pool.query(`
+    const tables = await client.query(`
       SELECT table_name FROM information_schema.tables
       WHERE table_schema=current_schema() AND table_name IN ('marketplace_order_disputes','marketplace_protection_cases')
     `);
     const names = new Set(tables.rows.map((row) => row.table_name));
     if (!names.has('marketplace_order_disputes') || !names.has('marketplace_protection_cases')) return;
 
-    const disputes = await pool.query(`
+    const columns = await client.query(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_schema=current_schema() AND table_name='marketplace_protection_cases' AND column_name='dispute_id'
+    `);
+    if (!columns.rowCount) return;
+
+    const disputes = await client.query(`
       SELECT d.id,d.order_id,d.opened_by,d.reason,d.details,d.status,o.buyer_id,o.seller_id
       FROM marketplace_order_disputes d
       JOIN marketplace_orders o ON o.id=d.order_id
@@ -85,10 +101,6 @@ async function reconcileOpenDisputes() {
       if (!role) continue;
       const caseId = crypto.randomUUID();
       const key = `FYNX-DISPUTE-${dispute.id}`;
-      try {
-        await pool.query('BEGIN');
-      } catch {}
-      const client = await pool.connect();
       try {
         await client.query('BEGIN');
         const inserted = await client.query(`
@@ -107,12 +119,12 @@ async function reconcileOpenDisputes() {
       } catch (error) {
         await client.query('ROLLBACK').catch(() => {});
         console.error('marketplace protection dispute reconciliation', error);
-      } finally {
-        client.release();
       }
     }
   } catch (error) {
     console.error('marketplace protection dispute scan', error);
+  } finally {
+    client.release();
   }
 }
 
