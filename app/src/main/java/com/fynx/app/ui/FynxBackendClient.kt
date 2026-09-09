@@ -24,6 +24,7 @@ object FynxBackendClient {
     private const val KEY_BASE_URL = "base_url"
     private const val LEGACY_ACCESS_TOKEN = "access_token"
     private const val PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"
+    private const val LEGACY_PRODUCTION_BASE_URL = "https://ai-creative-studio-572v.onrender.com"
     private const val MAX_IDEMPOTENT_RETRIES = 2
     private const val RETRY_DELAY_MS = 750L
     private const val NETWORK_VALIDATION_WAIT_MS = 6_000L
@@ -44,8 +45,15 @@ object FynxBackendClient {
     fun availability(context: Context): FynxBackendAvailability =
         if (baseUrl(context).isBlank()) FynxBackendAvailability.DISABLED else FynxBackendAvailability.CONFIGURED
 
-    fun baseUrl(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        .getString(KEY_BASE_URL, PRODUCTION_BASE_URL)?.trim()?.trimEnd('/') ?: PRODUCTION_BASE_URL
+    fun baseUrl(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val stored = prefs.getString(KEY_BASE_URL, null)?.trim()?.trimEnd()
+        if (stored.equals(LEGACY_PRODUCTION_BASE_URL, ignoreCase = true)) {
+            prefs.edit().putString(KEY_BASE_URL, PRODUCTION_BASE_URL).apply()
+            return PRODUCTION_BASE_URL
+        }
+        return stored?.trimEnd('/')?.takeIf { it.isNotBlank() } ?: PRODUCTION_BASE_URL
+    }
 
     fun configureBaseUrl(context: Context, value: String) {
         val normalized = value.trim().trimEnd('/')
