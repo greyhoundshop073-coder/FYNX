@@ -1,0 +1,1 @@
+Current Home implementation state is preserved. Latest known production code before the documentation commits: FYNX Home shell + real remote feed + AI voice + Status/Stories. Do not treat documentation commits as feature completion; the next chat must continue implementation from main and verify the full build.
