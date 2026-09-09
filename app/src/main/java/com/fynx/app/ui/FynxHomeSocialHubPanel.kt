@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -63,7 +64,12 @@ fun FynxHomeSocialHubPanel(
 
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
-            runCatching { context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
             capturedUri = uri
             capturedType = if (context.contentResolver.getType(uri)?.startsWith("video/") == true) "video" else "image"
             showComposer = true
@@ -122,18 +128,55 @@ fun FynxHomeSocialHubPanel(
                     if (!postingAllowed) {
                         Text("Posting is disabled by your Posts privacy setting.", color = MaterialTheme.colorScheme.error)
                     }
-                    OutlinedTextField(value = text, onValueChange = { text = it.take(4000) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 7, placeholder = { Text("Share something with your FYNX circle…") }, enabled = !posting && postingAllowed)
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it.take(4000) },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 7,
+                        placeholder = { Text("Share something with your FYNX circle…") },
+                        enabled = !posting && postingAllowed
+                    )
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { showComposer = false; showCamera = true }, modifier = Modifier.weight(1f), enabled = !posting && postingAllowed) { Icon(Icons.Default.CameraAlt, null); Spacer(Modifier.width(4.dp)); Text("Camera") }
-                        OutlinedButton(onClick = { gallery.launch(arrayOf("image/*", "video/*")) }, modifier = Modifier.weight(1f), enabled = !posting && postingAllowed) { Icon(Icons.Default.VideoLibrary, null); Spacer(Modifier.width(4.dp)); Text("Gallery") }
+                        OutlinedButton(
+                            onClick = { showComposer = false; showCamera = true },
+                            modifier = Modifier.weight(1f),
+                            enabled = !posting && postingAllowed
+                        ) {
+                            Icon(Icons.Default.CameraAlt, null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Camera")
+                        }
+                        OutlinedButton(
+                            onClick = { gallery.launch(arrayOf("image/*", "video/*")) },
+                            modifier = Modifier.weight(1f),
+                            enabled = !posting && postingAllowed
+                        ) {
+                            Icon(Icons.Default.VideoLibrary, null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Gallery")
+                        }
                     }
                     capturedUri?.let {
-                        Text(if (capturedType == "video") "Video captured and ready" else "Photo captured and ready", color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            if (capturedType == "video") "Video captured and ready" else "Photo captured and ready",
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                     Text("Who can see this?", style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(visibility == FynxPostVisibility.PUBLIC, { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") }, enabled = !posting && postingAllowed && configuredPostVisibility == "Everyone")
-                        FilterChip(visibility == FynxPostVisibility.FRIENDS_ONLY, { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") }, enabled = !posting && postingAllowed)
+                        FilterChip(
+                            selected = visibility == FynxPostVisibility.PUBLIC,
+                            onClick = { visibility = FynxPostVisibility.PUBLIC },
+                            label = { Text("Public") },
+                            enabled = !posting && postingAllowed && configuredPostVisibility == "Everyone"
+                        )
+                        FilterChip(
+                            selected = visibility == FynxPostVisibility.FRIENDS_ONLY,
+                            onClick = { visibility = FynxPostVisibility.FRIENDS_ONLY },
+                            label = { Text("Friends") },
+                            enabled = !posting && postingAllowed
+                        )
                     }
                     if (networkLevel == FynxNetworkQuality.Level.OFFLINE) {
                         Text("You are offline. Reconnect before publishing this post.", color = MaterialTheme.colorScheme.error)
@@ -142,25 +185,35 @@ fun FynxHomeSocialHubPanel(
                 }
             },
             confirmButton = {
-                Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUri != null), onClick = {
-                    if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) {
-                        notice = "You are offline. Reconnect before publishing this post."
-                        return@Button
+                Button(
+                    enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUri != null),
+                    onClick = {
+                        if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) {
+                            notice = "You are offline. Reconnect before publishing this post."
+                            return@Button
+                        }
+                        posting = true
+                        notice = null
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                FynxRemoteSocialClient.createPost(context, text, visibility, capturedUri)
+                            }
+                            result.onSuccess {
+                                showComposer = false
+                                capturedUri = null
+                                text = ""
+                            }.onFailure { notice = it.message ?: "Post could not be published." }
+                            posting = false
+                        }
                     }
-                    posting = true
-                    notice = null
-                    scope.launch {
-                        val result = withContext(Dispatchers.IO) { FynxRemoteSocialClient.createPost(context, text, visibility, capturedUri) }
-                        result.onSuccess {
-                            showComposer = false
-                            capturedUri = null
-                            text = ""
-                        }.onFailure { notice = it.message ?: "Post could not be published." }
-                        posting = false
-                    }
-                }) { Text(if (posting) "Publishing…" else "Post") }
+                ) { Text(if (posting) "Publishing…" else "Post") }
             },
-            dismissButton = { TextButton(onClick = { if (!posting) { showComposer = false; capturedUri = null } }, enabled = !posting) { Text("Cancel") } }
+            dismissButton = {
+                TextButton(
+                    onClick = { if (!posting) { showComposer = false; capturedUri = null } },
+                    enabled = !posting
+                ) { Text("Cancel") }
+            }
         )
     }
 

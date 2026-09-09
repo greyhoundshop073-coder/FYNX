@@ -108,12 +108,47 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
             }
         }
         posts.forEach { post ->
-            RemotePostCard(post, currentUsername,
-                onLike = { id -> scope.launch { FynxRemoteSocialClient.like(context, id).onSuccess { result -> val (liked, count) = result; posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = liked, likeCount = count) else it } }.onFailure { error = it.message } } },
-                onComment = { commentsPost = post }, onLikes = { likesPost = post },
-                onFollow = { following -> scope.launch { FynxRemoteSocialClient.follow(context, post.authorUsername, following).onSuccess { now -> posts = posts.map { if (it.authorUsername.equals(post.authorUsername, true)) it.copy(followedByCurrentUser = now) else it } }.onFailure { error = it.message } } },
-                onDelete = { scope.launch { FynxRemoteSocialClient.deletePost(context, post.id).onSuccess { posts = posts.filterNot { it.id == post.id } }.onFailure { error = it.message } } },
-                onShare = { sharePost(context, post) }, onOpenMarketplace = onOpenMarketplace)
+            RemotePostCard(
+                post = post,
+                currentUsername = currentUsername,
+                onLike = { id ->
+                    scope.launch {
+                        FynxRemoteSocialClient.like(context, id)
+                            .onSuccess { result ->
+                                val (liked, count) = result
+                                posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = liked, likeCount = count) else it }
+                            }
+                            .onFailure { error = it.message }
+                    }
+                },
+                onComment = { commentsPost = post },
+                onLikes = { likesPost = post },
+                onFollow = { following ->
+                    scope.launch {
+                        FynxRemoteSocialClient.follow(context, post.authorUsername, following)
+                            .onSuccess { now -> posts = posts.map { if (it.authorUsername.equals(post.authorUsername, true)) it.copy(followedByCurrentUser = now) else it } }
+                            .onFailure { error = it.message }
+                    }
+                },
+                onDelete = {
+                    scope.launch {
+                        FynxRemoteSocialClient.deletePost(context, post.id)
+                            .onSuccess { posts = posts.filterNot { it.id == post.id } }
+                            .onFailure { error = it.message }
+                    }
+                },
+                onShare = {
+                    scope.launch { FynxDiscoveryClient.recordEngagement(context, "SHARE", post.id) }
+                    sharePost(context, post)
+                },
+                onSave = {
+                    scope.launch {
+                        FynxDiscoveryClient.recordEngagement(context, "SAVE", post.id)
+                            .onFailure { error = it.message }
+                    }
+                },
+                onOpenMarketplace = onOpenMarketplace
+            )
         }
         if (!loading && hasMore) {
             OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore && !feedRequestInFlight, modifier = Modifier.fillMaxWidth()) { Text(if (loadingMore) "Loading more posts…" else "Load more posts") }
@@ -150,7 +185,7 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
                     }
                 }) { Text(if (busy) "Publishing…" else "Post") }
             },
-            dismissButton = { TextButton(enabled = !busy, onClick = { composerOpen = false; selectedMedia = null; selectedMediaType = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(enabled = !busy, onClick = { composerOpen = false; selectedMedia = null; selectedMediaType = null }) { Text("Cancel") } }
         )
     }
     if (voiceRecorderOpen) {
@@ -164,7 +199,18 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
 }
 
 @Composable
-private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsername: String, onLike: (String) -> Unit, onComment: () -> Unit, onLikes: () -> Unit, onFollow: (Boolean) -> Unit, onDelete: () -> Unit, onShare: () -> Unit, onOpenMarketplace: () -> Unit) {
+private fun RemotePostCard(
+    post: FynxRemoteSocialClient.RemotePost,
+    currentUsername: String,
+    onLike: (String) -> Unit,
+    onComment: () -> Unit,
+    onLikes: () -> Unit,
+    onFollow: (Boolean) -> Unit,
+    onDelete: () -> Unit,
+    onShare: () -> Unit,
+    onSave: () -> Unit,
+    onOpenMarketplace: () -> Unit
+) {
     val mine = post.authorUsername.equals(currentUsername.removePrefix("@"), true)
     val marketplaceAd = post.text.startsWith(MARKETPLACE_AD_MARKER)
     val displayText = if (marketplaceAd) post.text.removePrefix(MARKETPLACE_AD_MARKER).trim() else post.text
@@ -174,11 +220,7 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
                 FynxAvatar(post.authorUsername, Modifier.size(46.dp).clip(CircleShape))
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(post.authorDisplayName.ifBlank { post.authorUsername }, style = MaterialTheme.typography.titleSmall)
-                        Spacer(Modifier.width(4.dp))
-                        Text("✓", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
-                    }
+                    Text(post.authorDisplayName.ifBlank { post.authorUsername }, style = MaterialTheme.typography.titleSmall)
                     Text("${post.authorUsername.removePrefix("@")} • ${relative(post.timestamp)}", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
                 }
                 if (mine) IconButton(onClick = onDelete) { Icon(Icons.Default.MoreHoriz, "Post options") }
@@ -196,7 +238,7 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
                 IconButton(onClick = onShare) { Icon(Icons.Default.Share, "Share") }
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onLikes) { Icon(Icons.Default.People, "People who liked this") }
-                IconButton(onClick = onShare) { Icon(Icons.Default.BookmarkBorder, "Save") }
+                IconButton(onClick = onSave) { Icon(Icons.Default.BookmarkBorder, "Save") }
             }
         }
     }
@@ -224,12 +266,75 @@ private fun RemoteSocialMedia(path: String, type: String?) {
 }
 
 @Composable
-private fun CommentsDialog(post: FynxRemoteSocialClient.RemotePost, onClose: () -> Unit) { val context = LocalContext.current; val scope = rememberCoroutineScope(); var list by remember(post.id) { mutableStateOf<List<FynxRemoteSocialClient.RemoteComment>>(emptyList()) }; var text by remember { mutableStateOf("") }; LaunchedEffect(post.id) { FynxRemoteSocialClient.comments(context, post.id).onSuccess { list = it } }; AlertDialog(onDismissRequest = onClose, title = { Text("Comments") }, text = { Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { list.forEach { comment -> Column { Text(comment.authorDisplayName.ifBlank { comment.authorUsername }); Text(comment.text); Text(relative(comment.timestamp), style = MaterialTheme.typography.labelSmall) } }; if (list.isEmpty()) Text("No comments yet."); OutlinedTextField(text, { text = it.take(1000) }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Write a comment…") }) } }, confirmButton = { TextButton(onClick = { if (text.isNotBlank()) scope.launch { FynxRemoteSocialClient.addComment(context, post.id, text).onSuccess { list = list + it; text = "" } } }) { Text("Comment") } }, dismissButton = { TextButton(onClick = onClose) { Text("Close") } }) }
+private fun CommentsDialog(post: FynxRemoteSocialClient.RemotePost, onClose: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var list by remember(post.id) { mutableStateOf<List<FynxRemoteSocialClient.RemoteComment>>(emptyList()) }
+    var text by remember { mutableStateOf("") }
+    LaunchedEffect(post.id) { FynxRemoteSocialClient.comments(context, post.id).onSuccess { list = it } }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Comments") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                list.forEach { comment ->
+                    Column {
+                        Text(comment.authorDisplayName.ifBlank { comment.authorUsername })
+                        Text(comment.text)
+                        Text(relative(comment.timestamp), style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                if (list.isEmpty()) Text("No comments yet.")
+                OutlinedTextField(text, { text = it.take(1000) }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Write a comment…") })
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                if (text.isNotBlank()) scope.launch {
+                    FynxRemoteSocialClient.addComment(context, post.id, text)
+                        .onSuccess { list = list + it; text = "" }
+                }
+            }) { Text("Comment") }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("Close") } }
+    )
+}
 
 @Composable
-private fun LikesDialog(post: FynxRemoteSocialClient.RemotePost, onClose: () -> Unit) { val context = LocalContext.current; var list by remember(post.id) { mutableStateOf<List<FynxRemoteSocialClient.RemoteUser>>(emptyList()) }; LaunchedEffect(post.id) { FynxRemoteSocialClient.likes(context, post.id).onSuccess { list = it } }; AlertDialog(onDismissRequest = onClose, title = { Text("People who liked this") }, text = { LazyColumn { items(list) { user -> Row(Modifier.fillMaxWidth().padding(7.dp), verticalAlignment = Alignment.CenterVertically) { FynxAvatar(user.username, Modifier.size(38.dp)); Spacer(Modifier.width(10.dp)); Column { Text(user.displayName.ifBlank { user.username }); Text("@${user.username.removePrefix("@")}", style = MaterialTheme.typography.labelSmall) } } } } }, confirmButton = { TextButton(onClick = onClose) { Text("Close") } }) }
+private fun LikesDialog(post: FynxRemoteSocialClient.RemotePost, onClose: () -> Unit) {
+    val context = LocalContext.current
+    var list by remember(post.id) { mutableStateOf<List<FynxRemoteSocialClient.RemoteUser>>(emptyList()) }
+    LaunchedEffect(post.id) { FynxRemoteSocialClient.likes(context, post.id).onSuccess { list = it } }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("People who liked this") },
+        text = {
+            LazyColumn {
+                items(list) { user ->
+                    Row(Modifier.fillMaxWidth().padding(7.dp), verticalAlignment = Alignment.CenterVertically) {
+                        FynxAvatar(user.username, Modifier.size(38.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text(user.displayName.ifBlank { user.username })
+                            Text("@${user.username.removePrefix("@")}", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Close") } }
+    )
+}
 
-private fun relative(timestamp: Long): String { val minutes = TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L)); return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" } }
+private fun relative(timestamp: Long): String {
+    val minutes = TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L))
+    return when {
+        minutes < 1 -> "now"
+        minutes < 60 -> "${minutes}m"
+        minutes < 1440 -> "${minutes / 60}h"
+        else -> "${minutes / 1440}d"
+    }
+}
 
 @Composable
 private fun AudioPostPlayer(file: File) {
