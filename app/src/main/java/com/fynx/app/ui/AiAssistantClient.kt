@@ -12,4 +12,13 @@ object AiAssistantClient {
             throw IllegalStateException("Assistant returned an empty response")
         }
     }
+
+    suspend fun improvePostCaption(context: Context, caption: String): Result<String> {
+        val clean = caption.trim().take(4000)
+        if (clean.isBlank()) return Result.failure(IllegalArgumentException("Caption is empty"))
+        return sendMessage(
+            context,
+            "Improve this social-media post caption. Keep the user's original meaning and facts, make it natural, clear and engaging, and do not add invented personal details. Return only the finished caption.\n\nCaption:\n$clean"
+        )
+    }
 }
