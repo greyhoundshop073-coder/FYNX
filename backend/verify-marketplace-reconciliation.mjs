@@ -16,7 +16,7 @@ const checks = [
   ['transfer failure/reversal webhook', webhook.includes("eventName === 'transfer.failed'") && webhook.includes("eventName === 'transfer.reversed'")],
   ['webhook amount validation', webhook.includes('expectedAmount') && webhook.includes('providerAmount')],
   ['webhook currency validation', webhook.includes('providerCurrency') && webhook.includes('currencyMatches')],
-  ['refund remains asynchronous', webhook.includes("refund.pending") && webhook.includes("refund.processed")],
+  ['refund remains asynchronous', webhook.includes("eventName.startsWith('refund.')") && webhook.includes("eventName === 'refund.processed'") && webhook.includes("eventName === 'refund.failed'") && webhook.includes("SET status='PENDING'")],
   ['financial operation provider reference uniqueness', settlement.includes('marketplace_fin_ops_provider_ref_idx')],
   ['ledger idempotency uniqueness', settlement.includes('idempotency_key TEXT NOT NULL UNIQUE')]
 ];
