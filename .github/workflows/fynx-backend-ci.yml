@@ -48,6 +48,7 @@ jobs:
           node --check marketplaceTransactions.js
           node --check marketplaceReputation.js
           node --check marketplaceSettlement.js
+          node --check marketplaceSettlementWorker.js
           node --check marketplaceProtection.js
           node --check marketplaceAdvertising.js
           node --check scalability.js
