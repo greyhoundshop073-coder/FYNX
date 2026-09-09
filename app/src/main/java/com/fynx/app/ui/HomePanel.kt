@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.*
@@ -37,7 +38,8 @@ fun HomePanel(
     onOpenMarketplace: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
     onOpenFindPeople: () -> Unit = {},
-    onOpenAi: () -> Unit = {}
+    onOpenAi: () -> Unit = {},
+    onCreatePost: () -> Unit = {}
 ) {
     val displayUsername = currentUsername.trim().removePrefix("@").trim()
 
@@ -74,10 +76,18 @@ fun HomePanel(
                             Spacer(Modifier.width(4.dp))
                             Icon(Icons.Default.Verified, contentDescription = "FYNX verified", tint = androidx.compose.ui.graphics.Color(0xFF3B82F6), modifier = Modifier.size(18.dp))
                         }
+                        IconButton(onClick = onCreatePost) {
+                            Icon(Icons.Default.AddCircle, contentDescription = "Create a FYNX post")
+                        }
                         IconButton(onClick = onOpenNotifications) {
                             Icon(Icons.Default.NotificationsNone, contentDescription = "Notifications")
                         }
                     }
+                    Text(
+                        "Welcome to FYNX AI",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
                     Text(
                         if (displayUsername.isBlank()) "Your people. Your moments. Your world."
                         else "Welcome back, $displayUsername",
