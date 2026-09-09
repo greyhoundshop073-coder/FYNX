@@ -7,11 +7,13 @@ import android.net.Uri
 import android.util.Base64
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -23,6 +25,12 @@ object FynxProductionMessaging {
     private const val IMAGE_QUALITY = 85
     private const val MAX_MESSAGE_LENGTH = 4000
     private const val MAX_VOICE_DURATION_MS = 60 * 60 * 1000L
+    private const val REMOTE_MEDIA_RETRIES = 2
+    private const val REMOTE_MEDIA_RETRY_DELAY_MS = 700L
+    private const val REMOTE_MEDIA_CONNECT_TIMEOUT_MS = 15_000
+    private const val REMOTE_MEDIA_READ_TIMEOUT_MS = 30_000
+    private const val REMOTE_MEDIA_WEAK_CONNECT_TIMEOUT_MS = 20_000
+    private const val REMOTE_MEDIA_WEAK_READ_TIMEOUT_MS = 45_000
 
     data class RemoteMedia(val id: String, val mimeType: String, val byteSize: Int)
     data class RemoteMessage(
@@ -127,30 +135,92 @@ object FynxProductionMessaging {
             val existing = directory.listFiles()?.firstOrNull { it.name.startsWith("${safeId}.") && it.length() > 0L }
             if (existing != null) return@withContext Result.success(Uri.fromFile(existing))
             val absoluteUrl = if (mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://")) mediaUrl else FynxBackendClient.baseUrl(context).trimEnd('/') + "/" + mediaUrl.trimStart('/')
-            val connection = (URL(absoluteUrl).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 10_000; readTimeout = 20_000; useCaches = false; setRequestProperty("Accept", "*/*")
-                FynxBackendClient.accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
-            }
-            try {
-                val status = connection.responseCode
-                if (status == HttpURLConnection.HTTP_UNAUTHORIZED) { FynxBackendClient.saveAccessToken(context, null); throw IllegalStateException("FYNX media session expired") }
-                require(status in 200..299) { "FYNX media could not be loaded (HTTP $status)." }
-                val contentLength = connection.contentLengthLong
-                require(contentLength <= MAX_MEDIA_BYTES || contentLength < 0L) { "Remote media is too large." }
-                val extension = when (connection.contentType.orEmpty().lowercase()) {
-                    "video/mp4" -> "mp4"; "video/webm" -> "webm"; "video/quicktime" -> "mov"; "audio/mp4", "audio/x-m4a" -> "m4a"; "audio/mpeg" -> "mp3"; "audio/aac" -> "aac"; "audio/wav" -> "wav"; "image/png" -> "png"; "image/webp" -> "webp"; "image/gif" -> "gif"; else -> "bin"
+            var attempt = 0
+            while (true) {
+                try {
+                    awaitRemoteMediaReadiness(context)
+                    val uri = downloadRemoteMediaAttempt(context, directory, safeId, absoluteUrl)
+                    return@withContext Result.success(uri)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Throwable) {
+                    if (!isRetryableRemoteMediaFailure(error) || attempt >= REMOTE_MEDIA_RETRIES) throw error
+                    attempt++
+                    delay(REMOTE_MEDIA_RETRY_DELAY_MS * attempt)
                 }
-                val target = File(directory, "$safeId.$extension")
-                connection.inputStream.use { input -> target.outputStream().use { output ->
-                    val buffer = ByteArray(32 * 1024); var total = 0L
-                    while (true) { val read = input.read(buffer); if (read <= 0) break; total += read; require(total <= MAX_MEDIA_BYTES) { "Remote media is too large." }; output.write(buffer, 0, read) }
-                } }
-                require(target.length() > 0L) { "Remote media is empty." }
-                Result.success(Uri.fromFile(target))
-            } finally { connection.disconnect() }
+            }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (error: Throwable) { Result.failure(error) }
     }
+
+    private suspend fun awaitRemoteMediaReadiness(context: Context) {
+        if (!FynxBackendClient.isNetworkAvailable(context)) {
+            var waited = 0L
+            while (waited < 6_000L && !FynxBackendClient.isNetworkAvailable(context)) {
+                delay(500L)
+                waited += 500L
+            }
+            if (!FynxBackendClient.isNetworkAvailable(context)) throw IOException("FYNX network connection is unavailable")
+        }
+        // Reuse the same production readiness gate used by all protected backend traffic.
+        FynxBackendClient.get(context, "/ready").getOrThrow()
+    }
+
+    private fun downloadRemoteMediaAttempt(context: Context, directory: File, safeId: String, absoluteUrl: String): Uri {
+        val weakNetwork = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK
+        val connection = (URL(absoluteUrl).openConnection() as HttpURLConnection).apply {
+            connectTimeout = if (weakNetwork) REMOTE_MEDIA_WEAK_CONNECT_TIMEOUT_MS else REMOTE_MEDIA_CONNECT_TIMEOUT_MS
+            readTimeout = if (weakNetwork) REMOTE_MEDIA_WEAK_READ_TIMEOUT_MS else REMOTE_MEDIA_READ_TIMEOUT_MS
+            useCaches = false
+            setRequestProperty("Accept", "*/*")
+            setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0")
+            setRequestProperty("Pragma", "no-cache")
+            setRequestProperty("Connection", "close")
+            setRequestProperty("User-Agent", "FYNX-Android/1")
+            FynxBackendClient.accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
+        }
+        try {
+            val status = connection.responseCode
+            if (status == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                FynxBackendClient.saveAccessToken(context, null)
+                throw IllegalStateException("FYNX media session expired")
+            }
+            if (status !in 200..299) throw RemoteMediaHttpException(status)
+            val contentLength = connection.contentLengthLong
+            require(contentLength <= MAX_MEDIA_BYTES || contentLength < 0L) { "Remote media is too large." }
+            val extension = when (connection.contentType.orEmpty().lowercase().substringBefore(';').trim()) {
+                "video/mp4" -> "mp4"; "video/webm" -> "webm"; "video/quicktime" -> "mov"; "audio/mp4", "audio/x-m4a" -> "m4a"; "audio/mpeg" -> "mp3"; "audio/aac" -> "aac"; "audio/wav" -> "wav"; "image/png" -> "png"; "image/webp" -> "webp"; "image/gif" -> "gif"; "image/jpeg" -> "jpg"; else -> "bin"
+            }
+            val target = File(directory, "$safeId.$extension")
+            val temp = File(directory, ".$safeId.$extension.part")
+            if (temp.exists()) temp.delete()
+            connection.inputStream.use { input -> temp.outputStream().use { output ->
+                val buffer = ByteArray(32 * 1024); var total = 0L
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read <= 0) break
+                    total += read
+                    require(total <= MAX_MEDIA_BYTES) { "Remote media is too large." }
+                    output.write(buffer, 0, read)
+                }
+            } }
+            require(temp.length() > 0L) { "Remote media is empty." }
+            if (target.exists()) target.delete()
+            require(temp.renameTo(target)) { "Unable to cache remote media." }
+            return Uri.fromFile(target)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun isRetryableRemoteMediaFailure(error: Throwable): Boolean {
+        if (error is RemoteMediaHttpException) return error.status in setOf(408, 425, 429, 500, 502, 503, 504)
+        val message = error.message.orEmpty().lowercase()
+        return error is IOException || message.contains("timeout") || message.contains("timed out") ||
+            message.contains("connection") || message.contains("network") || message.contains("socket")
+    }
+
+    private class RemoteMediaHttpException(val status: Int) : IOException("FYNX media could not be loaded (HTTP $status).")
 
     suspend fun sendText(context: Context, recipientUsername: String, text: String, replyToId: String? = null, mediaId: String? = null, mediaType: String? = null, voiceDurationMs: Long = 0L): Result<RemoteMessage> {
         val normalizedRecipient = recipientUsername.trim().removePrefix("@").lowercase()
@@ -166,10 +236,6 @@ object FynxProductionMessaging {
         val body = JSONObject().apply { put("recipientUsername", normalizedRecipient); put("text", cleanText); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("voiceDurationMs", voiceDurationMs) }
         val result = FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
         if (result.isSuccess) return result
-
-        // A timed-out POST may have been committed by the server before the connection failed.
-        // Reconcile against authoritative history before reporting failure so the UI does not
-        // create a duplicate when the user retries an ambiguous send.
         if (isAmbiguousTransportFailure(result.exceptionOrNull())) {
             val recovered = history(context, normalizedRecipient).getOrNull()?.asReconciliationCandidate(
                 currentUsername = currentUsername,
