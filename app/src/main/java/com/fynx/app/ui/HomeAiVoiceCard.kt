@@ -52,12 +52,12 @@ fun HomeAiVoiceInlineControl(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .size(62.dp)
                 .background(
-                    if (connected) FynxDesign.Accent else FynxDesign.SurfaceRaised,
+                    if (connected) MaterialTheme.colorScheme.primary else FynxDesign.SurfaceRaised,
                     CircleShape
                 )
                 .border(
                     width = if (connecting || connected) 3.dp else 1.dp,
-                    color = if (connecting || connected) FynxDesign.Accent else FynxDesign.Outline.copy(alpha = .65f),
+                    color = if (connecting || connected) MaterialTheme.colorScheme.primary else FynxDesign.Outline.copy(alpha = .65f),
                     shape = CircleShape
                 ),
             contentAlignment = Alignment.Center
