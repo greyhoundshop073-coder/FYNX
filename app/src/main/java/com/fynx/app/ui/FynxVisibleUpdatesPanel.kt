@@ -44,20 +44,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
-fun FynxVisibleUpdatesPanel(
-    currentUsername: String,
-    onOpenStories: () -> Unit,
-    onOpenAi: () -> Unit
-) {
+fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, onOpenAi: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var statuses by remember { mutableStateOf<List<FynxStatus>>(emptyList()) }
-
-    LaunchedEffect(currentUsername) {
-        statuses = FynxStatusClient.list(context).getOrDefault(emptyList())
-    }
+    LaunchedEffect(currentUsername) { statuses = FynxStatusClient.list(context).getOrDefault(emptyList()) }
 
     val activeStatuses = statuses.filter { it.expiresAtMillis <= 0L || it.expiresAtMillis > System.currentTimeMillis() }
-    val grouped = activeStatuses.groupBy { it.ownerUsername }.mapNotNull { (_, list) -> list.maxByOrNull { it.createdAtMillis }?.let { it to list.size } }
+    val grouped = activeStatuses.groupBy { it.ownerUsername }
+        .mapNotNull { (_, list) -> list.maxByOrNull { it.createdAtMillis }?.let { it to list.size } }
 
     Card(
         onClick = onOpenStories,
@@ -66,45 +60,38 @@ fun FynxVisibleUpdatesPanel(
         colors = CardDefaults.cardColors(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface),
         border = null
     ) {
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Spacer(Modifier.width(14.dp))
-                Text("Status", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text("Status", Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                 TextButton(onClick = onOpenStories) { Text("See all") }
             }
-            LazyRow(contentPadding = PaddingValues(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
                     val own = grouped.firstOrNull { it.first.ownerUsername.equals(currentUsername, true) }
-                    FynxStatusPreviewCircle(status = own?.first, name = currentUsername, label = "Your status", active = true, onClick = onOpenStories, statusCount = own?.second ?: 0)
+                    FynxStatusPreviewCircle(own?.first, currentUsername.ifBlank { "You" }, "Your status", true, onOpenStories, own?.second ?: 0)
                 }
                 item {
                     Column(Modifier.width(82.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         IconButton(onClick = onOpenStories, modifier = Modifier.size(70.dp)) {
-                            androidx.compose.foundation.layout.Box(Modifier.size(62.dp).background(FynxDesign.SurfaceRaised, CircleShape).border(2.dp, MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Add, "Create status", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
-                            }
+                            androidx.compose.foundation.layout.Box(
+                                Modifier.size(64.dp).background(FynxDesign.SurfaceRaised, CircleShape).border(3.dp, MaterialTheme.colorScheme.primary, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) { Icon(Icons.Default.Add, "Create status", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp)) }
                         }
                         Text("Create status", style = MaterialTheme.typography.labelSmall, maxLines = 1)
                     }
                 }
                 items(grouped.filterNot { it.first.ownerUsername.equals(currentUsername, true) }) { (status, count) ->
-                    FynxStatusPreviewCircle(status = status, name = status.ownerUsername, label = status.ownerDisplayName.ifBlank { status.ownerUsername }, active = true, onClick = onOpenStories, statusCount = count)
+                    FynxStatusPreviewCircle(status, status.ownerUsername, status.ownerDisplayName.ifBlank { status.ownerUsername }, true, onOpenStories, count)
                 }
             }
-            Spacer(Modifier.size(4.dp))
         }
     }
 }
 
 @Composable
-private fun FynxStatusPreviewCircle(
-    status: FynxStatus?,
-    name: String,
-    label: String,
-    active: Boolean,
-    onClick: () -> Unit,
-    statusCount: Int = 0
-) {
+private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: String, active: Boolean, onClick: () -> Unit, statusCount: Int = 0) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var bitmap by remember(status?.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
 
@@ -113,17 +100,13 @@ private fun FynxStatusPreviewCircle(
         if (status != null && !status.contentUri.isNullOrBlank()) {
             bitmap = withContext(Dispatchers.IO) {
                 runCatching {
-                    val cached = FynxMediaCache.getOrDownload(context, status.contentUri!!, when (status.type) {
-                        FynxStatusType.VIDEO -> "video"
-                        else -> "image"
-                    })
+                    val cached = FynxMediaCache.getOrDownload(context, status.contentUri!!, if (status.type == FynxStatusType.VIDEO) "video" else "image")
                     when {
                         cached == null -> null
                         status.type == FynxStatusType.VIDEO -> MediaMetadataRetriever().run {
                             setDataSource(cached.absolutePath)
                             val frame = getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                            release()
-                            frame
+                            release(); frame
                         }
                         status.type == FynxStatusType.PHOTO -> android.graphics.BitmapFactory.decodeFile(cached.absolutePath)
                         else -> null
@@ -134,17 +117,20 @@ private fun FynxStatusPreviewCircle(
     }
 
     Column(Modifier.width(82.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        IconButton(onClick = onClick, modifier = Modifier.size(70.dp)) {
+        IconButton(onClick = onClick, modifier = Modifier.size(72.dp)) {
             androidx.compose.foundation.layout.Box(
-                Modifier.size(62.dp).background(if (status?.type == FynxStatusType.TEXT) Color(status.textStyle.backgroundColor) else FynxDesign.SurfaceRaised, CircleShape).border(3.dp, if (active) MaterialTheme.colorScheme.primary else FynxDesign.Outline, CircleShape).clip(CircleShape),
+                Modifier.size(66.dp)
+                    .background(if (status?.type == FynxStatusType.TEXT) Color(status.textStyle.backgroundColor) else FynxDesign.SurfaceRaised, CircleShape)
+                    .border(3.dp, if (active) MaterialTheme.colorScheme.primary else FynxDesign.Outline, CircleShape)
+                    .clip(CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 when {
                     bitmap != null -> androidx.compose.foundation.Image(bitmap!!.asImageBitmap(), "Status media preview", Modifier.fillMaxWidth(), contentScale = ContentScale.Crop)
-                    status?.type == FynxStatusType.TEXT -> Text(status.text.orEmpty().take(16), color = Color(status.textStyle.foregroundColor), style = MaterialTheme.typography.labelSmall, maxLines = 3)
+                    status?.type == FynxStatusType.TEXT -> Text(status.text.orEmpty().take(20), color = Color(status.textStyle.foregroundColor), style = MaterialTheme.typography.labelSmall, maxLines = 3)
                     status?.type == FynxStatusType.VIDEO -> Icon(Icons.Default.PlayArrow, "Video status", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
                     status?.type == FynxStatusType.VOICE -> Icon(Icons.Default.Mic, "Voice status", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
-                    else -> FynxAvatar(name, Modifier.size(58.dp).clip(CircleShape))
+                    else -> FynxAvatar(name, Modifier.size(60.dp).clip(CircleShape))
                 }
             }
         }
