@@ -164,20 +164,33 @@ async function verifyPayout(payload) {
   const client = await pool.connect();
   try {
     const operation = (await client.query(`SELECT * FROM marketplace_financial_operations WHERE id=$1`, [operationId])).rows[0];
-    if (!operation || operation.status !== 'PENDING' || !operation.provider_reference) return;
+    if (!operation || operation.status !== 'PENDING' || !operation.provider_reference) return false;
     const { response, data } = await paystackJson(`https://api.paystack.co/transfer/verify/${encodeURIComponent(operation.provider_reference)}`, { headers: providerHeaders() });
     const providerStatus = String(data?.data?.status || '').toLowerCase();
     await client.query('BEGIN');
     const current = (await client.query(`SELECT * FROM marketplace_financial_operations WHERE id=$1 FOR UPDATE`, [operation.id])).rows[0];
-    if (!current || current.status !== 'PENDING') { await client.query('COMMIT'); return; }
+    if (!current || current.status !== 'PENDING') { await client.query('COMMIT'); return false; }
     if (response.ok && data?.status === true && ['success', 'successful'].includes(providerStatus)) {
       await markPayoutSucceeded(client, current, current.provider_reference, providerStatus);
-    } else if (response.ok && data?.status === true && ['failed', 'reversed', 'rejected'].includes(providerStatus)) {
+      await client.query('COMMIT');
+      return false;
+    }
+    if (response.ok && data?.status === true && ['failed', 'reversed', 'rejected'].includes(providerStatus)) {
       await markPayoutFailed(client, current, `Paystack transfer status: ${providerStatus}`);
-    } else if (response.ok && data?.status === true) {
-      await client.query(`UPDATE marketplace_financial_operations SET metadata=metadata || $1::jsonb,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, [JSON.stringify({ providerStatus, lastVerifiedAt: new Date().toISOString() }), current.id]);
+      await client.query('COMMIT');
+      return false;
+    }
+    if (response.ok && data?.status === true) {
+      const attempts = Number(current.metadata?.verificationAttempts || 0) + 1;
+      await client.query(
+        `UPDATE marketplace_financial_operations SET metadata=metadata || $1::jsonb,updated_at=NOW() WHERE id=$2 AND status='PENDING'`,
+        [JSON.stringify({ providerStatus, verificationAttempts: attempts, lastVerifiedAt: new Date().toISOString() }), current.id]
+      );
+      await client.query('COMMIT');
+      return attempts < 12;
     }
     await client.query('COMMIT');
+    return true;
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     throw error;
@@ -192,11 +205,17 @@ export function registerMarketplaceSettlementWorker({ jobs, logger = console }) 
   globalThis.__fynxJobHandlers['marketplace.payout.release'] = async (payload) => {
     await initiatePayout(payload);
     if (payload?.operationId) {
-      await jobs.enqueue('marketplace.payout.verify', { operationId: String(payload.operationId) }, { idempotencyKey: `VERIFY-${String(payload.operationId)}`, delayMs: 5_000, maxAttempts: 5 });
+      await jobs.enqueue('marketplace.payout.verify', { operationId: String(payload.operationId) }, { idempotencyKey: `VERIFY-${String(payload.operationId)}-0`, delayMs: 5_000, maxAttempts: 5 });
     }
   };
   globalThis.__fynxJobHandlers['marketplace.payout.verify'] = async (payload) => {
-    await verifyPayout(payload);
+    const operationId = String(payload?.operationId || '');
+    if (!operationId) return;
+    const shouldContinue = await verifyPayout(payload);
+    if (!shouldContinue) return;
+    const attempt = Math.max(0, Number(payload?.attempt || 0)) + 1;
+    if (attempt > 11) return;
+    await jobs.enqueue('marketplace.payout.verify', { operationId, attempt }, { idempotencyKey: `VERIFY-${operationId}-${attempt}`, delayMs: 10_000, maxAttempts: 3 });
   };
   logger.log('[fynx-marketplace] settlement worker handlers registered');
 }
