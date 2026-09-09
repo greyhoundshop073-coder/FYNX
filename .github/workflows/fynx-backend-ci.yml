@@ -50,6 +50,7 @@ jobs:
           node --check marketplaceSettlement.js
           node --check marketplaceSettlementWorker.js
           node --check marketplaceProtection.js
+          node --check marketplaceProtectionResolution.js
           node --check marketplaceAdvertising.js
           node --check scalability.js
           node --check privacyRoutes.js
