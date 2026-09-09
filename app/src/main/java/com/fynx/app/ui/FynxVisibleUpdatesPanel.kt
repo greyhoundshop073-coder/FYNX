@@ -2,6 +2,7 @@ package com.fynx.app.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -27,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -57,10 +59,10 @@ fun FynxVisibleUpdatesPanel(
         modifier = Modifier.fillMaxWidth(),
         shape = FynxDesign.LargeCardShape,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = Color.Transparent,
             contentColor = MaterialTheme.colorScheme.onSurface
         ),
-        border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))
+        border = null
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -134,12 +136,16 @@ private fun FynxStatusPreviewCircle(
     ) {
         androidx.compose.material3.IconButton(
             onClick = onClick,
-            modifier = Modifier.size(66.dp)
+            modifier = Modifier.size(70.dp)
         ) {
             FynxAvatar(
                 name,
                 Modifier
-                    .size(60.dp)
+                    .size(62.dp)
+                    .background(
+                        if (active) MaterialTheme.colorScheme.primary.copy(alpha = .12f) else FynxDesign.SurfaceRaised,
+                        CircleShape
+                    )
                     .border(
                         BorderStroke(
                             3.dp,
