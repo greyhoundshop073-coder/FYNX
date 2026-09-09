@@ -1,0 +1,3 @@
+# FYNX Home visual contract
+
+The generated master reference is the visual target for the Home screen. Preserve the FYNX header, verified badge placement, Status/Stories circles, circular AI microphone, large media, caption-above-media hierarchy, engagement controls, arrows/chevrons, spacing, surfaces, icon sizing, typography, and bottom navigation. Do not copy example people or fake engagement from the reference. All visible content must come from real FYNX data.
