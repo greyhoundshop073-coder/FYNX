@@ -33,7 +33,7 @@ fun FynxAiCreationPanel(
     var result by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    val modes = listOf("caption" to "Create caption", "rewrite" to "Improve caption", "ideas" to "Post ideas", "creative" to "Creative brief", "product" to "Product description")
+    val modes = listOf("caption" to "Create caption", "rewrite" to "Improve caption", "ideas" to "Post ideas", "creative" to "Creative brief", "product" to "Product selling copy")
 
     fun requestCreation() {
         val promptInput = input.trim()
@@ -42,19 +42,32 @@ fun FynxAiCreationPanel(
             "rewrite" -> "Improve this FYNX social-media caption. Keep the original meaning, make it natural, engaging and concise. Return only the finished caption.\n\nCaption:\n$promptInput"
             "ideas" -> "Give 5 safe, original FYNX post ideas based on this topic. Keep each idea short and practical.\n\nTopic:\n$promptInput"
             "creative" -> "Create a practical creative brief for a FYNX social post from this idea. Include: a short hook, visual concept, caption direction, suggested call-to-action, and 3 safe content variations. Do not invent personal facts. Keep it concise and ready to use.\n\nIdea:\n$promptInput"
-            "product" -> "Write a clear, persuasive marketplace product description from these seller notes. Do not invent specifications, guarantees, prices or facts. Return only the finished description.\n\nSeller notes:\n$promptInput"
             else -> "Create a natural, engaging FYNX social-media caption from this idea. Do not invent personal facts. Return only the finished caption.\n\nIdea:\n$promptInput"
         }
         val capability = if (mode == "product") FynxAiCapability.MARKETPLACE_ASSIST else FynxAiCapability.MEDIA_ASSIST
         val decision = FynxFutureIntelligencePolicy.authorize(
             permissions = listOf(FynxAiPermission(capability, setOf(FynxAiDataScope.NONE), true)),
-            request = FynxAiRequest(capability, instruction, setOf(FynxAiDataScope.NONE))
+            request = FynxAiRequest(capability, if (mode == "product") "Create truthful marketplace selling copy and relevant hashtags from seller facts." else instruction, setOf(FynxAiDataScope.NONE))
         )
         if (!decision.allowed) { error = "I couldn't process that creation request safely."; return }
         loading = true
         error = null
         scope.launch {
-            val response = withContext(Dispatchers.IO) { AiAssistantClient.sendMessage(context, instruction) }
+            val response = withContext(Dispatchers.IO) {
+                if (mode == "product") {
+                    AiAssistantClient.createProductMarketingCopy(
+                        context = context,
+                        productName = "",
+                        category = "Marketplace product",
+                        condition = "",
+                        sellerFacts = promptInput,
+                        hasMedia = false,
+                        mediaCount = 0
+                    )
+                } else {
+                    AiAssistantClient.sendMessage(context, instruction)
+                }
+            }
             response.onSuccess { result = it.trim() }.onFailure { error = "FYNX AI is temporarily unavailable. Please try again." }
             loading = false
         }
@@ -71,7 +84,7 @@ fun FynxAiCreationPanel(
         LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 2.dp)) {
             item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { modes.forEach { (key, label) -> FilterChip(selected = mode == key, onClick = { mode = key; result = ""; error = null }, label = { Text(label) }, enabled = !loading) } } }
         }
-        OutlinedTextField(value = input, onValueChange = { input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH) }, modifier = Modifier.fillMaxWidth(), minLines = 4, maxLines = 8, enabled = !loading, shape = FynxDesign.ControlShape, placeholder = { Text(when (mode) { "rewrite" -> "Paste the caption you want improved…"; "ideas" -> "What do you want to post about?"; "creative" -> "Describe the content idea you want to develop…"; "product" -> "Enter your real product details…"; else -> "Describe the post you want to create…" }) })
+        OutlinedTextField(value = input, onValueChange = { input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH) }, modifier = Modifier.fillMaxWidth(), minLines = 4, maxLines = 8, enabled = !loading, shape = FynxDesign.ControlShape, placeholder = { Text(when (mode) { "rewrite" -> "Paste the caption you want improved…"; "ideas" -> "What do you want to post about?"; "creative" -> "Describe the content idea you want to develop…"; "product" -> "Enter the real product facts you know. FYNX AI will turn them into selling copy + relevant hashtags…"; else -> "Describe the post you want to create…" }) })
         Button(onClick = ::requestCreation, enabled = !loading && input.trim().isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.AutoAwesome, null); Spacer(Modifier.width(6.dp)); Text(if (loading) "Creating…" else "Create with AI") }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if (result.isNotBlank()) Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .45f))) {
