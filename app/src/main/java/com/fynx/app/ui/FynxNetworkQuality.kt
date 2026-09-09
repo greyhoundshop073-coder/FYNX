@@ -10,11 +10,19 @@ object FynxNetworkQuality {
 
     fun current(context: Context): Level {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return Level.OFFLINE
-        val network = manager.activeNetwork ?: return Level.OFFLINE
-        val capabilities = manager.getNetworkCapabilities(network) ?: return Level.OFFLINE
-        if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ||
-            !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return Level.WEAK
-        val downstream = capabilities.linkDownstreamBandwidthKbps
-        return if (downstream in 1..999) Level.WEAK else Level.GOOD
+        var sawUsableNetwork = false
+        var bestDownstreamKbps = 0
+
+        manager.allNetworks.forEach { network ->
+            val capabilities = manager.getNetworkCapabilities(network) ?: return@forEach
+            if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return@forEach
+            if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return@forEach
+
+            sawUsableNetwork = true
+            bestDownstreamKbps = maxOf(bestDownstreamKbps, capabilities.linkDownstreamBandwidthKbps)
+        }
+
+        if (!sawUsableNetwork) return Level.OFFLINE
+        return if (bestDownstreamKbps in 1..999) Level.WEAK else Level.GOOD
     }
 }
