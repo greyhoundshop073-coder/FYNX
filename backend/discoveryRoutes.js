@@ -131,4 +131,33 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       return res.status(500).json({ error: "marketplace discovery unavailable" });
     }
   });
+
+  app.get("/api/marketplace/listing/:id", auth, async (req, res) => {
+    try {
+      const listingId = validListingId(req.params?.id);
+      if (!listingId) return res.status(400).json({ error: "invalid listing id" });
+      const result = await pool.query(`
+        SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,l.store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.active,l.created_at
+        FROM marketplace_listings l
+        JOIN users u ON u.id=l.seller_id
+        WHERE l.id=$1
+        LIMIT 1
+      `, [listingId]);
+      if (!result.rows[0]) return res.status(404).json({ error: "listing not found" });
+      const row = result.rows[0];
+      if (!row.active || Number(row.quantity) <= 0) return res.status(404).json({ error: "listing unavailable" });
+      return res.json({ listing: {
+        id:String(row.id), seller_id:String(row.seller_id), seller_username:row.seller_username,
+        seller_display_name:row.seller_display_name, store_name:row.store_name, title:row.title,
+        description:row.description, price:Number(row.price), currency:row.currency, category:row.category,
+        condition:row.condition, quantity:Number(row.quantity), location:row.location,
+        delivery_available:Boolean(row.delivery_available), pickup_available:Boolean(row.pickup_available),
+        delivery_fee:row.delivery_fee == null ? null : Number(row.delivery_fee),
+        media_ids:Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], active:Boolean(row.active)
+      }});
+    } catch (error) {
+      console.error("marketplace exact listing", error);
+      return res.status(500).json({ error: "marketplace listing unavailable" });
+    }
+  });
 }
