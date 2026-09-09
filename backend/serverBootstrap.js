@@ -20,8 +20,12 @@ const rateLimitReplacements = [
   ['app.use("/api/messages", rateLimit("messages", RATE_LIMITS.messages));', 'app.use("/api/messages", rateLimit("messages", 120));']
 ];
 for (const [from, to] of rateLimitReplacements) source = source.replace(from, to);
-source = source.replace('from "./socialRoutes.js";', 'from "./.fynx-runtime-socialRoutes.js";\nimport { registerDiscoveryRoutes } from "./discoveryRoutes.js";\nimport { registerBusinessRoutes } from "./businessRoutes.js";\nimport { startMarketplaceInspectionReconciliation } from "./marketplaceInspectionReconciliation.js";');
-source = source.replace('registerSocialRoutes(app, { pool, auth, findUserByUsername });', 'registerSocialRoutes(app, { pool, auth, findUserByUsername });\nif (pool) registerDiscoveryRoutes({ app, pool, auth });\nif (pool) registerBusinessRoutes({ app, auth });\nif (pool) startMarketplaceInspectionReconciliation({ pool });');
+source = source.replace('from "./socialRoutes.js";', 'from "./.fynx-runtime-socialRoutes.js";\nimport { registerDiscoveryRoutes } from "./discoveryRoutes.js";\nimport { registerBusinessRoutes } from "./businessRoutes.js";\nimport { startMarketplaceInspectionReconciliation } from "./marketplaceInspectionReconciliation.js";\nimport { registerMarketplacePaystackWebhook } from "./marketplacePaystackWebhook.js";');
+source = source.replace('registerSocialRoutes(app, { pool, auth, findUserByUsername });', 'registerSocialRoutes(app, { pool, auth, findUserByUsername });\nif (pool) registerDiscoveryRoutes({ app, pool, auth });\nif (pool) registerBusinessRoutes({ app, auth });\nif (pool) startMarketplaceInspectionReconciliation({ pool });\nif (pool) registerMarketplacePaystackWebhook({ app, pool });');
+source = source.replace(
+  'app.use(express.json({ limit: "18mb", strict: true }));',
+  'app.use(express.json({ limit: "18mb", strict: true, verify: (req, _res, buf) => { req.rawBody = Buffer.from(buf); } }));'
+);
 
 let social = await readFile(socialSourcePath, "utf8");
 const signature = 'export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {';
