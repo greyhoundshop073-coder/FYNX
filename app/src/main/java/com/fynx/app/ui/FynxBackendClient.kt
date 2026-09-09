@@ -66,9 +66,7 @@ object FynxBackendClient {
     fun isNetworkAvailable(context: Context): Boolean = hasNetwork(context)
     fun isUnauthorizedFailure(error: Throwable): Boolean = generateSequence(error) { it.cause }.any { it is FynxUnauthorizedException }
 
-    /** Lightweight authenticated-independent health probe used to distinguish backend outages from UI failures. */
     suspend fun health(context: Context): Result<String> = get(context, "/health")
-
     suspend fun get(context: Context, path: String): Result<String> = request(context, "GET", path, null)
     suspend fun postJson(context: Context, path: String, body: String): Result<String> = request(context, "POST", path, body)
     suspend fun patchJson(context: Context, path: String, body: String): Result<String> = request(context, "PATCH", path, body)
@@ -116,18 +114,21 @@ object FynxBackendClient {
             readTimeout = if (weakNetwork) WEAK_READ_TIMEOUT_MS else READ_TIMEOUT_MS
             useCaches = false
             setRequestProperty("Accept", "application/json")
+            setRequestProperty("Accept-Encoding", "identity")
             setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0")
             setRequestProperty("Pragma", "no-cache")
-            setRequestProperty("Connection", "keep-alive")
+            setRequestProperty("Connection", "close")
             setRequestProperty("User-Agent", "FYNX-Android/1")
             accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
         }
         val cancellationHandle = currentCoroutineContext().job.invokeOnCompletion { connection.disconnect() }
         try {
             if (body != null) {
+                val payload = body.toByteArray(Charsets.UTF_8)
                 connection.doOutput = true
+                connection.setFixedLengthStreamingMode(payload.size)
                 connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                connection.outputStream.use { it.write(payload) }
             }
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
@@ -160,7 +161,8 @@ object FynxBackendClient {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
         val network = manager.activeNetwork ?: return false
         val capabilities = manager.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
     private fun isRetryableFailure(error: Throwable): Boolean {
