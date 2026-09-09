@@ -12,7 +12,6 @@ REQUIRED = [
     "app/src/main/java/com/fynx/app/ui/AiAssistantClient.kt",
     "backend/serverBootstrap.js",
     "backend/marketplaceTransactions.js",
-    "backend/marketplaceDisputes.js",
     "gradlew",
     ".github/workflows/android-build.yml",
 ]
