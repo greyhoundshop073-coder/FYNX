@@ -74,12 +74,22 @@ export function registerMoneyPlannerRoutes({ app, pool, auth }) {
         pool.query(`SELECT id,name,target_amount,saved_amount,currency,target_date,created_at FROM money_savings_goals WHERE user_id=$1 ORDER BY created_at DESC`, [uid]),
         pool.query(`SELECT id,name,category,amount,currency,frequency,next_date,created_at FROM money_recurring_expenses WHERE user_id=$1 ORDER BY next_date ASC`, [uid])
       ]);
-      const income = transactions.rows.filter(r => r.type === 'INCOME').reduce((s, r) => s + Number(r.amount), 0);
-      const expenses = transactions.rows.filter(r => r.type === 'EXPENSE').reduce((s, r) => s + Number(r.amount), 0);
-      const budgetTotal = budgets.rows.reduce((s, r) => s + Number(r.amount), 0);
-      const recurringTotal = recurring.rows.reduce((s, r) => s + Number(r.amount), 0);
+      const byCurrency = new Map();
+      for (const row of transactions.rows) {
+        const key = String(row.currency);
+        const current = byCurrency.get(key) || { currency: key, income: 0, expenses: 0 };
+        if (row.type === 'INCOME') current.income += Number(row.amount); else current.expenses += Number(row.amount);
+        byCurrency.set(key, current);
+      }
+      const summaryByCurrency = Object.fromEntries([...byCurrency.values()].map(item => [item.currency, {
+        currency: item.currency,
+        income: item.income,
+        expenses: item.expenses,
+        net: item.income - item.expenses
+      }]));
       return res.json({
-        summary: { income, expenses, net: income - expenses, budgetTotal, recurringTotal, transactionCount: transactions.rows.length },
+        summary: { transactionCount: transactions.rows.length, currencies: Object.keys(summaryByCurrency) },
+        summaryByCurrency,
         transactions: transactions.rows.map(r => ({ id:String(r.id), title:r.title, category:r.category, type:r.type, amount:Number(r.amount), currency:r.currency, note:r.note, occurredOn:r.occurred_on, createdAt:r.created_at })),
         budgets: budgets.rows.map(r => ({ id:String(r.id), category:r.category, amount:Number(r.amount), currency:r.currency, period:r.period, createdAt:r.created_at })),
         goals: goals.rows.map(r => ({ id:String(r.id), name:r.name, targetAmount:Number(r.target_amount), savedAmount:Number(r.saved_amount), currency:r.currency, targetDate:r.target_date, createdAt:r.created_at })),
@@ -109,7 +119,7 @@ export function registerMoneyPlannerRoutes({ app, pool, auth }) {
     catch(error){ console.error('money budget create',error); return res.status(500).json({error:'budget creation failed'}); }
   });
 
-  app.delete('/api/money-planner/budgets/:id', auth, async (req,res)=>{ try{ await ensureSchema(); const budgetId=id(req.params.id); if(!budgetId)return res.status(400).json({error:'invalid budget id'}); const r=await pool.query('DELETE FROM money_budgets WHERE id=$1 AND user_id=$2 RETURNING id',[budgetId,req.user.sub]); if(!r.rows[0])return res.status(404).json({error:'budget not found'}); return res.json({ok:true}); }catch(error){console.error('money budget delete',error);return res.status(500).json({error:'budget deletion failed'});} });
+  app.delete('/api/money-planner/budgets/:id', auth, async (req,res)=>{ try { await ensureSchema(); const budgetId=id(req.params.id); if(!budgetId)return res.status(400).json({error:'invalid budget id'}); const r=await pool.query('DELETE FROM money_budgets WHERE id=$1 AND user_id=$2 RETURNING id',[budgetId,req.user.sub]); if(!r.rows[0])return res.status(404).json({error:'budget not found'}); return res.json({ok:true}); }catch(error){console.error('money budget delete',error);return res.status(500).json({error:'budget deletion failed'});} });
 
   app.post('/api/money-planner/goals', auth, async (req,res)=>{ try{ await ensureSchema(); const name=text(req.body?.name,120), target=amount(req.body?.targetAmount), saved=typeof req.body?.savedAmount==='undefined'?0:amount(req.body?.savedAmount), curr=currency(req.body?.currency||'NGN'), targetDate=req.body?.targetDate==null?null:date(req.body.targetDate); if(!name||!target||saved===null||saved>target||!curr||(req.body?.targetDate!=null&&!targetDate))return res.status(400).json({error:'valid savings goal values are required'}); const r=await pool.query(`INSERT INTO money_savings_goals(user_id,name,target_amount,saved_amount,currency,target_date) VALUES($1,$2,$3,$4,$5,$6) RETURNING *`,[req.user.sub,name,target,saved,curr,targetDate]); const row=r.rows[0]; return res.status(201).json({goal:{id:String(row.id),name:row.name,targetAmount:Number(row.target_amount),savedAmount:Number(row.saved_amount),currency:row.currency,targetDate:row.target_date,createdAt:row.created_at}}); }catch(error){console.error('money goal create',error);return res.status(500).json({error:'savings goal creation failed'});} });
 
