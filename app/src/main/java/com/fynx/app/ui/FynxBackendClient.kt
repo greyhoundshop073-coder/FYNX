@@ -26,6 +26,8 @@ object FynxBackendClient {
     private const val PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"
     private const val MAX_IDEMPOTENT_RETRIES = 2
     private const val RETRY_DELAY_MS = 750L
+    private const val NETWORK_VALIDATION_WAIT_MS = 6_000L
+    private const val NETWORK_VALIDATION_POLL_MS = 500L
     private const val CONNECT_TIMEOUT_MS = 15_000
     private const val READ_TIMEOUT_MS = 30_000
     private const val WEAK_CONNECT_TIMEOUT_MS = 20_000
@@ -82,7 +84,7 @@ object FynxBackendClient {
                 require(root.isNotBlank()) { "FYNX backend is not configured." }
                 require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }
                 require(path.startsWith("/")) { "Backend path must start with /." }
-                if (!hasNetwork(context)) throw FynxNetworkUnavailableException()
+                awaitValidatedNetwork(context)
 
                 var attempt = 0
                 var response: String? = null
@@ -105,6 +107,17 @@ object FynxBackendClient {
                 response
             }
         }
+
+    private suspend fun awaitValidatedNetwork(context: Context) {
+        if (hasNetwork(context)) return
+        var waited = 0L
+        while (waited < NETWORK_VALIDATION_WAIT_MS) {
+            delay(NETWORK_VALIDATION_POLL_MS)
+            waited += NETWORK_VALIDATION_POLL_MS
+            if (hasNetwork(context)) return
+        }
+        throw FynxNetworkUnavailableException()
+    }
 
     private suspend fun executeRequest(context: Context, root: String, method: String, path: String, body: String?): String {
         val weakNetwork = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK
