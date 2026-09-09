@@ -9,7 +9,7 @@ import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.compose.PickVisualMediaRequest
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
 import androidx.compose.foundation.layout.*
@@ -39,10 +39,7 @@ private enum class FynxEditPreset(val label: String, val saturation: Float, val 
 
 /** AI-assisted photo editing that can hand the edited image directly back into the post composer. */
 @Composable
-fun FynxAiPhotoEditorPanel(
-    initialUri: Uri? = null,
-    onDone: (Uri?) -> Unit = {}
-) {
+fun FynxAiPhotoEditorPanel(initialUri: Uri? = null, onDone: (Uri?) -> Unit = {}) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
@@ -126,7 +123,7 @@ fun FynxAiPhotoEditorPanel(
                 Text("Edit the photo you are preparing to post, then return it to the post composer.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(mediaType = ActivityResultContracts.PickVisualMedia.ImageOnly)) }, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Default.PhotoLibrary, null)
             Spacer(Modifier.width(6.dp))
             Text(if (sourceUri == null) "Choose photo" else "Choose another photo")
