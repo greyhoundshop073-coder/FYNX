@@ -192,7 +192,7 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
                     }
                 }) { Text(if (busy) "Publishing…" else "Post") }
             },
-            dismissButton = { TextButton(enabled = !busy, onClick = { composerOpen = false; selectedMedia = null; selectedMediaType = null }) { Text("Cancel") }
+            dismissButton = { TextButton(enabled = !busy, onClick = { composerOpen = false; selectedMedia = null; selectedMediaType = null }) { Text("Cancel") } }
         )
     }
     if (voiceRecorderOpen) {
@@ -238,17 +238,14 @@ private fun RemotePostCard(
         }
         if (marketplaceAd) Text("MARKETPLACE", Modifier.padding(horizontal = 12.dp, vertical = 3.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
 
-        // Caption stays ABOVE the media exactly as requested.
         if (displayText.isNotBlank()) {
             Text(displayText, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), style = MaterialTheme.typography.bodyLarge)
         }
 
-        // Media is intentionally outside any rounded card/padded surface and fills the phone width.
         post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType) }
 
         if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = onOpenMarketplace) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
 
-        // Large, easy-to-hit Instagram-style action controls.
         Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { onLike(post.id) }, modifier = Modifier.size(50.dp)) {
                 Icon(if (post.likedByCurrentUser) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Like", tint = if (post.likedByCurrentUser) MaterialTheme.colorScheme.error else FynxDesign.TextPrimary, modifier = Modifier.size(30.dp))
