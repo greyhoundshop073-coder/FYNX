@@ -133,12 +133,18 @@ export function registerMarketplaceProtectionResolutionRoutes({ app }) {
       if (refundJob) {
         try {
           await refundPaystack(refundJob.reference, refundJob.amount, refundJob.currency);
-          await pool.query('BEGIN').catch(() => {});
-          await pool.query(`UPDATE marketplace_financial_operations SET status='SUCCEEDED',provider_reference=$1,failure_reason=NULL,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, [refundJob.reference, refundJob.operationId]);
-          await pool.query(`UPDATE marketplace_orders SET status='REFUNDED',updated_at=NOW() WHERE id=$1 AND status NOT IN ('COMPLETED','CANCELLED','REFUNDED')`, [refundJob.orderId]);
-          await pool.query(`UPDATE marketplace_protection_cases SET status='REFUNDED',updated_at=NOW() WHERE id=$1`, [refundJob.caseId]);
-          await pool.query(`UPDATE marketplace_escrows SET status='REFUNDED',refunded_at=NOW(),updated_at=NOW() WHERE order_id=$1 AND status='REFUND_PENDING'`, [refundJob.orderId]);
-          await pool.query('COMMIT').catch(() => {});
+          const finishClient = await pool.connect();
+          try {
+            await finishClient.query('BEGIN');
+            await finishClient.query(`UPDATE marketplace_financial_operations SET status='SUCCEEDED',provider_reference=$1,failure_reason=NULL,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, [refundJob.reference, refundJob.operationId]);
+            await finishClient.query(`UPDATE marketplace_orders SET status='REFUNDED',updated_at=NOW() WHERE id=$1 AND status NOT IN ('COMPLETED','CANCELLED','REFUNDED')`, [refundJob.orderId]);
+            await finishClient.query(`UPDATE marketplace_protection_cases SET status='REFUNDED',updated_at=NOW() WHERE id=$1`, [refundJob.caseId]);
+            await finishClient.query(`UPDATE marketplace_escrows SET status='REFUNDED',refunded_at=NOW(),updated_at=NOW() WHERE order_id=$1 AND status='REFUND_PENDING'`, [refundJob.orderId]);
+            await finishClient.query('COMMIT');
+          } catch (error) {
+            await finishClient.query('ROLLBACK').catch(() => {});
+            throw error;
+          } finally { finishClient.release(); }
           return res.status(200).json({ ok: true, caseId: refundJob.caseId, status: 'REFUNDED' });
         } catch (error) {
           await pool.query(`UPDATE marketplace_financial_operations SET status='FAILED',failure_reason=$1,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, [String(error?.message || error).slice(0, 2000), refundJob.operationId]);
