@@ -57,6 +57,9 @@ object FynxDeepLinkParser {
             .apply { value?.trim()?.takeIf { it.isNotBlank() }?.let { appendPath(it.removePrefix("@")) } }
             .build().toString()
 
+    private fun cleanIdentifier(value: String?): String? =
+        value?.trim()?.removePrefix("@")?.takeIf { it.isNotBlank() }
+
     fun parse(uri: Uri?): FynxDeepLinkDestination? {
         if (uri == null) return null
         val isFynxScheme = uri.scheme.equals("fynx", ignoreCase = true)
@@ -65,31 +68,33 @@ object FynxDeepLinkParser {
 
         val normalizedPath = uri.path.orEmpty().trim('/').split('/').filter { it.isNotBlank() }
         val first = normalizedPath.firstOrNull()?.lowercase().orEmpty()
-        val value = normalizedPath.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+        val value = cleanIdentifier(normalizedPath.getOrNull(1))
         val host = uri.host.orEmpty().lowercase()
 
         if (isFynxScheme) {
-            when (host) {
-                "home" -> return FynxDeepLinkDestination.Home
-                "stories" -> return FynxDeepLinkDestination.Stories
-                "money" -> return FynxDeepLinkDestination.Money
-                "profile" -> return value?.let { FynxDeepLinkDestination.Profile(it.removePrefix("@")) }
-                "chat" -> return value?.let { FynxDeepLinkDestination.Chat(it.removePrefix("@")) }
-                "group" -> return value?.let { FynxDeepLinkDestination.Group(it) }
-                "marketplace" -> return FynxDeepLinkDestination.Marketplace(value)
-                "invite" -> return FynxDeepLinkDestination.Invite(value ?: uri.getQueryParameter("code"))
+            return when (host) {
+                "home" -> if (normalizedPath.isEmpty()) FynxDeepLinkDestination.Home else null
+                "stories" -> if (normalizedPath.isEmpty()) FynxDeepLinkDestination.Stories else null
+                "money" -> if (normalizedPath.isEmpty()) FynxDeepLinkDestination.Money else null
+                "profile" -> if (normalizedPath.size == 1) value?.let { FynxDeepLinkDestination.Profile(it) } else null
+                "chat" -> if (normalizedPath.size == 1) value?.let { FynxDeepLinkDestination.Chat(it) } else null
+                "group" -> if (normalizedPath.size == 1) value?.let { FynxDeepLinkDestination.Group(it) } else null
+                "marketplace" -> if (normalizedPath.size <= 1) FynxDeepLinkDestination.Marketplace(value) else null
+                "invite" -> if (normalizedPath.size <= 1) FynxDeepLinkDestination.Invite(value ?: uri.getQueryParameter("code")?.trim()?.takeIf { it.isNotBlank() }) else null
+                else -> null
             }
         }
 
         return when (first) {
-            "", "home" -> FynxDeepLinkDestination.Home
-            "invite" -> FynxDeepLinkDestination.Invite(uri.getQueryParameter("code") ?: value)
-            "profile" -> value?.let { FynxDeepLinkDestination.Profile(it.removePrefix("@")) }
-            "chat" -> value?.let { FynxDeepLinkDestination.Chat(it.removePrefix("@")) }
-            "group" -> value?.let { FynxDeepLinkDestination.Group(it) }
-            "marketplace" -> FynxDeepLinkDestination.Marketplace(value)
-            "stories" -> FynxDeepLinkDestination.Stories
-            "money" -> FynxDeepLinkDestination.Money
+            "" -> if (normalizedPath.isEmpty()) FynxDeepLinkDestination.Home else null
+            "home" -> if (normalizedPath.size == 1) FynxDeepLinkDestination.Home else null
+            "invite" -> if (normalizedPath.size == 1) FynxDeepLinkDestination.Invite(uri.getQueryParameter("code")?.trim()?.takeIf { it.isNotBlank() } ?: value) else null
+            "profile" -> if (normalizedPath.size == 2) value?.let { FynxDeepLinkDestination.Profile(it) } else null
+            "chat" -> if (normalizedPath.size == 2) value?.let { FynxDeepLinkDestination.Chat(it) } else null
+            "group" -> if (normalizedPath.size == 2) value?.let { FynxDeepLinkDestination.Group(it) } else null
+            "marketplace" -> if (normalizedPath.size <= 2) FynxDeepLinkDestination.Marketplace(value) else null
+            "stories" -> if (normalizedPath.size == 1) FynxDeepLinkDestination.Stories else null
+            "money" -> if (normalizedPath.size == 1) FynxDeepLinkDestination.Money else null
             else -> null
         }
     }
