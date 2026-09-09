@@ -86,7 +86,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     }
     if (!FYNX_PREVIEW_MODE && authSession.state != AuthState.SIGNED_IN) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }) { FynxAuthGate { username -> FynxAuthStore.save(context, username); authSession = AuthSession(AuthState.SIGNED_IN, username) } }; return }
     if (selected == "Admin" && adminRole == null) selected = "Features"
-    val mainNav = listOf(FynxNavItem("Home", "Home", Icons.Default.Home), FynxNavItem("Chats", "Chats", Icons.Default.ChatBubbleOutline), FynxNavItem("Friends", "Friends", Icons.Default.Person), FynxNavItem("Marketplace", "Market", Icons.Default.ShoppingBag), FynxNavItem("Money Tools", "Money", Icons.Default.AccountBalanceWallet), FynxNavItem("Features", "More", Icons.Default.MoreHoriz))
+    val mainNav = listOf(FynxNavItem("Home", "Home", Icons.Default.Home), FynxNavItem("Chats", "Chats", Icons.Default.ChatBubbleOutline), FynxNavItem("Friends", "Friends", Icons.Default.Person), FynxNavItem("Marketplace", "Market", Icons.Default.ShoppingBag), FynxNavItem("Business Account", "Business", Icons.Default.Storefront), FynxNavItem("Features", "More", Icons.Default.MoreHoriz))
     val isSecondary = selected !in mainNav.map { it.key }.toSet()
     BackHandler(enabled = profileUser != null) { profileUser = null }
     BackHandler(enabled = openChat != null) { openChat = null }
@@ -110,6 +110,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Friends" -> FriendsPanel(onOpenProfile = { profileUser = it })
             "Marketplace" -> FynxMarketplaceRemotePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenChat = { username -> val normalized = username.trim().let { if (it.startsWith("@")) it else "@$it" }; openChat = FynxChatStore.loadPreviews(context).firstOrNull { it.username.equals(normalized, true) } ?: ChatPreview(normalized.removePrefix("@").ifBlank { "FYNX seller" }, normalized, "Start a conversation", "Now"); FynxChatStore.savePreview(context, openChat!!) })
             "Money Tools" -> MoneyCenterPanel()
+            "Business Account" -> FynxBusinessAccountPanel(onBack = { selected = "Features" }, onOpenAdvertising = { selected = "Advertising" }, onOpenDashboard = { selected = "Advertising Dashboard" })
             "Features" -> FynxFeaturesPanel(isAdmin = adminRole != null, onSelect = { if (it != "Admin" || adminRole != null) selected = it })
             "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
             "Calendar" -> CalendarPanel()
@@ -123,7 +124,6 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "To-Do" -> TodoPanel()
             "Privacy" -> FynxPrivacySettingsPanel(onBack = { selected = "Profile" })
             "Seller Center" -> FynxMarketplaceSellerCenterPanel()
-            "Business Account" -> FynxBusinessAccountPanel(onBack = { selected = "Features" }, onOpenAdvertising = { selected = "Advertising" }, onOpenDashboard = { selected = "Advertising Dashboard" })
             "AI" -> FynxAiAssistantPanel(onOpenDestination = { destination -> selected = destination })
             "AI Creation" -> FynxAiCreationPanel(onUseCaptionForPost = { caption -> aiCaptionDraft = caption; selected = "Home" }, onOpenPhotoEditor = { selected = "AI Photo Editor" })
             "AI Photo Editor" -> FynxAiPhotoEditorPanel(onDone = { selected = "AI Creation" })
