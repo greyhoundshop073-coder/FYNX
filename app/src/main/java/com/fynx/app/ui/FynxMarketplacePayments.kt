@@ -3,6 +3,7 @@ package com.fynx.app.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 
 internal data class FynxMarketplacePayment(
@@ -67,12 +68,19 @@ internal suspend fun verifyMarketplacePayment(
         return Result.failure(IllegalArgumentException("A payment reference is required."))
     }
     val encoded = Uri.encode(normalizedReference)
-    return FynxBackendClient.get(
-        context,
-        "/api/marketplace/payments/verify/$encoded"
-    ).mapCatching { raw ->
-        val o = JSONObject(raw)
-        require(o.optBoolean("verified")) { "Payment has not been verified yet." }
-        o.optJSONObject("order")?.optString("status").orEmpty().ifBlank { "PAID" }
+    var lastFailure: Throwable? = null
+    repeat(3) { attempt ->
+        val result = FynxBackendClient.get(
+            context,
+            "/api/marketplace/payments/verify/$encoded"
+        ).mapCatching { raw ->
+            val o = JSONObject(raw)
+            require(o.optBoolean("verified")) { "Payment has not been verified yet." }
+            o.optJSONObject("order")?.optString("status").orEmpty().ifBlank { "PAID" }
+        }
+        if (result.isSuccess) return result
+        lastFailure = result.exceptionOrNull()
+        if (attempt < 2) delay(1_000L * (attempt + 1))
     }
+    return Result.failure(lastFailure ?: IllegalStateException("Payment verification failed."))
 }
