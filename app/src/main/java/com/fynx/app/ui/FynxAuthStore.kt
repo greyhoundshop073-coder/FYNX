@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import java.io.File
 
 object FynxAuthStore {
     private const val PREFS = "fynx_auth"
@@ -21,6 +22,10 @@ object FynxAuthStore {
 
     fun storedUsername(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_USERNAME, null)
 
+    /** Stable local namespace for account-scoped caches and stores. */
+    fun accountStorageKey(context: Context): String? =
+        storedUsername(context)?.trim()?.lowercase()?.ifBlank { null }
+
     fun saveAccount(context: Context, displayName: String, username: String, phone: String) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_ACCOUNT_CREATED, true)
@@ -39,12 +44,24 @@ object FynxAuthStore {
     }
 
     /**
-     * Ends the local authenticated session and clears the backend access token.
-     * Account-created state is intentionally preserved so the next launch can
-     * still offer the existing account's login path.
+     * Ends the local authenticated session and clears all local data that was
+     * not already account-namespaced. This prevents the next account on the
+     * same device from inheriting feed, media or notification data.
+     * Account-created state is intentionally preserved for the login path.
      */
     fun clear(context: Context) {
         runCatching { FynxBackendClient.saveAccessToken(context, null) }
+
+        runCatching {
+            context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE).edit().clear().apply()
+        }
+        runCatching {
+            context.getSharedPreferences("fynx_notification_store", Context.MODE_PRIVATE).edit().clear().apply()
+        }
+        runCatching {
+            File(context.cacheDir, "fynx_media_cache_v2").deleteRecursively()
+        }
+
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_SIGNED_IN, false)
             .remove(KEY_USERNAME)
