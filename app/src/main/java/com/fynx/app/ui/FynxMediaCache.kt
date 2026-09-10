@@ -22,7 +22,10 @@ internal object FynxMediaCache {
         if (path.isBlank()) return null
         val normalizedPath = path.trim()
         if (!normalizedPath.startsWith("/api/media/")) return null
-        val directory = File(context.cacheDir, FYNX_MEDIA_CACHE_DIR).apply { mkdirs() }
+        val accountKey = FynxAuthStore.accountStorageKey(context) ?: return null
+        if (!FynxBackendClient.hasAccessToken(context)) return null
+
+        val directory = File(context.cacheDir, "$FYNX_MEDIA_CACHE_DIR/${accountCacheKey(accountKey)}").apply { mkdirs() }
         val extension = when (type) { "video" -> ".mp4"; "audio" -> ".m4a"; else -> ".jpg" }
         val file = File(directory, "${key(normalizedPath, type)}$extension")
         if (file.isFile && file.length() in 1..MAX_FYNX_MEDIA_FILE_BYTES) {
@@ -74,7 +77,7 @@ internal object FynxMediaCache {
         try {
             val status = connection.responseCode
             if (status == HttpURLConnection.HTTP_UNAUTHORIZED) {
-                FynxBackendClient.saveAccessToken(context, null)
+                FynxAuthStore.clear(context)
                 return null
             }
             if (status !in 200..299) return null
@@ -149,8 +152,12 @@ internal object FynxMediaCache {
         }
     }
 
-    private fun key(path: String, type: String?): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest("${type ?: "unknown"}:$path".toByteArray())
+    private fun key(path: String, type: String?): String = sha256("${type ?: "unknown"}:$path")
+
+    private fun accountCacheKey(account: String): String = sha256("account:$account")
+
+    private fun sha256(value: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
         return digest.joinToString("") { "%02x".format(it) }
     }
 }
