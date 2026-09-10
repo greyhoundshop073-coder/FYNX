@@ -2,6 +2,7 @@ package com.fynx.app.ui
 
 import android.content.Context
 import android.content.Intent
+import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -57,7 +58,6 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
     var feedRequestInFlight by remember { mutableStateOf(false) }
     var lastFeedRequestAt by remember { mutableLongStateOf(0L) }
     var commentsPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
-    var likesPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> selectedMedia = uri; selectedMediaType = uri?.let { context.contentResolver.getType(it)?.substringBefore("/") } }
 
     fun reload(forceRefresh: Boolean = false) {
@@ -123,7 +123,6 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
                     }
                 },
                 onComment = { commentsPost = post },
-                onLikes = { likesPost = post },
                 onFollow = { following ->
                     scope.launch {
                         FynxRemoteSocialClient.follow(context, post.authorUsername, following)
@@ -202,7 +201,6 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
         )
     }
     commentsPost?.let { post -> CommentsDialog(post) { commentsPost = null } }
-    likesPost?.let { post -> LikesDialog(post) { likesPost = null } }
 }
 
 @Composable
@@ -211,7 +209,6 @@ private fun RemotePostCard(
     currentUsername: String,
     onLike: (String) -> Unit,
     onComment: () -> Unit,
-    onLikes: () -> Unit,
     onFollow: (Boolean) -> Unit,
     onDelete: () -> Unit,
     onShare: () -> Unit,
@@ -223,8 +220,7 @@ private fun RemotePostCard(
     val marketplaceAd = post.text.startsWith(MARKETPLACE_AD_MARKER)
     val displayText = if (marketplaceAd) post.text.removePrefix(MARKETPLACE_AD_MARKER).trim() else post.text
 
-    // Deliberately no outer Card: the media is a true edge-to-edge feed surface,
-    // while text/actions remain normal feed content above and below it.
+    // No outer Card around the post. Caption/text stays above the media and the media itself reaches the full feed width.
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             FynxAvatar(post.authorUsername, Modifier.size(46.dp).clip(CircleShape))
@@ -246,6 +242,7 @@ private fun RemotePostCard(
 
         if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = onOpenMarketplace) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
 
+        // Instagram-style primary actions: Like, Comment, Repost, Share, Save.
         Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { onLike(post.id) }, modifier = Modifier.size(50.dp)) {
                 Icon(if (post.likedByCurrentUser) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Like", tint = if (post.likedByCurrentUser) MaterialTheme.colorScheme.error else FynxDesign.TextPrimary, modifier = Modifier.size(30.dp))
@@ -256,7 +253,6 @@ private fun RemotePostCard(
             IconButton(onClick = onRepost, modifier = Modifier.size(50.dp)) { Icon(Icons.Default.Repeat, "Repost", modifier = Modifier.size(30.dp)) }
             IconButton(onClick = onShare, modifier = Modifier.size(50.dp)) { Icon(Icons.Default.Share, "Share", modifier = Modifier.size(30.dp)) }
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = onLikes, modifier = Modifier.size(50.dp)) { Icon(Icons.Default.People, "People who liked this", modifier = Modifier.size(28.dp)) }
             IconButton(onClick = onSave, modifier = Modifier.size(50.dp)) { Icon(Icons.Default.BookmarkBorder, "Save", modifier = Modifier.size(30.dp)) }
         }
         Spacer(Modifier.height(10.dp))
@@ -273,21 +269,43 @@ private fun sharePost(context: Context, post: FynxRemoteSocialClient.RemotePost)
 private fun RemoteSocialMedia(path: String, type: String?) {
     val context = LocalContext.current
     var file by remember(path) { mutableStateOf<File?>(null) }
-    LaunchedEffect(path) { file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, path, type) } }
-    if (file == null) Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-    else if (type == "audio") AudioPostPlayer(file!!)
-    else if (type == "video") AndroidView(
-        factory = { ctx ->
-            VideoView(ctx).apply {
-                layoutParams = ViewGroup.LayoutParams(-1, -1)
-                setMediaController(MediaController(ctx))
-                setVideoURI(Uri.fromFile(file))
-                setOnPreparedListener { it.isLooping = true; start() }
+    var videoAspectRatio by remember(path) { mutableFloatStateOf(16f / 9f) }
+    LaunchedEffect(path) {
+        file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, path, type) }
+    }
+    LaunchedEffect(file, type) {
+        if (file != null && type == "video") {
+            videoAspectRatio = withContext(Dispatchers.IO) {
+                runCatching {
+                    MediaMetadataRetriever().run {
+                        setDataSource(file!!.absolutePath)
+                        val width = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 16f
+                        val height = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 9f
+                        val rotation = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+                        release()
+                        if (rotation == 90 || rotation == 270) height / width else width / height
+                    }.coerceIn(0.56f, 1.91f)
+                }.getOrDefault(16f / 9f)
             }
-        },
-        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
-    )
-    else {
+        }
+    }
+    if (file == null) {
+        Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+    } else if (type == "audio") {
+        AudioPostPlayer(file!!)
+    } else if (type == "video") {
+        AndroidView(
+            factory = { ctx ->
+                VideoView(ctx).apply {
+                    layoutParams = ViewGroup.LayoutParams(-1, -1)
+                    setMediaController(MediaController(ctx))
+                    setVideoURI(Uri.fromFile(file))
+                    setOnPreparedListener { it.isLooping = true; start() }
+                }
+            },
+            modifier = Modifier.fillMaxWidth().aspectRatio(videoAspectRatio)
+        )
+    } else {
         var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
         LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }
         bitmap?.let {
@@ -328,32 +346,6 @@ private fun CommentsDialog(post: FynxRemoteSocialClient.RemotePost, onClose: () 
             }) { Text("Comment") }
         },
         dismissButton = { TextButton(onClick = onClose) { Text("Close") } }
-    )
-}
-
-@Composable
-private fun LikesDialog(post: FynxRemoteSocialClient.RemotePost, onClose: () -> Unit) {
-    val context = LocalContext.current
-    var list by remember(post.id) { mutableStateOf<List<FynxRemoteSocialClient.RemoteUser>>(emptyList()) }
-    LaunchedEffect(post.id) { FynxRemoteSocialClient.likes(context, post.id).onSuccess { list = it } }
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text("People who liked this") },
-        text = {
-            LazyColumn {
-                items(list) { user ->
-                    Row(Modifier.fillMaxWidth().padding(7.dp), verticalAlignment = Alignment.CenterVertically) {
-                        FynxAvatar(user.username, Modifier.size(38.dp))
-                        Spacer(Modifier.width(10.dp))
-                        Column {
-                            Text(user.displayName.ifBlank { user.username })
-                            Text("@${user.username.removePrefix("@")}", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onClose) { Text("Close") } }
     )
 }
 
