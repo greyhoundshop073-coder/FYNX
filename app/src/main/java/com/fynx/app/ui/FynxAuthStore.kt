@@ -27,6 +27,7 @@ object FynxAuthStore {
         storedUsername(context)?.trim()?.lowercase()?.ifBlank { null }
 
     fun saveAccount(context: Context, displayName: String, username: String, phone: String) {
+        clearIfSwitchingAccounts(context, username)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_ACCOUNT_CREATED, true)
             .putString(KEY_DISPLAY_NAME, displayName)
@@ -37,10 +38,18 @@ object FynxAuthStore {
     }
 
     fun save(context: Context, username: String) {
+        clearIfSwitchingAccounts(context, username)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_SIGNED_IN, true)
             .putString(KEY_USERNAME, username)
             .apply()
+    }
+
+    private fun clearIfSwitchingAccounts(context: Context, nextUsername: String) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val current = prefs.getString(KEY_USERNAME, null)?.trim()?.lowercase()
+        val next = nextUsername.trim().lowercase()
+        if (prefs.getBoolean(KEY_SIGNED_IN, false) && !current.isNullOrBlank() && current != next) clear(context)
     }
 
     /**
