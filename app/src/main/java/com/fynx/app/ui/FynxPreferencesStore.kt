@@ -93,6 +93,29 @@ object FynxPreferencesStore {
     private fun chatState(context: Context, username: String) = context.getSharedPreferences("${KEY_CHAT_LIST_STATE}_${username.removePrefix("@").trim().lowercase()}", Context.MODE_PRIVATE)
     private fun saveChatState(context: Context, username: String, key: String, value: Boolean) { chatState(context, username).edit().putBoolean(key, value).apply() }
 
+    /** Clear identity/privacy/media state before another account can enter this process. */
+    fun clearAccountSessionData(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .remove(KEY_DISPLAY_NAME)
+            .remove(KEY_USERNAME)
+            .remove(KEY_BIO)
+            .remove(KEY_DESCRIPTION)
+            .remove(KEY_NOTIFICATIONS)
+            .remove(KEY_PRIVATE_PROFILE)
+            .remove(KEY_READ_RECEIPTS)
+            .remove(KEY_STORY_REPLIES)
+            .remove(KEY_PROFILE_PHOTO)
+            .remove(KEY_ASSET)
+            .remove(KEY_NIGHT_MODE)
+            .remove(KEY_NIGHT_MODE_START)
+            .remove(KEY_NIGHT_MODE_END)
+            .remove(KEY_CHAT_WALLPAPER)
+            .remove(KEY_CHAT_LIST_VIEW)
+            .remove(KEY_STICKER_ANIMATION)
+            .remove(KEY_EMOJI_SIZE)
+            .apply()
+    }
+
     /** Persist the selected customization image inside FYNX so the picker URI cannot expire. */
     fun saveAsset(context: Context, uri: String?) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
