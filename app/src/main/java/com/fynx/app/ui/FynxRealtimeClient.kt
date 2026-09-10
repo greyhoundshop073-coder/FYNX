@@ -73,7 +73,6 @@ class FynxRealtimeClient(
                 reconnectAttempt = 0
                 if (socket == null) connectInternal()
             }
-
             override fun onLost(network: Network) {
                 if (manuallyClosed) return
                 if (!hasUsableNetwork()) {
@@ -134,14 +133,7 @@ class FynxRealtimeClient(
                         if (callEvent.signalType == "invite") {
                             val caller = callEvent.fromUsername?.removePrefix("@").orEmpty().ifBlank { callEvent.fromUserId }
                             val kind = if (callEvent.callType == "video") "Video call" else "Voice call"
-                            FynxNotificationFoundation.show(
-                                context,
-                                FynxNotificationFoundation.MESSAGES_CHANNEL,
-                                callEvent.callId.hashCode(),
-                                "Incoming $kind 📞",
-                                "@$caller is calling you.",
-                                stableKey = "incoming-call:${callEvent.callId}"
-                            )
+                            FynxNotificationFoundation.show(context, FynxNotificationFoundation.MESSAGES_CHANNEL, callEvent.callId.hashCode(), "Incoming $kind 📞", "@$caller is calling you.", stableKey = "incoming-call:${callEvent.callId}")
                         }
                         onEvent(callEvent)
                     }
@@ -180,18 +172,12 @@ class FynxRealtimeClient(
 
     private fun parseCallEvent(root: JSONObject): Event.Call? {
         val rawCallId = root.optString("callId").trim()
-        val callId = when {
-            rawCallId.startsWith("call_") -> rawCallId.replaceFirst("call_", "call-")
-            else -> rawCallId
-        }
+        val callId = when { rawCallId.startsWith("call_") -> rawCallId.replaceFirst("call_", "call-"); else -> rawCallId }
         val callType = root.optString("callType", "voice").trim().lowercase()
         val signalType = root.optString("signalType").trim().lowercase()
         val fromUserId = root.optString("fromUserId").trim()
         val toUserId = root.optString("toUserId").trim()
-        if (!FynxCallTransportHardening.isValidCallId(callId) ||
-            !FynxCallTransportHardening.isValidCallSignal(signalType) ||
-            !FynxCallTransportHardening.isValidCallType(callType) ||
-            fromUserId.isBlank() || toUserId.isBlank() || fromUserId == toUserId) return null
+        if (!FynxCallTransportHardening.isValidCallId(callId) || !FynxCallTransportHardening.isValidCallSignal(signalType) || !FynxCallTransportHardening.isValidCallType(callType) || fromUserId.isBlank() || toUserId.isBlank() || fromUserId == toUserId) return null
         val c = root.optJSONObject("candidate")?.let {
             val candidate = it.optString("candidate").trim()
             if (candidate.isBlank() || candidate.length > 20_000) return@let null
@@ -214,9 +200,41 @@ class FynxRealtimeClient(
     fun sendTyping(recipientId: String, isTyping: Boolean) = sendJson(JSONObject().apply { put("type", "typing"); put("recipientId", recipientId); put("isTyping", isTyping) })
     fun sendRead(messageIds: List<String>) { val ids = messageIds.mapNotNull { it.toLongOrNull() }.take(100); if (ids.isNotEmpty()) sendJson(JSONObject().apply { put("type", "read"); put("messageIds", JSONArray(ids)) }) }
     fun acknowledgeMessage(messageId: String) { messageId.toLongOrNull()?.let { sendJson(JSONObject().apply { put("type", "message_ack"); put("messageId", it) }) } }
-    private fun sendJson(payload: JSONObject) { val value = payload.toString(); if (socket?.send(value) == true) return; synchronized(pendingLock) { if (pendingPayloads.size >= 100) pendingPayloads.removeFirst(); pendingPayloads.addLast(value) } }
-    private fun flushPending(webSocket: WebSocket) { while (true) { val next = synchronized(pendingLock) { if (pendingPayloads.isEmpty()) null else pendingPayloads.removeFirst() } ?: break; if (!webSocket.send(next)) { synchronized(pendingLock) { pendingPayloads.addFirst(next) }; break } } }
-    fun close() { manuallyClosed = true; reconnectHandler.removeCallbacksAndMessages(null); unregisterNetworkCallback(); synchronized(pendingLock) { pendingPayloads.clear() }; socket?.close(1000, "FYNX conversation closed"); socket = null; onStateChanged(State.DISCONNECTED); client.connectionPool.evictAll() }
+
+    private fun sendJson(payload: JSONObject) {
+        val value = payload.toString()
+        if (socket?.send(value) == true) return
+        // Only durable protocol events should survive a reconnect. Typing and call
+        // signaling are time-sensitive; replaying stale versions can corrupt a new
+        // call/session after a network outage.
+        val type = payload.optString("type")
+        if (type != "read" && type != "message_ack") return
+        synchronized(pendingLock) {
+            if (pendingPayloads.size >= 100) pendingPayloads.removeFirst()
+            pendingPayloads.addLast(value)
+        }
+    }
+
+    private fun flushPending(webSocket: WebSocket) {
+        while (true) {
+            val next = synchronized(pendingLock) { if (pendingPayloads.isEmpty()) null else pendingPayloads.removeFirst() } ?: break
+            if (!webSocket.send(next)) {
+                synchronized(pendingLock) { pendingPayloads.addFirst(next) }
+                break
+            }
+        }
+    }
+
+    fun close() {
+        manuallyClosed = true
+        reconnectHandler.removeCallbacksAndMessages(null)
+        unregisterNetworkCallback()
+        synchronized(pendingLock) { pendingPayloads.clear() }
+        socket?.close(1000, "FYNX conversation closed")
+        socket = null
+        onStateChanged(State.DISCONNECTED)
+        client.connectionPool.evictAll()
+    }
 }
 
 private object NetworkRequestFactory {
