@@ -87,8 +87,17 @@ object FynxRemoteSocialClient {
 
     private const val FEED_PAGE_SIZE = 20
     private const val FEED_CACHE_TTL_MS = 120_000L
-    private const val FEED_CACHE_KEY = "fynx_feed_cache_v1"
-    private const val FEED_CACHE_TIME_KEY = "fynx_feed_cache_time_v1"
+    private const val FEED_CACHE_KEY_PREFIX = "fynx_feed_cache_v1_"
+    private const val FEED_CACHE_TIME_KEY_PREFIX = "fynx_feed_cache_time_v1_"
+
+    private fun feedCacheAccountKey(context: Context): String? =
+        FynxAuthStore.accountStorageKey(context)?.takeIf { it.isNotBlank() }
+
+    private fun feedCacheKey(context: Context): String? =
+        feedCacheAccountKey(context)?.let { FEED_CACHE_KEY_PREFIX + it }
+
+    private fun feedCacheTimeKey(context: Context): String? =
+        feedCacheAccountKey(context)?.let { FEED_CACHE_TIME_KEY_PREFIX + it }
 
     suspend fun feed(context: Context): Result<List<RemotePost>> =
         feedPage(context, FEED_PAGE_SIZE, 0, useCache = true).map { it.posts }
@@ -148,25 +157,30 @@ object FynxRemoteSocialClient {
     }
 
     private fun readCachedFeed(context: Context): FeedPage? = runCatching {
+        val cacheKey = feedCacheKey(context) ?: return null
+        val timeKey = feedCacheTimeKey(context) ?: return null
         val prefs = context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE)
-        val savedAt = prefs.getLong(FEED_CACHE_TIME_KEY, 0L)
-        val raw = prefs.getString(FEED_CACHE_KEY, null) ?: return null
+        val savedAt = prefs.getLong(timeKey, 0L)
+        val raw = prefs.getString(cacheKey, null) ?: return null
         if (System.currentTimeMillis() - savedAt > FEED_CACHE_TTL_MS) return null
         parseFeedPage(raw)
     }.getOrNull()
 
     private fun readStaleCachedFeed(context: Context): FeedPage? = runCatching {
+        val cacheKey = feedCacheKey(context) ?: return null
         val prefs = context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE)
-        val raw = prefs.getString(FEED_CACHE_KEY, null) ?: return null
+        val raw = prefs.getString(cacheKey, null) ?: return null
         parseFeedPage(raw)
     }.getOrNull()
 
     private fun writeCachedFeed(context: Context, raw: String) {
         runCatching {
+            val cacheKey = feedCacheKey(context) ?: return
+            val timeKey = feedCacheTimeKey(context) ?: return
             context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE)
                 .edit()
-                .putString(FEED_CACHE_KEY, raw)
-                .putLong(FEED_CACHE_TIME_KEY, System.currentTimeMillis())
+                .putString(cacheKey, raw)
+                .putLong(timeKey, System.currentTimeMillis())
                 .apply()
         }
     }
