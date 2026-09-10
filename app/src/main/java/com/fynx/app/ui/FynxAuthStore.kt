@@ -38,9 +38,18 @@ object FynxAuthStore {
             .apply()
     }
 
+    /**
+     * Ends the local authenticated session and clears the backend access token.
+     * Account-created state is intentionally preserved so the next launch can
+     * still offer the existing account's login path.
+     */
     fun clear(context: Context) {
+        runCatching { FynxBackendClient.saveAccessToken(context, null) }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_SIGNED_IN, false)
+            .remove(KEY_USERNAME)
+            .remove(KEY_DISPLAY_NAME)
+            .remove(KEY_PHONE)
             .apply()
     }
 }
