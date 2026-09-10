@@ -29,8 +29,8 @@ object FynxBackendClient {
     private const val RETRY_DELAY_MS = 750L
     private const val NETWORK_VALIDATION_WAIT_MS = 6_000L
     private const val NETWORK_VALIDATION_POLL_MS = 500L
-    private const val BACKEND_READY_WAIT_MS = 8_000L
-    private const val BACKEND_READY_POLL_MS = 500L
+    private const val BACKEND_READY_WAIT_MS = 60_000L
+    private const val BACKEND_READY_POLL_MS = 1_000L
     private const val CONNECT_TIMEOUT_MS = 15_000
     private const val READ_TIMEOUT_MS = 30_000
     private const val WEAK_CONNECT_TIMEOUT_MS = 20_000
@@ -203,8 +203,7 @@ object FynxBackendClient {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
         return manager.allNetworks.any { network ->
             val capabilities = manager.getNetworkCapabilities(network) ?: return@any false
-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
         }
     }
 
