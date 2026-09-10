@@ -29,8 +29,6 @@ object FynxBackendClient {
     private const val RETRY_DELAY_MS = 750L
     private const val NETWORK_VALIDATION_WAIT_MS = 6_000L
     private const val NETWORK_VALIDATION_POLL_MS = 500L
-    private const val BACKEND_READY_WAIT_MS = 60_000L
-    private const val BACKEND_READY_POLL_MS = 1_000L
     private const val CONNECT_TIMEOUT_MS = 15_000
     private const val READ_TIMEOUT_MS = 30_000
     private const val WEAK_CONNECT_TIMEOUT_MS = 20_000
@@ -95,7 +93,6 @@ object FynxBackendClient {
                 require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }
                 require(path.startsWith("/")) { "Backend path must start with /." }
                 awaitValidatedNetwork(context)
-                if (path != "/health" && path != "/ready") awaitBackendReady(context, root)
 
                 var attempt = 0
                 var response: String? = null
@@ -128,24 +125,6 @@ object FynxBackendClient {
             if (hasNetwork(context)) return
         }
         throw FynxNetworkUnavailableException()
-    }
-
-    private suspend fun awaitBackendReady(context: Context, root: String) {
-        var waited = 0L
-        var lastFailure: Exception? = null
-        while (waited <= BACKEND_READY_WAIT_MS) {
-            try {
-                executeRequest(context, root, "GET", "/ready", null)
-                return
-            } catch (error: Exception) {
-                lastFailure = error
-            }
-            if (waited == BACKEND_READY_WAIT_MS) break
-            delay(BACKEND_READY_POLL_MS)
-            waited += BACKEND_READY_POLL_MS
-            awaitValidatedNetwork(context)
-        }
-        throw lastFailure ?: IOException("FYNX backend is not ready")
     }
 
     private suspend fun executeRequest(context: Context, root: String, method: String, path: String, body: String?): String {
