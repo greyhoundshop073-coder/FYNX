@@ -61,6 +61,9 @@ export function installSocialHardening(app) {
       const mediaId = req.body?.mediaId;
       const mediaType = req.body?.mediaType == null ? "" : String(req.body.mediaType).trim().toLowerCase();
 
+      if (!text && (mediaId == null || mediaId === "")) {
+        return res.status(400).json({ error: "post content is required" });
+      }
       if (text.length > 4000) return res.status(413).json({ error: "post text is too long" });
       if (!["PUBLIC", "FRIENDS", "ONLY_ME"].includes(visibility)) {
         return res.status(400).json({ error: "invalid post visibility" });
