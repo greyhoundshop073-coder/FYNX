@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import android.app.Activity
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 @Composable
-fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Boolean = false, onSettingsClosed: () -> Unit = {}, onSignOut: () -> Unit = {}, onAppearanceChanged: (String) -> Unit = {}, onAccentChanged: (FynxAccent) -> Unit = {}, onOpenPrivacy: () -> Unit = {}) {
+fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Boolean = false, onSettingsClosed: () -> Unit = {}, onSignOut: (() -> Unit)? = null, onAppearanceChanged: (String) -> Unit = {}, onAccentChanged: (FynxAccent) -> Unit = {}, onOpenPrivacy: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf(false) }
@@ -83,7 +84,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
         item { ProfileInfoCard("Username", "@${profile.username.removePrefix("@")}") }
         item { ProfileInfoCard("Profile photo", if (photo == null) "Not set" else "Photo selected") }
         item { ProfileInfoCard("Account", if (session.state == AuthState.SIGNED_IN) "Signed in" else "Signed out") }
-        if (session.state == AuthState.SIGNED_IN) item { OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.ControlShape) { Text("Sign out") } }
+        if (session.state == AuthState.SIGNED_IN) item { OutlinedButton(onClick = { if (onSignOut != null) onSignOut() else { FynxAuthStore.clear(context); (context as? Activity)?.recreate() } }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.ControlShape) { Text("Sign out") } }
     }
     connectionType?.let { type -> ProfileConnectionsDialog(type, connections, connectionsLoading, connectionsError) { connectionType = null } }
 }
