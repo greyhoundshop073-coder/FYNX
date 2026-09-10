@@ -90,8 +90,22 @@ object FynxPreferencesStore {
     fun setChatPinned(context: Context, username: String, value: Boolean) { saveChatState(context, username, "pinned", value) }
     fun setChatMuted(context: Context, username: String, value: Boolean) { saveChatState(context, username, "muted", value) }
     fun setChatArchived(context: Context, username: String, value: Boolean) { saveChatState(context, username, "archived", value) }
-    private fun chatState(context: Context, username: String) = context.getSharedPreferences("${KEY_CHAT_LIST_STATE}_${username.removePrefix("@").trim().lowercase()}", Context.MODE_PRIVATE)
-    private fun saveChatState(context: Context, username: String, key: String, value: Boolean) { chatState(context, username).edit().putBoolean(key, value).apply() }
+
+    private fun chatState(context: Context, username: String) = context.getSharedPreferences(
+        "${KEY_CHAT_LIST_STATE}_${FynxAuthStore.accountStorageKey(context)?.let(::storageKey) ?: "signed_out"}_${username.removePrefix("@").trim().lowercase()}",
+        Context.MODE_PRIVATE
+    )
+
+    private fun saveChatState(context: Context, username: String, key: String, value: Boolean) {
+        chatState(context, username).edit().putBoolean(key, value).apply()
+    }
+
+    private fun storageKey(value: String): String = value.map { character ->
+        when {
+            character.isLetterOrDigit() -> character
+            else -> '_'
+        }
+    }.joinToString("").take(80).ifBlank { "account" }
 
     /** Clear identity/privacy/media state before another account can enter this process. */
     fun clearAccountSessionData(context: Context) {
@@ -114,6 +128,15 @@ object FynxPreferencesStore {
             .remove(KEY_STICKER_ANIMATION)
             .remove(KEY_EMOJI_SIZE)
             .apply()
+
+        // Remove the old pre-account-scoped chat-state stores so they cannot
+        // survive an account switch and cannot be mistaken for current state.
+        runCatching {
+            File(context.applicationInfo.dataDir, "shared_prefs")
+                .listFiles()
+                ?.filter { it.name.startsWith("${KEY_CHAT_LIST_STATE}_") && it.name.endsWith(".xml") }
+                ?.forEach { it.delete() }
+        }
     }
 
     /** Persist the selected customization image inside FYNX so the picker URI cannot expire. */
