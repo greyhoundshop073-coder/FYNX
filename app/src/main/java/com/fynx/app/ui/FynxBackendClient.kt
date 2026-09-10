@@ -167,7 +167,10 @@ object FynxBackendClient {
                 output.toString()
             }.orEmpty()
             if (status == HttpURLConnection.HTTP_UNAUTHORIZED) {
-                saveAccessToken(context, null)
+                // 401 is a session boundary event, not just a failed request.
+                // Clear the complete local session so no stale account-sensitive
+                // state can remain visible after token expiry.
+                FynxAuthStore.clear(context)
                 throw FynxUnauthorizedException()
             }
             if (status !in 200..299) throw FynxHttpException(status, response)
