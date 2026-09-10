@@ -46,21 +46,15 @@ object FynxAuthStore {
     /**
      * Ends the local authenticated session and clears all local data that was
      * not already account-namespaced. This prevents the next account on the
-     * same device from inheriting feed, media or notification data.
+     * same device from inheriting identity, feed, media or notification data.
      * Account-created state is intentionally preserved for the login path.
      */
     fun clear(context: Context) {
         runCatching { FynxBackendClient.saveAccessToken(context, null) }
-
-        runCatching {
-            context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE).edit().clear().apply()
-        }
-        runCatching {
-            context.getSharedPreferences("fynx_notification_store", Context.MODE_PRIVATE).edit().clear().apply()
-        }
-        runCatching {
-            File(context.cacheDir, "fynx_media_cache_v2").deleteRecursively()
-        }
+        runCatching { FynxPreferencesStore.clearAccountSessionData(context) }
+        runCatching { context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE).edit().clear().apply() }
+        runCatching { context.getSharedPreferences("fynx_notification_store", Context.MODE_PRIVATE).edit().clear().apply() }
+        runCatching { File(context.cacheDir, "fynx_media_cache_v2").deleteRecursively() }
 
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_SIGNED_IN, false)
