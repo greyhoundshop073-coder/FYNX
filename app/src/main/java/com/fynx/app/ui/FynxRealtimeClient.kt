@@ -151,7 +151,7 @@ class FynxRealtimeClient(
                 if (current) socket = null
                 if (!current || manuallyClosed) return
                 if (FynxCallTransportHardening.isAuthFailure(response?.code)) {
-                    FynxBackendClient.saveAccessToken(context, null)
+                    FynxAuthStore.clear(context)
                     onStateChanged(State.FAILED)
                     return
                 }
