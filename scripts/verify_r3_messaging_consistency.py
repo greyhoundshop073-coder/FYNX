@@ -53,4 +53,17 @@ for needle, label in [
 ]:
     require(ISOLATION, needle, label)
 
+# Account/session isolation regression invariants: a replaced socket must be
+# marked stale, prevented from sending/receiving, and unable to clear the newer
+# active session when its delayed close event arrives.
+for needle, label in [
+    ('previous.__fynxStale = true;', "old socket stale marker"),
+    ('previous.close(4001, "replaced realtime session")', "old socket replacement close"),
+    ('socket.__fynxStale = false;', "new socket active marker"),
+    ('if (currentSocketByUserId.get(userId) !== socket || socket.__fynxStale) return;', "stale socket send guard"),
+    ('if (currentSocketByUserId.get(userId) !== socket || socket.__fynxStale || socket.readyState !== 1) return;', "stale socket message guard"),
+    ('if (currentSocketByUserId.get(userId) === socket) currentSocketByUserId.delete(userId);', "old close cannot remove replacement session"),
+]:
+    require(ISOLATION, needle, label)
+
 print("R3 messaging consistency gate: GREEN")
