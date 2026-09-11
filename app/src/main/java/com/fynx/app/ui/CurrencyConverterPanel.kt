@@ -15,6 +15,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -110,12 +111,32 @@ private suspend fun fetchOpenRates(context: Context, base: String): Result<Map<S
 
 private fun fetchOpenRatesOnce(base: String): Result<Map<String, Double>> = runCatching {
     val connection = (URL("https://open.er-api.com/v6/latest/${base.uppercase(Locale.US)}").openConnection() as HttpURLConnection).apply {
-        requestMethod = "GET"; connectTimeout = RATE_CONNECT_TIMEOUT_MS; readTimeout = RATE_READ_TIMEOUT_MS; useCaches = false; instanceFollowRedirects = false; setRequestProperty("Accept", "application/json"); setRequestProperty("Accept-Encoding", "identity"); setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0"); setRequestProperty("User-Agent", "FYNX-Android/1")
+        requestMethod = "GET"
+        connectTimeout = RATE_CONNECT_TIMEOUT_MS
+        readTimeout = RATE_READ_TIMEOUT_MS
+        useCaches = false
+        instanceFollowRedirects = false
+        setRequestProperty("Accept", "application/json")
+        setRequestProperty("Accept-Encoding", "identity")
+        setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0")
+        setRequestProperty("User-Agent", "FYNX-Android/1")
     }
     try {
         val status = connection.responseCode
         val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-        val body = stream?.use { input -> val out = StringBuilder(); val buffer = CharArray(8192); var total = 0; while (true) { val count = input.read(buffer); if (count < 0) break; total += count; if (total > RATE_MAX_RESPONSE_BYTES) error("Rate response is too large"); out.append(buffer, 0, count) }; out.toString() }.orEmpty()
+        val body = stream?.use { input ->
+            val out = ByteArrayOutputStream()
+            val buffer = ByteArray(8192)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                if (total > RATE_MAX_RESPONSE_BYTES) error("Rate response is too large")
+                out.write(buffer, 0, count)
+            }
+            out.toString(Charsets.UTF_8.name())
+        }.orEmpty()
         if (status !in 200..299) error("HTTP $status")
         val json = JSONObject(body)
         if (json.optString("result") != "success") error("Rate service unavailable")
@@ -126,7 +147,10 @@ private fun fetchOpenRatesOnce(base: String): Result<Map<String, Double>> = runC
 
 private fun awaitValidatedNetwork(context: Context) {
     val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: throw IOException("Network service unavailable")
-    val valid = manager.allNetworks.any { network -> val capabilities = manager.getNetworkCapabilities(network); capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) }
+    val valid = manager.allNetworks.any { network ->
+        val capabilities = manager.getNetworkCapabilities(network)
+        capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
     if (!valid) throw IOException("Network connection is unavailable")
 }
 
