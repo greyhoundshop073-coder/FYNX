@@ -18,7 +18,7 @@ require('owner-only Status deletion','DELETE FROM statuses WHERE id=$1 AND owner
 require('management route authentication','jwt.verify(token, JWT_SECRET)' in management)
 require('management route production wiring','registerStatusManagementRoutes({ app });' in scale and './statusManagementRoutes.js' in scale)
 require('client sends audience','put("audience", status.audience.name)' in client)
-require('client supports deletion','FynxBackendClient.delete(context, "/api/statuses/${statusId}")' in client)
+require('client supports deletion','FynxBackendClient.delete(context, "/api/statuses/${statusId.trim()}")' in client)
 require('audience model exists','enum class FynxStatusAudience' in foundation)
 require('real image preview','ImageView' in composer and 'setImageURI' in composer)
 require('real video preview','VideoView' in composer and 'setVideoURI' in composer)
