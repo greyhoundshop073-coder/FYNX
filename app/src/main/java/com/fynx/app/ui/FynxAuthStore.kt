@@ -70,17 +70,26 @@ object FynxAuthStore {
         // Remove the older unscoped media cache as well. It predates account
         // namespaces and must never survive a logout/account switch.
         runCatching { File(context.cacheDir, "fynx_media").deleteRecursively() }
-        // Remove account-scoped media caches on logout/account switch.
-        // This covers both production-messaging and remote-media namespaces.
+
+        // Remove account-scoped remote-media caches on logout/account switch.
+        runCatching {
+            context.cacheDir.listFiles()
+                ?.filter { it.isDirectory && it.name.startsWith("fynx_media_remote_") }
+                ?.forEach { it.deleteRecursively() }
+        }
+
+        // Remove account-scoped production-messaging media caches on logout/account switch.
         runCatching {
             context.cacheDir.listFiles()
                 ?.filter {
                     it.isDirectory &&
                         it.name.startsWith("fynx_media_") &&
+                        !it.name.startsWith("fynx_media_remote_") &&
                         it.name != "fynx_media_cache_v2"
                 }
                 ?.forEach { it.deleteRecursively() }
         }
+
         // Legacy social/status media was stored directly under filesDir without
         // an account namespace. Delete those protected local copies at the
         // session boundary so another account cannot inherit stale media bytes.
