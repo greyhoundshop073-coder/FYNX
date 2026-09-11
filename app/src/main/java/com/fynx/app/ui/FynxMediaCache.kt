@@ -6,6 +6,8 @@ import android.graphics.BitmapFactory
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 private const val FYNX_MEDIA_CACHE_DIR = "fynx_media_cache_v2"
 private const val MAX_FYNX_MEDIA_CACHE_BYTES = 100L * 1024L * 1024L
@@ -13,7 +15,7 @@ private const val MAX_FYNX_MEDIA_FILE_BYTES = 12 * 1024 * 1024
 private const val MAX_IMAGE_DIMENSION = 1600
 
 internal object FynxMediaCache {
-    private val downloadLocks = mutableMapOf<String, Any>()
+    private val downloadLocks = mutableMapOf<String, Mutex>()
 
     suspend fun getOrDownload(context: Context, path: String, type: String?): File? {
         if (path.isBlank()) return null
@@ -31,18 +33,20 @@ internal object FynxMediaCache {
         }
         if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) return null
 
-        val lock = synchronized(downloadLocks) { downloadLocks.getOrPut(file.absolutePath) { Any() } }
+        val lock = synchronized(downloadLocks) { downloadLocks.getOrPut(file.absolutePath) { Mutex() } }
         return try {
-            synchronized(lock) {
+            lock.withLock {
                 if (file.isFile && file.length() in 1..MAX_FYNX_MEDIA_FILE_BYTES) {
                     file.setLastModified(System.currentTimeMillis())
-                    return@synchronized file
+                    return@withLock file
                 }
-                if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) return@synchronized null
+                if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) return@withLock null
                 download(context, normalizedPath, file)?.also { trim(directory, it) }
             }
         } finally {
-            synchronized(downloadLocks) { downloadLocks.remove(file.absolutePath) }
+            synchronized(downloadLocks) {
+                if (!lock.isLocked) downloadLocks.remove(file.absolutePath)
+            }
         }
     }
 
