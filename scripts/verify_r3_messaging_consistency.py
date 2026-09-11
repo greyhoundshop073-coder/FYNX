@@ -4,16 +4,17 @@ ROOT = Path(__file__).resolve().parents[1]
 BOOTSTRAP = (ROOT / "backend" / "serverBootstrap.js").read_text(encoding="utf-8")
 ISOLATION = (ROOT / "backend" / "realtimeIsolationBootstrap.js").read_text(encoding="utf-8")
 
-# R3 deliberately has two realtime layers:
-# - serverBootstrap owns authenticated messaging policy and typing/message delivery.
-# - realtimeIsolationBootstrap owns stale-session isolation plus read/ACK abuse guards.
-# The old gate incorrectly assumed every packet handler lived in serverBootstrap.
+# serverBootstrap contains a JavaScript template literal that generates the
+# runtime server. Its embedded packet strings are escaped in the source file.
+# Normalize only those escape sequences before checking the actual invariants.
+BOOTSTRAP_CHECK = BOOTSTRAP.replace('\\"', '"')
+
 
 def require(text, needle, label):
     if needle not in text:
         raise SystemExit(f"R3 messaging consistency check failed: missing {label}: {needle}")
 
-# HTTP + messaging authorization invariants.
+# HTTP + realtime messaging authorization invariants.
 for needle, label in [
     ("const fynxRealtimeMessagingCanSend = async (senderId, targetId)", "shared message authorization helper"),
     ("fynxRealtimeMessagingBlocks(senderId, targetId)", "mutual block check"),
@@ -24,19 +25,20 @@ for needle, label in [
     ("const fynxRealtimeMessagingAck = async (userId, id)", "ACK helper"),
     ("fynxRealtimeMessagingAttach(socket, userId)", "authenticated realtime attachment"),
     ("body.type === \"typing\"", "typing packet handling"),
+    ("body.type === \"message_ack\"", "message ACK handling"),
+    ("body.type === \"read\"", "read packet handling"),
     ("conversation unavailable", "HTTP shared-authorization failure"),
     ("const fynxRealtimeMessagingMaxPacketBytes = 64 * 1024", "64 KB realtime packet guard"),
     ("if (!pool || !fynxRealtimeMessagingValidUserId(targetId) || targetId === senderId) return false;", "invalid/self target guard"),
 ]:
-    require(BOOTSTRAP, needle, label)
+    require(BOOTSTRAP_CHECK, needle, label)
 
 # SQL authorization must bind state changes to the authenticated recipient.
-require(BOOTSTRAP, "id=ANY($1::bigint[]) AND recipient_id=$2", "read receipts recipient binding")
-require(BOOTSTRAP, "id=$1 AND recipient_id=$2", "delivery ACK recipient binding")
+require(BOOTSTRAP_CHECK, "id=ANY($1::bigint[]) AND recipient_id=$2", "read receipts recipient binding")
+require(BOOTSTRAP_CHECK, "id=$1 AND recipient_id=$2", "delivery ACK recipient binding")
 
-# Read/ACK traffic is intentionally intercepted by the outer isolation layer.
-# This is not a weaker path: it runs before the legacy socket message listeners,
-# and its identity is independently derived from a verified JWT.
+# The outer isolation layer independently authenticates the socket and applies
+# abuse protection before the legacy socket message listeners receive packets.
 for needle, label in [
     ("const user = jwt.verify(token, JWT_SECRET);", "independent JWT verification"),
     ("currentSocketByUserId.set(userId, socket);", "per-user active socket isolation"),
