@@ -11,6 +11,7 @@ const RATE_WINDOW_MS = 60_000;
 const READ_RATE_LIMIT = 120;
 const ACK_RATE_LIMIT = 240;
 const MAX_READ_IDS = 100;
+const MAX_PACKET_BYTES = 64 * 1024;
 const originalServerOn = WebSocketServer.prototype.on;
 
 function authenticatedUserId(req) {
@@ -41,6 +42,7 @@ function allowRate(map, userId, limit) {
 }
 
 function validReadOrAckPacket(raw, userId) {
+  if (Buffer.byteLength(raw.toString(), "utf8") > MAX_PACKET_BYTES) return false;
   let body;
   try { body = JSON.parse(raw.toString()); } catch { return true; }
   if (!body || typeof body !== "object" || Array.isArray(body)) return true;
@@ -50,6 +52,10 @@ function validReadOrAckPacket(raw, userId) {
   }
   if (body.type === "read") {
     if (!Array.isArray(body.messageIds) || body.messageIds.length > MAX_READ_IDS) return false;
+    if (body.messageIds.some(value => {
+      const id = Number(value);
+      return !Number.isSafeInteger(id) || id <= 0;
+    })) return false;
     return allowRate(realtimeReadRate, userId, READ_RATE_LIMIT);
   }
   return true;
