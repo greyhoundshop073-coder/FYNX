@@ -4,6 +4,7 @@ import { createBackgroundJobQueue } from "./backgroundJobs.js";
 import { registerMarketplaceSettlementRoutes } from "./marketplaceSettlement.js";
 import { registerMarketplaceSettlementWorker } from "./marketplaceSettlementWorker.js";
 import { registerMarketplacePaymentExpiryWorker } from "./marketplacePaymentExpiry.js";
+import { registerMarketplaceInspectionExpiryWorker } from "./marketplaceInspectionExpiry.js";
 import { registerMarketplaceProtectionRoutes } from "./marketplaceProtection.js";
 import { registerMarketplaceProtectionResolutionRoutes } from "./marketplaceProtectionResolution.js";
 import { installSecurityHardening } from "./securityHardening.js";
@@ -69,6 +70,7 @@ http.createServer = function fynxCreateServer(...args) {
   globalThis.__fynxBackgroundJobs=jobs;
   registerMarketplaceSettlementWorker({ jobs, logger: console });
   registerMarketplacePaymentExpiryWorker({ logger: console });
+  registerMarketplaceInspectionExpiryWorker({ logger: console });
   void jobs.start().catch(error=>console.error("[fynx-jobs] startup failed",error?.message||error));
   return server;
 };
