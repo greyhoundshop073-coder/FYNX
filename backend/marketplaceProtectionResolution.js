@@ -34,6 +34,7 @@ async function ensureProtectionSchema() {
       const tables = await pool.query(`SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('marketplace_protection_cases','marketplace_order_disputes')`);
       const names = new Set(tables.rows.map(row => row.table_name));
       if (!names.has('marketplace_protection_cases')) return;
+      await pool.query(`ALTER TABLE marketplace_protection_cases ADD COLUMN IF NOT EXISTS previous_order_status TEXT; ALTER TABLE marketplace_protection_cases ADD COLUMN IF NOT EXISTS previous_escrow_status TEXT;`);
       if (names.has('marketplace_order_disputes')) {
         await pool.query(`ALTER TABLE marketplace_protection_cases ADD COLUMN IF NOT EXISTS dispute_id UUID;
           DO $$ BEGIN ALTER TABLE marketplace_protection_cases ADD CONSTRAINT marketplace_protection_cases_dispute_fk FOREIGN KEY (dispute_id) REFERENCES marketplace_order_disputes(id) ON DELETE SET NULL; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -62,8 +63,8 @@ async function reconcileOpenDisputes() {
     if (!names.has('marketplace_order_disputes') || !names.has('marketplace_protection_cases')) return;
     const columns = await client.query(`SELECT column_name FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='marketplace_protection_cases' AND column_name='dispute_id'`);
     if (!columns.rowCount) return;
-    const disputes = await client.query(`SELECT d.id,d.order_id,d.opened_by,d.reason,d.details,d.status,o.buyer_id,o.seller_id
-      FROM marketplace_order_disputes d JOIN marketplace_orders o ON o.id=d.order_id
+    const disputes = await client.query(`SELECT d.id,d.order_id,d.opened_by,d.reason,d.details,d.status,o.buyer_id,o.seller_id,o.status AS order_status,e.status AS escrow_status
+      FROM marketplace_order_disputes d JOIN marketplace_orders o ON o.id=d.order_id LEFT JOIN marketplace_escrows e ON e.order_id=d.order_id
       WHERE d.status IN ('OPEN','UNDER_REVIEW') AND NOT EXISTS (SELECT 1 FROM marketplace_protection_cases c WHERE c.dispute_id=d.id)
       ORDER BY d.created_at ASC LIMIT 100`);
     for (const dispute of disputes.rows) {
@@ -71,10 +72,14 @@ async function reconcileOpenDisputes() {
       if (!role) continue;
       try {
         await client.query('BEGIN');
-        const inserted = await client.query(`INSERT INTO marketplace_protection_cases (id,order_id,opened_by,role,case_type,reason,details,status,idempotency_key,dispute_id)
-          VALUES ($1,$2,$3,$4,'DISPUTE',$5,$6,CASE WHEN $7 IN ('OPEN','UNDER_REVIEW') THEN $7 ELSE 'OPEN' END,$8,$9)
-          ON CONFLICT (idempotency_key) DO NOTHING RETURNING id`, [crypto.randomUUID(), dispute.order_id, dispute.opened_by, role, String(dispute.reason), String(dispute.details || ''), dispute.status, `FYNX-DISPUTE-${dispute.id}`, dispute.id]);
-        if (inserted.rows[0]) await client.query(`INSERT INTO marketplace_protection_audit (case_id,order_id,actor_id,action,metadata) VALUES ($1,$2,$3,'DISPUTE_LINKED',$4::jsonb)`, [inserted.rows[0].id, dispute.order_id, dispute.opened_by, JSON.stringify({ disputeId: String(dispute.id), reason: dispute.reason })]);
+        const inserted = await client.query(`INSERT INTO marketplace_protection_cases (id,order_id,opened_by,role,case_type,reason,details,status,idempotency_key,dispute_id,previous_order_status,previous_escrow_status)
+          VALUES ($1,$2,$3,$4,'DISPUTE',$5,$6,CASE WHEN $7 IN ('OPEN','UNDER_REVIEW') THEN $7 ELSE 'OPEN' END,$8,$9,$10,$11)
+          ON CONFLICT (idempotency_key) DO NOTHING RETURNING id`, [crypto.randomUUID(), dispute.order_id, dispute.opened_by, role, String(dispute.reason), String(dispute.details || ''), dispute.status, `FYNX-DISPUTE-${dispute.id}`, dispute.id, String(dispute.order_status), dispute.escrow_status ? String(dispute.escrow_status) : null]);
+        if (inserted.rows[0]) {
+          await client.query(`UPDATE marketplace_orders SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status=$2`, [dispute.order_id, dispute.order_status]);
+          await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE order_id=$1 AND status IN ('HELD','RELEASE_ELIGIBLE','RELEASE_PENDING')`, [dispute.order_id]);
+          await client.query(`INSERT INTO marketplace_protection_audit (case_id,order_id,actor_id,action,metadata) VALUES ($1,$2,$3,'DISPUTE_LINKED',$4::jsonb)`, [inserted.rows[0].id, dispute.order_id, dispute.opened_by, JSON.stringify({ disputeId: String(dispute.id), reason: dispute.reason, previousOrderStatus: dispute.order_status, previousEscrowStatus: dispute.escrow_status || null })]);
+        }
         await client.query('COMMIT');
       } catch (error) { await client.query('ROLLBACK').catch(() => {}); console.error('marketplace protection dispute reconciliation', error); }
     }
@@ -84,8 +89,6 @@ async function reconcileOpenDisputes() {
 
 async function requireAdmin(userId) {
   if (!pool) return false;
-  const first = (await pool.query('SELECT id FROM users ORDER BY id ASC LIMIT 1')).rows[0];
-  if (first && String(first.id) === String(userId)) return true;
   return (await pool.query('SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 LIMIT 1', [userId])).rowCount > 0;
 }
 
@@ -111,7 +114,7 @@ export function registerMarketplaceProtectionResolutionRoutes({ app }) {
       if (!(await requireAdmin(req.user.sub))) return res.status(403).json({ error: 'administrator access required' });
       const status = typeof req.query?.status === 'string' ? req.query.status.trim().toUpperCase() : '';
       const params = status ? [status] : [];
-      const result = await pool.query(`SELECT c.id,c.order_id,c.dispute_id,c.opened_by,c.role,c.case_type,c.reason,c.details,c.status,c.created_at,c.updated_at,
+      const result = await pool.query(`SELECT c.id,c.order_id,c.dispute_id,c.opened_by,c.role,c.case_type,c.reason,c.details,c.status,c.previous_order_status,c.previous_escrow_status,c.created_at,c.updated_at,
         o.buyer_id,o.seller_id,o.total_amount,o.currency,o.status AS order_status,o.payment_reference
         FROM marketplace_protection_cases c JOIN marketplace_orders o ON o.id=c.order_id ${status ? 'WHERE c.status=$1' : ''} ORDER BY c.created_at ASC LIMIT 100`, params);
       return res.json({ cases: result.rows.map(row => ({ ...row, id: String(row.id), orderId: String(row.order_id), disputeId: row.dispute_id ? String(row.dispute_id) : null, openedBy: String(row.opened_by), buyerId: String(row.buyer_id), sellerId: String(row.seller_id), totalAmount: Number(row.total_amount) })) });
@@ -137,6 +140,12 @@ export function registerMarketplaceProtectionResolutionRoutes({ app }) {
         if (!['OPEN','UNDER_REVIEW'].includes(row.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'protection case is already resolved' }); }
         if (!row.escrow_id) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order escrow is not initialized' }); }
 
+        const payoutConflict = (await client.query(`SELECT status FROM marketplace_financial_operations WHERE order_id=$1 AND operation_type='PAYOUT_RELEASE' AND status IN ('PENDING','SUCCEEDED') LIMIT 1 FOR UPDATE`, [row.order_id])).rows[0];
+        const refundConflict = (await client.query(`SELECT status FROM marketplace_financial_operations WHERE order_id=$1 AND operation_type='REFUND' AND status IN ('PENDING','SUCCEEDED') LIMIT 1 FOR UPDATE`, [row.order_id])).rows[0];
+        if (resolution === 'BUYER' && payoutConflict) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'seller payout is already active; refund is blocked until financial reconciliation completes' }); }
+        if (resolution === 'SELLER' && refundConflict) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'refund is already active; seller release is blocked' }); }
+        if (resolution === 'CANCEL' && (payoutConflict || refundConflict)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'financial operation is active; protection cannot be cancelled while money movement is pending or finalized' }); }
+
         if (resolution === 'BUYER') {
           if (!row.payment_reference) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'payment reference is required before refund' }); }
           if (!PAYSTACK_SECRET_KEY) { await client.query('ROLLBACK'); return res.status(503).json({ error: 'refund provider is not configured yet' }); }
@@ -146,25 +155,25 @@ export function registerMarketplaceProtectionResolutionRoutes({ app }) {
           if (existing?.status === 'PENDING') { await client.query('COMMIT'); return res.status(202).json({ ok: true, pending: true, caseId: String(caseId), status: 'REFUND_PENDING', operation: existing }); }
           if (existing?.status === 'FAILED') { await client.query('COMMIT'); return res.status(409).json({ error: 'previous refund attempt failed; provider status must be reconciled before retry', protectionActive: true, caseId: String(caseId), operation: existing }); }
           const operationId = crypto.randomUUID();
-          refundJob = { operationId, orderId: String(row.order_id), caseId: String(caseId), reference: String(row.payment_reference), amount: Number(row.total_amount), currency: String(row.currency), quantity: Number(row.quantity), listingId: String(row.listing_id), disputeId: row.dispute_id ? String(row.dispute_id) : null };
+          refundJob = { operationId, orderId: String(row.order_id), caseId: String(caseId), reference: String(row.payment_reference), amount: Number(row.total_amount), currency: String(row.currency) };
           await client.query(`INSERT INTO marketplace_financial_operations (id,order_id,operation_type,idempotency_key,status,provider,amount,currency,metadata) VALUES ($1,$2,'REFUND',$3,'PENDING','paystack',$4,$5,$6::jsonb)`, [operationId, row.order_id, key, row.total_amount, row.currency, JSON.stringify({ paymentReference: row.payment_reference, caseId: String(caseId), note })]);
           await client.query(`UPDATE marketplace_escrows SET status='REFUND_PENDING',updated_at=NOW() WHERE id=$1 AND status IN ('HELD','DISPUTED','RELEASE_ELIGIBLE')`, [row.escrow_id]);
           await client.query(`UPDATE marketplace_protection_cases SET status='UNDER_REVIEW',updated_at=NOW() WHERE id=$1`, [caseId]);
         } else {
           const caseStatus = resolution === 'SELLER' ? 'RESOLVED_SELLER' : 'CANCELLED';
-          const escrowStatus = resolution === 'SELLER' ? 'RELEASE_ELIGIBLE' : 'CANCELLED';
+          const escrowStatus = resolution === 'SELLER' ? 'RELEASE_ELIGIBLE' : (row.previous_escrow_status || 'HELD');
           await client.query(`UPDATE marketplace_protection_cases SET status=$1,updated_at=NOW() WHERE id=$2`, [caseStatus, caseId]);
           if (row.dispute_id) await client.query(`UPDATE marketplace_order_disputes SET status=$1,resolution_notes=$2,updated_at=NOW() WHERE id=$3`, [resolution === 'SELLER' ? 'RESOLVED_SELLER' : 'CANCELLED', note, row.dispute_id]);
           if (resolution === 'SELLER') {
             await client.query(`UPDATE marketplace_orders SET status='COMPLETED',completed_at=COALESCE(completed_at,NOW()),updated_at=NOW() WHERE id=$1 AND status='DISPUTED'`, [row.order_id]);
             await client.query(`UPDATE marketplace_listings SET quantity=GREATEST(0,quantity-$1),reserved_quantity=GREATEST(0,reserved_quantity-$1),active=CASE WHEN quantity-$1 <= 0 THEN FALSE ELSE active END,updated_at=NOW() WHERE id=$2`, [row.quantity,row.listing_id]);
           } else {
-            await client.query(`UPDATE marketplace_orders SET status='CANCELLED',cancelled_at=COALESCE(cancelled_at,NOW()),updated_at=NOW() WHERE id=$1 AND status='DISPUTED'`, [row.order_id]);
-            await client.query(`UPDATE marketplace_listings SET reserved_quantity=GREATEST(0,reserved_quantity-$1),updated_at=NOW() WHERE id=$2`, [row.quantity,row.listing_id]);
+            const restoreOrderStatus = ['PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED'].includes(String(row.previous_order_status)) ? String(row.previous_order_status) : 'PAID';
+            await client.query(`UPDATE marketplace_orders SET status=$1,updated_at=NOW() WHERE id=$2 AND status='DISPUTED'`, [restoreOrderStatus, row.order_id]);
           }
           await client.query(`UPDATE marketplace_escrows SET status=$1,release_eligible_at=CASE WHEN $1='RELEASE_ELIGIBLE' THEN COALESCE(release_eligible_at,NOW()) ELSE release_eligible_at END,updated_at=NOW() WHERE id=$2 AND status='DISPUTED'`, [escrowStatus,row.escrow_id]);
         }
-        await client.query(`INSERT INTO marketplace_protection_audit (case_id,order_id,actor_id,action,metadata) VALUES ($1,$2,$3,$4,$5::jsonb)`, [caseId,row.order_id,req.user.sub,`RESOLVED_${resolution}`,JSON.stringify({ note, disputeId: row.dispute_id ? String(row.dispute_id) : null })]);
+        await client.query(`INSERT INTO marketplace_protection_audit (case_id,order_id,actor_id,action,metadata) VALUES ($1,$2,$3,$4,$5::jsonb)`, [caseId,row.order_id,req.user.sub,`RESOLVED_${resolution}`,JSON.stringify({ note, disputeId: row.dispute_id ? String(row.dispute_id) : null, previousOrderStatus: row.previous_order_status || null, previousEscrowStatus: row.previous_escrow_status || null })]);
         await client.query('COMMIT');
       } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
       finally { client.release(); }
@@ -173,7 +182,7 @@ export function registerMarketplaceProtectionResolutionRoutes({ app }) {
         try {
           const provider = await refundPaystack(refundJob.reference, refundJob.amount, refundJob.currency);
           const providerReference = provider?.data?.id || provider?.data?.refund_reference || provider?.data?.transaction?.reference || null;
-          await pool.query(`UPDATE marketplace_financial_operations SET status='PENDING',provider_reference=COALESCE($1,provider_reference),failure_reason=NULL,metadata=jsonb_set(COALESCE(metadata,'{}'::jsonb),'{providerStatus}','"pending"'::jsonb),updated_at=NOW() WHERE id=$2 AND status='PENDING'`, [providerReference ? String(providerReference) : null, refundJob.operationId]);
+          await pool.query(`UPDATE marketplace_financial_operations SET status='PENDING',provider_reference=COALESCE($1,provider_reference),failure_reason=NULL,metadata=jsonb_set(COALESCE(metadata,'{}'::jsonb),'{providerStatus}','\"pending\"'::jsonb),updated_at=NOW() WHERE id=$2 AND status='PENDING'`, [providerReference ? String(providerReference) : null, refundJob.operationId]);
           return res.status(202).json({ ok: true, pending: true, caseId: refundJob.caseId, status: 'REFUND_PENDING', providerReference: providerReference ? String(providerReference) : null });
         } catch (error) {
           await pool.query(`UPDATE marketplace_financial_operations SET status='FAILED',failure_reason=$1,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, [String(error?.message || error).slice(0,2000),refundJob.operationId]);
