@@ -3,6 +3,7 @@ package com.fynx.app.ui
 import android.content.Context
 import android.net.Uri
 import java.io.File
+import java.security.MessageDigest
 
 /**
  * Local persistence for the existing profile/settings foundation.
@@ -32,6 +33,8 @@ object FynxPreferencesStore {
     private const val KEY_STICKER_ANIMATION = "sticker_animation"
     private const val KEY_EMOJI_SIZE = "emoji_size"
     private const val KEY_CHAT_LIST_STATE = "chat_list_state"
+    private const val LEGACY_ASSET_FILE = "fynx_customization.jpg"
+    private const val ASSET_FILE_PREFIX = "fynx_customization_"
 
     private const val DEFAULT_VISIBILITY = "My friends"
 
@@ -67,7 +70,15 @@ object FynxPreferencesStore {
     fun saveAppearance(context: Context, value: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_APPEARANCE, value).apply() }
     fun loadLanguage(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_LANGUAGE, "Device default") ?: "Device default"
     fun saveLanguage(context: Context, value: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_LANGUAGE, value).apply() }
-    fun loadAsset(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_ASSET, null)
+
+    fun loadAsset(context: Context): String? {
+        val file = accountAssetFile(context) ?: return null
+        if (!file.isFile) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY_ASSET).apply()
+            return null
+        }
+        return Uri.fromFile(file).toString()
+    }
 
     fun loadNightMode(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_NIGHT_MODE, "Follow system") ?: "Follow system"
     fun saveNightMode(context: Context, value: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_NIGHT_MODE, value).apply() }
@@ -107,8 +118,20 @@ object FynxPreferencesStore {
         }
     }.joinToString("").take(80).ifBlank { "account" }
 
+    private fun accountAssetFile(context: Context): File? {
+        val accountKey = FynxAuthStore.accountStorageKey(context) ?: return null
+        val digest = MessageDigest.getInstance("SHA-256").digest(accountKey.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        return File(context.filesDir, "${ASSET_FILE_PREFIX}${digest}.jpg")
+    }
+
     /** Clear identity/privacy/media state before another account can enter this process. */
     fun clearAccountSessionData(context: Context) {
+        // Delete the current account's protected customization asset before the
+        // username is removed, so the next account cannot inherit its bytes.
+        runCatching { accountAssetFile(context)?.delete() }
+        // Remove the old single-file asset created before account isolation.
+        runCatching { File(context.filesDir, LEGACY_ASSET_FILE).delete() }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .remove(KEY_DISPLAY_NAME)
             .remove(KEY_USERNAME)
@@ -139,12 +162,12 @@ object FynxPreferencesStore {
         }
     }
 
-    /** Persist the selected customization image inside FYNX so the picker URI cannot expire. */
+    /** Persist the selected customization image inside an account-owned file. */
     fun saveAsset(context: Context, uri: String?) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (uri.isNullOrBlank()) { prefs.edit().remove(KEY_ASSET).apply(); return }
+        if (uri.isNullOrBlank()) { prefs.edit().remove(KEY_ASSET).apply(); runCatching { accountAssetFile(context)?.delete() }; return }
         val source = runCatching { Uri.parse(uri) }.getOrNull() ?: return
-        val target = File(context.filesDir, "fynx_customization.jpg")
+        val target = accountAssetFile(context) ?: return
         val copied = runCatching {
             context.contentResolver.openInputStream(source)?.use { input -> target.outputStream().use { output -> input.copyTo(output) } } ?: return@runCatching false
             true
