@@ -26,7 +26,10 @@ class FynxGiftHistoryStore(
     private val giftResolver: (String) -> FynxGift?
 ) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val context = context.applicationContext
     private val entries = mutableListOf<FynxGiftHistoryEntry>()
+
+    private fun entriesKey(): String = "entries_${FynxAuthStore.accountStorageKey(context)?.let(::storageKey) ?: "signed_out"}"
 
     init {
         loadPersisted()
@@ -52,7 +55,7 @@ class FynxGiftHistoryStore(
 
     private fun loadPersisted() {
         entries.clear()
-        val records = prefs.getStringSet(KEY_ENTRIES, emptySet()).orEmpty()
+        val records = prefs.getStringSet(entriesKey(), emptySet()).orEmpty()
         records.mapNotNull { decode(it) }
             .forEach { entry ->
                 if (entries.none { it.transfer.transaction.id == entry.transfer.transaction.id }) entries += entry
@@ -61,7 +64,7 @@ class FynxGiftHistoryStore(
 
     private fun persist() {
         prefs.edit()
-            .putStringSet(KEY_ENTRIES, entries.map(::encode).toSet())
+            .putStringSet(entriesKey(), entries.map(::encode).toSet())
             .apply()
     }
 
@@ -110,9 +113,15 @@ class FynxGiftHistoryStore(
         )
     }.getOrNull()
 
+    private fun storageKey(value: String): String = value.map { character ->
+        when {
+            character.isLetterOrDigit() -> character
+            else -> '_'
+        }
+    }.joinToString("").take(80).ifBlank { "account" }
+
     companion object {
         private const val PREFS_NAME = "fynx_gift_history"
-        private const val KEY_ENTRIES = "entries"
         private const val DELIMITER = "."
     }
 }
