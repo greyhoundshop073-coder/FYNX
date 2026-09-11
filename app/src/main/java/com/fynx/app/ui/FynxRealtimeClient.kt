@@ -49,6 +49,7 @@ class FynxRealtimeClient(
     private val reconnectHandler = Handler(Looper.getMainLooper())
     private val pendingLock = Any()
     private val pendingPayloads = ArrayDeque<String>()
+    private var pendingAccountKey: String? = null
     private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var socket: WebSocket? = null
@@ -111,6 +112,13 @@ class FynxRealtimeClient(
     private fun isSocketStillAuthorized(expectedAccountKey: String? = socketAccountKey): Boolean =
         !expectedAccountKey.isNullOrBlank() && expectedAccountKey == currentAccountKey() && FynxBackendClient.hasAccessToken(context)
 
+    private fun bindPendingQueueToAccount(accountKey: String) {
+        synchronized(pendingLock) {
+            if (pendingAccountKey != null && pendingAccountKey != accountKey) pendingPayloads.clear()
+            pendingAccountKey = accountKey
+        }
+    }
+
     private fun connectInternal() {
         if (manuallyClosed) return
         if (!hasUsableNetwork()) {
@@ -121,6 +129,7 @@ class FynxRealtimeClient(
         val token = FynxBackendClient.accessToken(context)
         val accountKey = currentAccountKey()
         if (token.isNullOrBlank() || accountKey.isNullOrBlank()) { onStateChanged(State.FAILED); return }
+        bindPendingQueueToAccount(accountKey)
         val httpBase = FynxBackendClient.baseUrl(context)
         if (!httpBase.startsWith("https://")) { onStateChanged(State.FAILED); return }
         val encodedToken = URLEncoder.encode(token, Charsets.UTF_8.name())
@@ -223,7 +232,8 @@ class FynxRealtimeClient(
     fun acknowledgeMessage(messageId: String) { messageId.toLongOrNull()?.let { sendJson(JSONObject().apply { put("type", "message_ack"); put("messageId", it) }) } }
 
     private fun sendJson(payload: JSONObject) {
-        if (!isSocketStillAuthorized()) return
+        val accountKey = currentAccountKey()
+        if (accountKey.isNullOrBlank() || !isSocketStillAuthorized(accountKey)) return
         val value = payload.toString()
         if (socket?.send(value) == true) return
         // Only durable protocol events should survive a reconnect. Typing and call
@@ -232,17 +242,29 @@ class FynxRealtimeClient(
         val type = payload.optString("type")
         if (type != "read" && type != "message_ack") return
         synchronized(pendingLock) {
+            if (pendingAccountKey != null && pendingAccountKey != accountKey) pendingPayloads.clear()
+            pendingAccountKey = accountKey
             if (pendingPayloads.size >= 100) pendingPayloads.removeFirst()
             pendingPayloads.addLast(value)
         }
     }
 
     private fun flushPending(webSocket: WebSocket) {
-        if (!isSocketStillAuthorized()) return
+        val accountKey = currentAccountKey() ?: return
+        if (!isSocketStillAuthorized(accountKey)) return
         while (true) {
-            val next = synchronized(pendingLock) { if (pendingPayloads.isEmpty()) null else pendingPayloads.removeFirst() } ?: break
+            val next = synchronized(pendingLock) {
+                if (pendingAccountKey != accountKey) {
+                    pendingPayloads.clear()
+                    pendingAccountKey = accountKey
+                }
+                if (pendingPayloads.isEmpty()) null else pendingPayloads.removeFirst()
+            } ?: break
             if (!webSocket.send(next)) {
-                synchronized(pendingLock) { pendingPayloads.addFirst(next) }
+                synchronized(pendingLock) {
+                    pendingAccountKey = accountKey
+                    pendingPayloads.addFirst(next)
+                }
                 break
             }
         }
@@ -252,7 +274,10 @@ class FynxRealtimeClient(
         manuallyClosed = true
         reconnectHandler.removeCallbacksAndMessages(null)
         unregisterNetworkCallback()
-        synchronized(pendingLock) { pendingPayloads.clear() }
+        synchronized(pendingLock) {
+            pendingPayloads.clear()
+            pendingAccountKey = null
+        }
         socket?.close(1000, "FYNX conversation closed")
         socket = null
         socketAccountKey = null
