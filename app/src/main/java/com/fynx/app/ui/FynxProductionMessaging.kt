@@ -12,8 +12,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 
 /** Production messaging boundary. The server is the source of truth for chat state. */
 object FynxProductionMessaging {
@@ -123,31 +121,14 @@ object FynxProductionMessaging {
         try {
             val safeId = mediaId.filter { it.isLetterOrDigit() || it == '-' || it == '_' }
             require(safeId.isNotBlank()) { "Invalid media id." }
-            val directory = File(context.cacheDir, "fynx_media").apply { mkdirs() }
+            val directory = File(context.cacheDir, "fynx_media")
+            if (!directory.exists() && !directory.mkdirs()) throw IllegalStateException("Unable to create media cache")
             val existing = directory.listFiles()?.firstOrNull { it.name.startsWith("${safeId}.") && it.length() > 0L }
             if (existing != null) return@withContext Result.success(Uri.fromFile(existing))
             val absoluteUrl = if (mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://")) mediaUrl else FynxBackendClient.baseUrl(context).trimEnd('/') + "/" + mediaUrl.trimStart('/')
-            val connection = (URL(absoluteUrl).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 10_000; readTimeout = 20_000; useCaches = false; setRequestProperty("Accept", "*/*")
-                FynxBackendClient.accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
-            }
-            try {
-                val status = connection.responseCode
-                if (status == HttpURLConnection.HTTP_UNAUTHORIZED) { FynxBackendClient.saveAccessToken(context, null); throw IllegalStateException("FYNX media session expired") }
-                require(status in 200..299) { "FYNX media could not be loaded (HTTP $status)." }
-                val contentLength = connection.contentLengthLong
-                require(contentLength <= MAX_MEDIA_BYTES || contentLength < 0L) { "Remote media is too large." }
-                val extension = when (connection.contentType.orEmpty().lowercase()) {
-                    "video/mp4" -> "mp4"; "video/webm" -> "webm"; "video/quicktime" -> "mov"; "audio/mp4", "audio/x-m4a" -> "m4a"; "audio/mpeg" -> "mp3"; "audio/aac" -> "aac"; "audio/wav" -> "wav"; "image/png" -> "png"; "image/webp" -> "webp"; "image/gif" -> "gif"; else -> "bin"
-                }
-                val target = File(directory, "$safeId.$extension")
-                connection.inputStream.use { input -> target.outputStream().use { output ->
-                    val buffer = ByteArray(32 * 1024); var total = 0L
-                    while (true) { val read = input.read(buffer); if (read <= 0) break; total += read; require(total <= MAX_MEDIA_BYTES) { "Remote media is too large." }; output.write(buffer, 0, read) }
-                } }
-                require(target.length() > 0L) { "Remote media is empty." }
-                Result.success(Uri.fromFile(target))
-            } finally { connection.disconnect() }
+            val target = File(directory, "$safeId.bin")
+            val result = FynxBackendClient.downloadToFile(context, absoluteUrl, target, MAX_MEDIA_BYTES)
+            result.map { Uri.fromFile(it) }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (error: Throwable) { Result.failure(error) }
     }
@@ -166,10 +147,6 @@ object FynxProductionMessaging {
         val body = JSONObject().apply { put("recipientUsername", normalizedRecipient); put("text", cleanText); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("voiceDurationMs", voiceDurationMs) }
         val result = FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
         if (result.isSuccess) return result
-
-        // A timed-out POST may have been committed by the server before the connection failed.
-        // Reconcile against authoritative history before reporting failure so the UI does not
-        // create a duplicate when the user retries an ambiguous send.
         if (isAmbiguousTransportFailure(result.exceptionOrNull())) {
             val recovered = history(context, normalizedRecipient).getOrNull()?.asReconciliationCandidate(
                 currentUsername = currentUsername,
@@ -199,7 +176,7 @@ object FynxProductionMessaging {
     ): RemoteMessage? {
         val now = System.currentTimeMillis()
         return asSequence()
-            .filter { it.senderUsername?.trim()?.removePrefix("@")?.lowercase() == currentUsername }
+            .filter { it.senderUsername?.trim()?.removePrefix("@").orEmpty().lowercase() == currentUsername }
             .filter { it.text == text && it.replyToId == replyToId && it.mediaId == mediaId && it.mediaType == mediaType }
             .filter { it.timestamp == 0L || kotlin.math.abs(now - it.timestamp) <= 120_000L }
             .maxByOrNull { it.timestamp }
