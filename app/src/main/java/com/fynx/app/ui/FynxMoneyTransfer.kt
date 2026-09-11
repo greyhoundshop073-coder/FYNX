@@ -20,7 +20,6 @@ import org.json.JSONObject
 import java.util.Locale
 
 private const val TRANSFER_PREFS = "fynx_money_transfers"
-private const val TRANSFERS_KEY = "records"
 
 enum class FynxMoneyTransferType { ACCOUNT_TRANSFER, PAYMENT }
 enum class FynxMoneyTransferStatus { COMPLETED, CANCELLED }
@@ -38,9 +37,12 @@ data class FynxMoneyTransfer(
 )
 
 object FynxMoneyTransferStore {
+    private fun recordsKey(context: Context): String =
+        "records_${FynxAuthStore.accountStorageKey(context)?.let(::storageKey) ?: "signed_out"}"
+
     fun load(context: Context): List<FynxMoneyTransfer> = runCatching {
         val raw = context.getSharedPreferences(TRANSFER_PREFS, Context.MODE_PRIVATE)
-            .getString(TRANSFERS_KEY, "[]") ?: "[]"
+            .getString(recordsKey(context), "[]") ?: "[]"
         val array = JSONArray(raw)
         buildList {
             for (i in 0 until array.length()) {
@@ -83,7 +85,7 @@ object FynxMoneyTransferStore {
             })
         }
         context.getSharedPreferences(TRANSFER_PREFS, Context.MODE_PRIVATE).edit()
-            .putString(TRANSFERS_KEY, array.toString()).apply()
+            .putString(recordsKey(context), array.toString()).apply()
     }
 
     fun add(context: Context, item: FynxMoneyTransfer) {
@@ -93,6 +95,13 @@ object FynxMoneyTransferStore {
     fun cancel(context: Context, id: Long) {
         save(context, load(context).map { if (it.id == id) it.copy(status = FynxMoneyTransferStatus.CANCELLED) else it })
     }
+
+    private fun storageKey(value: String): String = value.map { character ->
+        when {
+            character.isLetterOrDigit() -> character
+            else -> '_'
+        }
+    }.joinToString("").take(80).ifBlank { "account" }
 }
 
 @Composable
