@@ -8,8 +8,15 @@ import com.fynx.app.MainActivity
 
 class TodoReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        val scheduledAccount = intent.getStringExtra("todo_account")?.trim()?.lowercase() ?: return
+        val currentAccount = FynxAuthStore.accountStorageKey(context)?.trim()?.lowercase() ?: return
+        // AlarmManager can retain a reminder across logout/account switching.
+        // Never expose the previous account's task to the current account.
+        if (scheduledAccount != currentAccount) return
+
         val title = intent.getStringExtra("todo_title") ?: "FYNX task reminder"
-        val notificationId = title.hashCode()
+        val todoId = intent.getLongExtra("todo_id", 0L)
+        val notificationId = ("$currentAccount:$todoId").hashCode()
         val openIntent = Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val pending = PendingIntent.getActivity(
@@ -24,7 +31,7 @@ class TodoReminderReceiver : BroadcastReceiver() {
             id = notificationId,
             title = "FYNX reminder",
             message = title,
-            stableKey = "todo-reminder:$notificationId:$title",
+            stableKey = "todo-reminder:$currentAccount:$todoId:$title",
             contentIntent = pending
         )
     }
