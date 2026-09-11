@@ -64,6 +64,9 @@ object FynxAuthStore {
         runCatching { context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE).edit().clear().apply() }
         runCatching { context.getSharedPreferences("fynx_notification_store", Context.MODE_PRIVATE).edit().clear().apply() }
         runCatching { File(context.cacheDir, "fynx_media_cache_v2").deleteRecursively() }
+        // Remove the older unscoped media cache as well. It predates account
+        // namespaces and must never survive a logout/account switch.
+        runCatching { File(context.cacheDir, "fynx_media").deleteRecursively() }
 
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_SIGNED_IN, false)
