@@ -6,11 +6,14 @@ import android.content.Context
 object FynxConversationPreferences {
     private const val CHAT_PREFS = "fynx_chat_settings"
 
+    private fun accountKey(context: Context): String =
+        FynxAuthStore.accountStorageKey(context)?.trim()?.lowercase()?.map { c -> if (c.isLetterOrDigit()) c else '_' }?.joinToString("")?.take(80)?.ifBlank { "account" } ?: "signed_out"
+
     fun chat(context: Context, username: String) =
-        context.getSharedPreferences(CHAT_PREFS, Context.MODE_PRIVATE)
+        context.getSharedPreferences("${CHAT_PREFS}_${accountKey(context)}", Context.MODE_PRIVATE)
 
     fun group(context: Context, groupId: String) =
-        context.getSharedPreferences("fynx_group_settings_$groupId", Context.MODE_PRIVATE)
+        context.getSharedPreferences("fynx_group_settings_${accountKey(context)}_$groupId", Context.MODE_PRIVATE)
 
     fun chatNotifications(context: Context, username: String): Boolean =
         chat(context, username).getBoolean("notifications_$username", true)
