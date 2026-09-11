@@ -11,6 +11,7 @@ import { registerPrivacyRoutes } from "./privacyRoutes.js";
 import { registerProfileRoutes } from "./profileRoutes.js";
 import { registerFollowRoutes } from "./followRoutes.js";
 import { registerGroupRoutes } from "./groupRoutes.js";
+import { registerGroupMembershipRoutes } from "./groupMembershipRoutes.js";
 import { registerNotificationPreferenceRoutes } from "./notificationPreferences.js";
 import { registerAdminRoutes } from "./adminRoutes.js";
 import { installPresencePrivacyGuard } from "./presencePrivacy.js";
@@ -39,6 +40,7 @@ http.createServer = function fynxCreateServer(...args) {
       registerProfileRoutes({ app });
       registerFollowRoutes({ app });
       registerGroupRoutes({ app });
+      registerGroupMembershipRoutes({ app });
       registerNotificationPreferenceRoutes({ app });
       registerAdminRoutes({ app });
       installMediaPrivacyGuard(app);
