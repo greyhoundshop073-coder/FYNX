@@ -5,20 +5,17 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import java.io.File
 import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.security.MessageDigest
 
 private const val FYNX_MEDIA_CACHE_DIR = "fynx_media_cache_v2"
 private const val MAX_FYNX_MEDIA_CACHE_BYTES = 100L * 1024L * 1024L
 private const val MAX_FYNX_MEDIA_FILE_BYTES = 12 * 1024 * 1024
 private const val MAX_IMAGE_DIMENSION = 1600
-private const val MAX_DOWNLOAD_ATTEMPTS = 3
 
 internal object FynxMediaCache {
     private val downloadLocks = mutableMapOf<String, Any>()
 
-    fun getOrDownload(context: Context, path: String, type: String?): File? {
+    suspend fun getOrDownload(context: Context, path: String, type: String?): File? {
         if (path.isBlank()) return null
         val normalizedPath = path.trim()
         if (!normalizedPath.startsWith("/api/media/")) return null
@@ -33,92 +30,53 @@ internal object FynxMediaCache {
             return file
         }
         if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) return null
+
         val lock = synchronized(downloadLocks) { downloadLocks.getOrPut(file.absolutePath) { Any() } }
-        return synchronized(lock) {
-            if (file.isFile && file.length() in 1..MAX_FYNX_MEDIA_FILE_BYTES) {
-                file.setLastModified(System.currentTimeMillis())
-                return@synchronized file
+        return try {
+            synchronized(lock) {
+                if (file.isFile && file.length() in 1..MAX_FYNX_MEDIA_FILE_BYTES) {
+                    file.setLastModified(System.currentTimeMillis())
+                    return@synchronized file
+                }
+                if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) return@synchronized null
+                download(context, normalizedPath, file)?.also { trim(directory, it) }
             }
-            if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) return@synchronized null
-            file.delete()
-            download(context, normalizedPath, file)?.also { trim(directory, it) }
-        }.also {
+        } finally {
             synchronized(downloadLocks) { downloadLocks.remove(file.absolutePath) }
         }
     }
 
-    private fun download(context: Context, path: String, destination: File): File? {
-        val networkLevel = FynxNetworkQuality.current(context)
-        val attempts = when (networkLevel) {
-            FynxNetworkQuality.Level.WEAK -> 2
-            FynxNetworkQuality.Level.GOOD -> MAX_DOWNLOAD_ATTEMPTS
-            FynxNetworkQuality.Level.OFFLINE -> 0
+    private suspend fun download(context: Context, path: String, destination: File): File? {
+        val rawFile = File(destination.parentFile, ".${destination.name}.raw")
+        rawFile.delete()
+        val result = FynxBackendClient.downloadToFile(
+            context = context,
+            mediaUrl = path,
+            destination = rawFile,
+            maxBytes = MAX_FYNX_MEDIA_FILE_BYTES.toLong()
+        )
+        if (result.isFailure) {
+            rawFile.delete()
+            return null
         }
-        repeat(attempts) { attempt ->
-            val result = downloadOnce(context, path, destination, networkLevel)
-            if (result != null) return result
-            if (attempt + 1 < attempts) Thread.sleep(500L * (1L shl attempt))
-        }
-        return null
-    }
 
-    private fun downloadOnce(context: Context, path: String, destination: File, networkLevel: FynxNetworkQuality.Level): File? = runCatching {
-        val baseUrl = FynxBackendClient.baseUrl(context).trimEnd('/')
-        val connection = (URL(baseUrl + path).openConnection() as HttpURLConnection).apply {
-            connectTimeout = if (networkLevel == FynxNetworkQuality.Level.WEAK) 30_000 else 15_000
-            readTimeout = if (networkLevel == FynxNetworkQuality.Level.WEAK) 60_000 else 30_000
-            useCaches = false
-            instanceFollowRedirects = false
-            setRequestProperty("Authorization", "Bearer ${FynxBackendClient.accessToken(context) ?: ""}")
-            setRequestProperty("Accept", "image/*,video/*,audio/*")
-            setRequestProperty("Connection", "close")
-        }
-        val temporary = File(destination.parentFile, ".${destination.name}.part")
-        try {
-            val status = connection.responseCode
-            if (status == HttpURLConnection.HTTP_UNAUTHORIZED) {
-                FynxAuthStore.clear(context)
-                return null
-            }
-            if (status !in 200..299) return null
-            temporary.delete()
-            var total = 0L
-            val declaredLength = connection.contentLengthLong
-            if (declaredLength > MAX_FYNX_MEDIA_FILE_BYTES) return null
-            val buffer = ByteArray(32 * 1024)
-            connection.inputStream.use { input ->
-                FileOutputStream(temporary).use { output ->
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        total += read
-                        if (total > MAX_FYNX_MEDIA_FILE_BYTES) {
-                            temporary.delete()
-                            return null
-                        }
-                        output.write(buffer, 0, read)
-                    }
-                    output.fd.sync()
-                }
-            }
-            if (total <= 0L || temporary.length() != total) {
-                temporary.delete()
-                return null
-            }
-            optimizeImageIfNeeded(temporary, destination)
+        return runCatching {
+            optimizeImageIfNeeded(rawFile, destination)
             if (!destination.exists()) {
-                if (!temporary.renameTo(destination)) { temporary.delete(); return null }
-            } else temporary.delete()
+                if (!rawFile.renameTo(destination)) throw IllegalStateException("Unable to finalize media cache")
+            } else {
+                rawFile.delete()
+            }
             if (destination.length() !in 1..MAX_FYNX_MEDIA_FILE_BYTES) {
                 destination.delete()
-                return null
-            }
-            destination
-        } finally {
-            temporary.delete()
-            connection.disconnect()
+                null
+            } else destination
+        }.getOrElse {
+            rawFile.delete()
+            destination.delete()
+            null
         }
-    }.getOrNull()
+    }
 
     private fun optimizeImageIfNeeded(source: File, destination: File) {
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -140,7 +98,7 @@ internal object FynxMediaCache {
     }
 
     private fun trim(directory: File, newest: File) {
-        val files = directory.listFiles()?.filter { it.isFile && !it.name.endsWith(".part") } ?: return
+        val files = directory.listFiles()?.filter { it.isFile && !it.name.endsWith(".part") && !it.name.endsWith(".raw") } ?: return
         var total = files.sumOf { it.length() }
         if (total <= MAX_FYNX_MEDIA_CACHE_BYTES) return
         files.sortedBy { if (it == newest) Long.MAX_VALUE else it.lastModified() }.forEach { file ->
