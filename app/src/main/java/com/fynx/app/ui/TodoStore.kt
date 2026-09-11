@@ -8,12 +8,17 @@ import java.time.format.DateTimeFormatter
 
 object TodoStore {
     private const val PREFS = "fynx_todo_store"
-    private const val KEY_TODOS = "todos"
-    private const val KEY_NEXT_ID = "next_id"
     private val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
+    private fun accountKey(context: Context): String =
+        FynxAuthStore.accountStorageKey(context)?.let(::storageKey) ?: "signed_out"
+
+    private fun todosKey(context: Context) = "todos_${accountKey(context)}"
+    private fun nextIdKey(context: Context) = "next_id_${accountKey(context)}"
+
     fun load(context: Context): List<FynxTodo> {
-        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_TODOS, "[]") ?: "[]"
+        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(todosKey(context), "[]") ?: "[]"
         return runCatching {
             val array = JSONArray(raw)
             buildList {
@@ -45,18 +50,26 @@ object TodoStore {
             })
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(KEY_TODOS, array.toString())
-            .putLong(KEY_NEXT_ID, (todos.maxOfOrNull { it.id } ?: 0L) + 1L)
+            .putString(todosKey(context), array.toString())
+            .putLong(nextIdKey(context), (todos.maxOfOrNull { it.id } ?: 0L) + 1L)
             .apply()
     }
 
     fun nextId(context: Context): Long {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val stored = prefs.getLong(KEY_NEXT_ID, 1L)
+        val key = nextIdKey(context)
+        val stored = prefs.getLong(key, 1L)
         val safe = maxOf(stored, load(context).maxOfOrNull { it.id }?.plus(1L) ?: 1L)
-        if (safe != stored) prefs.edit().putLong(KEY_NEXT_ID, safe).apply()
+        if (safe != stored) prefs.edit().putLong(key, safe).apply()
         return safe
     }
 
     fun isValidDate(value: String): Boolean = runCatching { LocalDate.parse(value, dateFormatter); true }.getOrDefault(false)
+
+    private fun storageKey(value: String): String = value.map { character ->
+        when {
+            character.isLetterOrDigit() -> character
+            else -> '_'
+        }
+    }.joinToString("").take(80).ifBlank { "account" }
 }
