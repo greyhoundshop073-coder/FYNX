@@ -16,9 +16,13 @@ import java.util.Locale
 
 private val calendarFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 private const val PREFS = "fynx_calendar_events"
-private const val KEY_EVENTS = "events"
 
 data class FynxCalendarEvent(val id: Long, val title: String, val date: String, val time: String = "", val notes: String = "", val repeat: String = "None")
+
+private fun accountKey(context: Context): String =
+    FynxAuthStore.accountStorageKey(context)?.let { it.trim().lowercase().map { c -> if (c.isLetterOrDigit()) c else '_' }.joinToString("").take(80).ifBlank { "account" } } ?: "signed_out"
+
+private fun eventsKey(context: Context) = "events_${accountKey(context)}"
 
 private fun encode(events: List<FynxCalendarEvent>) = events.joinToString("\n") { listOf(it.id, it.title, it.date, it.time, it.notes, it.repeat).joinToString("|") { v -> v.toString().replace("|", "/").replace("\n", " ") } }
 private fun decode(raw: String) = raw.replace("\\n", "\n").lineSequence().mapNotNull { line ->
@@ -29,7 +33,7 @@ private fun decode(raw: String) = raw.replace("\\n", "\n").lineSequence().mapNot
         else -> null
     }
 }.toList()
-private fun save(c: Context, e: List<FynxCalendarEvent>) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_EVENTS, encode(e)).apply()
+private fun save(c: Context, e: List<FynxCalendarEvent>) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(eventsKey(c), encode(e)).apply()
 
 @Composable
 fun CalendarPanel() {
@@ -40,7 +44,7 @@ fun CalendarPanel() {
     var time by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
     var repeat by remember { mutableStateOf("None") }
-    var events by remember { mutableStateOf(decode(c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_EVENTS, "") ?: "")) }
+    var events by remember { mutableStateOf(decode(c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(eventsKey(c), "") ?: "")) }
     var nextId by remember { mutableLongStateOf((events.maxOfOrNull { it.id } ?: 0) + 1) }
     var editing by remember { mutableStateOf<FynxCalendarEvent?>(null) }
 
@@ -60,20 +64,12 @@ fun CalendarPanel() {
     val cells = List(month.get(Calendar.DAY_OF_WEEK) - 1) { null } + (1..month.getActualMaximum(Calendar.DAY_OF_MONTH)).map { it }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text("Calendar", style = MaterialTheme.typography.headlineSmall)
         Text("Plan events and keep important dates in one place.", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodyMedium)
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = FynxDesign.LargeCardShape,
-            colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
-            border = BorderStroke(1.dp, FynxDesign.Outline)
-        ) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline)) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     TextButton(onClick = { offset-- }, shape = FynxDesign.ControlShape) { Text("‹") }
@@ -86,63 +82,39 @@ fun CalendarPanel() {
                 cells.chunked(7).forEach { week ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                         week.forEach { day ->
-                            if (day == null) {
-                                Spacer(Modifier.size(40.dp))
-                            } else {
+                            if (day == null) Spacer(Modifier.size(40.dp)) else {
                                 val d = Calendar.getInstance().apply { set(month.get(Calendar.YEAR), month.get(Calendar.MONTH), day) }
                                 val ds = calendarFormat.format(d.time)
-                                OutlinedButton(
-                                    onClick = { selected = ds },
-                                    modifier = Modifier.size(40.dp),
-                                    contentPadding = PaddingValues(0.dp),
-                                    shape = FynxDesign.ControlShape,
-                                    border = BorderStroke(1.dp, if (selected == ds) MaterialTheme.colorScheme.primary else FynxDesign.Outline),
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        containerColor = if (selected == ds) FynxDesign.SelectedContainer else FynxDesign.Surface
-                                    )
-                                ) { Text(day.toString()) }
+                                OutlinedButton(onClick = { selected = ds }, modifier = Modifier.size(40.dp), contentPadding = PaddingValues(0.dp), shape = FynxDesign.ControlShape, border = BorderStroke(1.dp, if (selected == ds) MaterialTheme.colorScheme.primary else FynxDesign.Outline), colors = ButtonDefaults.outlinedButtonColors(containerColor = if (selected == ds) FynxDesign.SelectedContainer else FynxDesign.Surface)) { Text(day.toString()) }
                             }
                         }
                     }
                 }
             }
         }
-
         Text("Events for $selected", style = MaterialTheme.typography.titleMedium)
         OutlinedTextField(title, { title = it }, label = { Text("Event title") }, singleLine = true, shape = FynxDesign.ControlShape, modifier = Modifier.fillMaxWidth())
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(time, { time = it }, label = { Text("Time") }, singleLine = true, shape = FynxDesign.ControlShape, modifier = Modifier.weight(1f))
-            Button(
-                onClick = {
-                    val t = title.trim()
-                    if (t.isNotEmpty()) {
-                        val e = FynxCalendarEvent(nextId++, t, selected, time.trim(), notes.trim(), repeat)
-                        events = events + e
-                        save(c, events)
-                        CalendarReminderScheduler.schedule(c, e)
-                        title = ""; time = ""; notes = ""; repeat = "None"
-                    }
-                },
-                shape = FynxDesign.ControlShape
-            ) { Text("Add") }
+            Button(onClick = {
+                val t = title.trim()
+                if (t.isNotEmpty()) {
+                    val e = FynxCalendarEvent(nextId++, t, selected, time.trim(), notes.trim(), repeat)
+                    events = events + e
+                    save(c, events)
+                    CalendarReminderScheduler.schedule(c, e)
+                    title = ""; time = ""; notes = ""; repeat = "None"
+                }
+            }, shape = FynxDesign.ControlShape) { Text("Add") }
         }
         OutlinedTextField(notes, { notes = it }, label = { Text("Details / notes") }, shape = FynxDesign.ControlShape, modifier = Modifier.fillMaxWidth(), minLines = 2)
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text("Repeat: $repeat", color = FynxDesign.TextSecondary)
             TextButton(onClick = { repeat = when (repeat) { "None" -> "Daily"; "Daily" -> "Weekly"; "Weekly" -> "Monthly"; "Monthly" -> "Yearly"; else -> "None" } }, shape = FynxDesign.ControlShape) { Text("Change") }
         }
-
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(events.filter { it.date == selected }, key = { it.id }) { e ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = FynxDesign.CardShape,
-                    colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
-                    border = BorderStroke(1.dp, FynxDesign.Outline)
-                ) {
+                Card(modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline)) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(e.title, style = MaterialTheme.typography.titleMedium)
                         if (e.time.isNotBlank()) Text(e.time, color = FynxDesign.TextSecondary)
@@ -166,7 +138,6 @@ private fun EventEditor(e: FynxCalendarEvent, onCancel: () -> Unit, onSave: (Fyn
     var time by remember(e) { mutableStateOf(e.time) }
     var notes by remember(e) { mutableStateOf(e.notes) }
     var repeat by remember(e) { mutableStateOf(e.repeat) }
-
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             TextButton(onClick = onCancel, shape = FynxDesign.ControlShape) { Text("Cancel") }
