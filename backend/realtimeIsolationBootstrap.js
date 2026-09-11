@@ -5,6 +5,12 @@ import { WebSocketServer } from "ws";
 // wrapper makes the existing WebSocket connection handler reject stale/replaced
 // sockets before its message listeners can process or deliver realtime traffic.
 const currentSocketByUserId = new Map();
+const realtimeReadRate = new Map();
+const realtimeAckRate = new Map();
+const RATE_WINDOW_MS = 60_000;
+const READ_RATE_LIMIT = 120;
+const ACK_RATE_LIMIT = 240;
+const MAX_READ_IDS = 100;
 const originalServerOn = WebSocketServer.prototype.on;
 
 function authenticatedUserId(req) {
@@ -21,6 +27,40 @@ function authenticatedUserId(req) {
     return null;
   }
 }
+
+function allowRate(map, userId, limit) {
+  const now = Date.now();
+  const current = map.get(userId);
+  if (!current || now - current.startedAt >= RATE_WINDOW_MS) {
+    map.set(userId, { startedAt: now, count: 1 });
+    return true;
+  }
+  if (current.count >= limit) return false;
+  current.count += 1;
+  return true;
+}
+
+function validReadOrAckPacket(raw, userId) {
+  let body;
+  try { body = JSON.parse(raw.toString()); } catch { return true; }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return true;
+  if (body.type === "message_ack") {
+    const id = Number(body.messageId);
+    return Number.isSafeInteger(id) && id > 0 && allowRate(realtimeAckRate, userId, ACK_RATE_LIMIT);
+  }
+  if (body.type === "read") {
+    if (!Array.isArray(body.messageIds) || body.messageIds.length > MAX_READ_IDS) return false;
+    return allowRate(realtimeReadRate, userId, READ_RATE_LIMIT);
+  }
+  return true;
+}
+
+setInterval(() => {
+  const cutoff = Date.now() - RATE_WINDOW_MS;
+  for (const map of [realtimeReadRate, realtimeAckRate]) {
+    for (const [key, value] of map) if (value.startedAt < cutoff) map.delete(key);
+  }
+}, RATE_WINDOW_MS).unref();
 
 WebSocketServer.prototype.on = function on(event, listener) {
   if (event !== "connection") return originalServerOn.call(this, event, listener);
@@ -48,6 +88,7 @@ WebSocketServer.prototype.on = function on(event, listener) {
       if (socketEvent === "message") {
         return originalSocketOn("message", (data, ...args) => {
           if (currentSocketByUserId.get(userId) !== socket || socket.__fynxStale || socket.readyState !== 1) return;
+          if (!validReadOrAckPacket(data, userId)) return;
           return callback(data, ...args);
         });
       }
