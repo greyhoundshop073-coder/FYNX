@@ -117,7 +117,10 @@ object FynxProductionMessaging {
         try {
             val safeId = mediaId.filter { it.isLetterOrDigit() || it == '-' || it == '_' }
             require(safeId.isNotBlank()) { "Invalid media id." }
-            val directory = File(context.cacheDir, "fynx_media")
+            val accountKey = FynxAuthStore.accountStorageKey(context) ?: throw IllegalStateException("FYNX account unavailable")
+            require(FynxBackendClient.hasAccessToken(context)) { "FYNX session unavailable" }
+            val safeAccount = accountKey.map { if (it.isLetterOrDigit()) it else '_' }.joinToString("").take(80).ifBlank { throw IllegalStateException("FYNX account unavailable") }
+            val directory = File(context.cacheDir, "fynx_media_$safeAccount")
             if (!directory.exists() && !directory.mkdirs()) throw IllegalStateException("Unable to create media cache")
             val existing = directory.listFiles()?.firstOrNull { it.name.startsWith("${safeId}.") && it.length() > 0L }
             if (existing != null) return@withContext Result.success(Uri.fromFile(existing))
@@ -202,7 +205,7 @@ object FynxProductionMessaging {
     fun fromJson(item: JSONObject): RemoteMessage = RemoteMessage(
         id = item.optString("id"), senderId = item.optString("sender_id", item.optString("senderId")),
         senderUsername = item.optString("sender_username", item.optString("senderUsername")).takeIf { it.isNotBlank() }, senderDisplayName = item.optString("sender_display_name", item.optString("senderDisplayName")).takeIf { it.isNotBlank() },
-        recipientId = item.optString("recipient_id", item.optString("recipientId")), recipientUsername = item.optString("recipient_username", item.optString("recipientUsername")).takeIf { it.isNotBlank() }, recipientDisplayName = item.optString("recipient_display_name", item.optString("recipientDisplayName")).takeIf { it.isNotBlank() },
+        recipientId = item.optString("recipient_id", item.optString("recipientId")).takeIf { it.isNotBlank() }, recipientDisplayName = item.optString("recipient_display_name", item.optString("recipientDisplayName")).takeIf { it.isNotBlank() },
         text = item.optString("text"), timestamp = item.optDouble("timestamp", 0.0).toLong(), delivered = item.optBoolean("delivered", false), read = item.optBoolean("read", false), edited = item.optBoolean("edited", false), deleted = item.optBoolean("deleted", false),
         replyToId = if (item.isNull("reply_to_id") && item.isNull("replyToId")) null else item.optString("reply_to_id", item.optString("replyToId")).takeIf { it.isNotBlank() },
         mediaId = if (item.isNull("media_id") && item.isNull("mediaId")) null else item.optString("media_id", item.optString("mediaId")).takeIf { it.isNotBlank() }, mediaType = item.optString("media_type", item.optString("mediaType")).takeIf { it.isNotBlank() },
