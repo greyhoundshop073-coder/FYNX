@@ -22,11 +22,15 @@ data class FynxMoneyAccount(
 
 object FynxMoneyStore {
     private const val PREFS = "fynx_money_store"
-    private const val TRANSACTIONS = "transactions"
-    private const val ACCOUNTS = "accounts"
+
+    private fun accountKey(context: Context): String =
+        FynxAuthStore.accountStorageKey(context)?.let(::storageKey) ?: "signed_out"
+
+    private fun transactionsKey(context: Context) = "transactions_${accountKey(context)}"
+    private fun accountsKey(context: Context) = "accounts_${accountKey(context)}"
 
     fun loadTransactions(context: Context): List<FynxMoneyTransaction> = runCatching {
-        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(TRANSACTIONS, "[]") ?: "[]"
+        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(transactionsKey(context), "[]") ?: "[]"
         val array = JSONArray(raw)
         buildList {
             for (i in 0 until array.length()) {
@@ -53,7 +57,7 @@ object FynxMoneyStore {
                 put("note", item.note)
             })
         }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(TRANSACTIONS, array.toString()).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(transactionsKey(context), array.toString()).apply()
     }
 
     fun addTransaction(context: Context, transaction: FynxMoneyTransaction) {
@@ -61,7 +65,7 @@ object FynxMoneyStore {
     }
 
     fun loadAccounts(context: Context): List<FynxMoneyAccount> = runCatching {
-        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(ACCOUNTS, "[]") ?: "[]"
+        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(accountsKey(context), "[]") ?: "[]"
         val array = JSONArray(raw)
         buildList {
             for (i in 0 until array.length()) {
@@ -86,10 +90,17 @@ object FynxMoneyStore {
                 put("balance", item.balance)
             })
         }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(ACCOUNTS, array.toString()).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(accountsKey(context), array.toString()).apply()
     }
 
     fun addAccount(context: Context, account: FynxMoneyAccount) {
         saveAccounts(context, loadAccounts(context) + account)
     }
+
+    private fun storageKey(value: String): String = value.map { character ->
+        when {
+            character.isLetterOrDigit() -> character
+            else -> '_'
+        }
+    }.joinToString("").take(80).ifBlank { "account" }
 }
