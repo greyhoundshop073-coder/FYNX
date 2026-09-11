@@ -62,12 +62,6 @@ object FynxBackendClient {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_BASE_URL, normalized).apply()
     }
 
-    /**
-     * Token writes are normally simple secure-store operations. Clearing the
-     * token, however, is a session-boundary event because legacy callers can
-     * encounter a 401 outside the central request pipeline. Route that event
-     * through the full account cleanup instead of leaving stale local data.
-     */
     fun saveAccessToken(context: Context, token: String?) {
         if (token.isNullOrBlank()) {
             FynxAuthStore.clear(context)
@@ -101,12 +95,6 @@ object FynxBackendClient {
     suspend fun currentUserId(context: Context): Result<String> =
         get(context, "/api/me").mapCatching { raw -> JSONObject(raw).getJSONObject("user").getString("id") }
 
-    /**
-     * Canonical authenticated media download boundary. Relative backend paths
-     * and absolute URLs on the configured FYNX backend are accepted; arbitrary
-     * external URLs are rejected so media callers cannot bypass the backend
-     * authorization/session boundary.
-     */
     suspend fun downloadToFile(
         context: Context,
         mediaUrl: String,
@@ -133,9 +121,10 @@ object FynxBackendClient {
             if (!parent.exists()) parent.mkdirs()
             val temporary = File(parent, ".${destination.name}.part")
             var attempt = 0
-            while (true) {
+            var completed: DownloadedMedia? = null
+            while (completed == null) {
                 try {
-                    val result = requestSemaphore.withPermit {
+                    completed = requestSemaphore.withPermit {
                         if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK) {
                             weakRequestSemaphore.withPermit { downloadOnce(context, target, temporary, maxBytes) }
                         } else {
@@ -144,7 +133,6 @@ object FynxBackendClient {
                     }
                     if (destination.exists()) destination.delete()
                     if (!temporary.renameTo(destination)) throw IOException("Unable to finalize downloaded media")
-                    return@runCatching result
                 } catch (error: Exception) {
                     temporary.delete()
                     if (!isRetryableFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) throw error
@@ -153,6 +141,7 @@ object FynxBackendClient {
                     delay(RETRY_DELAY_MS * attempt)
                 }
             }
+            completed
         }
     }
 
@@ -215,7 +204,7 @@ object FynxBackendClient {
 
     private suspend fun request(context: Context, method: String, path: String, body: String?): Result<String> =
         withContext(Dispatchers.IO) {
-            runCatching {
+            return@withContext runCatching {
                 val root = baseUrl(context)
                 require(root.isNotBlank()) { "FYNX backend is not configured." }
                 require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }
@@ -240,7 +229,7 @@ object FynxBackendClient {
                         delay(RETRY_DELAY_MS * attempt)
                     }
                 }
-                response
+                response!!
             }
         }
 
