@@ -83,13 +83,9 @@ object FynxProductionMessaging {
         val width = bounds.outWidth
         val height = bounds.outHeight
         require(width > 0 && height > 0) { "Unable to read the selected image." }
-
         val knownLength = runCatching { context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L }.getOrDefault(-1L)
         val needsResize = width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION
-        if (!needsResize && knownLength in 1..IMAGE_RECOMPRESS_THRESHOLD.toLong()) {
-            return readMediaBytes(context, uri) to mimeType
-        }
-
+        if (!needsResize && knownLength in 1..IMAGE_RECOMPRESS_THRESHOLD.toLong()) return readMediaBytes(context, uri) to mimeType
         var sample = 1
         while (width / sample > MAX_IMAGE_DIMENSION * 2 || height / sample > MAX_IMAGE_DIMENSION * 2) sample *= 2
         val options = BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.RGB_565 }
@@ -127,8 +123,8 @@ object FynxProductionMessaging {
             if (existing != null) return@withContext Result.success(Uri.fromFile(existing))
             val absoluteUrl = if (mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://")) mediaUrl else FynxBackendClient.baseUrl(context).trimEnd('/') + "/" + mediaUrl.trimStart('/')
             val target = File(directory, "$safeId.bin")
-            val result = FynxBackendClient.downloadToFile(context, absoluteUrl, target, MAX_MEDIA_BYTES)
-            result.map { Uri.fromFile(it) }
+            val result = FynxBackendClient.downloadToFile(context, absoluteUrl, target, MAX_MEDIA_BYTES.toLong())
+            result.map { Uri.fromFile(target) }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (error: Throwable) { Result.failure(error) }
     }
@@ -167,13 +163,7 @@ object FynxProductionMessaging {
             message.contains("http 429") || message.contains("http 5") || message.contains("503") || message.contains("502")
     }
 
-    private fun List<RemoteMessage>.asReconciliationCandidate(
-        currentUsername: String,
-        text: String,
-        replyToId: String?,
-        mediaId: String?,
-        mediaType: String?
-    ): RemoteMessage? {
+    private fun List<RemoteMessage>.asReconciliationCandidate(currentUsername: String, text: String, replyToId: String?, mediaId: String?, mediaType: String?): RemoteMessage? {
         val now = System.currentTimeMillis()
         return asSequence()
             .filter { it.senderUsername?.trim()?.removePrefix("@").orEmpty().lowercase() == currentUsername }
