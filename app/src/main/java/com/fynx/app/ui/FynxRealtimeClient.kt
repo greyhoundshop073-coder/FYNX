@@ -49,6 +49,7 @@ class FynxRealtimeClient(
     @Volatile private var socketAccountKey: String? = null
     private val socketCreationLock = Any()
     @Volatile private var socketCreationInProgress = false
+    @Volatile private var socketBeingCreated: WebSocket? = null
 
     fun connect() {
         manuallyClosed = false
@@ -70,7 +71,14 @@ class FynxRealtimeClient(
             override fun onLost(network: Network) {
                 if (manuallyClosed) return
                 if (!hasUsableNetwork()) {
-                    socket?.cancel(); socket = null; socketAccountKey = null
+                    synchronized(socketCreationLock) {
+                        socket?.cancel()
+                        socket = null
+                        socketAccountKey = null
+                        socketBeingCreated?.cancel()
+                        socketBeingCreated = null
+                        socketCreationInProgress = false
+                    }
                     onStateChanged(State.DISCONNECTED)
                 }
             }
@@ -109,20 +117,21 @@ class FynxRealtimeClient(
             }
             if (socketCreationInProgress) return
             socketCreationInProgress = true
+            socketBeingCreated = null
         }
         if (!hasUsableNetwork()) {
-            synchronized(socketCreationLock) { socketCreationInProgress = false }
+            synchronized(socketCreationLock) { socketCreationInProgress = false; socketBeingCreated = null }
             onStateChanged(State.DISCONNECTED); scheduleReconnect(); return
         }
         val token = FynxBackendClient.accessToken(context)
         if (token.isNullOrBlank() || accountKey.isNullOrBlank()) {
-            synchronized(socketCreationLock) { socketCreationInProgress = false }
+            synchronized(socketCreationLock) { socketCreationInProgress = false; socketBeingCreated = null }
             onStateChanged(State.FAILED); return
         }
         bindPendingQueueToAccount(accountKey)
         val httpBase = FynxBackendClient.baseUrl(context)
         if (!httpBase.startsWith("https://")) {
-            synchronized(socketCreationLock) { socketCreationInProgress = false }
+            synchronized(socketCreationLock) { socketCreationInProgress = false; socketBeingCreated = null }
             onStateChanged(State.FAILED); return
         }
         val encodedToken = URLEncoder.encode(token, Charsets.UTF_8.name())
@@ -132,7 +141,10 @@ class FynxRealtimeClient(
         val newSocket = client.newWebSocket(Request.Builder().url(wsUrl).build(), object : WebSocketListener() {
             private fun belongsToCurrentAccount(webSocket: WebSocket? = null): Boolean = (webSocket == null || socket === webSocket) && socketAccountKey == accountKey && currentAccountKey() == accountKey && FynxBackendClient.hasAccessToken(context)
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                synchronized(socketCreationLock) { socketCreationInProgress = false }
+                synchronized(socketCreationLock) {
+                    socketCreationInProgress = false
+                    if (socketBeingCreated === webSocket) socketBeingCreated = null
+                }
                 if (manuallyClosed || !belongsToCurrentAccount(webSocket)) { webSocket.close(1000, "FYNX socket replaced"); return }
                 reconnectAttempt = 0; onStateChanged(State.CONNECTED); flushPending(webSocket)
             }
@@ -154,7 +166,10 @@ class FynxRealtimeClient(
                 } }
             }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                synchronized(socketCreationLock) { socketCreationInProgress = false }
+                synchronized(socketCreationLock) {
+                    socketCreationInProgress = false
+                    if (socketBeingCreated === webSocket) socketBeingCreated = null
+                }
                 val current = socket === webSocket
                 if (current) { socket = null; socketAccountKey = null }
                 if (!current || manuallyClosed) return
@@ -162,7 +177,10 @@ class FynxRealtimeClient(
                 if (FynxCallTransportHardening.shouldRetrySocket(code)) scheduleReconnect(accountKey)
             }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                synchronized(socketCreationLock) { socketCreationInProgress = false }
+                synchronized(socketCreationLock) {
+                    socketCreationInProgress = false
+                    if (socketBeingCreated === webSocket) socketBeingCreated = null
+                }
                 val current = socket === webSocket
                 if (current) { socket = null; socketAccountKey = null }
                 if (!current || manuallyClosed) return
@@ -172,11 +190,13 @@ class FynxRealtimeClient(
             }
         })
         synchronized(socketCreationLock) {
-            if (manuallyClosed || currentAccountKey() != accountKey || !FynxBackendClient.hasAccessToken(context)) {
+            if (manuallyClosed || currentAccountKey() != accountKey || !FynxBackendClient.hasAccessToken(context) || !hasUsableNetwork()) {
                 socketCreationInProgress = false
+                socketBeingCreated = null
                 newSocket.cancel()
                 return
             }
+            socketBeingCreated = newSocket
             socket = newSocket
         }
     }
@@ -232,8 +252,14 @@ class FynxRealtimeClient(
     fun close() {
         manuallyClosed = true; reconnectHandler.removeCallbacksAndMessages(null); unregisterNetworkCallback()
         synchronized(pendingLock) { pendingPayloads.clear(); pendingAccountKey = null }
-        synchronized(socketCreationLock) { socketCreationInProgress = false }
-        socket?.close(1000, "FYNX conversation closed"); socket = null; socketAccountKey = null
+        synchronized(socketCreationLock) {
+            socketCreationInProgress = false
+            socketBeingCreated?.cancel()
+            socketBeingCreated = null
+            socket?.close(1000, "FYNX conversation closed")
+            socket = null
+            socketAccountKey = null
+        }
         onStateChanged(State.DISCONNECTED); client.connectionPool.evictAll()
     }
 }
