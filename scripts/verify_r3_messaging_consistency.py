@@ -40,7 +40,8 @@ require(BOOTSTRAP_CHECK, "id=$1 AND recipient_id=$2", "delivery ACK recipient bi
 # The outer isolation layer independently authenticates the socket and applies
 # abuse protection before the legacy socket message listeners receive packets.
 for needle, label in [
-    ("const user = jwt.verify(token, JWT_SECRET);", "independent JWT verification"),
+    ("const secret = process.env.JWT_SECRET || \"\";", "JWT secret loading"),
+    ("const user = jwt.verify(token, secret);", "independent JWT verification"),
     ("currentSocketByUserId.set(userId, socket);", "per-user active socket isolation"),
     ("function validReadOrAckPacket(raw, userId)", "read/ACK packet validation"),
     ("body.type === \"message_ack\"", "message ACK packet guard"),
