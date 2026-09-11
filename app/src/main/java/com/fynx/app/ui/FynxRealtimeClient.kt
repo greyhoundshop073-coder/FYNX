@@ -108,8 +108,8 @@ class FynxRealtimeClient(
 
     private fun currentAccountKey(): String? = FynxAuthStore.accountStorageKey(context)
 
-    private fun isSocketStillAuthorized(): Boolean =
-        socketAccountKey != null && socketAccountKey == currentAccountKey() && FynxBackendClient.hasAccessToken(context)
+    private fun isSocketStillAuthorized(expectedAccountKey: String? = socketAccountKey): Boolean =
+        !expectedAccountKey.isNullOrBlank() && expectedAccountKey == currentAccountKey() && FynxBackendClient.hasAccessToken(context)
 
     private fun connectInternal() {
         if (manuallyClosed) return
@@ -159,7 +159,7 @@ class FynxRealtimeClient(
                 if (current) { socket = null; socketAccountKey = null }
                 if (!current || manuallyClosed) return
                 onStateChanged(State.DISCONNECTED)
-                if (FynxCallTransportHardening.shouldRetrySocket(code) && currentAccountKey() == accountKey && FynxBackendClient.hasAccessToken(context)) scheduleReconnect()
+                if (FynxCallTransportHardening.shouldRetrySocket(code)) scheduleReconnect(accountKey)
             }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 val current = socket === webSocket
@@ -170,24 +170,24 @@ class FynxRealtimeClient(
                     onStateChanged(State.FAILED)
                     return
                 }
-                if (currentAccountKey() != accountKey || !FynxBackendClient.hasAccessToken(context)) {
+                if (!isSocketStillAuthorized(accountKey)) {
                     onStateChanged(State.FAILED)
                     return
                 }
                 onStateChanged(State.FAILED)
-                scheduleReconnect()
+                scheduleReconnect(accountKey)
             }
         })
     }
 
-    private fun scheduleReconnect() {
-        if (manuallyClosed || !isSocketStillAuthorized()) return
+    private fun scheduleReconnect(expectedAccountKey: String? = socketAccountKey) {
+        if (manuallyClosed || !isSocketStillAuthorized(expectedAccountKey)) return
         reconnectHandler.removeCallbacksAndMessages(null)
         reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(6)
         val exponentialDelay = (1000L shl (reconnectAttempt - 1)).coerceAtMost(30_000L)
         val jitter = Random.nextLong(0L, 501L)
         reconnectHandler.postDelayed({
-            if (isSocketStillAuthorized()) connectInternal()
+            if (isSocketStillAuthorized(expectedAccountKey)) connectInternal()
         }, exponentialDelay + jitter)
     }
 
