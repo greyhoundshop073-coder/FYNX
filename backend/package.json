@@ -3,11 +3,10 @@
   "version": "1.1.1",
   "type": "module",
   "scripts": {
-    "start": "node serverBootstrap.js"
+    "start": "node realtimeIsolationBootstrap.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
-    "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.16.3",
     "ws": "^8.18.3"
