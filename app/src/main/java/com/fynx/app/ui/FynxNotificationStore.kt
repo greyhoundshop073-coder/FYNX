@@ -7,12 +7,15 @@ import org.json.JSONObject
 /** Single local source of truth for the FYNX notification center. */
 object FynxNotificationStore {
     private const val PREFS = "fynx_notification_store"
-    private const val KEY = "notifications"
+    private const val KEY_PREFIX = "notifications_"
     private const val MAX_NOTIFICATIONS = 200
+
+    private fun key(context: Context): String =
+        KEY_PREFIX + (FynxAuthStore.accountStorageKey(context)?.let(::storageKey) ?: "signed_out")
 
     fun load(context: Context): List<FynxNotification> {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY, null) ?: return emptyList()
+            .getString(key(context), null) ?: return emptyList()
         return runCatching {
             val array = JSONArray(raw)
             buildList {
@@ -54,7 +57,7 @@ object FynxNotificationStore {
             })
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY, array.toString()).apply()
+            .edit().putString(key(context), array.toString()).apply()
     }
 
     fun add(context: Context, notification: FynxNotification) {
@@ -67,4 +70,11 @@ object FynxNotificationStore {
     fun markAllRead(context: Context) = save(context, FynxNotificationActivityCenter.markAllRead(load(context)))
 
     fun clearRead(context: Context) = save(context, FynxNotificationActivityCenter.clearRead(load(context)))
+
+    private fun storageKey(value: String): String = value.map { character ->
+        when {
+            character.isLetterOrDigit() -> character
+            else -> '_'
+        }
+    }.joinToString("").take(80).ifBlank { "account" }
 }
