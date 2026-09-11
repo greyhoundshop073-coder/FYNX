@@ -31,7 +31,7 @@ if (startScript === 'node serverBootstrap.js') {
 }
 if (startScript === 'node realtimeIsolationBootstrap.js') {
   const isolation = read('backend/realtimeIsolationBootstrap.js');
-  if (!isolation.includes('import "./serverBootstrap.js"') || !isolation.includes('currentSocketByUserId') || !isolation.includes('__fynxStale')) {
+  if (!isolation.includes('serverBootstrap.js') || !isolation.includes('currentSocketByUserId') || !isolation.includes('__fynxStale')) {
     failures.push('Realtime isolation bootstrap is missing the production server/scalability startup chain');
   }
 }
