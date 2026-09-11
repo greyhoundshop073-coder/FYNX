@@ -98,8 +98,16 @@ class FynxRealtimeClient(
     }
     private fun connectInternal() {
         if (manuallyClosed) return
+        val accountKey = currentAccountKey()
         synchronized(socketCreationLock) {
-            if (socket != null || socketCreationInProgress) return
+            val existingSocket = socket
+            if (existingSocket != null) {
+                if (socketAccountKey == accountKey && accountKey != null) return
+                socket = null
+                socketAccountKey = null
+                existingSocket.cancel()
+            }
+            if (socketCreationInProgress) return
             socketCreationInProgress = true
         }
         if (!hasUsableNetwork()) {
@@ -107,7 +115,6 @@ class FynxRealtimeClient(
             onStateChanged(State.DISCONNECTED); scheduleReconnect(); return
         }
         val token = FynxBackendClient.accessToken(context)
-        val accountKey = currentAccountKey()
         if (token.isNullOrBlank() || accountKey.isNullOrBlank()) {
             synchronized(socketCreationLock) { socketCreationInProgress = false }
             onStateChanged(State.FAILED); return
