@@ -54,6 +54,10 @@ class FynxRealtimeClient(
     private var socket: WebSocket? = null
     private var manuallyClosed = false
     private var reconnectAttempt = 0
+    // Bind each socket to the account that created it. If logout/account-switch
+    // happens while a callback is still in flight, the old socket must not be
+    // allowed to deliver events into the newly authenticated account.
+    @Volatile private var socketAccountKey: String? = null
 
     fun connect() {
         manuallyClosed = false
@@ -78,6 +82,7 @@ class FynxRealtimeClient(
                 if (!hasUsableNetwork()) {
                     socket?.cancel()
                     socket = null
+                    socketAccountKey = null
                     onStateChanged(State.DISCONNECTED)
                 }
             }
@@ -101,6 +106,11 @@ class FynxRealtimeClient(
             capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }.getOrDefault(true)
 
+    private fun currentAccountKey(): String? = FynxAuthStore.accountStorageKey(context)
+
+    private fun isSocketStillAuthorized(): Boolean =
+        socketAccountKey != null && socketAccountKey == currentAccountKey() && FynxBackendClient.hasAccessToken(context)
+
     private fun connectInternal() {
         if (manuallyClosed) return
         if (!hasUsableNetwork()) {
@@ -109,21 +119,26 @@ class FynxRealtimeClient(
             return
         }
         val token = FynxBackendClient.accessToken(context)
-        if (token.isNullOrBlank()) { onStateChanged(State.FAILED); return }
+        val accountKey = currentAccountKey()
+        if (token.isNullOrBlank() || accountKey.isNullOrBlank()) { onStateChanged(State.FAILED); return }
         val httpBase = FynxBackendClient.baseUrl(context)
         if (!httpBase.startsWith("https://")) { onStateChanged(State.FAILED); return }
         val encodedToken = URLEncoder.encode(token, Charsets.UTF_8.name())
         val wsUrl = "wss://${httpBase.removePrefix("https://")}/realtime?token=$encodedToken"
         onStateChanged(State.CONNECTING)
         socket?.cancel()
+        socketAccountKey = accountKey
         socket = client.newWebSocket(Request.Builder().url(wsUrl).build(), object : WebSocketListener() {
+            private fun belongsToCurrentAccount(): Boolean = socketAccountKey == accountKey && currentAccountKey() == accountKey && FynxBackendClient.hasAccessToken(context)
+
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                if (manuallyClosed) { webSocket.close(1000, "FYNX conversation closed"); return }
+                if (manuallyClosed || !belongsToCurrentAccount()) { webSocket.close(1000, "FYNX account changed"); return }
                 reconnectAttempt = 0
                 onStateChanged(State.CONNECTED)
                 flushPending(webSocket)
             }
             override fun onMessage(webSocket: WebSocket, text: String) {
+                if (!belongsToCurrentAccount()) { webSocket.close(1000, "FYNX account changed"); return }
                 runCatching { val root = JSONObject(text); when (root.optString("type")) {
                     "message" -> root.optJSONObject("message")?.let { onMessage(FynxProductionMessaging.fromJson(it)) }
                     "message_status" -> onEvent(Event.MessageStatus(root.optString("messageId"), when (root.optString("status")) { "read" -> Status.READ; "delivered" -> Status.DELIVERED; else -> Status.SENT }))
@@ -141,17 +156,21 @@ class FynxRealtimeClient(
             }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 val current = socket === webSocket
-                if (current) socket = null
+                if (current) { socket = null; socketAccountKey = null }
                 if (!current || manuallyClosed) return
                 onStateChanged(State.DISCONNECTED)
-                if (FynxCallTransportHardening.shouldRetrySocket(code)) scheduleReconnect()
+                if (FynxCallTransportHardening.shouldRetrySocket(code) && currentAccountKey() == accountKey && FynxBackendClient.hasAccessToken(context)) scheduleReconnect()
             }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 val current = socket === webSocket
-                if (current) socket = null
+                if (current) { socket = null; socketAccountKey = null }
                 if (!current || manuallyClosed) return
                 if (FynxCallTransportHardening.isAuthFailure(response?.code)) {
                     FynxAuthStore.clear(context)
+                    onStateChanged(State.FAILED)
+                    return
+                }
+                if (currentAccountKey() != accountKey || !FynxBackendClient.hasAccessToken(context)) {
                     onStateChanged(State.FAILED)
                     return
                 }
@@ -162,12 +181,14 @@ class FynxRealtimeClient(
     }
 
     private fun scheduleReconnect() {
-        if (manuallyClosed) return
+        if (manuallyClosed || !isSocketStillAuthorized()) return
         reconnectHandler.removeCallbacksAndMessages(null)
         reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(6)
         val exponentialDelay = (1000L shl (reconnectAttempt - 1)).coerceAtMost(30_000L)
         val jitter = Random.nextLong(0L, 501L)
-        reconnectHandler.postDelayed({ connectInternal() }, exponentialDelay + jitter)
+        reconnectHandler.postDelayed({
+            if (isSocketStillAuthorized()) connectInternal()
+        }, exponentialDelay + jitter)
     }
 
     private fun parseCallEvent(root: JSONObject): Event.Call? {
@@ -202,6 +223,7 @@ class FynxRealtimeClient(
     fun acknowledgeMessage(messageId: String) { messageId.toLongOrNull()?.let { sendJson(JSONObject().apply { put("type", "message_ack"); put("messageId", it) }) } }
 
     private fun sendJson(payload: JSONObject) {
+        if (!isSocketStillAuthorized()) return
         val value = payload.toString()
         if (socket?.send(value) == true) return
         // Only durable protocol events should survive a reconnect. Typing and call
@@ -216,6 +238,7 @@ class FynxRealtimeClient(
     }
 
     private fun flushPending(webSocket: WebSocket) {
+        if (!isSocketStillAuthorized()) return
         while (true) {
             val next = synchronized(pendingLock) { if (pendingPayloads.isEmpty()) null else pendingPayloads.removeFirst() } ?: break
             if (!webSocket.send(next)) {
@@ -232,6 +255,7 @@ class FynxRealtimeClient(
         synchronized(pendingLock) { pendingPayloads.clear() }
         socket?.close(1000, "FYNX conversation closed")
         socket = null
+        socketAccountKey = null
         onStateChanged(State.DISCONNECTED)
         client.connectionPool.evictAll()
     }
