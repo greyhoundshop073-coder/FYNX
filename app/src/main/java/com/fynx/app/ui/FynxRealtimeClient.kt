@@ -237,10 +237,26 @@ class FynxRealtimeClient(
     fun sendRead(messageIds: List<String>) { val ids = messageIds.mapNotNull { it.toLongOrNull() }.take(100); if (ids.isNotEmpty()) sendJson(JSONObject().apply { put("type", "read"); put("messageIds", JSONArray(ids)) }) }
     fun acknowledgeMessage(messageId: String) { messageId.toLongOrNull()?.let { sendJson(JSONObject().apply { put("type", "message_ack"); put("messageId", it) }) } }
     private fun sendJson(payload: JSONObject) {
-        val accountKey = currentAccountKey(); if (accountKey.isNullOrBlank() || !isSocketStillAuthorized(accountKey)) return
-        val value = payload.toString(); if (socket?.send(value) == true) return
-        val type = payload.optString("type"); if (type != "read" && type != "message_ack") return
-        synchronized(pendingLock) { if (pendingAccountKey != null && pendingAccountKey != accountKey) pendingPayloads.clear(); pendingAccountKey = accountKey; if (pendingPayloads.size >= 100) pendingPayloads.removeFirst(); pendingPayloads.addLast(value) }
+        val accountKey = currentAccountKey()
+        if (accountKey.isNullOrBlank()) return
+        val value = payload.toString()
+        val type = payload.optString("type")
+        val sent = synchronized(socketCreationLock) {
+            val activeSocket = socket
+            if (activeSocket == null || socketAccountKey != accountKey || !FynxBackendClient.hasAccessToken(context)) {
+                false
+            } else {
+                activeSocket.send(value)
+            }
+        }
+        if (sent) return
+        if (type != "read" && type != "message_ack") return
+        synchronized(pendingLock) {
+            if (pendingAccountKey != null && pendingAccountKey != accountKey) pendingPayloads.clear()
+            pendingAccountKey = accountKey
+            if (pendingPayloads.size >= 100) pendingPayloads.removeFirst()
+            pendingPayloads.addLast(value)
+        }
     }
     private fun flushPending(webSocket: WebSocket) {
         val accountKey = currentAccountKey() ?: return; if (!isSocketStillAuthorized(accountKey)) return
