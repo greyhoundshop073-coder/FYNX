@@ -14,7 +14,7 @@ const checks = [
   ['buyer refund uses deterministic idempotency key', resolution.includes('REFUND-${row.order_id}')],
   ['refund pending state protects escrow', resolution.includes("status='REFUND_PENDING'")],
   ['seller resolution makes escrow release eligible', resolution.includes("'RELEASE_ELIGIBLE'") && resolution.includes("resolution === 'SELLER'")],
-  ['cancel resolution preserves reserved inventory recovery', resolution.includes("status='CANCELLED'") && resolution.includes('reserved_quantity=GREATEST(0,reserved_quantity-$1)')],
+  ['cancel resolution restores captured prior state without starting a money movement', resolution.includes('row.previous_order_status') && resolution.includes('row.previous_escrow_status') && resolution.includes('restoreOrderStatus') && resolution.includes("resolution === 'CANCEL'") && resolution.includes('payoutConflict || refundConflict')],
   ['protection resolution writes audit trail', resolution.includes('marketplace_protection_audit') && resolution.includes('RESOLVED_${resolution}')],
   ['android client exposes protection case lookup', adminClient.includes('marketplaceProtectionCases')],
   ['android client exposes protection resolution', adminClient.includes('resolveMarketplaceProtectionCase')],
