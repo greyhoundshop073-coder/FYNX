@@ -44,12 +44,24 @@ for needle, label in [
     ("const user = jwt.verify(token, secret);", "independent JWT verification"),
     ("currentSocketByUserId.set(userId, socket);", "per-user active socket isolation"),
     ("function validReadOrAckPacket(raw, userId)", "read/ACK packet validation"),
+    ("const MAX_PACKET_BYTES = 64 * 1024;", "isolation packet size guard"),
+    ("Buffer.byteLength(raw.toString(), \"utf8\") > MAX_PACKET_BYTES", "oversized packet rejection"),
     ("body.type === \"message_ack\"", "message ACK packet guard"),
     ("body.type === \"read\"", "read packet guard"),
-    ("MAX_READ_IDS = 100", "read batch bound"),
+    ("body.messageIds.length > MAX_READ_IDS", "read batch bound"),
+    ("Number.isSafeInteger(id) || id <= 0", "invalid read ID rejection"),
+    ("MAX_READ_IDS = 100", "read batch limit"),
     ("READ_RATE_LIMIT = 120", "read rate limit"),
     ("ACK_RATE_LIMIT = 240", "ACK rate limit"),
     ("if (!validReadOrAckPacket(data, userId)) return;", "read/ACK enforcement before legacy listener"),
+]:
+    require(ISOLATION, needle, label)
+
+# Malformed JSON is deliberately passed to the existing authenticated handler,
+# which already ignores malformed non-call realtime packets without killing the socket.
+for needle, label in [
+    ('try { body = JSON.parse(raw.toString()); } catch { return true; }', "malformed JSON compatibility"),
+    ('if (!body || typeof body !== "object" || Array.isArray(body)) return true;', "non-object packet compatibility"),
 ]:
     require(ISOLATION, needle, label)
 
