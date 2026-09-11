@@ -71,6 +71,21 @@ async function initiatePayout(payload) {
       return;
     }
 
+    const operationAmount = Number(operation.amount);
+    const escrowAmount = Number(escrow.amount);
+    if (!Number.isFinite(operationAmount) || !Number.isFinite(escrowAmount) || operationAmount !== escrowAmount || String(operation.currency).toUpperCase() !== String(escrow.currency).toUpperCase()) {
+      await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, ['payout amount or currency does not match the protected escrow', operation.id]);
+      await client.query('COMMIT');
+      return;
+    }
+
+    const refundConflict = (await client.query(`SELECT 1 FROM marketplace_financial_operations WHERE order_id=$1 AND operation_type='REFUND' AND status IN ('PENDING','SUCCEEDED') LIMIT 1`, [operation.order_id])).rowCount > 0;
+    if (refundConflict) {
+      await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,updated_at=NOW() WHERE id=$2 AND status='PENDING'`, ['refund financial operation is active for this order', operation.id]);
+      await client.query('COMMIT');
+      return;
+    }
+
     const recipientCode = String(operation.metadata?.recipientCode || '');
     if (!recipientCode) {
       await markPayoutFailed(client, operation, 'verified seller payout recipient is missing');
@@ -88,7 +103,7 @@ async function initiatePayout(payload) {
     const { response, data } = await paystackJson('https://api.paystack.co/transfer', {
       method: 'POST',
       headers: providerHeaders(),
-      body: JSON.stringify({ source: 'balance', amount: Math.round(Number(operation.amount) * 100), recipient: recipientCode, reason: `FYNX marketplace payout ${operation.order_id}`, reference })
+      body: JSON.stringify({ source: 'balance', amount: Math.round(operationAmount * 100), recipient: recipientCode, reason: `FYNX marketplace payout ${operation.order_id}`, reference })
     });
     const providerReference = String(data?.data?.reference || data?.data?.transfer_code || reference);
     const providerStatus = String(data?.data?.status || '').toLowerCase();
