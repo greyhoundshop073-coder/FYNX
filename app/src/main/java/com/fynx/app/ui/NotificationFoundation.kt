@@ -25,10 +25,19 @@ object FynxNotificationFoundation {
     private const val KEY_SPEAK = "speak_notifications"
     private const val KEY_DEDUPE = "recent_notification_ids"
 
+    private fun accountKey(context: Context): String =
+        FynxAuthStore.accountStorageKey(context)?.let { value ->
+            value.map { character -> if (character.isLetterOrDigit()) character else '_' }
+                .joinToString("").take(80).ifBlank { "account" }
+        } ?: "signed_out"
+
+    private fun key(base: String, context: Context): String = "${base}_${accountKey(context)}"
+
     private fun shouldShow(context: Context, stableKey: String): Boolean {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val dedupeKey = key(KEY_DEDUPE, context)
         val now = System.currentTimeMillis()
-        val values = prefs.getStringSet(KEY_DEDUPE, emptySet()).orEmpty()
+        val values = prefs.getStringSet(dedupeKey, emptySet()).orEmpty()
         val fresh = values.mapNotNull { entry ->
             val parts = entry.split("|", limit = 2)
             if (parts.size != 2) return@mapNotNull null
@@ -37,7 +46,7 @@ object FynxNotificationFoundation {
         }.toMutableSet()
         if (fresh.any { it.startsWith("$stableKey|") }) return false
         fresh.add("$stableKey|$now")
-        prefs.edit().putStringSet(KEY_DEDUPE, fresh).apply()
+        prefs.edit().putStringSet(dedupeKey, fresh).apply()
         return true
     }
 
@@ -60,10 +69,10 @@ object FynxNotificationFoundation {
     }
 
     fun isSpeakNotificationsEnabled(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_SPEAK, false)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(key(KEY_SPEAK, context), false)
 
     fun setSpeakNotificationsEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_SPEAK, enabled).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(key(KEY_SPEAK, context), enabled).apply()
         if (!enabled) stopSpeaking()
     }
 
