@@ -138,11 +138,11 @@ object FynxBackendClient {
                     if (!temporary.renameTo(destination)) {
                         throw IOException("Unable to finalize downloaded media")
                     }
-                    return@withContext Result.success(result)
+                    return@withContext Result.success<DownloadedMedia>(result)
                 } catch (error: Exception) {
                     temporary.delete()
                     if (!isRetryableFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) {
-                        return@withContext Result.failure(error)
+                        return@withContext Result.failure<DownloadedMedia>(error)
                     }
                     attempt++
                     awaitValidatedNetwork(context)
@@ -150,7 +150,7 @@ object FynxBackendClient {
                 }
             }
         } catch (error: Throwable) {
-            Result.failure(error)
+            Result.failure<DownloadedMedia>(error)
         }
     }
 
@@ -213,7 +213,7 @@ object FynxBackendClient {
 
     private suspend fun request(context: Context, method: String, path: String, body: String?): Result<String> =
         withContext(Dispatchers.IO) {
-            runCatching {
+            try {
                 val root = baseUrl(context)
                 require(root.isNotBlank()) { "FYNX backend is not configured." }
                 require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }
@@ -223,21 +223,26 @@ object FynxBackendClient {
                 var attempt = 0
                 while (true) {
                     try {
-                        return@runCatching requestSemaphore.withPermit {
+                        val response = requestSemaphore.withPermit {
                             if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK) {
                                 weakRequestSemaphore.withPermit { executeRequest(context, root, method, path, body) }
                             } else {
                                 executeRequest(context, root, method, path, body)
                             }
                         }
+                        return@withContext Result.success<String>(response)
                     } catch (error: Exception) {
                         val retryable = method == "GET" || method == "DELETE"
-                        if (!retryable || !isRetryableFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) throw error
+                        if (!retryable || !isRetryableFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) {
+                            return@withContext Result.failure<String>(error)
+                        }
                         attempt++
                         delay(RETRY_DELAY_MS * attempt)
                         awaitValidatedNetwork(context)
                     }
                 }
+            } catch (error: Throwable) {
+                Result.failure<String>(error)
             }
         }
 
