@@ -12,7 +12,7 @@ checks = []
 def check(name, condition):
     checks.append((name, bool(condition)))
 
-check("backend transport requires HTTPS", 'startsWith("https://")' in client and 'startsWith("https://")' in client)
+check("backend transport requires HTTPS", 'startsWith("https://")' in client)
 check("backend transport waits for validated network", "awaitValidatedNetwork(context)" in client and "NET_CAPABILITY_VALIDATED" in client)
 check("idempotent backend requests have bounded retries", "MAX_IDEMPOTENT_RETRIES = 2" in client and "attempt >= MAX_IDEMPOTENT_RETRIES" in client)
 check("non-idempotent POST/PATCH are not automatically retried", 'val retryable = method == "GET" || method == "DELETE"' in client)
@@ -23,7 +23,7 @@ check("media downloads use the central backend transport", "FynxBackendClient.do
 check("media downloads require HTTPS and same trusted host", 'target.protocol.equals("https", true)' in client and 'target.host.equals(configured.host, true)' in client)
 check("media downloads have bounded bytes and partial-file protection", "maxBytes: Long" in client and ".part" in client and "temporary.renameTo(destination)" in client)
 check("media downloads cancel the underlying connection", "invokeOnCompletion" in client and "connection.disconnect()" in client)
-check("currency conversion has validated-network protection", "FynxNetworkQuality" in currency and "NET_CAPABILITY_VALIDATED" in currency)
+check("currency conversion has validated-network protection", "ConnectivityManager" in currency and "awaitValidatedNetwork(context)" in currency and "NET_CAPABILITY_INTERNET" in currency and "NET_CAPABILITY_VALIDATED" in currency)
 check("CI contains the complete R2 sequence", all(x in workflow for x in ["verify_r2c_realtime.py", "verify_r2d_recovery.py", "verify_r2e_final.py"]))
 check("R2-E runs before production certification", workflow.index("verify_r2e_final.py") < workflow.index("verify_fynx_production.py"))
 
