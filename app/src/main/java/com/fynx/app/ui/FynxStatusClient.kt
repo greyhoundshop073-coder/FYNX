@@ -6,7 +6,7 @@ import android.util.Base64
 import org.json.JSONObject
 import java.io.File
 
-/** Account-scoped Status API. Local StatusStore remains as a cache/fallback. */
+/** Authenticated Status API. The local store is only a cache/fallback and never the source of shared truth. */
 object FynxStatusClient {
     suspend fun uploadMedia(context: Context, uri: Uri, mimeType: String): Result<String> = runCatching {
         val input = if (uri.scheme.equals("file", true)) uri.path?.let { File(it).inputStream() } else context.contentResolver.openInputStream(uri)
@@ -37,7 +37,9 @@ object FynxStatusClient {
             if (mediaId != null) put("mediaId", mediaId)
             put("backgroundColor", status.textStyle.backgroundColor); put("foregroundColor", status.textStyle.foregroundColor)
             put("font", status.textStyle.font.name); put("alignment", status.textStyle.alignment)
-            put("privateStatus", status.privateStatus); put("voiceDurationMs", status.voiceDurationMs)
+            put("privateStatus", status.audience != FynxStatusAudience.EVERYONE)
+            put("audience", status.audience.name)
+            put("voiceDurationMs", status.voiceDurationMs)
         }.toString()
         FynxBackendClient.postJson(context, "/api/statuses", body).getOrThrow()
     }
@@ -50,14 +52,19 @@ object FynxStatusClient {
                 val o = items.getJSONObject(i)
                 val type = runCatching { FynxStatusType.valueOf(o.getString("type")) }.getOrNull() ?: continue
                 val font = runCatching { FynxStatusTextFont.valueOf(o.optString("font", "CLASSIC")) }.getOrDefault(FynxStatusTextFont.CLASSIC)
+                val audience = runCatching { FynxStatusAudience.valueOf(o.optString("audience", if (o.optBoolean("privateStatus")) "FRIENDS" else "EVERYONE")) }.getOrDefault(FynxStatusAudience.EVERYONE)
                 add(FynxStatus(
                     id=o.getString("id"), ownerUsername=o.getString("ownerUsername"), ownerDisplayName=o.optString("ownerDisplayName"),
                     type=type, contentUri=o.optString("mediaUrl").ifBlank { null }, text=o.optString("text").ifBlank { null },
                     createdAtMillis=o.optLong("createdAtMillis"), expiresAtMillis=o.optLong("expiresAtMillis"),
                     textStyle=FynxStatusTextStyle(o.optLong("backgroundColor",0xFF111111),o.optLong("foregroundColor",0xFFFFFFFF),font,o.optInt("alignment",1)),
-                    privateStatus=o.optBoolean("privateStatus"), voiceDurationMs=o.optLong("voiceDurationMs",0L)
+                    privateStatus=o.optBoolean("privateStatus"), voiceDurationMs=o.optLong("voiceDurationMs",0L), audience=audience
                 ))
             }
         }
+    }
+
+    suspend fun delete(context: Context, statusId: String): Result<Unit> = runCatching {
+        FynxBackendClient.delete(context, "/api/statuses/${statusId.trim()}").getOrThrow()
     }
 }
