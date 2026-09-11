@@ -25,10 +25,14 @@ const val FYNX_STATUS_MAX_VOICE_DURATION_MS = 30_000L
 
 object FynxStatusStore {
     private const val PREFS = "fynx_status_foundation"
-    private const val KEY_STATUSES = "statuses"
+
+    private fun accountKey(context: Context): String =
+        FynxAuthStore.accountStorageKey(context)?.let(::storageKey) ?: "signed_out"
+
+    private fun statusesKey(context: Context) = "statuses_${accountKey(context)}"
 
     fun load(context: Context): List<FynxStatus> {
-        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_STATUSES, null) ?: return emptyList()
+        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(statusesKey(context), null) ?: return emptyList()
         return runCatching {
             val array = JSONArray(raw)
             buildList {
@@ -47,14 +51,14 @@ object FynxStatusStore {
         val active = load(context).filterNot { it.id == status.id && it.ownerUsername == status.ownerUsername } + status
         val array = JSONArray()
         active.filterNot { it.isExpired() }.take(200).forEach { array.put(toJson(it)) }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_STATUSES, array.toString()).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(statusesKey(context), array.toString()).apply()
     }
 
     fun delete(context: Context, statusId: String) {
         val status = load(context).firstOrNull { it.id == statusId }
         val array = JSONArray()
         load(context).filterNot { it.id == statusId }.forEach { array.put(toJson(it)) }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_STATUSES, array.toString()).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(statusesKey(context), array.toString()).apply()
         status?.contentUri?.let { path -> runCatching { File(Uri.parse(path).path ?: "").delete() } }
     }
 
@@ -72,7 +76,11 @@ object FynxStatusStore {
                 FynxStatusType.VOICE -> ".m4a"
                 FynxStatusType.TEXT -> return@runCatching null
             }
-            val file = File(context.filesDir, "fynx_status_${UUID.randomUUID()}$extension")
+            val account = FynxAuthStore.accountStorageKey(context) ?: return@runCatching null
+            val safeAccount = storageKey(account)
+            val directory = File(context.filesDir, "fynx_status_$safeAccount")
+            if (!directory.exists() && !directory.mkdirs()) return@runCatching null
+            val file = File(directory, "status_${UUID.randomUUID()}$extension")
             input.use { stream ->
                 FileOutputStream(file).use { output ->
                     val buffer = ByteArray(32 * 1024)
@@ -93,4 +101,11 @@ object FynxStatusStore {
     private fun toJson(status: FynxStatus) = JSONObject().apply {
         put("id", status.id); put("ownerUsername", status.ownerUsername); put("ownerDisplayName", status.ownerDisplayName); put("type", status.type.name); put("contentUri", status.contentUri ?: ""); put("text", status.text ?: ""); put("createdAtMillis", status.createdAtMillis); put("expiresAtMillis", status.expiresAtMillis); put("backgroundColor", status.textStyle.backgroundColor); put("foregroundColor", status.textStyle.foregroundColor); put("font", status.textStyle.font.name); put("alignment", status.textStyle.alignment); put("privateStatus", status.privateStatus); put("voiceDurationMs", status.voiceDurationMs); put("muted", status.muted)
     }
+
+    private fun storageKey(value: String): String = value.map { character ->
+        when {
+            character.isLetterOrDigit() -> character
+            else -> '_'
+        }
+    }.joinToString("").take(80).ifBlank { "account" }
 }
