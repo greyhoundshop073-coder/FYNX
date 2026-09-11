@@ -59,7 +59,10 @@ object FynxAuthStore {
      * Account-created state is intentionally preserved for the login path.
      */
     fun clear(context: Context) {
-        runCatching { FynxBackendClient.saveAccessToken(context, null) }
+        // Clear the token directly here. FynxBackendClient.saveAccessToken(null)
+        // is itself a session-boundary operation, so calling it from this method
+        // would recurse when a legacy networking path expires the token.
+        runCatching { FynxSecureTokenStore.save(context, null) }
         runCatching { FynxPreferencesStore.clearAccountSessionData(context) }
         runCatching { context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE).edit().clear().apply() }
         runCatching { context.getSharedPreferences("fynx_notification_store", Context.MODE_PRIVATE).edit().clear().apply() }
