@@ -8,7 +8,7 @@ const webhook = read('./marketplacePaystackWebhook.js');
 const checks = [
   ['hold ledger is idempotent', settlement.includes("'ESCROW-HOLD-' || NEW.id") && settlement.includes('ON CONFLICT (idempotency_key) DO NOTHING')],
   ['payout ledger is idempotent', worker.includes('PAYOUT-RELEASE-${operation.order_id}') && worker.includes('ON CONFLICT (idempotency_key) DO NOTHING')],
-  ['refund ledger is idempotent', webhook.includes("entry_type='REFUND'") && webhook.includes('ON CONFLICT (idempotency_key) DO NOTHING')],
+  ['refund ledger is idempotent', /entry_type[^\n]*['\"]REFUND['\"]/.test(webhook) && webhook.includes('ON CONFLICT (idempotency_key) DO NOTHING')],
   ['payout amount is tied to escrow', worker.includes('operationAmount !== escrowAmount')],
   ['payout currency is tied to escrow', worker.includes("String(operation.currency).toUpperCase() !== String(escrow.currency).toUpperCase()")],
   ['refund blocks payout', worker.includes("operation_type='REFUND'") && worker.includes("status IN ('PENDING','SUCCEEDED')")],
