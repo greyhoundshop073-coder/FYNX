@@ -13,14 +13,16 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun MoneyAlertsPanel() {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val prefs = remember { context.getSharedPreferences("fynx_money_alerts", Context.MODE_PRIVATE) }
-    var bills by remember { mutableStateOf(prefs.getBoolean("bills", true)) }
-    var subscriptions by remember { mutableStateOf(prefs.getBoolean("subscriptions", true)) }
-    var savings by remember { mutableStateOf(prefs.getBoolean("savings", true)) }
-    var budget by remember { mutableStateOf(prefs.getBoolean("budget", true)) }
-    var spending by remember { mutableStateOf(prefs.getBoolean("spending", false)) }
+    val account = FynxAuthStore.accountStorageKey(context)?.trim()?.lowercase()?.map { c -> if (c.isLetterOrDigit()) c else '_' }?.joinToString("")?.take(80)?.ifBlank { "account" } ?: "signed_out"
+    val prefs = remember(account) { context.getSharedPreferences("fynx_money_alerts", Context.MODE_PRIVATE) }
+    fun key(name: String) = "${name}_$account"
+    var bills by remember(account) { mutableStateOf(prefs.getBoolean(key("bills"), true)) }
+    var subscriptions by remember(account) { mutableStateOf(prefs.getBoolean(key("subscriptions"), true)) }
+    var savings by remember(account) { mutableStateOf(prefs.getBoolean(key("savings"), true)) }
+    var budget by remember(account) { mutableStateOf(prefs.getBoolean(key("budget"), true)) }
+    var spending by remember(account) { mutableStateOf(prefs.getBoolean(key("spending"), false)) }
 
-    fun save(key: String, value: Boolean) = prefs.edit().putBoolean(key, value).apply()
+    fun save(keyName: String, value: Boolean) = prefs.edit().putBoolean(key(keyName), value).apply()
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
