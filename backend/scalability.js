@@ -9,6 +9,7 @@ import { installSecurityHardening } from "./securityHardening.js";
 import { registerRealtimeAssistantRoutes } from "./aiRealtimeRoutes.js";
 import { registerPrivacyRoutes } from "./privacyRoutes.js";
 import { registerProfileRoutes } from "./profileRoutes.js";
+import { registerFollowRoutes } from "./followRoutes.js";
 import { registerGroupRoutes } from "./groupRoutes.js";
 import { registerNotificationPreferenceRoutes } from "./notificationPreferences.js";
 import { registerAdminRoutes } from "./adminRoutes.js";
@@ -36,6 +37,7 @@ http.createServer = function fynxCreateServer(...args) {
       registerMarketplaceProtectionResolutionRoutes({ app });
       registerPrivacyRoutes({ app });
       registerProfileRoutes({ app });
+      registerFollowRoutes({ app });
       registerGroupRoutes({ app });
       registerNotificationPreferenceRoutes({ app });
       registerAdminRoutes({ app });
