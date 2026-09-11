@@ -55,9 +55,6 @@ class FynxRealtimeClient(
     private var socket: WebSocket? = null
     private var manuallyClosed = false
     private var reconnectAttempt = 0
-    // Bind each socket to the account that created it. If logout/account-switch
-    // happens while a callback is still in flight, the old socket must not be
-    // allowed to deliver events into the newly authenticated account.
     @Volatile private var socketAccountKey: String? = null
 
     fun connect() {
@@ -138,16 +135,17 @@ class FynxRealtimeClient(
         socket?.cancel()
         socketAccountKey = accountKey
         socket = client.newWebSocket(Request.Builder().url(wsUrl).build(), object : WebSocketListener() {
-            private fun belongsToCurrentAccount(): Boolean = socketAccountKey == accountKey && currentAccountKey() == accountKey && FynxBackendClient.hasAccessToken(context)
+            private fun belongsToCurrentAccount(webSocket: WebSocket? = null): Boolean =
+                (webSocket == null || socket === webSocket) && socketAccountKey == accountKey && currentAccountKey() == accountKey && FynxBackendClient.hasAccessToken(context)
 
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                if (manuallyClosed || !belongsToCurrentAccount()) { webSocket.close(1000, "FYNX account changed"); return }
+                if (manuallyClosed || !belongsToCurrentAccount(webSocket)) { webSocket.close(1000, "FYNX socket replaced"); return }
                 reconnectAttempt = 0
                 onStateChanged(State.CONNECTED)
                 flushPending(webSocket)
             }
             override fun onMessage(webSocket: WebSocket, text: String) {
-                if (!belongsToCurrentAccount()) { webSocket.close(1000, "FYNX account changed"); return }
+                if (!belongsToCurrentAccount(webSocket)) { webSocket.close(1000, "FYNX socket replaced"); return }
                 runCatching { val root = JSONObject(text); when (root.optString("type")) {
                     "message" -> root.optJSONObject("message")?.let { onMessage(FynxProductionMessaging.fromJson(it)) }
                     "message_status" -> onEvent(Event.MessageStatus(root.optString("messageId"), when (root.optString("status")) { "read" -> Status.READ; "delivered" -> Status.DELIVERED; else -> Status.SENT }))
@@ -236,9 +234,6 @@ class FynxRealtimeClient(
         if (accountKey.isNullOrBlank() || !isSocketStillAuthorized(accountKey)) return
         val value = payload.toString()
         if (socket?.send(value) == true) return
-        // Only durable protocol events should survive a reconnect. Typing and call
-        // signaling are time-sensitive; replaying stale versions can corrupt a new
-        // call/session after a network outage.
         val type = payload.optString("type")
         if (type != "read" && type != "message_ack") return
         synchronized(pendingLock) {
