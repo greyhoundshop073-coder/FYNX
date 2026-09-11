@@ -8,7 +8,14 @@ object FynxCallTransportHardening {
     private val validSignals = setOf("invite", "accept", "reject", "end", "offer", "answer", "ice", "unavailable", "busy")
 
     // Accept both the legacy call-123 form and the hardened call_123 form.
-    fun shouldRetrySocket(closeCode: Int): Boolean = closeCode != 1000 && closeCode != 1008 && closeCode != 1003
+    // Retry only transient/transport-level closes. Protocol, payload-size and
+    // policy failures are deterministic and retrying them just creates a
+    // reconnect loop while the underlying socket contract is still invalid.
+    fun shouldRetrySocket(closeCode: Int): Boolean = when (closeCode) {
+        1000, 1002, 1003, 1007, 1008, 1009 -> false
+        1001, 1011, 1012, 1013, 1014, 1006 -> true
+        else -> true
+    }
     fun isAuthFailure(httpCode: Int?): Boolean = httpCode == 401 || httpCode == 403
     fun isValidCallId(value: String): Boolean = value.length <= MAX_CALL_ID_LENGTH && callIdPattern.matches(value)
     fun isValidCallSignal(value: String): Boolean = value.length <= MAX_SIGNAL_LENGTH && value in validSignals
