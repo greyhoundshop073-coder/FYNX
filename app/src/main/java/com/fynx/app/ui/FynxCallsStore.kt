@@ -15,12 +15,15 @@ data class FynxCallRecord(
 
 object FynxCallsStore {
     private const val PREFS = "fynx_calls_store"
-    private const val CALLS_KEY = "calls"
+    private const val CALLS_KEY_PREFIX = "calls_"
     private const val MAX_HISTORY = 50
+
+    private fun callsKey(context: Context): String =
+        CALLS_KEY_PREFIX + (FynxAuthStore.accountStorageKey(context)?.let(::storageKey) ?: "signed_out")
 
     fun load(context: Context): List<FynxCallRecord> {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(CALLS_KEY, null) ?: return emptyList()
+            .getString(callsKey(context), null) ?: return emptyList()
         return runCatching {
             val array = JSONArray(raw)
             buildList {
@@ -62,7 +65,7 @@ object FynxCallsStore {
                 })
             }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(CALLS_KEY, array.toString()).apply()
+            .edit().putString(callsKey(context), array.toString()).apply()
     }
 
     fun add(context: Context, call: FynxCallRecord) {
@@ -76,4 +79,11 @@ object FynxCallsStore {
         }
         save(context, updated)
     }
+
+    private fun storageKey(value: String): String = value.map { character ->
+        when {
+            character.isLetterOrDigit() -> character
+            else -> '_'
+        }
+    }.joinToString("").take(80).ifBlank { "account" }
 }
