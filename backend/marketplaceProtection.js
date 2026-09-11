@@ -45,9 +45,13 @@ async function ensureSchema() {
         details TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL CHECK (status IN ('OPEN','UNDER_REVIEW','RESOLVED_BUYER','RESOLVED_SELLER','REFUNDED','CANCELLED')),
         idempotency_key TEXT NOT NULL UNIQUE,
+        previous_order_status TEXT,
+        previous_escrow_status TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      ALTER TABLE marketplace_protection_cases ADD COLUMN IF NOT EXISTS previous_order_status TEXT;
+      ALTER TABLE marketplace_protection_cases ADD COLUMN IF NOT EXISTS previous_escrow_status TEXT;
       CREATE INDEX IF NOT EXISTS marketplace_protection_cases_order_idx ON marketplace_protection_cases (order_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS marketplace_protection_cases_status_idx ON marketplace_protection_cases (status, updated_at DESC);
 
@@ -81,7 +85,6 @@ export function registerMarketplaceProtectionRoutes({ app }) {
     await createCase(req, res, 'DISPUTE');
   });
 
-  // Compatibility route for the existing Android order-support client. It maps to the same protection case system.
   app.post('/api/marketplace/orders/:id/disputes', auth, async (req, res) => {
     await createCase(req, res, 'DISPUTE');
   });
@@ -98,7 +101,7 @@ export function registerMarketplaceProtectionRoutes({ app }) {
       const order = (await pool.query('SELECT buyer_id,seller_id FROM marketplace_orders WHERE id=$1', [orderId])).rows[0];
       if (!order) return res.status(404).json({ error: 'order not found' });
       if (String(order.buyer_id) !== String(req.user.sub) && String(order.seller_id) !== String(req.user.sub)) return res.status(403).json({ error: 'order unavailable' });
-      const cases = await pool.query('SELECT id,case_type,reason,details,status,created_at,updated_at FROM marketplace_protection_cases WHERE order_id=$1 ORDER BY created_at DESC', [orderId]);
+      const cases = await pool.query('SELECT id,case_type,reason,details,status,previous_order_status,previous_escrow_status,created_at,updated_at FROM marketplace_protection_cases WHERE order_id=$1 ORDER BY created_at DESC', [orderId]);
       return res.json({ cases: cases.rows });
     } catch (error) {
       console.error('marketplace protection case lookup', error);
@@ -131,8 +134,12 @@ async function createCase(req, res, caseType) {
         await client.query('ROLLBACK');
         return res.status(409).json({ error: 'this order is no longer eligible for a protection request' });
       }
+      if (!['PAID','COMPLETED','SHIPPED','DELIVERED','INSPECTION','DISPUTED'].includes(String(order.status))) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'this order is not in a protected post-payment state' });
+      }
 
-      const existing = (await client.query('SELECT id,case_type,reason,details,status,created_at,updated_at FROM marketplace_protection_cases WHERE idempotency_key=$1', [idempotencyKey])).rows[0];
+      const existing = (await client.query('SELECT id,case_type,reason,details,status,previous_order_status,previous_escrow_status,created_at,updated_at FROM marketplace_protection_cases WHERE idempotency_key=$1', [idempotencyKey])).rows[0];
       if (existing) {
         await client.query('ROLLBACK');
         return res.json({ case: existing, idempotent: true });
@@ -140,30 +147,28 @@ async function createCase(req, res, caseType) {
 
       const caseId = crypto.randomUUID();
       const role = isBuyer ? 'BUYER' : 'SELLER';
+      const previousOrderStatus = String(order.status);
+      const previousEscrowStatus = String(escrow.status);
       const inserted = (await client.query(`
-        INSERT INTO marketplace_protection_cases (id,order_id,opened_by,role,case_type,reason,details,status,idempotency_key)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,'OPEN',$8)
-        RETURNING id,case_type,reason,details,status,created_at,updated_at
-      `, [caseId, orderId, req.user.sub, role, caseType, reason, details, idempotencyKey])).rows[0];
+        INSERT INTO marketplace_protection_cases (id,order_id,opened_by,role,case_type,reason,details,status,idempotency_key,previous_order_status,previous_escrow_status)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,'OPEN',$8,$9,$10)
+        RETURNING id,case_type,reason,details,status,previous_order_status,previous_escrow_status,created_at,updated_at
+      `, [caseId, orderId, req.user.sub, role, caseType, reason, details, idempotencyKey, previousOrderStatus, previousEscrowStatus])).rows[0];
 
       await client.query(`
         INSERT INTO marketplace_protection_audit (case_id,order_id,actor_id,action,metadata)
         VALUES ($1,$2,$3,$4,$5::jsonb)
-      `, [caseId, orderId, req.user.sub, caseType === 'DISPUTE' ? 'DISPUTE_OPENED' : 'REFUND_REQUESTED', JSON.stringify({ role, reason })]);
+      `, [caseId, orderId, req.user.sub, caseType === 'DISPUTE' ? 'DISPUTE_OPENED' : 'REFUND_REQUESTED', JSON.stringify({ role, reason, previousOrderStatus, previousEscrowStatus })]);
 
-      // A protection request immediately prevents payout release while the case is reviewed.
-      await client.query(`
-        UPDATE marketplace_escrows
-        SET status='DISPUTED', updated_at=NOW()
-        WHERE order_id=$1 AND status IN ('HELD','RELEASE_ELIGIBLE')
-      `, [orderId]);
+      await client.query(`UPDATE marketplace_orders SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status=$2`, [orderId, previousOrderStatus]);
+      await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status IN ('HELD','RELEASE_ELIGIBLE')`, [escrow.id]);
 
       await client.query('COMMIT');
-      return res.status(201).json({ case: inserted, protection: { funds: 'DISPUTED', payoutBlocked: true } });
+      return res.status(201).json({ case: inserted, protection: { funds: 'DISPUTED', payoutBlocked: true, orderStatus: 'DISPUTED' } });
     } catch (error) {
       await client.query('ROLLBACK');
       if (error?.code === '23505') {
-        const existing = (await client.query('SELECT id,case_type,reason,details,status,created_at,updated_at FROM marketplace_protection_cases WHERE idempotency_key=$1', [idempotencyKey])).rows[0];
+        const existing = (await client.query('SELECT id,case_type,reason,details,status,previous_order_status,previous_escrow_status,created_at,updated_at FROM marketplace_protection_cases WHERE idempotency_key=$1', [idempotencyKey])).rows[0];
         if (existing) return res.json({ case: existing, idempotent: true });
       }
       throw error;
