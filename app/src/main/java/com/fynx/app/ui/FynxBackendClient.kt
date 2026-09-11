@@ -198,7 +198,8 @@ object FynxBackendClient {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
         return manager.allNetworks.any { network ->
             val capabilities = manager.getNetworkCapabilities(network) ?: return@any false
-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
         }
     }
 
