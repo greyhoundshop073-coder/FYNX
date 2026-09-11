@@ -7,10 +7,13 @@ import org.json.JSONObject
 /** Local group persistence foundation. Production sync can replace this store without changing the UI contract. */
 object FynxGroupsStore {
     private const val PREFS = "fynx_groups_store"
-    private const val GROUPS_KEY = "groups"
+    private const val GROUPS_KEY_PREFIX = "groups_"
+
+    private fun groupsKey(context: Context): String =
+        GROUPS_KEY_PREFIX + (FynxAuthStore.accountStorageKey(context)?.let(::storageKey) ?: "signed_out")
 
     fun load(context: Context): List<FynxGroup> {
-        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(GROUPS_KEY, null) ?: return emptyList()
+        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(groupsKey(context), null) ?: return emptyList()
         return runCatching {
             val array = JSONArray(raw)
             buildList {
@@ -38,7 +41,7 @@ object FynxGroupsStore {
                 put("members", JSONArray().apply { group.members.forEach { member -> put(JSONObject().apply { put("username", member.username); put("role", member.role.name) }) } })
             })
         }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(GROUPS_KEY, array.toString()).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(groupsKey(context), array.toString()).apply()
     }
 
     fun add(context: Context, group: FynxGroup): Boolean {
@@ -65,4 +68,11 @@ object FynxGroupsStore {
         FynxChatStore.clear(context, "group_$groupId")
         return true
     }
+
+    private fun storageKey(value: String): String = value.map { character ->
+        when {
+            character.isLetterOrDigit() -> character
+            else -> '_'
+        }
+    }.joinToString("").take(80).ifBlank { "account" }
 }
