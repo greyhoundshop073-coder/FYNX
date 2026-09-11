@@ -59,7 +59,20 @@ object FynxBackendClient {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_BASE_URL, normalized).apply()
     }
 
-    fun saveAccessToken(context: Context, token: String?) = FynxSecureTokenStore.save(context, token)
+    /**
+     * Token writes are normally simple secure-store operations. Clearing the
+     * token, however, is a session-boundary event because legacy callers can
+     * encounter a 401 outside the central request pipeline. Route that event
+     * through the full account cleanup instead of leaving stale local data.
+     */
+    fun saveAccessToken(context: Context, token: String?) {
+        if (token.isNullOrBlank()) {
+            FynxAuthStore.clear(context)
+            return
+        }
+        FynxSecureTokenStore.save(context, token)
+    }
+
     fun accessToken(context: Context): String? = FynxSecureTokenStore.load(context) ?: migrateLegacyAccessToken(context)
 
     private fun migrateLegacyAccessToken(context: Context): String? {
