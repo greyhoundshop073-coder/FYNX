@@ -100,50 +100,48 @@ object FynxBackendClient {
         mediaUrl: String,
         destination: File,
         maxBytes: Long = 12L * 1024L * 1024L
-    ): Result<DownloadedMedia> {
-        return withContext(Dispatchers.IO) {
-            runCatching {
-                val root = baseUrl(context).trimEnd('/')
-                require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }
-                val candidate = mediaUrl.trim()
-                require(candidate.isNotBlank()) { "Media URL is empty." }
-                val absoluteUrl = if (candidate.startsWith("http://") || candidate.startsWith("https://")) {
-                    candidate
-                } else {
-                    require(candidate.startsWith("/")) { "Media path must start with /." }
-                    root + candidate
-                }
-                val target = URL(absoluteUrl)
-                val configured = URL(root)
-                require(target.protocol.equals("https", true)) { "FYNX media must use HTTPS." }
-                require(target.host.equals(configured.host, true)) { "FYNX media host is not trusted." }
-                awaitValidatedNetwork(context)
-                val parent = destination.parentFile ?: throw IOException("Media destination has no parent directory")
-                if (!parent.exists()) parent.mkdirs()
-                val temporary = File(parent, ".${destination.name}.part")
-                var attempt = 0
-                var completed: DownloadedMedia? = null
-                while (completed == null) {
-                    try {
-                        completed = requestSemaphore.withPermit {
-                            if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK) {
-                                weakRequestSemaphore.withPermit { downloadOnce(context, target, temporary, maxBytes) }
-                            } else {
-                                downloadOnce(context, target, temporary, maxBytes)
-                            }
-                        }
-                        if (destination.exists()) destination.delete()
-                        if (!temporary.renameTo(destination)) throw IOException("Unable to finalize downloaded media")
-                    } catch (error: Exception) {
-                        temporary.delete()
-                        if (!isRetryableFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) throw error
-                        attempt++
-                        awaitValidatedNetwork(context)
-                        delay(RETRY_DELAY_MS * attempt)
-                    }
-                }
-                completed
+    ): Result<DownloadedMedia> = withContext(Dispatchers.IO) {
+        runCatching {
+            val root = baseUrl(context).trimEnd('/')
+            require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }
+            val candidate = mediaUrl.trim()
+            require(candidate.isNotBlank()) { "Media URL is empty." }
+            val absoluteUrl = if (candidate.startsWith("http://") || candidate.startsWith("https://")) {
+                candidate
+            } else {
+                require(candidate.startsWith("/")) { "Media path must start with /." }
+                root + candidate
             }
+            val target = URL(absoluteUrl)
+            val configured = URL(root)
+            require(target.protocol.equals("https", true)) { "FYNX media must use HTTPS." }
+            require(target.host.equals(configured.host, true)) { "FYNX media host is not trusted." }
+            awaitValidatedNetwork(context)
+            val parent = destination.parentFile ?: throw IOException("Media destination has no parent directory")
+            if (!parent.exists()) parent.mkdirs()
+            val temporary = File(parent, ".${destination.name}.part")
+            var attempt = 0
+            var completed: DownloadedMedia? = null
+            while (completed == null) {
+                try {
+                    completed = requestSemaphore.withPermit {
+                        if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK) {
+                            weakRequestSemaphore.withPermit { downloadOnce(context, target, temporary, maxBytes) }
+                        } else {
+                            downloadOnce(context, target, temporary, maxBytes)
+                        }
+                    }
+                    if (destination.exists()) destination.delete()
+                    if (!temporary.renameTo(destination)) throw IOException("Unable to finalize downloaded media")
+                } catch (error: Exception) {
+                    temporary.delete()
+                    if (!isRetryableFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) throw error
+                    attempt++
+                    awaitValidatedNetwork(context)
+                    delay(RETRY_DELAY_MS * attempt)
+                }
+            }
+            checkNotNull(completed)
         }
     }
 
@@ -204,35 +202,33 @@ object FynxBackendClient {
         }
     }
 
-    private suspend fun request(context: Context, method: String, path: String, body: String?): Result<String> {
-        return withContext(Dispatchers.IO) {
-            runCatching {
-                val root = baseUrl(context)
-                require(root.isNotBlank()) { "FYNX backend is not configured." }
-                require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }
-                require(path.startsWith("/")) { "Backend path must start with /." }
-                awaitValidatedNetwork(context)
+    private suspend fun request(context: Context, method: String, path: String, body: String?): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val root = baseUrl(context)
+            require(root.isNotBlank()) { "FYNX backend is not configured." }
+            require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }
+            require(path.startsWith("/")) { "Backend path must start with /." }
+            awaitValidatedNetwork(context)
 
-                var attempt = 0
-                var response: String? = null
-                while (response == null) {
-                    try {
-                        response = requestSemaphore.withPermit {
-                            if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK) {
-                                weakRequestSemaphore.withPermit { executeRequest(context, root, method, path, body) }
-                            } else {
-                                executeRequest(context, root, method, path, body)
-                            }
+            var attempt = 0
+            var response: String? = null
+            while (response == null) {
+                try {
+                    response = requestSemaphore.withPermit {
+                        if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK) {
+                            weakRequestSemaphore.withPermit { executeRequest(context, root, method, path, body) }
+                        } else {
+                            executeRequest(context, root, method, path, body)
                         }
-                    } catch (error: Exception) {
-                        val retryable = method == "GET" || method == "DELETE"
-                        if (!retryable || !isRetryableFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) throw error
-                        attempt++
-                        delay(RETRY_DELAY_MS * attempt)
                     }
+                } catch (error: Exception) {
+                    val retryable = method == "GET" || method == "DELETE"
+                    if (!retryable || !isRetryableFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) throw error
+                    attempt++
+                    delay(RETRY_DELAY_MS * attempt)
                 }
-                response!!
             }
+            checkNotNull(response)
         }
     }
 
