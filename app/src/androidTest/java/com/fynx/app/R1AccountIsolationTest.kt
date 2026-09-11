@@ -3,6 +3,7 @@ package com.fynx.app
 import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.fynx.app.ui.AuthState
 import com.fynx.app.ui.FynxAuthStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -52,7 +53,7 @@ class R1AccountIsolationTest {
         // different authenticated account enters the same app installation.
         FynxAuthStore.saveAccount(context, "Account B", "@accountB", "+234000000002")
 
-        assertTrue(FynxAuthStore.load(context).isSignedIn)
+        assertEquals(AuthState.SIGNED_IN, FynxAuthStore.load(context).state)
         assertEquals("@accountB", FynxAuthStore.storedUsername(context))
         assertEquals("@accountb", FynxAuthStore.accountStorageKey(context))
         assertEquals(
@@ -73,12 +74,12 @@ class R1AccountIsolationTest {
     fun logoutRemovesAuthenticatedIdentityButPreservesAccountCreatedState() {
         FynxAuthStore.saveAccount(context, "Account A", "@accountA", "+234000000001")
         assertTrue(FynxAuthStore.hasAccount(context))
-        assertTrue(FynxAuthStore.load(context).isSignedIn)
+        assertEquals(AuthState.SIGNED_IN, FynxAuthStore.load(context).state)
 
         FynxAuthStore.clear(context)
 
         assertTrue(FynxAuthStore.hasAccount(context))
-        assertFalse(FynxAuthStore.load(context).isSignedIn)
+        assertEquals(AuthState.SIGNED_OUT, FynxAuthStore.load(context).state)
         assertNull(FynxAuthStore.storedUsername(context))
         assertNull(FynxAuthStore.accountStorageKey(context))
     }
