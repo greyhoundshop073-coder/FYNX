@@ -37,6 +37,15 @@ private fun resolveFynxMediaUrl(context: android.content.Context, mediaUrl: Stri
     return if (value.startsWith("/")) FynxBackendClient.baseUrl(context) + value else FynxBackendClient.baseUrl(context) + "/" + value
 }
 
+private fun remoteMediaCacheFile(context: android.content.Context, resolvedUrl: String, extension: String): File? {
+    val accountKey = FynxAuthStore.accountStorageKey(context) ?: return null
+    if (!FynxBackendClient.hasAccessToken(context)) return null
+    val safeAccount = accountKey.map { if (it.isLetterOrDigit()) it else '_' }.joinToString("").take(80).ifBlank { return null }
+    val directory = File(context.cacheDir, "fynx_media_remote_$safeAccount")
+    if (!directory.exists() && !directory.mkdirs()) return null
+    return File(directory, "media_${resolvedUrl.hashCode()}$extension")
+}
+
 @Composable
 fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -52,15 +61,23 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
         try {
             val loaded = withContext(Dispatchers.IO) {
                 runCatching {
+                    val token = FynxBackendClient.accessToken(context) ?: error("FYNX session unavailable")
+                    if (FynxAuthStore.accountStorageKey(context).isNullOrBlank()) error("FYNX account unavailable")
                     val connection = (URL(resolvedUrl).openConnection() as HttpURLConnection).apply {
                         connectTimeout = 10_000
                         readTimeout = 20_000
                         useCaches = false
+                        instanceFollowRedirects = false
                         setRequestProperty("Accept", "image/*,video/*,*/*")
-                        FynxBackendClient.accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
+                        setRequestProperty("Authorization", "Bearer $token")
                     }
                     try {
-                        if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
+                        val responseCode = connection.responseCode
+                        if (responseCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                            FynxAuthStore.clear(context)
+                            error("FYNX session expired")
+                        }
+                        if (responseCode !in 200..299) error("HTTP $responseCode")
                         val contentLength = connection.contentLengthLong
                         if (contentLength > MAX_REMOTE_MEDIA_BYTES) error("Media is too large")
                         val contentType = connection.contentType.orEmpty().lowercase()
@@ -71,9 +88,9 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
                                 contentType.contains("3gpp") -> ".3gp"
                                 else -> ".mp4"
                             }
-                            val file = File(context.cacheDir, "fynx_media_${resolvedUrl.hashCode()}$extension")
+                            val file = remoteMediaCacheFile(context, resolvedUrl, extension) ?: error("FYNX media cache unavailable")
                             if (!file.exists() || file.length() == 0L) {
-                                val temp = File(context.cacheDir, "${file.name}.part")
+                                val temp = File(file.parentFile, "${file.name}.part")
                                 temp.delete()
                                 connection.inputStream.use { input ->
                                     temp.outputStream().use { output ->
