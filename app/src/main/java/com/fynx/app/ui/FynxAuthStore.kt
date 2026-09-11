@@ -67,6 +67,14 @@ object FynxAuthStore {
         // Remove the older unscoped media cache as well. It predates account
         // namespaces and must never survive a logout/account switch.
         runCatching { File(context.cacheDir, "fynx_media").deleteRecursively() }
+        // Remove account-namespaced remote-media caches on logout/account switch.
+        // The account is no longer authenticated, so retaining protected media
+        // bytes on disk is unnecessary and could expose stale content later.
+        runCatching {
+            context.cacheDir.listFiles()
+                ?.filter { it.isDirectory && it.name.startsWith("fynx_media_remote_") }
+                ?.forEach { it.deleteRecursively() }
+        }
 
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_SIGNED_IN, false)
