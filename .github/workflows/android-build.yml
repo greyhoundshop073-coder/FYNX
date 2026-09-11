@@ -73,6 +73,8 @@ jobs:
         run: |
           gcloud auth list --filter=status:ACTIVE --format="value(account)"
           gcloud config get-value project
+      - name: Verify R1 account isolation
+        run: python3 scripts/verify_r1_account_isolation.py
       - name: Verify Stage 15D reliability foundations
         run: |
           node backend/verify-stage15d-reliability.mjs
