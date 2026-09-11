@@ -56,15 +56,16 @@ object FynxPeopleDiscovery {
 /** Device-local privacy preference until account settings are backed by the FYNX server. */
 class FynxPhoneDiscoveryPrivacyStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("fynx_people_discovery", Context.MODE_PRIVATE)
+    private val key = "phone_discovery_visibility_${FynxAuthStore.accountStorageKey(context)?.trim()?.lowercase()?.map { c -> if (c.isLetterOrDigit()) c else '_' }?.joinToString("")?.take(80)?.ifBlank { "account" } ?: "signed_out"}"
 
     fun load(): FynxPhoneDiscoveryVisibility = runCatching {
         FynxPhoneDiscoveryVisibility.valueOf(
-            prefs.getString("phone_discovery_visibility", FynxPhoneDiscoveryVisibility.EVERYONE.name)
+            prefs.getString(key, FynxPhoneDiscoveryVisibility.EVERYONE.name)
                 ?: FynxPhoneDiscoveryVisibility.EVERYONE.name
         )
     }.getOrDefault(FynxPhoneDiscoveryVisibility.EVERYONE)
 
     fun save(value: FynxPhoneDiscoveryVisibility) {
-        prefs.edit().putString("phone_discovery_visibility", value.name).apply()
+        prefs.edit().putString(key, value.name).apply()
     }
 }
