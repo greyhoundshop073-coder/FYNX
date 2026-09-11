@@ -11,10 +11,25 @@ import java.io.FileOutputStream
 import java.util.UUID
 
 enum class FynxStatusType { TEXT, PHOTO, VIDEO, VOICE }
+enum class FynxStatusAudience { EVERYONE, FRIENDS, ONLY_ME }
 enum class FynxStatusTextFont { CLASSIC, CLEAN, BOLD, SERIF, TYPEWRITER }
 
 data class FynxStatusTextStyle(val backgroundColor: Long = 0xFF111111, val foregroundColor: Long = 0xFFFFFFFF, val font: FynxStatusTextFont = FynxStatusTextFont.CLASSIC, val alignment: Int = 1)
-data class FynxStatus(val id: String, val ownerUsername: String, val ownerDisplayName: String, val type: FynxStatusType, val contentUri: String? = null, val text: String? = null, val createdAtMillis: Long = System.currentTimeMillis(), val expiresAtMillis: Long = createdAtMillis + FYNX_STATUS_EXPIRY_MS, val textStyle: FynxStatusTextStyle = FynxStatusTextStyle(), val privateStatus: Boolean = false, val voiceDurationMs: Long = 0L, val muted: Boolean = false) {
+data class FynxStatus(
+    val id: String,
+    val ownerUsername: String,
+    val ownerDisplayName: String,
+    val type: FynxStatusType,
+    val contentUri: String? = null,
+    val text: String? = null,
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    val expiresAtMillis: Long = createdAtMillis + FYNX_STATUS_EXPIRY_MS,
+    val textStyle: FynxStatusTextStyle = FynxStatusTextStyle(),
+    val privateStatus: Boolean = false,
+    val voiceDurationMs: Long = 0L,
+    val muted: Boolean = false,
+    val audience: FynxStatusAudience = if (privateStatus) FynxStatusAudience.FRIENDS else FynxStatusAudience.EVERYONE
+) {
     fun isExpired(nowMillis: Long = System.currentTimeMillis()): Boolean = nowMillis >= expiresAtMillis
 }
 
@@ -40,7 +55,14 @@ object FynxStatusStore {
                     val o = array.optJSONObject(i) ?: continue
                     val type = runCatching { FynxStatusType.valueOf(o.optString("type")) }.getOrNull() ?: continue
                     val font = runCatching { FynxStatusTextFont.valueOf(o.optString("font", FynxStatusTextFont.CLASSIC.name)) }.getOrDefault(FynxStatusTextFont.CLASSIC)
-                    val status = FynxStatus(o.optString("id"), o.optString("ownerUsername"), o.optString("ownerDisplayName"), type, o.optString("contentUri").ifBlank { null }, o.optString("text").ifBlank { null }, o.optLong("createdAtMillis"), o.optLong("expiresAtMillis"), FynxStatusTextStyle(o.optLong("backgroundColor", 0xFF111111), o.optLong("foregroundColor", 0xFFFFFFFF), font, o.optInt("alignment", 1)), o.optBoolean("privateStatus"), o.optLong("voiceDurationMs", 0L), o.optBoolean("muted"))
+                    val audience = runCatching { FynxStatusAudience.valueOf(o.optString("audience", if (o.optBoolean("privateStatus")) "FRIENDS" else "EVERYONE")) }.getOrDefault(FynxStatusAudience.EVERYONE)
+                    val status = FynxStatus(
+                        o.optString("id"), o.optString("ownerUsername"), o.optString("ownerDisplayName"), type,
+                        o.optString("contentUri").ifBlank { null }, o.optString("text").ifBlank { null },
+                        o.optLong("createdAtMillis"), o.optLong("expiresAtMillis"),
+                        FynxStatusTextStyle(o.optLong("backgroundColor", 0xFF111111), o.optLong("foregroundColor", 0xFFFFFFFF), font, o.optInt("alignment", 1)),
+                        o.optBoolean("privateStatus"), o.optLong("voiceDurationMs", 0L), o.optBoolean("muted"), audience
+                    )
                     if (status.id.isNotBlank() && status.ownerUsername.isNotBlank() && !status.isExpired()) add(status)
                 }
             }.sortedByDescending { it.createdAtMillis }
@@ -64,11 +86,7 @@ object FynxStatusStore {
 
     suspend fun persistMedia(context: Context, sourceUri: Uri, type: FynxStatusType): Uri? = withContext(Dispatchers.IO) {
         runCatching {
-            val inputStream = if (sourceUri.scheme.equals("file", true)) {
-                sourceUri.path?.let { File(it).inputStream() }
-            } else {
-                context.contentResolver.openInputStream(sourceUri)
-            }
+            val inputStream = if (sourceUri.scheme.equals("file", true)) sourceUri.path?.let { File(it).inputStream() } else context.contentResolver.openInputStream(sourceUri)
             val input = inputStream ?: return@runCatching null
             val extension = when (type) {
                 FynxStatusType.PHOTO -> ".jpg"
@@ -99,13 +117,11 @@ object FynxStatusStore {
     }
 
     private fun toJson(status: FynxStatus) = JSONObject().apply {
-        put("id", status.id); put("ownerUsername", status.ownerUsername); put("ownerDisplayName", status.ownerDisplayName); put("type", status.type.name); put("contentUri", status.contentUri ?: ""); put("text", status.text ?: ""); put("createdAtMillis", status.createdAtMillis); put("expiresAtMillis", status.expiresAtMillis); put("backgroundColor", status.textStyle.backgroundColor); put("foregroundColor", status.textStyle.foregroundColor); put("font", status.textStyle.font.name); put("alignment", status.textStyle.alignment); put("privateStatus", status.privateStatus); put("voiceDurationMs", status.voiceDurationMs); put("muted", status.muted)
+        put("id", status.id); put("ownerUsername", status.ownerUsername); put("ownerDisplayName", status.ownerDisplayName); put("type", status.type.name)
+        put("contentUri", status.contentUri ?: ""); put("text", status.text ?: ""); put("createdAtMillis", status.createdAtMillis); put("expiresAtMillis", status.expiresAtMillis)
+        put("backgroundColor", status.textStyle.backgroundColor); put("foregroundColor", status.textStyle.foregroundColor); put("font", status.textStyle.font.name); put("alignment", status.textStyle.alignment)
+        put("privateStatus", status.privateStatus); put("voiceDurationMs", status.voiceDurationMs); put("muted", status.muted); put("audience", status.audience.name)
     }
 
-    private fun storageKey(value: String): String = value.map { character ->
-        when {
-            character.isLetterOrDigit() -> character
-            else -> '_'
-        }
-    }.joinToString("").take(80).ifBlank { "account" }
+    private fun storageKey(value: String): String = value.map { character -> if (character.isLetterOrDigit()) character else '_' }.joinToString("").take(80).ifBlank { "account" }
 }
