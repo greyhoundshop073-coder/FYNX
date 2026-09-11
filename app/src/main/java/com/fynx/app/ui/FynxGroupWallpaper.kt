@@ -14,8 +14,21 @@ private val FynxGroupWallpaperOptions=listOf("Classic","Midnight","Aurora","Sunr
 
 object FynxGroupWallpaperStore {
     private const val PREFS="fynx_group_wallpapers"
-    fun load(context:Context,groupId:String):String=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).getString(groupId,"Classic")?:"Classic"
-    fun save(context:Context,groupId:String,name:String){context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().putString(groupId,name).apply()}
+
+    private fun accountKey(context: Context): String =
+        FynxAuthStore.accountStorageKey(context)?.let(::storageKey) ?: "signed_out"
+
+    private fun key(context: Context, groupId: String) = "${accountKey(context)}_${groupId.trim()}"
+
+    fun load(context:Context,groupId:String):String=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).getString(key(context,groupId),"Classic")?:"Classic"
+    fun save(context:Context,groupId:String,name:String){context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().putString(key(context,groupId),name).apply()}
+
+    private fun storageKey(value: String): String = value.map { character ->
+        when {
+            character.isLetterOrDigit() -> character
+            else -> '_'
+        }
+    }.joinToString("").take(80).ifBlank { "account" }
 }
 
 @Composable
