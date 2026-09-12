@@ -29,9 +29,24 @@ async function reconcileRefundEvent(client, eventName, refund) {
   if (!operation) return false;
   const status = String(refund?.status || '').toLowerCase();
   const providerReference = refund?.refund_reference || refund?.id || null;
-  const metadata = { ...(operation.metadata || {}), refundEvent: eventName, refundStatus: status, transactionReference, refundReference: providerReference };
+  const providerAmount = Number(refund?.amount);
+  const providerCurrency = String(refund?.currency || '').trim().toUpperCase();
+  const expectedAmount = amountSubunit(operation.amount, operation.currency);
+  const expectedCurrency = String(operation.currency || '').trim().toUpperCase();
+  if (!Number.isFinite(providerAmount) || expectedAmount === null || providerAmount !== expectedAmount || providerCurrency !== expectedCurrency) {
+    await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status IN ('PENDING','FAILED')`, [
+      'Paystack refund webhook amount or currency does not match the refund operation',
+      JSON.stringify({ ...(operation.metadata || {}), refundEvent: eventName, refundStatus: status, transactionReference, providerReference, providerAmount, expectedAmount, providerCurrency, expectedCurrency }),
+      operation.id
+    ]);
+    if (['PENDING','FAILED'].includes(String(operation.status))) {
+      await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE order_id=$1 AND status IN ('REFUND_PENDING','DISPUTED')`, [operation.order_id]);
+    }
+    return true;
+  }
+  const metadata = { ...(operation.metadata || {}), refundEvent: eventName, refundStatus: status, transactionReference, refundReference: providerReference, providerAmount, providerCurrency };
   if (eventName === 'refund.processed') {
-    await client.query(`UPDATE marketplace_financial_operations SET status='SUCCEEDED',provider_reference=COALESCE($1,provider_reference),failure_reason=NULL,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3`, [providerReference ? String(providerReference) : null, JSON.stringify(metadata), operation.id]);
+    await client.query(`UPDATE marketplace_financial_operations SET status='SUCCEEDED',provider_reference=COALESCE($1,provider_reference),failure_reason=NULL,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status IN ('PENDING','FAILED')`, [providerReference ? String(providerReference) : null, JSON.stringify(metadata), operation.id]);
     await client.query(`UPDATE marketplace_orders SET status='REFUNDED',updated_at=NOW() WHERE id=$1 AND status NOT IN ('COMPLETED','REFUNDED')`, [operation.order_id]);
     const caseId = metadata.caseId ? String(metadata.caseId) : null;
     if (caseId) await client.query(`UPDATE marketplace_protection_cases SET status='REFUNDED',updated_at=NOW() WHERE id=$1 AND status IN ('OPEN','UNDER_REVIEW')`, [caseId]);
@@ -40,7 +55,7 @@ async function reconcileRefundEvent(client, eventName, refund) {
     const escrow = (await client.query('SELECT id,amount,currency FROM marketplace_escrows WHERE order_id=$1', [operation.order_id])).rows[0];
     if (escrow) await client.query(`INSERT INTO marketplace_ledger_entries (escrow_id,order_id,account,entry_type,amount,currency,idempotency_key,metadata) VALUES ($1,$2,'buyer_refund','REFUND',$3,$4,$5,$6::jsonb) ON CONFLICT (idempotency_key) DO NOTHING`, [escrow.id, operation.order_id, escrow.amount, escrow.currency, `REFUND-${operation.order_id}`, JSON.stringify({ provider: 'paystack', reference: transactionReference, caseId })]);
   } else if (eventName === 'refund.failed') {
-    await client.query(`UPDATE marketplace_financial_operations SET status='FAILED',provider_reference=COALESCE($1,provider_reference),failure_reason=$2,metadata=$3::jsonb,updated_at=NOW() WHERE id=$4`, [providerReference ? String(providerReference) : null, String(refund?.reason || refund?.message || 'Paystack refund failed').slice(0, 2000), JSON.stringify(metadata), operation.id]);
+    await client.query(`UPDATE marketplace_financial_operations SET status='FAILED',provider_reference=COALESCE($1,provider_reference),failure_reason=$2,metadata=$3::jsonb,updated_at=NOW() WHERE id=$4 AND status IN ('PENDING','FAILED')`, [providerReference ? String(providerReference) : null, String(refund?.reason || refund?.message || 'Paystack refund failed').slice(0, 2000), JSON.stringify(metadata), operation.id]);
     await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE order_id=$1 AND status='REFUND_PENDING'`, [operation.order_id]);
     const caseId = metadata.caseId ? String(metadata.caseId) : null;
     if (caseId) await client.query(`UPDATE marketplace_protection_cases SET status='UNDER_REVIEW',updated_at=NOW() WHERE id=$1 AND status <> 'REFUNDED'`, [caseId]);
