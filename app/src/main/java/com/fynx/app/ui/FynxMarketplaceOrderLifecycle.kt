@@ -67,6 +67,7 @@ fun FynxMarketplaceOrderLifecycle(
                 Text("${order.currency} ${"%.2f".format(order.totalAmount)}")
                 Text("Fulfillment: ${order.fulfillmentMethod}")
                 order.trackingReference?.let { Text("Tracking: $it") }
+                FynxMarketplaceOrderTimeline(context = context, orderId = order.id)
                 when (order.status) {
                     "PAID" -> Text("Choose how you want to receive the order.")
                     "SHIPPED" -> Text("The seller marked this order as shipped. Confirm when it reaches you.")
@@ -153,6 +154,7 @@ private fun MarketplaceFulfillmentDialog(
                 if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Save fulfillment")
             }
         },
-        dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text("Cancel") }
+        }
     )
 }
