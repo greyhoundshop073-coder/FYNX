@@ -167,10 +167,10 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        const result = await confirmMarketplacePayment(client, { orderId: order.id, buyerId: req.user.sub, reference, paidAmount, paidCurrency, source: 'verification' });
+        const result = await confirmMarketplacePayment(client, { orderId: order.id, buyerId: req.user.sub, reference, paidAmount, paidCurrency, providerFee: transaction.fees, source: 'verification' });
         await client.query('COMMIT');
         const updated = (await pool.query('SELECT * FROM marketplace_orders WHERE id=$1', [order.id])).rows[0];
-        return res.json({ verified: true, idempotent: result.idempotent, order: { id: String(updated.id), status: updated.status, paymentReference: updated.payment_reference, totalAmount: Number(updated.total_amount), currency: updated.currency } });
+        return res.json({ verified: true, idempotent: result.idempotent, order: { id: String(updated.id), status: updated.status, paymentReference: updated.payment_reference, totalAmount: Number(updated.total_amount), currency: updated.currency, buyerTotal: Number(updated.buyer_total), marketplaceFee: Number(updated.marketplace_fee), sellerNetAmount: Number(updated.seller_net_amount), paymentProviderFee: Number(updated.payment_provider_fee) } });
       } catch (error) {
         try { await client.query('ROLLBACK'); } catch {}
         if (error?.code === 'PAYMENT_FORBIDDEN') return res.status(403).json({ error: 'payment unavailable' });
