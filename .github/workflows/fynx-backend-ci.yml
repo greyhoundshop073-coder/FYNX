@@ -72,6 +72,7 @@ jobs:
           node --check verify-marketplace-failure-paths.mjs
           node --check verify-marketplace-state-machine.mjs
           node --check verify-marketplace-protection-lifecycle.mjs
+          node --check verify-marketplace-accounting.mjs
           node --check verify-stage15e-performance.mjs
           node --check verify-stage15f-security.mjs
           node --check verify-stage15g-integration.mjs
@@ -158,6 +159,9 @@ jobs:
 
       - name: Run R6-D buyer-protection lifecycle verification
         run: node verify-marketplace-protection-lifecycle.mjs
+
+      - name: Run R6-E accounting verification
+        run: node verify-marketplace-accounting.mjs
 
       - name: Run R6-B payment reliability verification
         working-directory: .
