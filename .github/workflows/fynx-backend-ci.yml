@@ -59,6 +59,8 @@ jobs:
           node --check verify-marketplace-ad-creative-identity.mjs
           node --check verify-marketplace-fulfillment-integrity.mjs
           node --check verify-marketplace-batch2.mjs
+          node --check verify-marketplace-batch4-shipping.mjs
+          node --check verify-marketplace-shipping-timeline.mjs
           node --check scalability.js
           node --check privacyRoutes.js
           node --check trustSafety.js
@@ -145,6 +147,12 @@ jobs:
 
       - name: Run marketplace order lifecycle guard
         run: node verify-marketplace-order-lifecycle.mjs
+
+      - name: Run Batch 4 canonical shipping verification
+        run: node verify-marketplace-batch4-shipping.mjs
+
+      - name: Run Batch 4 shipping timeline and fulfillment verification
+        run: node verify-marketplace-shipping-timeline.mjs
 
       - name: Run R6-F inspection expiry verification
         run: node verify-marketplace-inspection-expiry.mjs
