@@ -56,6 +56,7 @@ jobs:
           node --check marketplaceProtection.js
           node --check marketplaceProtectionResolution.js
           node --check marketplaceAdvertising.js
+          node --check verify-marketplace-ad-creative-identity.mjs
           node --check scalability.js
           node --check privacyRoutes.js
           node --check trustSafety.js
@@ -148,6 +149,9 @@ jobs:
 
       - name: Run R6-F fulfillment protection verification
         run: node verify-marketplace-fulfillment.mjs
+
+      - name: Run R6-G advertising canonical creative verification
+        run: node verify-marketplace-ad-creative-identity.mjs
 
       - name: Run R6-I ledger invariant verification
         run: node verify-marketplace-ledger-invariants.mjs
