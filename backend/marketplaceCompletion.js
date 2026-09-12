@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
+import { registerMarketplaceShippingTimeline } from './marketplaceShippingTimeline.js';
 
 export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
+  registerMarketplaceShippingTimeline({ app, pool, auth });
   let schemaPromise;
 
   const ensureSchema = async () => {
