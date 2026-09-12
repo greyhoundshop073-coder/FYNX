@@ -58,6 +58,7 @@ jobs:
           node --check marketplaceAdvertising.js
           node --check verify-marketplace-ad-creative-identity.mjs
           node --check verify-marketplace-fulfillment-integrity.mjs
+          node --check verify-marketplace-batch2.mjs
           node --check scalability.js
           node --check privacyRoutes.js
           node --check trustSafety.js
@@ -182,6 +183,9 @@ jobs:
       - name: Run R6-B payment expiry verification
         working-directory: .
         run: python3 scripts/verify_r6b_payment_expiry.py
+
+      - name: Run Batch 2 financial hardening verification
+        run: node verify-marketplace-batch2.mjs
 
       - name: Verify backend package metadata
         run: node -e "const p=require('./package.json'); if(!p.scripts || !p.scripts.start) process.exit(1); console.log('FYNX backend package OK')"
