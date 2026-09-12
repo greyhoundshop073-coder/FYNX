@@ -15,6 +15,7 @@ const checks = [
   ['payout currency is tied to escrow', worker.includes("String(operation.currency).toUpperCase() !== String(escrow.currency).toUpperCase()")],
   ['refund blocks payout', worker.includes("operation_type='REFUND'") && worker.includes("status IN ('PENDING','SUCCEEDED')")],
   ['payout is release-pending only', worker.includes("escrow.status !== 'RELEASE_PENDING'")],
+  ['payout accounting is validated before terminal success', worker.includes("status='BLOCKED',failure_reason=$1,updated_at=NOW() WHERE id=$2 AND status='PENDING'") && worker.indexOf("status='SUCCEEDED',provider_reference=$1") > worker.indexOf("payout settlement accounting does not reconcile with the protected escrow")],
   ['release terminal state is escrow RELEASED', worker.includes("SET status='RELEASED'")],
   ['refund terminal state is escrow REFUNDED', webhook.includes("SET status='REFUNDED'")],
   ['financial operation provider references are unique', settlement.includes('marketplace_fin_ops_provider_ref_idx')],
