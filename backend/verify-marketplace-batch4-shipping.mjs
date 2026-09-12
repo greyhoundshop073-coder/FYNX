@@ -16,7 +16,7 @@ const checks = [
   ['shipping options route exists', shipping.includes("/api/marketplace/shipping/options")],
   ['shipping schema has coverage table', shipping.includes('marketplace_shipping_coverage')],
   ['seller shipping settings GET exists', shipping.includes("/api/marketplace/listings/:id/shipping")],
-  ['seller shipping settings PUT exists', shipping.includes("app.put('/api/marketplace/listings/:id/shipping'")],
+  ['seller shipping settings PATCH exists', shipping.includes("app.patch('/api/marketplace/listings/:id/shipping'")],
   ['seller ownership is enforced', shipping.includes('only the listing seller can manage shipping settings')],
   ['shipping fees are validated', shipping.includes('shipping fees must be valid non-negative amounts')],
   ['coverage country is required', shipping.includes('each coverage entry requires a country')],
