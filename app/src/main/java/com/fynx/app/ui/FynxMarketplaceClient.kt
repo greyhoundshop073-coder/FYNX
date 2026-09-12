@@ -77,24 +77,11 @@ object FynxMarketplaceClient {
                     add(Coverage(row.optString("country"), row.optString("state"), row.optString("city")))
                 }
             }
-            ShippingSettings(
-                method = s.optString("method", "SELLER_ARRANGED"),
-                note = s.optString("note"),
-                baseFee = s.optDouble("baseFee", 0.0),
-                additionalItemFee = s.optDouble("additionalItemFee", 0.0),
-                feeCap = if (s.isNull("feeCap")) null else s.optDouble("feeCap"),
-                deliveryAvailable = s.optBoolean("deliveryAvailable"),
-                pickupAvailable = s.optBoolean("pickupAvailable", true),
-                coverage = coverage
-            )
+            ShippingSettings(s.optString("method", "SELLER_ARRANGED"), s.optString("note"), s.optDouble("baseFee", 0.0), s.optDouble("additionalItemFee", 0.0), if (s.isNull("feeCap")) null else s.optDouble("feeCap"), s.optBoolean("deliveryAvailable"), s.optBoolean("pickupAvailable", true), coverage)
         }
     }
 
-    suspend fun saveShippingSettings(
-        context: Context,
-        listingId: String,
-        settings: ShippingSettings
-    ): Result<ShippingSettings> {
+    suspend fun saveShippingSettings(context: Context, listingId: String, settings: ShippingSettings): Result<ShippingSettings> {
         val id = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
         require(settings.baseFee >= 0 && settings.additionalItemFee >= 0) { "Shipping fees cannot be negative." }
         require(settings.feeCap == null || settings.feeCap >= settings.baseFee) { "Shipping fee cap cannot be below the base fee." }
@@ -103,14 +90,8 @@ object FynxMarketplaceClient {
                 put(JSONObject().put("country", it.country.trim()).put("state", it.state.trim()).put("city", it.city.trim()))
             }
         }
-        val body = JSONObject()
-            .put("method", settings.method.trim().uppercase().ifBlank { "SELLER_ARRANGED" })
-            .put("note", settings.note.trim().take(500))
-            .put("baseFee", settings.baseFee)
-            .put("additionalItemFee", settings.additionalItemFee)
-            .put("feeCap", settings.feeCap ?: JSONObject.NULL)
-            .put("coverage", coverage)
-        return FynxBackendClient.putJson(context, "/api/marketplace/listings/$id/shipping", body.toString()).mapCatching { raw ->
+        val body = JSONObject().put("method", settings.method.trim().uppercase().ifBlank { "SELLER_ARRANGED" }).put("note", settings.note.trim().take(500)).put("baseFee", settings.baseFee).put("additionalItemFee", settings.additionalItemFee).put("feeCap", settings.feeCap ?: JSONObject.NULL).put("coverage", coverage)
+        return FynxBackendClient.patchJson(context, "/api/marketplace/listings/$id/shipping", body.toString()).mapCatching { raw ->
             val s = JSONObject(raw).getJSONObject("shipping")
             val rows = s.optJSONArray("coverage") ?: JSONArray()
             val parsed = buildList {
@@ -164,22 +145,13 @@ object FynxMarketplaceClient {
 
     private fun parseListings(raw: String): List<Listing> {
         val array = JSONObject(raw).getJSONArray("listings")
-        return buildList {
-            for (i in 0 until array.length()) add(parseListingObject(array.getJSONObject(i)))
-        }
+        return buildList { for (i in 0 until array.length()) add(parseListingObject(array.getJSONObject(i))) }
     }
 
     private fun parseListingObject(o: JSONObject): Listing {
         val media = o.optJSONArray("media_ids") ?: JSONArray()
         val ids = buildList { for (j in 0 until media.length()) add(media.getString(j)) }
-        return Listing(
-            o.getString("id"), o.optString("seller_username"), o.optString("seller_display_name"),
-            o.optString("store_name"), o.optString("title"), o.optString("description"),
-            o.optDouble("price", 0.0), o.optString("currency", "NGN"), o.optString("category"),
-            o.optString("condition", "NEW"), o.optInt("quantity", 0), o.optString("location"),
-            o.optBoolean("delivery_available", false), o.optBoolean("pickup_available", true),
-            if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"), ids, o.optBoolean("active", true)
-        )
+        return Listing(o.getString("id"), o.optString("seller_username"), o.optString("seller_display_name"), o.optString("store_name"), o.optString("title"), o.optString("description"), o.optDouble("price", 0.0), o.optString("currency", "NGN"), o.optString("category"), o.optString("condition", "NEW"), o.optInt("quantity", 0), o.optString("location"), o.optBoolean("delivery_available", false), o.optBoolean("pickup_available", true), if (o.isNull("delivery_fee")) null else o.optDouble("delivery_fee"), ids, o.optBoolean("active", true))
     }
 
     private fun encode(value: String): String = java.net.URLEncoder.encode(value.trim(), "UTF-8")
