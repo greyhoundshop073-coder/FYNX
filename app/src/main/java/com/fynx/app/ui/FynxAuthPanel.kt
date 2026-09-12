@@ -1,17 +1,16 @@
 package com.fynx.app.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Login
-import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -49,46 +48,71 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
         }
     }
 
+    val background = Brush.verticalGradient(
+        colors = listOf(Color(0xFF070F1B), Color(0xFF101B39), Color(0xFF26125A), Color(0xFF082B55))
+    )
+
     Box(
-        Modifier
+        modifier = Modifier
             .fillMaxSize()
+            .background(background)
             .imePadding()
-            .padding(horizontal = 20.dp)
+            .padding(horizontal = 22.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(vertical = 20.dp),
+                .padding(vertical = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Card(modifier = Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape) {
-                Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Surface(Modifier.size(72.dp), shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
-                        Icon(Icons.Default.Lock, contentDescription = "FYNX account security", Modifier.padding(20.dp), tint = MaterialTheme.colorScheme.primary)
+            if (page == FynxAuthPage.WELCOME || page == FynxAuthPage.LOGIN) {
+                Spacer(Modifier.height(18.dp))
+                Text("FYNX", color = Color.White, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold)
+                Spacer(Modifier.height(6.dp))
+                Text("Connect • Share • Trade • Grow", color = Color.White.copy(alpha = .88f), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                Text("Your world. All in one place.", color = Color.White.copy(alpha = .68f), style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(28.dp))
+            }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(28.dp),
+                color = Color(0xFF0C1728).copy(alpha = .82f),
+                tonalElevation = 0.dp
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (page == FynxAuthPage.REGISTER || page == FynxAuthPage.VERIFY) {
+                        Text("FYNX", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            if (page == FynxAuthPage.REGISTER) "Create your FYNX account" else "Finish your account setup",
+                            color = Color.White.copy(alpha = .72f)
+                        )
+                        Spacer(Modifier.height(20.dp))
                     }
-                    Spacer(Modifier.height(16.dp))
-                    Text("FYNX", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        when (page) {
-                            FynxAuthPage.WELCOME -> "Connect. Share. Discover."
-                            FynxAuthPage.REGISTER -> "Create your FYNX account"
-                            FynxAuthPage.VERIFY -> "Finish your account setup"
-                            FynxAuthPage.LOGIN -> "Welcome back"
-                        }, color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(22.dp))
+
                     when (page) {
                         FynxAuthPage.WELCOME -> {
-                            Button(onClick = { error = null; page = FynxAuthPage.REGISTER }, Modifier.fillMaxWidth(), shape = FynxDesign.ControlShape) {
-                                Icon(Icons.Default.PersonAdd, contentDescription = null); Spacer(Modifier.width(8.dp)); Text("Create account")
-                            }
-                            Spacer(Modifier.height(10.dp))
-                            OutlinedButton(onClick = { error = null; page = FynxAuthPage.LOGIN }, Modifier.fillMaxWidth(), shape = FynxDesign.ControlShape) {
-                                Icon(Icons.Default.Login, contentDescription = null); Spacer(Modifier.width(8.dp)); Text("Log in")
-                            }
+                            Button(
+                                onClick = { error = null; page = FynxAuthPage.REGISTER },
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                shape = RoundedCornerShape(28.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))
+                            ) { Text("Create Account", fontWeight = FontWeight.SemiBold) }
+                            Spacer(Modifier.height(12.dp))
+                            OutlinedButton(
+                                onClick = { error = null; page = FynxAuthPage.LOGIN },
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                shape = RoundedCornerShape(28.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF6A4CFF))
+                            ) { Text("Sign In", fontWeight = FontWeight.SemiBold) }
                         }
                         FynxAuthPage.REGISTER -> {
                             FynxAuthField(displayName, { displayName = it }, "Display name")
@@ -112,21 +136,23 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                     else -> null
                                 }
                                 if (error == null) page = FynxAuthPage.VERIFY
-                            }, Modifier.fillMaxWidth(), shape = FynxDesign.ControlShape, enabled = !busy) { Text("Continue") }
+                            }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy) { Text("Continue") }
                             TextButton(onClick = { error = null; page = FynxAuthPage.WELCOME }, enabled = !busy) { Text("Back") }
                         }
                         FynxAuthPage.VERIFY -> {
-                            Text("Your account will be created securely on the FYNX server. Phone/SMS verification is not being faked here; it will be connected before public launch.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                            Text("Your account will be created securely on the FYNX server. Phone/SMS verification is not being faked here; it will be connected before public launch.", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                             Spacer(Modifier.height(14.dp))
                             Button(onClick = {
                                 busy = true
                                 error = null
                                 scope.launch { finish(FynxRemoteAuthClient.register(context, displayName.trim(), username.trim(), phone.trim(), password)) }
-                            }, Modifier.fillMaxWidth(), shape = FynxDesign.ControlShape, enabled = !busy) { Text(if (busy) "Creating account…" else "Create and enter FYNX") }
+                            }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy) { Text(if (busy) "Creating account…" else "Create and enter FYNX") }
                             TextButton(onClick = { error = null; page = FynxAuthPage.REGISTER }, enabled = !busy) { Text("Back") }
                         }
                         FynxAuthPage.LOGIN -> {
+                            Text("Welcome back", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(18.dp))
                             FynxAuthField(username, { username = it.replace(" ", "").removePrefix("@") }, "Username", "@")
                             Spacer(Modifier.height(10.dp))
                             FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
@@ -139,11 +165,15 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                     error = null
                                     scope.launch { finish(FynxRemoteAuthClient.login(context, username.trim(), password)) }
                                 }
-                            }, Modifier.fillMaxWidth(), shape = FynxDesign.ControlShape, enabled = !busy) { Text(if (busy) "Signing in…" else "Log in") }
-                            TextButton(onClick = { error = null; page = FynxAuthPage.REGISTER }, enabled = !busy) { Text("Create a new account") }
+                            }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Signing in…" else "Sign In") }
+                            TextButton(onClick = { error = null; page = FynxAuthPage.REGISTER }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = .8f))) { Text("Create a new account") }
                         }
                     }
                 }
+            }
+            if (page == FynxAuthPage.WELCOME) {
+                Spacer(Modifier.height(20.dp))
+                Text("Secure • Social • Marketplace • AI Powered", color = Color.White.copy(alpha = .55f), style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -161,13 +191,18 @@ private fun FynxAuthField(value: String, onValueChange: (String) -> Unit, label:
         visualTransformation = if (password && !passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         trailingIcon = if (password) {
-            {
-                TextButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Text(if (passwordVisible) "Hide" else "Show")
-                }
-            }
+            { TextButton(onClick = { passwordVisible = !passwordVisible }) { Text(if (passwordVisible) "Hide" else "Show") } }
         } else null,
         modifier = Modifier.fillMaxWidth(),
-        shape = FynxDesign.ControlShape
+        shape = RoundedCornerShape(18.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Color(0xFF238AF2),
+            unfocusedBorderColor = Color.White.copy(alpha = .18f),
+            focusedLabelColor = Color(0xFF65B6FF),
+            unfocusedLabelColor = Color.White.copy(alpha = .6f),
+            focusedTextColor = Color.White,
+            unfocusedTextColor = Color.White,
+            cursorColor = Color(0xFF65B6FF)
+        )
     )
 }
