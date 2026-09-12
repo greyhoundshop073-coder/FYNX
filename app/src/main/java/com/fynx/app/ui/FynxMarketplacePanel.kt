@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -48,6 +49,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var selected by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
     var checkoutListing by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
     var paymentOrder by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }
+    var protectedOrder by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }
     var showSell by remember { mutableStateOf(false) }
     var showOrders by remember { mutableStateOf(false) }
     var cart by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
@@ -139,9 +141,17 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             order = order,
             onPaid = {
                 paymentOrder = null
+                protectedOrder = order
                 reload()
             },
             onClose = { paymentOrder = null }
+        )
+    }
+    protectedOrder?.let { order ->
+        MarketplaceProtectedOrderDialog(
+            order = order,
+            onViewOrder = { protectedOrder = null; showOrders = true },
+            onContinue = { protectedOrder = null }
         )
     }
     if (showCart) MarketplaceCartDialog(
@@ -154,6 +164,30 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         onClose = { showCart = false }
     )
     if (showOrders) MarketplaceOrders(context, orders, onRefresh = { reload() }, onClose = { showOrders = false })
+}
+
+@Composable
+private fun MarketplaceProtectedOrderDialog(
+    order: FynxRemoteSocialClient.MarketplaceOrder,
+    onViewOrder: () -> Unit,
+    onContinue: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onContinue,
+        icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp)) },
+        title = { Text("Order protected") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Payment received", style = MaterialTheme.typography.titleMedium)
+                Text("${order.productTitle.ifBlank { "FYNX order" }}")
+                Text("${order.currency} ${String.format(Locale.US, "%,.2f", order.totalAmount)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                Text("Your payment is protected by FYNX. The seller will fulfill the order, and funds remain protected until the order reaches the appropriate completion state.", style = MaterialTheme.typography.bodyMedium)
+                Text("Order #${order.id}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = { Button(onClick = onViewOrder) { Text("View order") } },
+        dismissButton = { TextButton(onClick = onContinue) { Text("Continue shopping") } }
+    )
 }
 
 @Composable
