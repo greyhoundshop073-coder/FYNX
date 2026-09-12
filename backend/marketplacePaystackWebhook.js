@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { confirmMarketplacePayment } from './marketplacePaymentState.js';
 
 function safeEqualHex(actual, expected) {
   if (!actual || !expected) return false;
@@ -29,7 +30,6 @@ async function reconcileRefundEvent(client, eventName, refund) {
   const status = String(refund?.status || '').toLowerCase();
   const providerReference = refund?.refund_reference || refund?.id || null;
   const metadata = { ...(operation.metadata || {}), refundEvent: eventName, refundStatus: status, transactionReference, refundReference: providerReference };
-
   if (eventName === 'refund.processed') {
     await client.query(`UPDATE marketplace_financial_operations SET status='SUCCEEDED',provider_reference=COALESCE($1,provider_reference),failure_reason=NULL,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3`, [providerReference ? String(providerReference) : null, JSON.stringify(metadata), operation.id]);
     await client.query(`UPDATE marketplace_orders SET status='REFUNDED',updated_at=NOW() WHERE id=$1 AND status NOT IN ('COMPLETED','REFUNDED')`, [operation.order_id]);
@@ -55,42 +55,23 @@ async function reconcileTransferEvent(client, eventName, transfer) {
   const reference = typeof transfer?.reference === 'string' ? transfer.reference.trim() : '';
   const transferCode = typeof transfer?.transfer_code === 'string' ? transfer.transfer_code.trim() : '';
   if (!reference && !transferCode) return false;
-
   const operationResult = await client.query(`
     SELECT f.id,f.order_id,f.status,f.amount,f.currency,f.provider_reference,f.metadata,o.seller_id,o.status AS order_status
-    FROM marketplace_financial_operations f
-    JOIN marketplace_orders o ON o.id=f.order_id
-    WHERE f.operation_type='PAYOUT_RELEASE'
-      AND (f.provider_reference=$1 OR f.provider_reference=$2)
-    ORDER BY f.created_at DESC
-    LIMIT 1
-    FOR UPDATE
+    FROM marketplace_financial_operations f JOIN marketplace_orders o ON o.id=f.order_id
+    WHERE f.operation_type='PAYOUT_RELEASE' AND (f.provider_reference=$1 OR f.provider_reference=$2)
+    ORDER BY f.created_at DESC LIMIT 1 FOR UPDATE
   `, [reference || null, transferCode || null]);
   const operation = operationResult.rows[0];
   if (!operation) return false;
-
   const providerStatus = String(transfer?.status || '').toLowerCase();
   const eventReference = reference || transferCode;
-  const metadata = {
-    ...(operation.metadata || {}),
-    transferEvent: eventName,
-    transferStatus: providerStatus,
-    transferReference: reference || null,
-    transferCode: transferCode || null,
-    transferUpdatedAt: new Date().toISOString()
-  };
-  const providerAmount = Number(transfer?.amount);
-  const expectedAmount = amountSubunit(operation.amount, operation.currency);
-  const providerCurrency = String(transfer?.currency || '').toUpperCase();
-  const amountMatches = Number.isFinite(providerAmount) && expectedAmount !== null && providerAmount === expectedAmount;
-  const currencyMatches = providerCurrency === String(operation.currency || '').toUpperCase();
-
-  if (!amountMatches || !currencyMatches) {
+  const metadata = { ...(operation.metadata || {}), transferEvent: eventName, transferStatus: providerStatus, transferReference: reference || null, transferCode: transferCode || null, transferUpdatedAt: new Date().toISOString() };
+  const providerAmount = Number(transfer?.amount), expectedAmount = amountSubunit(operation.amount, operation.currency), providerCurrency = String(transfer?.currency || '').toUpperCase();
+  if (!(Number.isFinite(providerAmount) && expectedAmount !== null && providerAmount === expectedAmount) || providerCurrency !== String(operation.currency || '').toUpperCase()) {
     await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, ['Paystack transfer webhook amount or currency does not match payout operation', JSON.stringify({ ...metadata, providerAmount, expectedAmount, providerCurrency }), operation.id]);
     await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE order_id=$1 AND status='RELEASE_PENDING'`, [operation.order_id]);
     return true;
   }
-
   if (eventName === 'transfer.success') {
     await client.query(`UPDATE marketplace_financial_operations SET status='SUCCEEDED',provider_reference=COALESCE($1,provider_reference),failure_reason=NULL,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, [eventReference || null, JSON.stringify(metadata), operation.id]);
     const escrow = (await client.query(`SELECT id,amount,currency,status FROM marketplace_escrows WHERE order_id=$1 FOR UPDATE`, [operation.order_id])).rows[0];
@@ -116,56 +97,36 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
     const eventName = typeof event?.event === 'string' ? event.event.trim().toLowerCase() : '';
     if (eventName.startsWith('refund.')) {
       const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        const matched = await reconcileRefundEvent(client, eventName, event.data || {});
-        await client.query('COMMIT');
-        return res.status(200).json({ received: true, matched, refundEvent: eventName });
-      } catch (error) {
-        try { await client.query('ROLLBACK'); } catch {}
-        console.error('marketplace Paystack refund webhook', error);
-        return res.status(500).json({ error: 'refund webhook processing failed' });
-      } finally { client.release(); }
+      try { await client.query('BEGIN'); const matched = await reconcileRefundEvent(client, eventName, event.data || {}); await client.query('COMMIT'); return res.status(200).json({ received: true, matched, refundEvent: eventName }); }
+      catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace Paystack refund webhook', error); return res.status(500).json({ error: 'refund webhook processing failed' }); }
+      finally { client.release(); }
     }
     if (eventName.startsWith('transfer.')) {
       const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        const matched = await reconcileTransferEvent(client, eventName, event.data || {});
-        await client.query('COMMIT');
-        return res.status(200).json({ received: true, matched, transferEvent: eventName });
-      } catch (error) {
-        try { await client.query('ROLLBACK'); } catch {}
-        console.error('marketplace Paystack transfer webhook', error);
-        return res.status(500).json({ error: 'transfer webhook processing failed' });
-      } finally { client.release(); }
+      try { await client.query('BEGIN'); const matched = await reconcileTransferEvent(client, eventName, event.data || {}); await client.query('COMMIT'); return res.status(200).json({ received: true, matched, transferEvent: eventName }); }
+      catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace Paystack transfer webhook', error); return res.status(500).json({ error: 'transfer webhook processing failed' }); }
+      finally { client.release(); }
     }
     if (eventName !== 'charge.success') return res.status(200).json({ received: true, ignored: true });
-    const transaction = event.data || {};
-    const reference = typeof transaction.reference === 'string' ? transaction.reference.trim() : '';
+    const transaction = event.data || {}, reference = typeof transaction.reference === 'string' ? transaction.reference.trim() : '';
     if (!reference || !/^[A-Za-z0-9_.=-]{8,100}$/.test(reference)) return res.status(400).json({ error: 'invalid payment reference' });
+    const expectedAmount = amountSubunit(transaction.amount, transaction.currency), paidAmount = Number(transaction.amount), paidCurrency = String(transaction.currency || '').toUpperCase(), metadataOrderId = String(transaction.metadata?.orderId || transaction.metadata?.order_id || '');
+    if (transaction.status !== 'success' || expectedAmount !== paidAmount || !metadataOrderId || !String(transaction.reference)) return res.status(400).json({ error: 'payment data does not match order' });
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const result = await client.query(`SELECT id,buyer_id,total_amount,currency,status,payment_reference FROM marketplace_orders WHERE payment_reference=$1 FOR UPDATE`, [reference]);
-      const order = result.rows[0];
+      const orderResult = await client.query(`SELECT id,buyer_id,total_amount,currency,status,payment_reference FROM marketplace_orders WHERE payment_reference=$1`, [reference]);
+      const order = orderResult.rows[0];
       if (!order) { await client.query('ROLLBACK'); return res.status(200).json({ received: true, matched: false }); }
-      const expectedAmount = amountSubunit(order.total_amount, order.currency);
-      const paidAmount = Number(transaction.amount);
-      const paidCurrency = String(transaction.currency || '').toUpperCase();
-      const metadataOrderId = String(transaction.metadata?.orderId || transaction.metadata?.order_id || '');
-      const valid = transaction.status === 'success' && expectedAmount !== null && expectedAmount === paidAmount && paidCurrency === String(order.currency).toUpperCase() && metadataOrderId === String(order.id) && String(transaction.reference) === String(order.payment_reference);
-      if (!valid) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'payment data does not match order' }); }
-      if (order.status === 'PAYMENT_PENDING') {
-        await client.query(`UPDATE marketplace_orders SET status='PAID',updated_at=NOW() WHERE id=$1`, [order.id]);
-        await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'PAYMENT_CONFIRMED','PAYMENT_PENDING','PAID',$3::jsonb)`, [order.id, order.buyer_id, JSON.stringify({ reference, provider: 'paystack', source: 'webhook', amount: paidAmount, currency: paidCurrency })]);
-      }
+      const orderExpectedAmount = amountSubunit(order.total_amount, order.currency);
+      if (metadataOrderId !== String(order.id) || String(transaction.reference) !== String(order.payment_reference) || orderExpectedAmount !== paidAmount || paidCurrency !== String(order.currency).toUpperCase()) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'payment data does not match order' }); }
+      const result = await confirmMarketplacePayment(client, { orderId: order.id, reference, paidAmount, paidCurrency, source: 'webhook' });
       await client.query('COMMIT');
-      return res.status(200).json({ received: true, matched: true, status: order.status === 'PAYMENT_PENDING' ? 'PAID' : order.status });
+      return res.status(200).json({ received: true, matched: true, status: result.status, idempotent: result.idempotent });
     } catch (error) {
       try { await client.query('ROLLBACK'); } catch {}
-      console.error('marketplace Paystack webhook', error);
-      return res.status(500).json({ error: 'webhook processing failed' });
+      if (error?.code === 'PAYMENT_DATA_MISMATCH' || error?.code === 'PAYMENT_STATE_CONFLICT') return res.status(400).json({ error: error.message });
+      console.error('marketplace Paystack webhook', error); return res.status(500).json({ error: 'webhook processing failed' });
     } finally { client.release(); }
   });
 }
