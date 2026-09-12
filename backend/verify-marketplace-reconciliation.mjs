@@ -12,7 +12,7 @@ const checks = [
   ['pending payout recovery scan', worker.includes("fo.operation_type='PAYOUT_RELEASE'") && worker.includes("fo.status='PENDING'")],
   ['provider transfer verification', worker.includes('/transfer/verify/')],
   ['idempotent payout ledger', worker.includes('PAYOUT-RELEASE-${operation.order_id}') && worker.includes('ON CONFLICT (idempotency_key) DO NOTHING')],
-  ['payout amount reconciles seller net plus marketplace fee', worker.includes('operationAmount + marketplaceFee') && worker.includes('=== escrowAmount')],
+  ['payout amount reconciles seller net plus marketplace fee', worker.includes('operationAmount + marketplaceFee') && worker.includes('Math.round((operationAmount + marketplaceFee) * 100) / 100 !== escrowAmount')],
   ['payout currency matches escrow', worker.includes("String(operation.currency).toUpperCase() !== String(escrow.currency).toUpperCase()")],
   ['active refund blocks payout', worker.includes("operation_type='REFUND'") && worker.includes("status IN ('PENDING','SUCCEEDED')") && worker.includes('refund financial operation is active for this order')],
   ['transfer success webhook', webhook.includes("eventName === 'transfer.success'")],
