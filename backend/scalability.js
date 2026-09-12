@@ -25,6 +25,7 @@ import { installPrivateCachePolicy } from "./privateCachePolicy.js";
 import { installMarketplaceMediaPrivacyGuard } from "./marketplaceMediaPrivacy.js";
 import { installRequestResourceGuard } from "./requestResourceGuard.js";
 import { installApiAbuseGuard } from "./apiAbuseGuard.js";
+import { registerMarketplaceBatch2FinalHardening } from "./marketplaceBatch2FinalHardening.js";
 
 installPresencePrivacyGuard();
 const originalCreateServer = http.createServer;
@@ -73,6 +74,7 @@ http.createServer = function fynxCreateServer(...args) {
   registerMarketplaceSettlementWorker({ jobs, logger: console });
   registerMarketplacePaymentExpiryWorker({ logger: console });
   registerMarketplaceInspectionExpiryWorker({ logger: console });
+  registerMarketplaceBatch2FinalHardening({ logger: console });
   void jobs.start().catch(error=>console.error("[fynx-jobs] startup failed",error?.message||error));
   return server;
 };

@@ -6,6 +6,8 @@ const expiry = read('marketplacePaymentExpiry.js');
 const worker = read('marketplaceSettlementWorker.js');
 const webhook = read('marketplacePaystackWebhook.js');
 const settlement = read('marketplaceSettlement.js');
+const scalability = read('scalability.js');
+const finalHardening = read('marketplaceBatch2FinalHardening.js');
 const checks = [
   ['payment initialization uses a deterministic order reference', payment.includes('const reference = `FYNX-${existing.id}`')],
   ['payment initialization has a locked database recheck', payment.includes('FOR UPDATE') && payment.includes("status='PAYMENT_PENDING'")],
@@ -20,7 +22,13 @@ const checks = [
   ['refund mismatches block protected funds', webhook.includes("status='BLOCKED'") && webhook.includes("status='DISPUTED'")],
   ['payment webhook is bound to the marketplace order', webhook.includes('metadataOrderId') && webhook.includes('payment_reference')],
   ['financial operations enforce provider reference uniqueness', settlement.includes('marketplace_fin_ops_provider_ref_idx')],
-  ['ledger entries enforce idempotency uniqueness', settlement.includes('idempotency_key TEXT NOT NULL UNIQUE')]
+  ['ledger entries enforce idempotency uniqueness', settlement.includes('idempotency_key TEXT NOT NULL UNIQUE')],
+  ['Paystack requests have a bounded timeout guard', finalHardening.includes('PAYSTACK_REQUEST_TIMEOUT_MS') || finalHardening.includes('PAYSTACK_TIMEOUT_MS') || finalHardening.includes('PAYSTACK_TIMEOUT')],
+  ['timeout guard is installed during marketplace worker startup', scalability.includes('registerMarketplaceBatch2FinalHardening')],
+  ['refund recovery revalidates amount and currency against escrow', finalHardening.includes('refund recovery amount or currency does not reconcile with the protected escrow')],
+  ['refund recovery mismatch freezes the escrow', finalHardening.includes("SET status='DISPUTED'") && finalHardening.includes('REFUND_RECOVERY_BLOCKED')],
+  ['financial recovery writes explicit order audit events', finalHardening.includes('PAYOUT_RECOVERY_RECONCILED') && finalHardening.includes('REFUND_RECOVERY_RECONCILED')],
+  ['recovery audit events are idempotently guarded', finalHardening.includes('NOT EXISTS') && finalHardening.includes("metadata->>'operationId'")]
 ];
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
 for (const [name, ok] of checks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
