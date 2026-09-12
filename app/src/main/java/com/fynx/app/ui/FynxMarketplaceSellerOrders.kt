@@ -40,8 +40,8 @@ private fun fulfillmentLabel(state: String): String = when (state) {
     "PICKUP_COMPLETED" -> "Pickup completed"
     "INSPECTION" -> "Buyer inspection"
     "COMPLETED" -> "Completed"
-    "FAILED_DELIVERY" -> "Failed delivery"
-    "RETURNED" -> "Returned"
+    "FAILED_DELIVERY" -> "Failed delivery — protected"
+    "RETURNED" -> "Returned — protected"
     else -> state.ifBlank { "Pending" }
 }
 
@@ -160,6 +160,12 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                     Text("Buyer: ${order.buyerName}")
                     Text("Order total: ${money(order.currency, order.total)}")
                     Text("Fulfillment: ${fulfillmentLabel(order.fulfillmentStatus)}", style = MaterialTheme.typography.bodyMedium)
+                    if (order.fulfillmentStatus == "FAILED_DELIVERY") {
+                        Text("Payment remains protected. A failed delivery does not release seller funds or bypass the existing dispute/refund controls.", style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (order.fulfillmentStatus == "RETURNED") {
+                        Text("Return recorded. Payment remains protected until the existing protection/settlement process reaches a verified outcome.", style = MaterialTheme.typography.bodySmall)
+                    }
                     if (settlementLoading) CircularProgressIndicator(Modifier.size(20.dp))
                     settlement?.let { s ->
                         val accounting = s.optJSONObject("accounting")
@@ -219,8 +225,18 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                             busy = false
                         }
                     }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Mark dispatched") }
-                    order.status == "SHIPPED" && order.fulfillment == "DELIVERY" && order.fulfillmentStatus == "DISPATCHED" -> Button(enabled = !busy, onClick = { progress("IN_TRANSIT") }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Mark in transit") }
-                    order.status == "SHIPPED" && order.fulfillment == "DELIVERY" && order.fulfillmentStatus == "IN_TRANSIT" -> Button(enabled = !busy, onClick = { progress("DELIVERED") }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Mark delivered") }
+                    order.status == "SHIPPED" && order.fulfillment == "DELIVERY" && order.fulfillmentStatus == "DISPATCHED" -> Column(horizontalAlignment = Alignment.End) {
+                        Button(enabled = !busy, onClick = { progress("IN_TRANSIT") }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Mark in transit") }
+                        TextButton(enabled = !busy, onClick = { progress("FAILED_DELIVERY", "Seller reported a failed delivery attempt.") }) { Text("Report failed delivery") }
+                    }
+                    order.status == "SHIPPED" && order.fulfillment == "DELIVERY" && order.fulfillmentStatus == "IN_TRANSIT" -> Column(horizontalAlignment = Alignment.End) {
+                        Button(enabled = !busy, onClick = { progress("DELIVERED") }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Mark delivered") }
+                        TextButton(enabled = !busy, onClick = { progress("FAILED_DELIVERY", "Seller reported a failed delivery attempt.") }) { Text("Report failed delivery") }
+                    }
+                    order.status == "SHIPPED" && order.fulfillment == "DELIVERY" && order.fulfillmentStatus == "FAILED_DELIVERY" -> Column(horizontalAlignment = Alignment.End) {
+                        Button(enabled = !busy, onClick = { progress("IN_TRANSIT", "Seller requested another delivery attempt.") }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Retry delivery") }
+                        TextButton(enabled = !busy, onClick = { progress("RETURNED", "Seller marked the failed delivery for return.") }) { Text("Mark returned") }
+                    }
                     order.status == "PAID" && order.fulfillment == "PICKUP" && order.fulfillmentStatus == "PAID" -> Button(enabled = !busy, onClick = { progress("READY_FOR_PICKUP") }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Ready for pickup") }
                     order.status == "PAID" && order.fulfillment == "PICKUP" && order.fulfillmentStatus == "READY_FOR_PICKUP" -> Button(enabled = !busy, onClick = {
                         busy = true
