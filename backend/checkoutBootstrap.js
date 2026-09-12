@@ -2,11 +2,10 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-// Batch 3 runtime bridge. The existing serverBootstrap already prepares the
-// production server from server.js, so this wrapper injects the checkout route
-// module before that preparation and restores the source file afterwards.
-// This keeps the existing server/bootstrap architecture intact while making
-// the new checkout quote endpoint live on the real production process.
+// Batch 3 runtime bridge. The existing realtimeIsolationBootstrap remains the
+// production entrypoint; it imports this bridge after installing its realtime
+// isolation hooks. This bridge temporarily injects the checkout route into the
+// existing server source, then lets serverBootstrap prepare the runtime server.
 const backendDir = path.dirname(fileURLToPath(import.meta.url));
 const sourcePath = path.join(backendDir, "server.js");
 const original = await readFile(sourcePath, "utf8");
@@ -26,7 +25,7 @@ const patched = original
 
 try {
   await writeFile(sourcePath, patched, "utf8");
-  await import("./realtimeIsolationBootstrap.js");
+  await import("./serverBootstrap.js");
 } finally {
   await writeFile(sourcePath, original, "utf8");
 }
