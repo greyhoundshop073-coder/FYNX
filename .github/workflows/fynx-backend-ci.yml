@@ -69,6 +69,7 @@ jobs:
           node --check verify-marketplace-inspection-expiry.mjs
           node --check verify-marketplace-ledger-invariants.mjs
           node --check verify-marketplace-financial-security.mjs
+          node --check verify-marketplace-failure-paths.mjs
           node --check verify-stage15e-performance.mjs
           node --check verify-stage15f-security.mjs
           node --check verify-stage15g-integration.mjs
@@ -146,6 +147,9 @@ jobs:
 
       - name: Run R6-I financial security verification
         run: node verify-marketplace-financial-security.mjs
+
+      - name: Run R6-I failure-path verification
+        run: node verify-marketplace-failure-paths.mjs
 
       - name: Run R6-B payment reliability verification
         working-directory: .
