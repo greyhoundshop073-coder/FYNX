@@ -12,6 +12,7 @@ export async function confirmMarketplacePayment(client, {
   reference,
   paidAmount,
   paidCurrency,
+  providerFee = null,
   source
 }) {
   const result = await client.query(`
@@ -28,19 +29,22 @@ export async function confirmMarketplacePayment(client, {
 
   const expectedAmount = amountSubunit(order.total_amount, order.currency);
   const normalizedCurrency = String(paidCurrency || '').toUpperCase();
+  const numericProviderFee = providerFee === null || providerFee === undefined || providerFee === '' ? 0 : Number(providerFee) / 100;
+  const validProviderFee = Number.isFinite(numericProviderFee) && numericProviderFee >= 0 ? Math.round(numericProviderFee * 100) / 100 : null;
   const valid = Boolean(reference)
     && String(reference) === String(order.payment_reference)
     && expectedAmount !== null
     && Number(paidAmount) === expectedAmount
-    && normalizedCurrency === String(order.currency || '').toUpperCase();
+    && normalizedCurrency === String(order.currency || '').toUpperCase()
+    && validProviderFee !== null;
   if (!valid) throw Object.assign(new Error('payment data does not match order'), { code: 'PAYMENT_DATA_MISMATCH' });
 
   if (order.status === 'PAYMENT_PENDING') {
     await client.query(`
       UPDATE marketplace_orders
-      SET status='PAID',updated_at=NOW()
+      SET status='PAID',payment_provider_fee=$2,updated_at=NOW()
       WHERE id=$1 AND status='PAYMENT_PENDING'
-    `, [order.id]);
+    `, [order.id, validProviderFee]);
     await client.query(`
       INSERT INTO marketplace_order_events
         (order_id,actor_id,event_type,from_status,to_status,metadata)
@@ -50,7 +54,8 @@ export async function confirmMarketplacePayment(client, {
       provider: 'paystack',
       source: source || 'unknown',
       amount: Number(paidAmount),
-      currency: normalizedCurrency
+      currency: normalizedCurrency,
+      providerFee: validProviderFee
     })]);
     return { status: 'PAID', idempotent: false };
   }
