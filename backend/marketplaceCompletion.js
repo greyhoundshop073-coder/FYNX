@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { registerMarketplaceShippingTimeline } from './marketplaceShippingTimeline.js';
+import { isMarketplaceDestinationCovered } from './marketplaceShipping.js';
 
 export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
   registerMarketplaceShippingTimeline({ app, pool, auth });
@@ -157,6 +158,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (method === 'DELIVERY' && !Boolean(snapshot.deliveryAvailable)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery is not available for this listing' }); }
       if (method === 'PICKUP' && !Boolean(snapshot.pickupAvailable)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'pickup is not available for this listing' }); }
       const safeAddress = method === 'DELIVERY' ? { name: String(address.name).trim().slice(0, 120), phone: String(address.phone).trim().slice(0, 40), address: String(address.address).trim().slice(0, 500), city: typeof address.city === 'string' ? address.city.trim().slice(0, 100) : '', state: typeof address.state === 'string' ? address.state.trim().slice(0, 100) : '', country: typeof address.country === 'string' ? address.country.trim().slice(0, 100) : '' } : null;
+      if (method === 'DELIVERY' && !(await isMarketplaceDestinationCovered(client, order.listing_id, safeAddress))) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'seller does not currently deliver to this destination', code: 'DESTINATION_NOT_COVERED' }); }
       const updated = await client.query(`UPDATE marketplace_orders SET fulfillment_method=$1,shipping_address=$2::jsonb,buyer_note=$3,updated_at=NOW() WHERE id=$4 RETURNING *`, [method, safeAddress ? JSON.stringify(safeAddress) : null, note, id]);
       await recordFulfillmentEvent(client, id, req.user.sub, 'FULFILLMENT_SELECTED', order.fulfillment_status || 'PENDING', order.fulfillment_status || 'PENDING', { method });
       await client.query('COMMIT');
