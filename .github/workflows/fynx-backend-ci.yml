@@ -73,6 +73,7 @@ jobs:
           node --check verify-marketplace-state-machine.mjs
           node --check verify-marketplace-protection-lifecycle.mjs
           node --check verify-marketplace-accounting.mjs
+          node --check verify-marketplace-fulfillment.mjs
           node --check verify-stage15e-performance.mjs
           node --check verify-stage15f-security.mjs
           node --check verify-stage15g-integration.mjs
@@ -144,6 +145,9 @@ jobs:
 
       - name: Run R6-F inspection expiry verification
         run: node verify-marketplace-inspection-expiry.mjs
+
+      - name: Run R6-F fulfillment protection verification
+        run: node verify-marketplace-fulfillment.mjs
 
       - name: Run R6-I ledger invariant verification
         run: node verify-marketplace-ledger-invariants.mjs
