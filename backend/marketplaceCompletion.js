@@ -1,8 +1,10 @@
 import crypto from 'node:crypto';
 import { registerMarketplaceShippingTimeline } from './marketplaceShippingTimeline.js';
+import { registerMarketplaceFulfillmentStateRoutes } from './marketplaceFulfillmentState.js';
 
 export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
   registerMarketplaceShippingTimeline({ app, pool, auth });
+  registerMarketplaceFulfillmentStateRoutes({ app, pool, auth });
   let schemaPromise;
 
   const ensureSchema = async () => {
@@ -78,7 +80,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
         id: String(row.id), buyerId: String(row.buyer_id), buyerUsername: row.buyer_username, buyerDisplayName: row.buyer_display_name,
         listingId: String(row.listing_id), quantity: Number(row.quantity), unitPrice: Number(row.unit_price), deliveryFee: Number(row.delivery_fee),
         totalAmount: Number(row.total_amount), currency: row.currency, product: row.product_snapshot, status: row.status,
-        fulfillmentMethod: row.fulfillment_method, shippingAddress: row.shipping_address, buyerNote: row.buyer_note,
+        fulfillmentStatus: row.fulfillment_status || null, fulfillmentMethod: row.fulfillment_method, shippingAddress: row.shipping_address, buyerNote: row.buyer_note,
         paymentReference: row.payment_reference, trackingReference: row.tracking_reference, shippedAt: row.shipped_at,
         pickupHandoverAt: row.pickup_handover_at, pickupHandoverBy: row.pickup_handover_by ? String(row.pickup_handover_by) : null,
         deliveredAt: row.delivered_at, inspectionDeadline: row.inspection_deadline, completedAt: row.completed_at,
