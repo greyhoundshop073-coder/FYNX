@@ -1,0 +1,1 @@
+Integration note: register `registerMarketplaceShippingTimeline(app, pool, requireAuth)` from `marketplaceShippingTimeline.js` in the backend composition root after the existing marketplace routes. The module is intentionally isolated from payment/protection transitions.
