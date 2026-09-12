@@ -16,7 +16,7 @@ const checks = [
   ['legacy orders receive safe zero-fee accounting defaults', transactions.includes("fee_policy=COALESCE(fee_policy,'ZERO')") && transactions.includes("seller_net_amount=COALESCE(seller_net_amount,total_amount)")],
   ['payout is created from seller net, not raw buyer total', settlement.includes('sellerNetAmount = Number(order.seller_net_amount') && settlement.includes('amount,currency,metadata')],
   ['payout operation carries protected amount and fee snapshot', settlement.includes('escrowAmount: protectedAmount') && settlement.includes('marketplaceFee') && settlement.includes('sellerNetAmount')],
-  ['payout reconciles seller net plus marketplace fee to escrow', settlement.includes('sellerNetAmount + marketplaceFee') && settlement.includes('=== protectedAmount')],
+  ['payout reconciles seller net plus marketplace fee to escrow', settlement.includes('sellerNetAmount + marketplaceFee') && settlement.includes('Math.round((sellerNetAmount + marketplaceFee) * 100) / 100 !== protectedAmount')],
   ['successful payout records marketplace fee in ledger', worker.includes("'fynx_marketplace_fee','FEE'") && worker.includes('MARKETPLACE-FEE-${operation.order_id}')],
   ['Paystack provider fee is stored on payment confirmation', paymentState.includes('payment_provider_fee=$2') && paymentState.includes('providerFee')],
   ['Paystack webhook supplies provider fee to the transition layer', webhook.includes('providerFee: transaction.fees')],
