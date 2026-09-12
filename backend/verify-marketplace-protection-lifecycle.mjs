@@ -24,7 +24,7 @@ const checks = [
   ['completion consumes reserved inventory once', completion.includes("reserved_quantity=GREATEST(0,reserved_quantity-$1)") && completion.includes("status='COMPLETED'")],
   ['inspection expiry is blocked by active disputes', inspection.includes("marketplace_order_disputes") && inspection.includes("status IN ('OPEN','UNDER_REVIEW')")],
   ['inspection expiry is blocked by protection cases', inspection.includes("marketplace_protection_cases") && inspection.includes("status IN ('OPEN','UNDER_REVIEW')")],
-  ['delivery exceptions use the integrated fulfillment state machine', completion.includes("['DISPATCHED','FAILED_DELIVERY'") && completion.includes("['IN_TRANSIT','FAILED_DELIVERY'") && completion.includes("['FAILED_DELIVERY','IN_TRANSIT'") && completion.includes("['FAILED_DELIVERY','RETURNED'")],
+  ['delivery exceptions use the integrated fulfillment state machine', completion.includes("['DISPATCHED->FAILED_DELIVERY', true]") && completion.includes("['IN_TRANSIT->FAILED_DELIVERY', true]") && completion.includes("['FAILED_DELIVERY->IN_TRANSIT', true]") && completion.includes("['FAILED_DELIVERY->RETURNED', true]")],
   ['failed delivery and return remain protected from active cases', completion.includes("['FAILED_DELIVERY','RETURNED'].includes(requested)") && completion.includes('active protection case or dispute')],
   ['fulfillment exceptions are written to the existing order timeline', completion.includes('recordFulfillmentEvent') && completion.includes('FULFILLMENT_${requested}')],
   ['manual cancellation is payment-pending only', transactions.includes("order.status!=='PAYMENT_PENDING'") || paymentExpiry.includes("status='PAYMENT_PENDING'")],
