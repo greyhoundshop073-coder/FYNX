@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,8 +17,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.util.Locale
 
-/** Seller management surface connected to the authenticated Marketplace settlement APIs. */
+private data class SellerMoneyRecord(
+    val orderId: String,
+    val title: String,
+    val currency: String,
+    val sellerNet: Double,
+    val marketplaceFee: Double,
+    val funds: String,
+    val payoutStatus: String,
+    val updatedAt: String
+)
+
+/** Seller management surface connected to authenticated Marketplace settlement APIs. */
 @Composable
 fun FynxMarketplaceSellerCenterPanel() {
     val context = LocalContext.current
@@ -34,6 +47,62 @@ fun FynxMarketplaceSellerCenterPanel() {
     var bankCode by remember { mutableStateOf("") }
     var accountNumber by remember { mutableStateOf("") }
     var accountName by remember { mutableStateOf("") }
+    var moneyLoading by remember { mutableStateOf(true) }
+    var moneyError by remember { mutableStateOf<String?>(null) }
+    var moneyRecords by remember { mutableStateOf(emptyList<SellerMoneyRecord>()) }
+
+    fun loadMoney() {
+        scope.launch {
+            moneyLoading = true
+            moneyError = null
+            FynxBackendClient.get(context, "/api/marketplace/seller/orders")
+                .onSuccess { raw ->
+                    val orders = JSONObject(raw).optJSONArray("orders")
+                    val records = mutableListOf<SellerMoneyRecord>()
+                    if (orders != null) {
+                        for (i in 0 until orders.length()) {
+                            val order = orders.optJSONObject(i) ?: continue
+                            val orderId = order.optString("id")
+                            if (orderId.isBlank()) continue
+                            FynxBackendClient.get(context, "/api/marketplace/settlement/order/$orderId")
+                                .onSuccess { settlementRaw ->
+                                    val settlement = JSONObject(settlementRaw)
+                                    val accounting = settlement.optJSONObject("accounting") ?: return@onSuccess
+                                    val protection = settlement.optJSONObject("protection")
+                                    val escrow = settlement.optJSONObject("escrow")
+                                    val funds = protection?.optString("funds").orEmpty().ifBlank { escrow?.optString("status").orEmpty() }.ifBlank { "UNKNOWN" }
+                                    val operations = settlement.optJSONArray("operations")
+                                    var payoutStatus = funds
+                                    var updatedAt = order.optString("updatedAt").ifBlank { order.optString("createdAt") }
+                                    if (operations != null) {
+                                        for (j in 0 until operations.length()) {
+                                            val op = operations.optJSONObject(j) ?: continue
+                                            if (op.optString("operation_type") == "PAYOUT_RELEASE") {
+                                                payoutStatus = op.optString("status").ifBlank { funds }
+                                                updatedAt = op.optString("updated_at").ifBlank { updatedAt }
+                                                break
+                                            }
+                                        }
+                                    }
+                                    records += SellerMoneyRecord(
+                                        orderId = orderId,
+                                        title = order.optJSONObject("product")?.optString("title").orEmpty().ifBlank { "FYNX order" },
+                                        currency = accounting.optString("currency", order.optString("currency", "NGN")).uppercase(),
+                                        sellerNet = accounting.optDouble("sellerNetAmount", 0.0),
+                                        marketplaceFee = accounting.optDouble("marketplaceFee", 0.0),
+                                        funds = funds,
+                                        payoutStatus = payoutStatus,
+                                        updatedAt = updatedAt
+                                    )
+                                }
+                        }
+                    }
+                    moneyRecords = records.sortedByDescending { it.updatedAt }
+                }
+                .onFailure { moneyError = it.message ?: "Seller earnings could not load." }
+            moneyLoading = false
+        }
+    }
 
     fun refresh() {
         scope.launch {
@@ -51,10 +120,13 @@ fun FynxMarketplaceSellerCenterPanel() {
                 .onFailure { accountMessage = it.message ?: "Payout account status could not load." }
             accountLoading = false
             loading = false
+            loadMoney()
         }
     }
 
     LaunchedEffect(Unit) { refresh() }
+
+    val currencies = moneyRecords.map { it.currency }.distinct()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(12.dp),
@@ -62,10 +134,65 @@ fun FynxMarketplaceSellerCenterPanel() {
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         item {
-            Text("Seller Center", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(4.dp))
-            Text("Your Marketplace sales, protected funds and payout controls use your real FYNX account data.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Seller Center", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text("Your Marketplace sales, protected funds and payout controls use your real FYNX account data.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                IconButton(onClick = { refresh() }) { Icon(Icons.Default.Refresh, "Refresh seller center") }
+            }
         }
+
+        item {
+            Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Marketplace earnings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        if (moneyLoading) CircularProgressIndicator(Modifier.size(20.dp))
+                    }
+                    Text("FYNX keeps buyer payments protected until the order is completed. Only settlement records marked eligible can be released.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    moneyError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    if (!moneyLoading && moneyRecords.isEmpty() && moneyError == null) {
+                        Text("No marketplace earnings yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    currencies.forEach { currency ->
+                        val rows = moneyRecords.filter { it.currency == currency }
+                        val protected = rows.filter { it.funds in setOf("HELD", "DISPUTED", "REFUND_PENDING") }.sumOf { it.sellerNet }
+                        val available = rows.filter { it.funds == "RELEASE_ELIGIBLE" }.sumOf { it.sellerNet }
+                        val pending = rows.filter { it.funds == "RELEASE_PENDING" || it.payoutStatus == "PENDING" }.sumOf { it.sellerNet }
+                        val paid = rows.filter { it.funds == "RELEASED" || it.payoutStatus == "SUCCEEDED" }.sumOf { it.sellerNet }
+                        Text(currency, fontWeight = FontWeight.Bold)
+                        MoneySummaryRow("Protected", protected, currency)
+                        MoneySummaryRow("Available for payout", available, currency)
+                        MoneySummaryRow("Payout pending", pending, currency)
+                        MoneySummaryRow("Paid out", paid, currency)
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Earnings history", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    if (moneyLoading) CircularProgressIndicator(Modifier.size(20.dp))
+                    else if (moneyRecords.isEmpty()) Text("Completed and protected Marketplace earnings will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else moneyRecords.take(20).forEach { record ->
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(record.title, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+                                Text(formatSellerMoney(record.sellerNet, record.currency), color = MaterialTheme.colorScheme.primary)
+                            }
+                            Text("${record.funds} • payout ${record.payoutStatus} • fee ${formatSellerMoney(record.marketplaceFee, record.currency)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (record.updatedAt.isNotBlank()) Text(record.updatedAt, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            HorizontalDivider(Modifier.padding(vertical = 5.dp))
+                        }
+                    }
+                }
+            }
+        }
+
         item {
             Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -88,6 +215,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                 }
             }
         }
+
         if (accountMessage != null) item { Text(accountMessage!!, color = MaterialTheme.colorScheme.error) }
         if (error != null) item { Text(error!!, color = MaterialTheme.colorScheme.error) }
         if (loading) {
@@ -147,7 +275,12 @@ fun FynxMarketplaceSellerCenterPanel() {
                     accountSaving = true
                     accountMessage = null
                     scope.launch {
-                        val body = JSONObject().put("bankCode", bankCode.trim()).put("accountNumber", accountNumber.trim()).put("accountName", accountName.trim()).put("bankName", payoutAccount?.optString("bankName").orEmpty()).toString()
+                        val body = JSONObject()
+                            .put("bankCode", bankCode.trim())
+                            .put("accountNumber", accountNumber.trim())
+                            .put("accountName", accountName.trim())
+                            .put("bankName", payoutAccount?.optString("bankName").orEmpty())
+                            .toString()
                         FynxBackendClient.postJson(context, "/api/marketplace/settlement/payout-account", body)
                             .onSuccess { raw ->
                                 payoutAccount = JSONObject(raw).optJSONObject("payoutAccount")
@@ -164,5 +297,13 @@ fun FynxMarketplaceSellerCenterPanel() {
     }
 }
 
+@Composable
+private fun MoneySummaryRow(label: String, amount: Double, currency: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+        Text(formatSellerMoney(amount, currency), fontWeight = FontWeight.SemiBold)
+    }
+}
+
 private fun formatSellerMoney(price: Double, currency: String): String =
-    "${currency.uppercase()} ${String.format(java.util.Locale.US, "%,.2f", price)}"
+    "${currency.uppercase()} ${String.format(Locale.US, "%,.2f", price)}"
