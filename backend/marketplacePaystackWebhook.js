@@ -76,8 +76,15 @@ async function reconcileTransferEvent(client, eventName, transfer) {
     await client.query(`UPDATE marketplace_financial_operations SET status='SUCCEEDED',provider_reference=COALESCE($1,provider_reference),failure_reason=NULL,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, [eventReference || null, JSON.stringify(metadata), operation.id]);
     const escrow = (await client.query(`SELECT id,amount,currency,status FROM marketplace_escrows WHERE order_id=$1 FOR UPDATE`, [operation.order_id])).rows[0];
     if (escrow?.status === 'RELEASE_PENDING') {
+      const operationAmount = Number(operation.amount), marketplaceFee = Number(operation.metadata?.marketplaceFee || 0), escrowAmount = Number(escrow.amount);
+      if (!Number.isFinite(operationAmount) || !Number.isFinite(marketplaceFee) || Math.round((operationAmount + marketplaceFee) * 100) / 100 !== escrowAmount) {
+        await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,updated_at=NOW() WHERE id=$2`, ['payout settlement accounting does not reconcile with the protected escrow', operation.id]);
+        await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status='RELEASE_PENDING'`, [escrow.id]);
+        return true;
+      }
       await client.query(`UPDATE marketplace_escrows SET status='RELEASED',released_at=COALESCE(released_at,NOW()),updated_at=NOW() WHERE id=$1 AND status='RELEASE_PENDING'`, [escrow.id]);
-      await client.query(`INSERT INTO marketplace_ledger_entries (escrow_id,order_id,account,entry_type,amount,currency,idempotency_key,metadata) VALUES ($1,$2,'seller_payout','RELEASE',$3,$4,$5,$6::jsonb) ON CONFLICT (idempotency_key) DO NOTHING`, [escrow.id, operation.order_id, escrow.amount, escrow.currency, `PAYOUT-RELEASE-${operation.order_id}`, JSON.stringify({ provider: 'paystack', providerReference: eventReference, providerStatus })]);
+      await client.query(`INSERT INTO marketplace_ledger_entries (escrow_id,order_id,account,entry_type,amount,currency,idempotency_key,metadata) VALUES ($1,$2,'seller_payout','RELEASE',$3,$4,$5,$6::jsonb) ON CONFLICT (idempotency_key) DO NOTHING`, [escrow.id, operation.order_id, operationAmount, escrow.currency, `PAYOUT-RELEASE-${operation.order_id}`, JSON.stringify({ provider: 'paystack', providerReference: eventReference, providerStatus, protectedAmount: escrowAmount, sellerNetAmount: operationAmount, marketplaceFee })]);
+      if (marketplaceFee > 0) await client.query(`INSERT INTO marketplace_ledger_entries (escrow_id,order_id,account,entry_type,amount,currency,idempotency_key,metadata) VALUES ($1,$2,'fynx_marketplace_fee','FEE',$3,$4,$5,$6::jsonb) ON CONFLICT (idempotency_key) DO NOTHING`, [escrow.id, operation.order_id, marketplaceFee, escrow.currency, `MARKETPLACE-FEE-${operation.order_id}`, JSON.stringify({ provider: 'paystack', providerReference: eventReference, feePolicy: operation.metadata?.feePolicy || null, feePolicyVersion: operation.metadata?.feePolicyVersion || null })]);
     }
   } else if (eventName === 'transfer.failed' || eventName === 'transfer.reversed') {
     await client.query(`UPDATE marketplace_financial_operations SET status='FAILED',provider_reference=COALESCE($1,provider_reference),failure_reason=$2,metadata=$3::jsonb,updated_at=NOW() WHERE id=$4 AND status='PENDING'`, [eventReference || null, `Paystack transfer ${eventName === 'transfer.reversed' ? 'reversed' : 'failed'}`, JSON.stringify(metadata), operation.id]);
@@ -120,7 +127,7 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
       if (!order) { await client.query('ROLLBACK'); return res.status(200).json({ received: true, matched: false }); }
       const orderExpectedAmount = amountSubunit(order.total_amount, order.currency);
       if (metadataOrderId !== String(order.id) || String(transaction.reference) !== String(order.payment_reference) || orderExpectedAmount !== paidAmount || paidCurrency !== String(order.currency).toUpperCase()) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'payment data does not match order' }); }
-      const result = await confirmMarketplacePayment(client, { orderId: order.id, reference, paidAmount, paidCurrency, source: 'webhook' });
+      const result = await confirmMarketplacePayment(client, { orderId: order.id, reference, paidAmount, paidCurrency, providerFee: transaction.fees, source: 'webhook' });
       await client.query('COMMIT');
       return res.status(200).json({ received: true, matched: true, status: result.status, idempotent: result.idempotent });
     } catch (error) {
