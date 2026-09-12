@@ -29,7 +29,7 @@ const checks = [
   ['financial operation provider reference uniqueness', settlement.includes('marketplace_fin_ops_provider_ref_idx')],
   ['ledger idempotency uniqueness', settlement.includes('idempotency_key TEXT NOT NULL UNIQUE')],
   ['checkout requires a normalized three-letter listing currency', checkout.includes('normalizeCurrency') && checkout.includes('listing.currency')],
-  ['protected order stores the listing currency', checkoutOrder.includes('normalizeCurrency') && checkoutOrder.includes('const currency = normalizeCurrency(listing.currency)') && checkoutOrder.includes('total_amount,currency') && checkoutOrder.includes('buyerTotal,currency')],
+  ['protected order stores the normalized listing currency', checkoutOrder.includes('const currency = normalizeCurrency(listing.currency)') && checkoutOrder.includes('currency,product_snapshot') && checkoutOrder.includes('currency })')],
   ['protected escrow is created from the order currency', settlement.includes('NEW.total_amount,NEW.currency')],
   ['payout account currency is matched to the order currency', read('./marketplacePayoutRetry.js').includes('payoutAccount.currency') && read('./marketplacePayoutRetry.js').includes('order.currency')]
 ];
