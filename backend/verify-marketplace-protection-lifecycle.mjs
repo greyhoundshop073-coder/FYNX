@@ -7,6 +7,7 @@ const completion = read('./marketplaceCompletion.js');
 const transactions = read('./marketplaceTransactions.js');
 const settlement = read('./marketplaceSettlement.js');
 const inspection = read('./marketplaceInspectionExpiry.js');
+const paymentExpiry = read('./marketplacePaymentExpiry.js');
 
 const checks = [
   ['buyer can open a refund request', protection.includes("app.post('/api/marketplace/protection/order/:id/refund-request'") && protection.includes("only the buyer can request a refund")],
@@ -15,7 +16,7 @@ const checks = [
   ['protected requests move escrow to DISPUTED', protection.includes("UPDATE marketplace_escrows SET status='DISPUTED'")],
   ['open protection cases are idempotent', protection.includes('idempotencyKey') && protection.includes('WHERE idempotency_key=$1') && protection.includes('idempotency_key TEXT NOT NULL UNIQUE')],
   ['evidence is stored against the order', transactions.includes('marketplace_order_evidence') && transactions.includes("app.post('/api/marketplace/orders/:id/evidence'")],
-  ['seller alone can ship', completion.includes('only the seller can ship this order') && completion.includes('order.status !== \'PAID\'' )],
+  ['seller alone can ship', completion.includes('only the seller can ship this order') && completion.includes("order.status !== 'PAID'")],
   ['buyer alone selects fulfillment', completion.includes('only the buyer can choose fulfillment')],
   ['delivery enters a protected inspection period', completion.includes("status='INSPECTION'") && completion.includes('inspection_deadline') && completion.includes('48 * 60 * 60 * 1000')],
   ['buyer alone can complete after inspection begins', completion.includes('only the buyer can complete this order') && completion.includes("order.status !== 'INSPECTION'")],
@@ -23,6 +24,11 @@ const checks = [
   ['completion consumes reserved inventory once', completion.includes("reserved_quantity=GREATEST(0,reserved_quantity-$1)") && completion.includes("status='COMPLETED'")],
   ['inspection expiry is blocked by active disputes', inspection.includes("marketplace_order_disputes") && inspection.includes("status IN ('OPEN','UNDER_REVIEW')")],
   ['inspection expiry is blocked by protection cases', inspection.includes("marketplace_protection_cases") && inspection.includes("status IN ('OPEN','UNDER_REVIEW')")],
+  ['delivery exceptions use the integrated fulfillment state machine', completion.includes("['DISPATCHED','FAILED_DELIVERY'") && completion.includes("['IN_TRANSIT','FAILED_DELIVERY'") && completion.includes("['FAILED_DELIVERY','IN_TRANSIT'") && completion.includes("['FAILED_DELIVERY','RETURNED'")],
+  ['failed delivery and return remain protected from active cases', completion.includes("['FAILED_DELIVERY','RETURNED'].includes(requested)") && completion.includes('active protection case or dispute')],
+  ['fulfillment exceptions are written to the existing order timeline', completion.includes('recordFulfillmentEvent') && completion.includes('FULFILLMENT_${requested}')],
+  ['manual cancellation is payment-pending only', transactions.includes("order.status!=='PAYMENT_PENDING'") || paymentExpiry.includes("status='PAYMENT_PENDING'")],
+  ['payment-pending cancellation releases the exact reserved quantity once', paymentExpiry.includes("status='CANCELLED'") && paymentExpiry.includes('reserved_quantity=GREATEST(0,reserved_quantity-$1)') && paymentExpiry.includes('ORDER_PAYMENT_EXPIRED')],
   ['admin refund cannot race payout', resolution.includes('payoutConflict') && resolution.includes("resolution === 'BUYER'")],
   ['admin seller resolution cannot race refund', resolution.includes('refundConflict') && resolution.includes("resolution === 'SELLER'")],
   ['admin cancellation cannot cancel active money movement', resolution.includes("resolution === 'CANCEL'") && resolution.includes('payoutConflict || refundConflict')],
