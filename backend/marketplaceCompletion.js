@@ -124,6 +124,13 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (order.status !== 'PAID') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'only paid orders can be shipped' }); }
       if (order.fulfillment_method === 'PICKUP') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'pickup orders require seller handover confirmation' }); }
       if (order.fulfillment_method === 'DELIVERY' && !order.shipping_address) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'buyer delivery details are missing' }); }
+      const conflict = (await client.query(`
+        SELECT 1 FROM marketplace_order_disputes WHERE order_id=$1 AND status IN ('OPEN','UNDER_REVIEW')
+        UNION ALL
+        SELECT 1 FROM marketplace_protection_cases WHERE order_id=$1 AND status IN ('OPEN','UNDER_REVIEW')
+        LIMIT 1
+      `, [id])).rowCount > 0;
+      if (conflict) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order has an active protection case or dispute' }); }
       const updated = await client.query(`UPDATE marketplace_orders SET status='SHIPPED',tracking_reference=$1,shipped_at=NOW(),updated_at=NOW() WHERE id=$2 RETURNING *`, [tracking || null, id]);
       await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'ORDER_SHIPPED',$3,'SHIPPED',$4::jsonb)`, [id, req.user.sub, order.status, JSON.stringify({ trackingReference: tracking || null, fulfillmentMethod: order.fulfillment_method })]);
       await client.query('COMMIT');
