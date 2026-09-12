@@ -13,7 +13,7 @@ const checks = [
   ['participants can open disputes', protection.includes("app.post('/api/marketplace/protection/order/:id/dispute'") && protection.includes("const isBuyer") && protection.includes("const isSeller")],
   ['protected requests lock the order before state change', protection.includes('SELECT id,buyer_id,seller_id,total_amount,currency,status FROM marketplace_orders WHERE id=$1 FOR UPDATE') && protection.includes("SET status='DISPUTED'")],
   ['protected requests move escrow to DISPUTED', protection.includes("UPDATE marketplace_escrows SET status='DISPUTED'")],
-  ['open protection cases are idempotent', protection.includes('idempotencyKey') && protection.includes('ON CONFLICT')],
+  ['open protection cases are idempotent', protection.includes('idempotencyKey') && protection.includes('WHERE idempotency_key=$1') && protection.includes('idempotency_key TEXT NOT NULL UNIQUE')],
   ['evidence is stored against the order', transactions.includes('marketplace_order_evidence') && transactions.includes("app.post('/api/marketplace/orders/:id/evidence'")],
   ['seller alone can ship', completion.includes('only the seller can ship this order') && completion.includes('order.status !== \'PAID\'' )],
   ['buyer alone selects fulfillment', completion.includes('only the buyer can choose fulfillment')],
