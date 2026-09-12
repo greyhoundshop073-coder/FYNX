@@ -99,7 +99,11 @@ async function reconcilePendingRefunds({ logger = console } = {}) {
   for (const row of rows.rows) {
     if (!row.payment_reference) continue;
     try {
-      const response = await fetch(`https://api.paystack.co/refund?transaction=${encodeURIComponent(row.payment_reference)}`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
+      const transactionResponse = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(row.payment_reference)}`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
+      const transactionData = await transactionResponse.json().catch(() => ({}));
+      const transactionId = Number(transactionData?.data?.id);
+      if (!transactionResponse.ok || transactionData?.status !== true || !Number.isSafeInteger(transactionId) || transactionId <= 0) continue;
+      const response = await fetch(`https://api.paystack.co/refund?transaction=${encodeURIComponent(transactionId)}&perPage=50`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data?.status !== true) continue;
       const refunds = Array.isArray(data.data) ? data.data : data.data ? [data.data] : [];
@@ -114,7 +118,7 @@ async function reconcilePendingRefunds({ logger = console } = {}) {
         await client.query('BEGIN');
         const locked = (await client.query(`SELECT f.*,e.id AS escrow_id,e.amount AS escrow_amount,e.currency AS escrow_currency,e.status AS escrow_status,o.status AS order_status,o.quantity,o.listing_id,o.payment_reference FROM marketplace_financial_operations f JOIN marketplace_escrows e ON e.order_id=f.order_id JOIN marketplace_orders o ON o.id=f.order_id WHERE f.id=$1 FOR UPDATE`, [row.id])).rows[0];
         if (!locked || locked.status !== 'PENDING' || locked.escrow_status !== 'REFUND_PENDING') { await client.query('COMMIT'); continue; }
-        const metadata = { ...(locked.metadata || {}), refundRecoveryStatus: status, refundReference: providerReference ? String(providerReference) : null, providerAmount: Number(match.amount), providerCurrency: String(match.currency || '').toUpperCase(), source: 'batch2-refund-reconciliation' };
+        const metadata = { ...(locked.metadata || {}), refundRecoveryStatus: status, refundReference: providerReference ? String(providerReference) : null, providerAmount: Number(match.amount), providerCurrency: String(match.currency || '').toUpperCase(), providerTransactionId: transactionId, source: 'batch2-refund-reconciliation' };
         if (Number(locked.amount) !== Number(locked.escrow_amount) || String(locked.currency).toUpperCase() !== String(locked.escrow_currency).toUpperCase()) {
           await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, ['refund recovery amount or currency does not reconcile with the protected escrow', JSON.stringify(metadata), locked.id]);
           await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status='REFUND_PENDING'`, [locked.escrow_id]);
@@ -129,9 +133,12 @@ async function reconcilePendingRefunds({ logger = console } = {}) {
           await client.query(`INSERT INTO marketplace_ledger_entries (escrow_id,order_id,account,entry_type,amount,currency,idempotency_key,metadata) VALUES ($1,$2,'buyer_refund','REFUND',$3,$4,$5,$6::jsonb) ON CONFLICT (idempotency_key) DO NOTHING`, [locked.escrow_id, locked.order_id, locked.escrow_amount, locked.escrow_currency, `REFUND-${locked.order_id}`, JSON.stringify({ provider: 'paystack', providerReference: providerReference ? String(providerReference) : null, source: 'batch2-refund-reconciliation' })]);
           await insertRecoveryEvent(client, locked, 'REFUND_RECOVERY_RECONCILED', { providerReference: providerReference ? String(providerReference) : null, amount: Number(locked.amount), currency: String(locked.currency).toUpperCase() });
           repaired += 1;
-        } else if (['failed', 'needs-attention'].includes(status)) {
-          await client.query(`UPDATE marketplace_financial_operations SET status='FAILED',provider_reference=COALESCE($1,provider_reference),failure_reason=$2,metadata=$3::jsonb,updated_at=NOW() WHERE id=$4 AND status='PENDING'`, [providerReference ? String(providerReference) : null, `Paystack refund ${status}`, JSON.stringify(metadata), locked.id]);
+        } else if (status === 'failed') {
+          await client.query(`UPDATE marketplace_financial_operations SET status='FAILED',provider_reference=COALESCE($1,provider_reference),failure_reason=$2,metadata=$3::jsonb,updated_at=NOW() WHERE id=$4 AND status='PENDING'`, [providerReference ? String(providerReference) : null, 'Paystack refund failed', JSON.stringify(metadata), locked.id]);
           await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status='REFUND_PENDING'`, [locked.escrow_id]);
+        } else if (status === 'needs-attention') {
+          await client.query(`UPDATE marketplace_financial_operations SET provider_reference=COALESCE($1,provider_reference),failure_reason=NULL,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, [providerReference ? String(providerReference) : null, JSON.stringify(metadata), locked.id]);
+          await insertRecoveryEvent(client, locked, 'REFUND_NEEDS_ATTENTION', { providerReference: providerReference ? String(providerReference) : null, transactionId, action: 'kept_pending_for_customer_account_details' });
         } else {
           await client.query(`UPDATE marketplace_financial_operations SET provider_reference=COALESCE($1,provider_reference),metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='PENDING'`, [providerReference ? String(providerReference) : null, JSON.stringify(metadata), locked.id]);
         }
