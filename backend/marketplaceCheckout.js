@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { inspectTrustSafetyText } from './trustSafety.js';
-import { calculateMarketplaceShipping } from './marketplaceShipping.js';
+import { calculateMarketplaceShipping, ensureMarketplaceShippingSchema, isMarketplaceDestinationCovered } from './marketplaceShipping.js';
 
 export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
   const parsePositiveInt = (value) => { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : null; };
@@ -31,6 +31,7 @@ export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
     if (fulfillmentMethod === 'DELIVERY' && !shippingAddress) return res.status(400).json({ error: 'delivery requires name, phone and address' });
     const client = await pool.connect();
     try {
+      await ensureMarketplaceShippingSchema(pool);
       const safety = (await client.query('SELECT marketplace_safety,account_status FROM fynx_account_safety WHERE user_id=$1 LIMIT 1', [req.user.sub])).rows[0] || { marketplace_safety: true, account_status: 'ACTIVE' };
       if (String(safety.account_status) === 'LOCKED') return res.status(403).json({ error: 'account is locked', code: 'ACCOUNT_LOCKED' });
       if (String(safety.account_status) === 'LIMITED') return res.status(403).json({ error: 'account is temporarily limited from marketplace purchases', code: 'ACCOUNT_LIMITED' });
@@ -48,6 +49,10 @@ export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
       if (quantity > available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'requested quantity is not available', availableQuantity: Math.max(0, available) }); }
       if (fulfillmentMethod === 'DELIVERY' && !Boolean(listing.delivery_available)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery is not available for this listing' }); }
       if (fulfillmentMethod === 'PICKUP' && !Boolean(listing.pickup_available)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'pickup is not available for this listing' }); }
+      if (fulfillmentMethod === 'DELIVERY' && !(await isMarketplaceDestinationCovered(client, listing.id, shippingAddress))) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'seller does not currently deliver to this destination', code: 'DESTINATION_NOT_COVERED' });
+      }
       const unitPrice = Number(listing.price); const productSubtotal = Math.round(unitPrice * quantity * 100) / 100;
       const shipping = calculateMarketplaceShipping(listing, quantity, fulfillmentMethod); const deliveryFee = shipping.fee;
       const config = feeConfig(); const rawFee = Math.round((productSubtotal * (config.bps / 10000) + config.fixed) * 100) / 100; const marketplaceFee = Math.max(0, rawFee);
