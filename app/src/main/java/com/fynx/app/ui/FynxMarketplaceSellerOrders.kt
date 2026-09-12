@@ -102,14 +102,36 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
         var tracking by remember(order.id) { mutableStateOf(order.tracking.orEmpty()) }
         var busy by remember(order.id) { mutableStateOf(false) }
         var message by remember(order.id) { mutableStateOf<String?>(null) }
+        var settlementLoading by remember(order.id) { mutableStateOf(true) }
+        var settlement by remember(order.id) { mutableStateOf<JSONObject?>(null) }
+        var payoutQueued by remember(order.id) { mutableStateOf(false) }
+
+        LaunchedEffect(order.id) {
+            settlementLoading = true
+            FynxBackendClient.get(context, "/api/marketplace/settlement/order/${order.id}")
+                .onSuccess { raw -> settlement = JSONObject(raw) }
+                .onFailure { message = it.message ?: "Settlement details could not load." }
+            settlementLoading = false
+        }
+
         AlertDialog(
-            onDismissRequest = { if (!busy) selected = null },
+            onDismissRequest = { if (!busy && !payoutQueued) selected = null },
             title = { Text(order.status) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(order.title, style = MaterialTheme.typography.titleMedium)
                     Text("Buyer: ${order.buyerName}")
-                    Text("Total: ${order.currency} ${String.format(Locale.US, "%,.2f", order.total)}")
+                    Text("Order total: ${order.currency} ${String.format(Locale.US, "%,.2f", order.total)}")
+                    if (settlementLoading) CircularProgressIndicator(Modifier.size(20.dp))
+                    settlement?.let { s ->
+                        val accounting = s.optJSONObject("accounting")
+                        val protection = s.optJSONObject("protection")
+                        if (accounting != null) {
+                            Text("Seller net: ${accounting.optString("currency", order.currency)} ${String.format(Locale.US, "%,.2f", accounting.optDouble("sellerNetAmount", 0.0))}", style = MaterialTheme.typography.bodyMedium)
+                            Text("Marketplace fee: ${accounting.optString("currency", order.currency)} ${String.format(Locale.US, "%,.2f", accounting.optDouble("marketplaceFee", 0.0))}", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (protection != null) Text("Protected funds: ${protection.optString("funds", "UNKNOWN")}", style = MaterialTheme.typography.bodySmall)
+                    }
                     if (order.fulfillment == "DELIVERY") {
                         val a = order.address
                         if (a != null) Text("Deliver to: ${a.optString("name")} • ${a.optString("phone")}\n${a.optString("address")}${a.optString("city").let { if (it.isBlank()) "" else ", $it" }}")
@@ -117,18 +139,15 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                     } else Text("Buyer selected pickup. Confirm the handover when the buyer receives the item.")
                     if (order.status == "PAID" && order.fulfillment == "DELIVERY") OutlinedTextField(tracking, { tracking = it }, label = { Text("Tracking reference (optional)") }, singleLine = true)
                     message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    if (payoutQueued) Text("Payout release has been queued. FYNX will verify the provider transfer before marking it paid.", color = MaterialTheme.colorScheme.primary)
                 }
             },
             confirmButton = {
-                when (order.status) {
-                    "PAID" -> Button(enabled = !busy, onClick = {
+                when {
+                    order.status == "PAID" -> Button(enabled = !busy, onClick = {
                         busy = true
                         scope.launch {
-                            val path = if (order.fulfillment == "PICKUP") {
-                                "/api/marketplace/orders/${order.id}/pickup-handover"
-                            } else {
-                                "/api/marketplace/orders/${order.id}/ship"
-                            }
+                            val path = if (order.fulfillment == "PICKUP") "/api/marketplace/orders/${order.id}/pickup-handover" else "/api/marketplace/orders/${order.id}/ship"
                             val body = if (order.fulfillment == "PICKUP") JSONObject().toString() else JSONObject().put("trackingReference", tracking.trim()).toString()
                             FynxBackendClient.postJson(context, path, body)
                                 .onSuccess { selected = null; load(); onChanged() }
@@ -136,10 +155,19 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                             busy = false
                         }
                     }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(if (order.fulfillment == "PICKUP") "Confirm pickup handover" else "Mark shipped") }
+                    order.status == "COMPLETED" -> Button(enabled = !busy && !payoutQueued, onClick = {
+                        busy = true
+                        scope.launch {
+                            FynxBackendClient.postJson(context, "/api/marketplace/settlement/release/${order.id}", JSONObject().toString())
+                                .onSuccess { payoutQueued = true; onChanged() }
+                                .onFailure { message = it.message ?: "Payout is not currently eligible." }
+                            busy = false
+                        }
+                    }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(if (payoutQueued) "Payout queued" else "Request payout") }
                     else -> TextButton(onClick = { selected = null }) { Text("Done") }
                 }
             },
-            dismissButton = { TextButton(enabled = !busy, onClick = { selected = null }) { Text("Close") } }
+            dismissButton = { TextButton(enabled = !busy && !payoutQueued, onClick = { selected = null }) { Text("Close") } }
         )
     }
 }
