@@ -1,19 +1,12 @@
 import crypto from 'node:crypto';
 import { inspectTrustSafetyText } from './trustSafety.js';
-import { calculateMarketplaceShipping } from './marketplaceShipping.js';
+import { calculateMarketplaceShipping, ensureMarketplaceShippingSchema, isMarketplaceDestinationCovered } from './marketplaceShipping.js';
 
 export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
   let schemaPromise;
   const ensureSchema = async () => {
     if (!schemaPromise) {
-      schemaPromise = pool.query(`
-        ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS fulfillment_method TEXT NOT NULL DEFAULT 'DELIVERY';
-        ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS shipping_address JSONB;
-        ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS buyer_note TEXT NOT NULL DEFAULT '';
-        ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS shipping_method TEXT NOT NULL DEFAULT 'SELLER_ARRANGED';
-        ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS shipping_note TEXT NOT NULL DEFAULT '';
-        ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS shipping_fee_policy TEXT NOT NULL DEFAULT 'FLAT_BASE';
-      `).catch((error) => { schemaPromise = undefined; throw error; });
+      schemaPromise = ensureMarketplaceShippingSchema(pool).catch((error) => { schemaPromise = undefined; throw error; });
     }
     return schemaPromise;
   };
@@ -52,6 +45,7 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
       if (safety.marketplace_safety) { const safetyResult = inspectTrustSafetyText([listing.title, listing.description, listing.location].filter(Boolean).join(' ')); if (safetyResult.shouldBlock) { await client.query('ROLLBACK'); return res.status(422).json({ error: 'listing blocked by marketplace safety protection', code: 'SAFETY_BLOCK' }); } }
       if (method === 'DELIVERY' && !listing.delivery_available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery is no longer available for this listing' }); }
       if (method === 'PICKUP' && !listing.pickup_available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'pickup is no longer available for this listing' }); }
+      if (method === 'DELIVERY' && !(await isMarketplaceDestinationCovered(client, listing.id, address))) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'seller does not currently deliver to this destination', code: 'DESTINATION_NOT_COVERED' }); }
       const available = Number(listing.quantity) - Number(listing.reserved_quantity || 0);
       if (quantity > available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'requested quantity is not available', code: 'INSUFFICIENT_STOCK' }); }
       const unitPrice = Number(listing.price); const productSubtotal = Math.round(unitPrice * quantity * 100) / 100;
