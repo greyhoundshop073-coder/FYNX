@@ -112,15 +112,37 @@ function positiveInt(value, max = Number.MAX_SAFE_INTEGER) {
 }
 
 async function validateCreativeReference(client, ownerId, creativeType, creativeRef) {
-  if (creativeType !== "product") return true;
   if (typeof creativeRef !== "string" || !/^[0-9]+$/.test(creativeRef)) return false;
-  const listingId = positiveInt(creativeRef);
-  if (!listingId) return false;
-  const result = await client.query(
-    "SELECT id FROM marketplace_listings WHERE id=$1 AND seller_id=$2 AND COALESCE(active,TRUE)=TRUE FOR SHARE",
-    [listingId, ownerId]
-  );
-  return result.rowCount > 0;
+  const referenceId = positiveInt(creativeRef);
+  if (!referenceId) return false;
+  if (creativeType === "product") {
+    const result = await client.query(
+      "SELECT id FROM marketplace_listings WHERE id=$1 AND seller_id=$2 AND COALESCE(active,TRUE)=TRUE FOR SHARE",
+      [referenceId, ownerId]
+    );
+    return result.rowCount > 0;
+  }
+  if (creativeType === "business") {
+    const result = await client.query(
+      "SELECT id FROM business_profiles WHERE id=$1 AND owner_id=$2 AND COALESCE(active,TRUE)=TRUE FOR SHARE",
+      [referenceId, ownerId]
+    );
+    return result.rowCount > 0;
+  }
+  if (creativeType === "post") {
+    const result = await client.query(
+      "SELECT id FROM social_posts WHERE id=$1 AND author_id=$2 FOR SHARE",
+      [referenceId, ownerId]
+    );
+    return result.rowCount > 0;
+  }
+  return false;
+}
+
+function creativeReferenceError(creativeType) {
+  if (creativeType === "product") return "product creative must reference an active marketplace listing owned by the advertiser";
+  if (creativeType === "business") return "business creative must reference an active business profile owned by the advertiser";
+  return "post creative must reference a social post owned by the advertiser";
 }
 
 export function registerMarketplaceAdvertisingRoutes({ app }) {
@@ -142,7 +164,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     if (typeof name !== "string" || name.trim().length < 1 || name.length > 120) return res.status(400).json({ error: "invalid campaign name" });
     if (!CREATIVE_TYPES.has(creativeType)) return res.status(400).json({ error: "invalid creative type" });
     if (creativeRef !== null && (typeof creativeRef !== "string" || creativeRef.length > 200)) return res.status(400).json({ error: "invalid creative reference" });
-    if (creativeType === "product" && !creativeRef) return res.status(400).json({ error: "product creative requires a marketplace listing reference" });
+    if (creativeType !== "product" && !creativeRef) return res.status(400).json({ error: `${creativeType} creative requires a canonical reference` });
     if (typeof headline !== "string" || headline.length > 180 || typeof body !== "string" || body.length > 5000) return res.status(400).json({ error: "invalid creative content" });
     if (destinationUrl !== null && (typeof destinationUrl !== "string" || destinationUrl.length > 2000 || !/^https:\/\//i.test(destinationUrl))) return res.status(400).json({ error: "destination must use HTTPS" });
     const parsedTargeting = parseTargeting(targeting);
@@ -162,7 +184,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       }
       if (!(await validateCreativeReference(client, auth.userId, creativeType, creativeRef))) {
         await client.query("ROLLBACK");
-        return res.status(404).json({ error: "product creative must reference an active marketplace listing owned by the advertiser" });
+        return res.status(404).json({ error: creativeReferenceError(creativeType) });
       }
       const inserted = await client.query(`INSERT INTO marketplace_ad_campaigns
         (owner_id,name,creative_type,creative_ref,headline,body,destination_url,targeting,daily_budget_kobo,total_budget_kobo,starts_at,ends_at)
@@ -331,6 +353,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
         FROM marketplace_ad_campaigns c WHERE m.campaign_id=$2 AND c.id=m.campaign_id AND c.status='active' RETURNING m.*`, [metric, id]);
       if (!result.rowCount) return res.status(404).json({ error: "campaign not active" });
       return res.status(204).end();
-    } catch { return res.status(500).json({ error: "unable to record metric" }); }
+    } catch { return res.status(500).json({ error: "unable to record metric" });
+    }
   });
 }
