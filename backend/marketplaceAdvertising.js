@@ -111,6 +111,18 @@ function positiveInt(value, max = Number.MAX_SAFE_INTEGER) {
   return Number.isSafeInteger(number) && number >= 0 && number <= max ? number : null;
 }
 
+async function validateCreativeReference(client, ownerId, creativeType, creativeRef) {
+  if (creativeType !== "product") return true;
+  if (typeof creativeRef !== "string" || !/^[0-9]+$/.test(creativeRef)) return false;
+  const listingId = positiveInt(creativeRef);
+  if (!listingId) return false;
+  const result = await client.query(
+    "SELECT id FROM marketplace_listings WHERE id=$1 AND seller_id=$2 AND COALESCE(active,TRUE)=TRUE FOR SHARE",
+    [listingId, ownerId]
+  );
+  return result.rowCount > 0;
+}
+
 export function registerMarketplaceAdvertisingRoutes({ app }) {
   if (!app || !pool) return;
   void ready().catch(error => console.error("[fynx-ads] schema initialization failed", error));
@@ -130,6 +142,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     if (typeof name !== "string" || name.trim().length < 1 || name.length > 120) return res.status(400).json({ error: "invalid campaign name" });
     if (!CREATIVE_TYPES.has(creativeType)) return res.status(400).json({ error: "invalid creative type" });
     if (creativeRef !== null && (typeof creativeRef !== "string" || creativeRef.length > 200)) return res.status(400).json({ error: "invalid creative reference" });
+    if (creativeType === "product" && !creativeRef) return res.status(400).json({ error: "product creative requires a marketplace listing reference" });
     if (typeof headline !== "string" || headline.length > 180 || typeof body !== "string" || body.length > 5000) return res.status(400).json({ error: "invalid creative content" });
     if (destinationUrl !== null && (typeof destinationUrl !== "string" || destinationUrl.length > 2000 || !/^https:\/\//i.test(destinationUrl))) return res.status(400).json({ error: "destination must use HTTPS" });
     const parsedTargeting = parseTargeting(targeting);
@@ -146,6 +159,10 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
           await client.query("COMMIT");
           return res.status(200).json({ campaign: prior.rows[0], idempotent: true });
         }
+      }
+      if (!(await validateCreativeReference(client, auth.userId, creativeType, creativeRef))) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "product creative must reference an active marketplace listing owned by the advertiser" });
       }
       const inserted = await client.query(`INSERT INTO marketplace_ad_campaigns
         (owner_id,name,creative_type,creative_ref,headline,body,destination_url,targeting,daily_budget_kobo,total_budget_kobo,starts_at,ends_at)
