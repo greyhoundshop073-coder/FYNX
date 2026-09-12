@@ -27,6 +27,8 @@ private data class SellerOrderRow(
     val tracking: String?
 )
 
+private fun money(currency: String, amount: Double): String = "$currency ${String.format(Locale.US, "%,.2f", amount)}"
+
 @Composable
 fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
     var open by remember { mutableStateOf(false) }
@@ -105,6 +107,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
         var settlementLoading by remember(order.id) { mutableStateOf(true) }
         var settlement by remember(order.id) { mutableStateOf<JSONObject?>(null) }
         var payoutQueued by remember(order.id) { mutableStateOf(false) }
+        var retryQueued by remember(order.id) { mutableStateOf(false) }
 
         LaunchedEffect(order.id) {
             settlementLoading = true
@@ -115,22 +118,49 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
         }
 
         AlertDialog(
-            onDismissRequest = { if (!busy && !payoutQueued) selected = null },
+            onDismissRequest = { if (!busy && !payoutQueued && !retryQueued) selected = null },
             title = { Text(order.status) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(order.title, style = MaterialTheme.typography.titleMedium)
                     Text("Buyer: ${order.buyerName}")
-                    Text("Order total: ${order.currency} ${String.format(Locale.US, "%,.2f", order.total)}")
+                    Text("Order total: ${money(order.currency, order.total)}")
                     if (settlementLoading) CircularProgressIndicator(Modifier.size(20.dp))
                     settlement?.let { s ->
                         val accounting = s.optJSONObject("accounting")
                         val protection = s.optJSONObject("protection")
+                        val escrow = s.optJSONObject("escrow")
+                        val operations = s.optJSONArray("operations")
+                        val ledger = s.optJSONArray("ledger")
                         if (accounting != null) {
-                            Text("Seller net: ${accounting.optString("currency", order.currency)} ${String.format(Locale.US, "%,.2f", accounting.optDouble("sellerNetAmount", 0.0))}", style = MaterialTheme.typography.bodyMedium)
-                            Text("Marketplace fee: ${accounting.optString("currency", order.currency)} ${String.format(Locale.US, "%,.2f", accounting.optDouble("marketplaceFee", 0.0))}", style = MaterialTheme.typography.bodySmall)
+                            Text("Product subtotal: ${money(accounting.optString("currency", order.currency), accounting.optDouble("productSubtotal", 0.0))}", style = MaterialTheme.typography.bodySmall)
+                            Text("Delivery fee: ${money(accounting.optString("currency", order.currency), accounting.optDouble("deliveryFee", 0.0))}", style = MaterialTheme.typography.bodySmall)
+                            Text("Marketplace fee: ${money(accounting.optString("currency", order.currency), accounting.optDouble("marketplaceFee", 0.0))}", style = MaterialTheme.typography.bodySmall)
+                            Text("Provider fee: ${money(accounting.optString("currency", order.currency), accounting.optDouble("paymentProviderFee", 0.0))}", style = MaterialTheme.typography.bodySmall)
+                            Text("Discount: ${money(accounting.optString("currency", order.currency), accounting.optDouble("discountAmount", 0.0))}", style = MaterialTheme.typography.bodySmall)
+                            Text("Buyer paid: ${money(accounting.optString("currency", order.currency), accounting.optDouble("buyerTotal", 0.0))}", style = MaterialTheme.typography.bodySmall)
+                            Text("Seller net: ${money(accounting.optString("currency", order.currency), accounting.optDouble("sellerNetAmount", 0.0))}", style = MaterialTheme.typography.bodyMedium)
                         }
                         if (protection != null) Text("Protected funds: ${protection.optString("funds", "UNKNOWN")}", style = MaterialTheme.typography.bodySmall)
+                        if (escrow != null) Text("Escrow: ${escrow.optString("status", "UNKNOWN")} • ${money(escrow.optString("currency", order.currency), escrow.optDouble("amount", 0.0))}", style = MaterialTheme.typography.bodySmall)
+                        if (operations != null && operations.length() > 0) {
+                            Text("Financial operations", style = MaterialTheme.typography.titleSmall)
+                            for (i in 0 until operations.length()) {
+                                val op = operations.optJSONObject(i) ?: continue
+                                val ref = op.optString("provider_reference").ifBlank { "No provider reference" }
+                                val reason = op.optString("failure_reason")
+                                Text("${op.optString("operation_type")} • ${op.optString("status")} • ${money(op.optString("currency", order.currency), op.optDouble("amount", 0.0))}", style = MaterialTheme.typography.bodySmall)
+                                if (ref != "No provider reference") Text("Provider: $ref", style = MaterialTheme.typography.bodySmall)
+                                if (reason.isNotBlank()) Text("Reason: $reason", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        if (ledger != null && ledger.length() > 0) {
+                            Text("Ledger history", style = MaterialTheme.typography.titleSmall)
+                            for (i in 0 until ledger.length()) {
+                                val entry = ledger.optJSONObject(i) ?: continue
+                                Text("${entry.optString("entry_type")} • ${money(entry.optString("currency", order.currency), entry.optDouble("amount", 0.0))}", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
                     }
                     if (order.fulfillment == "DELIVERY") {
                         val a = order.address
@@ -139,7 +169,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                     } else Text("Buyer selected pickup. Confirm the handover when the buyer receives the item.")
                     if (order.status == "PAID" && order.fulfillment == "DELIVERY") OutlinedTextField(tracking, { tracking = it }, label = { Text("Tracking reference (optional)") }, singleLine = true)
                     message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    if (payoutQueued) Text("Payout release has been queued. FYNX will verify the provider transfer before marking it paid.", color = MaterialTheme.colorScheme.primary)
+                    if (payoutQueued || retryQueued) Text("Payout processing has been queued. FYNX will verify the provider transfer before marking it paid.", color = MaterialTheme.colorScheme.primary)
                 }
             },
             confirmButton = {
@@ -155,7 +185,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                             busy = false
                         }
                     }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(if (order.fulfillment == "PICKUP") "Confirm pickup handover" else "Mark shipped") }
-                    order.status == "COMPLETED" -> Button(enabled = !busy && !payoutQueued, onClick = {
+                    order.status == "COMPLETED" -> Button(enabled = !busy && !payoutQueued && !retryQueued, onClick = {
                         busy = true
                         scope.launch {
                             FynxBackendClient.postJson(context, "/api/marketplace/settlement/release/${order.id}", JSONObject().toString())
@@ -167,7 +197,26 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                     else -> TextButton(onClick = { selected = null }) { Text("Done") }
                 }
             },
-            dismissButton = { TextButton(enabled = !busy && !payoutQueued, onClick = { selected = null }) { Text("Close") } }
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val hasFailedPayout = settlement?.optJSONArray("operations")?.let { ops ->
+                        (0 until ops.length()).any { i ->
+                            val op = ops.optJSONObject(i)
+                            op != null && op.optString("operation_type") == "PAYOUT_RELEASE" && op.optString("status") == "FAILED"
+                        }
+                    } == true
+                    if (hasFailedPayout) TextButton(enabled = !busy && !payoutQueued && !retryQueued, onClick = {
+                        busy = true
+                        scope.launch {
+                            FynxBackendClient.postJson(context, "/api/marketplace/settlement/retry/${order.id}", JSONObject().toString())
+                                .onSuccess { retryQueued = true; onChanged() }
+                                .onFailure { message = it.message ?: "Payout retry is not currently available." }
+                            busy = false
+                        }
+                    }) { Text(if (retryQueued) "Retry queued" else "Retry payout") }
+                    TextButton(enabled = !busy && !payoutQueued && !retryQueued, onClick = { selected = null }) { Text("Close") }
+                }
+            }
         )
     }
 }

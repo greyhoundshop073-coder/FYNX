@@ -2,6 +2,7 @@ import http from "node:http";
 import { installFailureRecovery, createIdempotencyStore } from "./reliability.js";
 import { createBackgroundJobQueue } from "./backgroundJobs.js";
 import { registerMarketplaceSettlementRoutes } from "./marketplaceSettlement.js";
+import { registerMarketplacePayoutRetryRoutes } from "./marketplacePayoutRetry.js";
 import { registerMarketplaceSettlementWorker } from "./marketplaceSettlementWorker.js";
 import { registerMarketplacePaymentExpiryWorker } from "./marketplacePaymentExpiry.js";
 import { registerMarketplaceInspectionExpiryWorker } from "./marketplaceInspectionExpiry.js";
@@ -37,6 +38,7 @@ http.createServer = function fynxCreateServer(...args) {
       installRequestResourceGuard(app);
       installApiAbuseGuard(app);
       registerMarketplaceSettlementRoutes({ app });
+      registerMarketplacePayoutRetryRoutes({ app });
       registerMarketplaceProtectionRoutes({ app });
       registerMarketplaceProtectionResolutionRoutes({ app });
       registerPrivacyRoutes({ app });
