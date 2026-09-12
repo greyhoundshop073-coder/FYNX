@@ -139,7 +139,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (!['SHIPPED','DELIVERED'].includes(order.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order is not ready for delivery confirmation' }); }
       const deadline = new Date(Date.now() + 48 * 60 * 60 * 1000);
       const updated = await client.query(`UPDATE marketplace_orders SET status='INSPECTION',delivered_at=COALESCE(delivered_at,NOW()),inspection_deadline=$1,updated_at=NOW() WHERE id=$2 RETURNING *`, [deadline.toISOString(), id]);
-      await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'DELIVERY_CONFIRMED',$3,'INSPECTION',$4::jsonb)`, [id, req.user.sub, order.status, JSON.stringify({ inspectionHours: 48 })]);
+      await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'DELIVERY_CONFIRMED',$3,'INSPECTION',$4::jsonb)`, [id, req.user.sub, order.status, JSON.stringify({ inspectionHours: 48, fulfillmentMethod: order.fulfillment_method })]);
       await client.query('COMMIT');
       return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, inspectionDeadline: updated.rows[0].inspection_deadline } });
     } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace confirm delivery', error); return res.status(500).json({ error: 'delivery confirmation failed' }); }
@@ -155,9 +155,19 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
       if (!isBuyer(order, req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the buyer can complete this order' }); }
       if (order.status !== 'INSPECTION') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order is not in inspection' }); }
-      const updated = await client.query(`UPDATE marketplace_orders SET status='COMPLETED',completed_at=NOW(),updated_at=NOW() WHERE id=$1 RETURNING *`, [id]);
+      const activeDispute = (await client.query(`
+        SELECT 1 FROM marketplace_order_disputes
+        WHERE order_id=$1 AND status IN ('OPEN','UNDER_REVIEW')
+        UNION ALL
+        SELECT 1 FROM marketplace_protection_cases
+        WHERE order_id=$1 AND status IN ('OPEN','UNDER_REVIEW')
+        LIMIT 1
+      `, [id])).rowCount > 0;
+      if (activeDispute) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order has an active protection case or dispute' }); }
+      const updated = await client.query(`UPDATE marketplace_orders SET status='COMPLETED',completed_at=NOW(),updated_at=NOW() WHERE id=$1 AND status='INSPECTION' RETURNING *`, [id]);
+      if (!updated.rows[0]) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order changed before completion' }); }
       await client.query('UPDATE marketplace_listings SET quantity=GREATEST(0,quantity-$1),reserved_quantity=GREATEST(0,reserved_quantity-$1),active=CASE WHEN quantity-$1 <= 0 THEN FALSE ELSE active END,updated_at=NOW() WHERE id=$2', [order.quantity, order.listing_id]);
-      await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'ORDER_COMPLETED',$3,'COMPLETED',$4::jsonb)`, [id, req.user.sub, order.status, JSON.stringify({ payout: 'eligible_for_release' })]);
+      await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'ORDER_COMPLETED',$3,'COMPLETED',$4::jsonb)`, [id, req.user.sub, order.status, JSON.stringify({ payout: 'eligible_for_release', fulfillmentMethod: order.fulfillment_method })]);
       await client.query('COMMIT');
       return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, completedAt: updated.rows[0].completed_at }, payout: { status: 'eligible_for_release' } });
     } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace complete', error); return res.status(500).json({ error: 'order completion failed' }); }
