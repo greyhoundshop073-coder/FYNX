@@ -17,10 +17,14 @@ const checks = [
   ['completion is buyer-only', completion.includes("only the buyer can complete this order")],
   ['completion requires inspection', completion.includes("order.status !== 'INSPECTION'")],
   ['active disputes/protection cases block completion', completion.includes("status IN ('OPEN','UNDER_REVIEW')") && completion.includes('marketplace_protection_cases')],
-  ['completion consumes reserved inventory once', completion.includes('reserved_quantity=GREATEST(0,reserved_quantity-$1)') && completion.includes('status=\'INSPECTION\'' )],
+  ['completion consumes reserved inventory once', completion.includes('reserved_quantity=GREATEST(0,reserved_quantity-$1)') && completion.includes("status='INSPECTION'")],
   ['inspection expiry has a dedicated worker', expiry.includes('marketplace.inspection.expire') || expiry.includes('inspection expiry')],
   ['settlement requires completed/release-pending protection', settlement.includes("order.status !== 'COMPLETED'") || settlement.includes("escrow.status !== 'RELEASE_PENDING'")],
-  ['protection routes are wired', protection.includes('marketplace_order_disputes') && protection.includes('marketplace_protection_cases')]
+  ['protection routes are wired',
+    protection.includes("app.post('/api/marketplace/protection/order/:id/dispute'") &&
+    protection.includes("app.post('/api/marketplace/orders/:id/disputes'") &&
+    protection.includes("app.post('/api/marketplace/protection/order/:id/refund-request'") &&
+    protection.includes('marketplace_protection_cases')]
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
