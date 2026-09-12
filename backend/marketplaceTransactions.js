@@ -55,7 +55,10 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
     const fixed = Math.max(0, Number(process.env.FYNX_MARKETPLACE_FEE_FIXED || '0') || 0);
     const buyerShare = Math.min(10000, Math.max(0, Number.parseInt(process.env.FYNX_MARKETPLACE_FEE_BUYER_SHARE_BPS || '5000', 10) || 0));
     const version = String(process.env.FYNX_MARKETPLACE_FEE_POLICY_VERSION || '1').trim().slice(0, 64) || '1';
-    const providerFeePayer = ['BUYER','SELLER','FYNX'].includes(String(process.env.FYNX_MARKETPLACE_PROVIDER_FEE_PAYER || 'FYNX').toUpperCase()) ? String(process.env.FYNX_MARKETPLACE_PROVIDER_FEE_PAYER || 'FYNX').toUpperCase() : 'FYNX';
+    // Paystack provider fees are recorded after settlement, but this order model does not yet have a deterministic provider-fee quote. Until that exists, only FYNX may be configured as payer; BUYER/SELLER would otherwise be a false accounting promise.
+    const requestedProviderFeePayer = String(process.env.FYNX_MARKETPLACE_PROVIDER_FEE_PAYER || 'FYNX').toUpperCase();
+    const providerFeePayer = requestedProviderFeePayer === 'FYNX' ? 'FYNX' : null;
+    if (!providerFeePayer) throw new Error('unsupported marketplace provider fee payer; only FYNX is supported until provider-fee pricing is implemented');
     return { mode, bps, fixed, buyerShare, version, providerFeePayer };
   };
 
