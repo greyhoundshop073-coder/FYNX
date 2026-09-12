@@ -26,6 +26,19 @@ object FynxMarketplaceClient {
         val active: Boolean = true
     )
 
+    data class ShippingSettings(
+        val method: String,
+        val note: String,
+        val baseFee: Double,
+        val additionalItemFee: Double,
+        val feeCap: Double?,
+        val deliveryAvailable: Boolean,
+        val pickupAvailable: Boolean,
+        val coverage: List<Coverage>
+    )
+
+    data class Coverage(val country: String, val state: String = "", val city: String = "")
+
     suspend fun listings(context: Context, query: String = "", category: String = ""): Result<List<Listing>> {
         val discovery = FynxDiscoveryClient.marketplaceDiscovery(context, query, category)
         if (discovery.isSuccess) return discovery
@@ -52,6 +65,63 @@ object FynxMarketplaceClient {
 
     suspend fun myListings(context: Context): Result<List<Listing>> =
         FynxBackendClient.get(context, "/api/marketplace/my-listings").mapCatching(::parseListings)
+
+    suspend fun shippingSettings(context: Context, listingId: String): Result<ShippingSettings> {
+        val id = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
+        return FynxBackendClient.get(context, "/api/marketplace/listings/$id/shipping").mapCatching { raw ->
+            val s = JSONObject(raw).getJSONObject("shipping")
+            val rows = s.optJSONArray("coverage") ?: JSONArray()
+            val coverage = buildList {
+                for (i in 0 until rows.length()) {
+                    val row = rows.optJSONObject(i) ?: continue
+                    add(Coverage(row.optString("country"), row.optString("state"), row.optString("city")))
+                }
+            }
+            ShippingSettings(
+                method = s.optString("method", "SELLER_ARRANGED"),
+                note = s.optString("note"),
+                baseFee = s.optDouble("baseFee", 0.0),
+                additionalItemFee = s.optDouble("additionalItemFee", 0.0),
+                feeCap = if (s.isNull("feeCap")) null else s.optDouble("feeCap"),
+                deliveryAvailable = s.optBoolean("deliveryAvailable"),
+                pickupAvailable = s.optBoolean("pickupAvailable", true),
+                coverage = coverage
+            )
+        }
+    }
+
+    suspend fun saveShippingSettings(
+        context: Context,
+        listingId: String,
+        settings: ShippingSettings
+    ): Result<ShippingSettings> {
+        val id = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
+        require(settings.baseFee >= 0 && settings.additionalItemFee >= 0) { "Shipping fees cannot be negative." }
+        require(settings.feeCap == null || settings.feeCap >= settings.baseFee) { "Shipping fee cap cannot be below the base fee." }
+        val coverage = JSONArray().apply {
+            settings.coverage.distinctBy { "${it.country.trim().uppercase()}|${it.state.trim().uppercase()}|${it.city.trim().uppercase()}" }.take(100).forEach {
+                put(JSONObject().put("country", it.country.trim()).put("state", it.state.trim()).put("city", it.city.trim()))
+            }
+        }
+        val body = JSONObject()
+            .put("method", settings.method.trim().uppercase().ifBlank { "SELLER_ARRANGED" })
+            .put("note", settings.note.trim().take(500))
+            .put("baseFee", settings.baseFee)
+            .put("additionalItemFee", settings.additionalItemFee)
+            .put("feeCap", settings.feeCap ?: JSONObject.NULL)
+            .put("coverage", coverage)
+        return FynxBackendClient.putJson(context, "/api/marketplace/listings/$id/shipping", body.toString()).mapCatching { raw ->
+            val s = JSONObject(raw).getJSONObject("shipping")
+            val rows = s.optJSONArray("coverage") ?: JSONArray()
+            val parsed = buildList {
+                for (i in 0 until rows.length()) {
+                    val row = rows.optJSONObject(i) ?: continue
+                    add(Coverage(row.optString("country"), row.optString("state"), row.optString("city")))
+                }
+            }
+            ShippingSettings(s.optString("method", "SELLER_ARRANGED"), s.optString("note"), s.optDouble("baseFee", 0.0), s.optDouble("additionalItemFee", 0.0), if (s.isNull("feeCap")) null else s.optDouble("feeCap"), settings.deliveryAvailable, settings.pickupAvailable, parsed)
+        }
+    }
 
     suspend fun createListing(
         context: Context,
