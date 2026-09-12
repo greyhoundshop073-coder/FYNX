@@ -13,6 +13,7 @@ const checks = [
   ['shipping is seller-only', completion.includes("only the seller can ship this order")],
   ['shipping requires paid order', completion.includes("order.status !== 'PAID'")],
   ['pickup cannot use the shipping transition', completion.includes("order.fulfillment_method === 'PICKUP'") && completion.includes('pickup orders require seller handover confirmation')],
+  ['delivery shipping blocks active protection conflicts', completion.includes("app.post('/api/marketplace/orders/:id/ship'") && completion.includes("marketplace_order_disputes WHERE order_id=$1 AND status IN ('OPEN','UNDER_REVIEW')") && completion.includes("marketplace_protection_cases WHERE order_id=$1 AND status IN ('OPEN','UNDER_REVIEW')")],
   ['pickup handover route is seller-only and pickup-only', completion.includes("/api/marketplace/orders/:id/pickup-handover") && completion.includes('only the seller can confirm pickup handover') && completion.includes("order.fulfillment_method !== 'PICKUP'")],
   ['pickup handover requires paid order and blocks active protection conflicts', completion.includes('only paid orders can be handed over for pickup') && completion.includes('PICKUP_HANDOVER_CONFIRMED') && completion.includes('marketplace_protection_cases')],
   ['delivery confirmation is buyer-only', completion.includes("only the buyer can confirm delivery")],
