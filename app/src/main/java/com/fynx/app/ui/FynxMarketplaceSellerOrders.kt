@@ -23,11 +23,27 @@ private data class SellerOrderRow(
     val currency: String,
     val status: String,
     val fulfillment: String,
+    val fulfillmentStatus: String,
     val address: JSONObject?,
     val tracking: String?
 )
 
 private fun money(currency: String, amount: Double): String = "$currency ${String.format(Locale.US, "%,.2f", amount)}"
+
+private fun fulfillmentLabel(state: String): String = when (state) {
+    "PAID" -> "Paid — ready to prepare"
+    "PREPARING" -> "Preparing"
+    "DISPATCHED" -> "Dispatched"
+    "IN_TRANSIT" -> "In transit"
+    "DELIVERED" -> "Delivered — waiting for buyer inspection"
+    "READY_FOR_PICKUP" -> "Ready for pickup"
+    "PICKUP_COMPLETED" -> "Pickup completed"
+    "INSPECTION" -> "Buyer inspection"
+    "COMPLETED" -> "Completed"
+    "FAILED_DELIVERY" -> "Failed delivery"
+    "RETURNED" -> "Returned"
+    else -> state.ifBlank { "Pending" }
+}
 
 @Composable
 fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
@@ -56,6 +72,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                                 currency = o.optString("currency", "NGN"),
                                 status = o.optString("status"),
                                 fulfillment = o.optString("fulfillmentMethod", "DELIVERY"),
+                                fulfillmentStatus = o.optString("fulfillmentStatus").ifBlank { o.optString("status") },
                                 address = o.optJSONObject("shippingAddress"),
                                 tracking = o.optString("trackingReference").takeIf { it.isNotBlank() }
                             ))
@@ -89,6 +106,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                                 Text("${order.currency} ${String.format(Locale.US, "%,.2f", order.total)} • ${order.status}")
                                 if (order.buyerName.isNotBlank()) Text("Buyer: ${order.buyerName}", style = MaterialTheme.typography.bodySmall)
                                 Text(if (order.fulfillment == "PICKUP") "Pickup" else "Delivery", style = MaterialTheme.typography.bodySmall)
+                                Text("Fulfillment: ${fulfillmentLabel(order.fulfillmentStatus)}", style = MaterialTheme.typography.bodySmall)
                                 order.tracking?.let { Text("Tracking: $it", style = MaterialTheme.typography.bodySmall) }
                             }
                         }
@@ -117,6 +135,22 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
             settlementLoading = false
         }
 
+        fun progress(state: String, note: String = "") {
+            busy = true
+            scope.launch {
+                FynxBackendClient.postJson(
+                    context,
+                    "/api/marketplace/orders/${order.id}/fulfillment-progress",
+                    JSONObject().put("state", state).put("note", note).toString()
+                ).onSuccess {
+                    selected = null
+                    load()
+                    onChanged()
+                }.onFailure { message = it.message ?: "Could not update fulfillment progress." }
+                busy = false
+            }
+        }
+
         AlertDialog(
             onDismissRequest = { if (!busy && !payoutQueued && !retryQueued) selected = null },
             title = { Text(order.status) },
@@ -125,6 +159,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                     Text(order.title, style = MaterialTheme.typography.titleMedium)
                     Text("Buyer: ${order.buyerName}")
                     Text("Order total: ${money(order.currency, order.total)}")
+                    Text("Fulfillment: ${fulfillmentLabel(order.fulfillmentStatus)}", style = MaterialTheme.typography.bodyMedium)
                     if (settlementLoading) CircularProgressIndicator(Modifier.size(20.dp))
                     settlement?.let { s ->
                         val accounting = s.optJSONObject("accounting")
@@ -174,17 +209,28 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
             },
             confirmButton = {
                 when {
-                    order.status == "PAID" -> Button(enabled = !busy, onClick = {
+                    order.status == "PAID" && order.fulfillment == "DELIVERY" && order.fulfillmentStatus == "PAID" -> Button(enabled = !busy, onClick = { progress("PREPARING") }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Start preparing") }
+                    order.status == "PAID" && order.fulfillment == "DELIVERY" && order.fulfillmentStatus == "PREPARING" -> Button(enabled = !busy, onClick = {
                         busy = true
                         scope.launch {
-                            val path = if (order.fulfillment == "PICKUP") "/api/marketplace/orders/${order.id}/pickup-handover" else "/api/marketplace/orders/${order.id}/ship"
-                            val body = if (order.fulfillment == "PICKUP") JSONObject().toString() else JSONObject().put("trackingReference", tracking.trim()).toString()
-                            FynxBackendClient.postJson(context, path, body)
+                            FynxBackendClient.postJson(context, "/api/marketplace/orders/${order.id}/ship", JSONObject().put("trackingReference", tracking.trim()).toString())
                                 .onSuccess { selected = null; load(); onChanged() }
-                                .onFailure { message = it.message ?: if (order.fulfillment == "PICKUP") "Could not confirm pickup handover." else "Could not mark order as shipped." }
+                                .onFailure { message = it.message ?: "Could not mark order as dispatched." }
                             busy = false
                         }
-                    }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(if (order.fulfillment == "PICKUP") "Confirm pickup handover" else "Mark shipped") }
+                    }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Mark dispatched") }
+                    order.status == "SHIPPED" && order.fulfillment == "DELIVERY" && order.fulfillmentStatus == "DISPATCHED" -> Button(enabled = !busy, onClick = { progress("IN_TRANSIT") }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Mark in transit") }
+                    order.status == "SHIPPED" && order.fulfillment == "DELIVERY" && order.fulfillmentStatus == "IN_TRANSIT" -> Button(enabled = !busy, onClick = { progress("DELIVERED") }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Mark delivered") }
+                    order.status == "PAID" && order.fulfillment == "PICKUP" && order.fulfillmentStatus == "PAID" -> Button(enabled = !busy, onClick = { progress("READY_FOR_PICKUP") }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Ready for pickup") }
+                    order.status == "PAID" && order.fulfillment == "PICKUP" && order.fulfillmentStatus == "READY_FOR_PICKUP" -> Button(enabled = !busy, onClick = {
+                        busy = true
+                        scope.launch {
+                            FynxBackendClient.postJson(context, "/api/marketplace/orders/${order.id}/pickup-handover", JSONObject().toString())
+                                .onSuccess { selected = null; load(); onChanged() }
+                                .onFailure { message = it.message ?: "Could not confirm pickup handover." }
+                            busy = false
+                        }
+                    }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Confirm pickup handover") }
                     order.status == "COMPLETED" -> Button(enabled = !busy && !payoutQueued && !retryQueued, onClick = {
                         busy = true
                         scope.launch {
