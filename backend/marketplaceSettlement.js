@@ -40,6 +40,27 @@ async function ensureSchema() {
   if (!pool) throw Object.assign(new Error('DATABASE_URL is not configured'), { code: 'DATABASE_NOT_CONFIGURED' });
   if (!schemaPromise) {
     schemaPromise = pool.query(`
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS product_subtotal NUMERIC(14,2);
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS marketplace_fee NUMERIC(14,2);
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS marketplace_fee_buyer NUMERIC(14,2);
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS marketplace_fee_seller NUMERIC(14,2);
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS payment_provider_fee NUMERIC(14,2) NOT NULL DEFAULT 0;
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(14,2) NOT NULL DEFAULT 0;
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS buyer_total NUMERIC(14,2);
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS seller_net_amount NUMERIC(14,2);
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS fee_policy TEXT;
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS fee_policy_version TEXT;
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS provider_fee_payer TEXT;
+      UPDATE marketplace_orders SET product_subtotal=COALESCE(product_subtotal,ROUND(unit_price*quantity,2)),marketplace_fee=COALESCE(marketplace_fee,0),marketplace_fee_buyer=COALESCE(marketplace_fee_buyer,0),marketplace_fee_seller=COALESCE(marketplace_fee_seller,0),buyer_total=COALESCE(buyer_total,total_amount),seller_net_amount=COALESCE(seller_net_amount,total_amount),fee_policy=COALESCE(fee_policy,'ZERO'),fee_policy_version=COALESCE(fee_policy_version,'legacy'),provider_fee_payer=COALESCE(provider_fee_payer,'FYNX') WHERE product_subtotal IS NULL OR marketplace_fee IS NULL OR marketplace_fee_buyer IS NULL OR marketplace_fee_seller IS NULL OR buyer_total IS NULL OR seller_net_amount IS NULL OR fee_policy IS NULL OR fee_policy_version IS NULL OR provider_fee_payer IS NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN product_subtotal SET NOT NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN marketplace_fee SET NOT NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN marketplace_fee_buyer SET NOT NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN marketplace_fee_seller SET NOT NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN buyer_total SET NOT NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN seller_net_amount SET NOT NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN fee_policy SET NOT NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN fee_policy_version SET NOT NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN provider_fee_payer SET NOT NULL;
       CREATE TABLE IF NOT EXISTS marketplace_payout_accounts (
         id UUID PRIMARY KEY,
         seller_id BIGINT NOT NULL UNIQUE REFERENCES users(id) ON DELETE RESTRICT,
@@ -165,7 +186,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
     if (!orderId) return res.status(400).json({ error: 'invalid order id' });
     try {
       await ensureSchema();
-      const orderResult = await pool.query('SELECT id,buyer_id,seller_id,total_amount,currency,status FROM marketplace_orders WHERE id=$1', [orderId]);
+      const orderResult = await pool.query('SELECT id,buyer_id,seller_id,total_amount,buyer_total,product_subtotal,delivery_fee,marketplace_fee,marketplace_fee_buyer,marketplace_fee_seller,payment_provider_fee,discount_amount,seller_net_amount,fee_policy,fee_policy_version,provider_fee_payer,currency,status FROM marketplace_orders WHERE id=$1', [orderId]);
       const order = orderResult.rows[0];
       if (!order) return res.status(404).json({ error: 'order not found' });
       if (String(order.buyer_id) !== String(req.user.sub) && String(order.seller_id) !== String(req.user.sub)) return res.status(403).json({ error: 'order unavailable' });
@@ -174,6 +195,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
       const ledger = await pool.query('SELECT account,entry_type,amount,currency,idempotency_key,metadata,created_at FROM marketplace_ledger_entries WHERE order_id=$1 ORDER BY created_at ASC', [orderId]);
       return res.json({
         orderId: String(order.id), orderStatus: order.status,
+        accounting: { productSubtotal: Number(order.product_subtotal), deliveryFee: Number(order.delivery_fee), marketplaceFee: Number(order.marketplace_fee), marketplaceFeeBuyer: Number(order.marketplace_fee_buyer), marketplaceFeeSeller: Number(order.marketplace_fee_seller), paymentProviderFee: Number(order.payment_provider_fee), discountAmount: Number(order.discount_amount), buyerTotal: Number(order.buyer_total), sellerNetAmount: Number(order.seller_net_amount), feePolicy: order.fee_policy, feePolicyVersion: order.fee_policy_version, providerFeePayer: order.provider_fee_payer, currency: order.currency },
         protection: { enabled: true, funds: escrow ? escrow.status : 'NOT_INITIALIZED', payoutBlockedUntilCompletion: true, disputeBlocksPayout: true },
         escrow: escrow ? { id: String(escrow.id), amount: Number(escrow.amount), currency: escrow.currency, status: escrow.status, heldAt: escrow.held_at, releaseEligibleAt: escrow.release_eligible_at, releasedAt: escrow.released_at, refundedAt: escrow.refunded_at } : null,
         operations: operations.rows,
@@ -250,11 +272,13 @@ export function registerMarketplaceSettlementRoutes({ app }) {
         if (order.status !== 'COMPLETED' || escrow.status !== 'RELEASE_ELIGIBLE') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'payout is not yet eligible; buyer completion is required' }); }
         const payoutAccount = (await client.query('SELECT * FROM marketplace_payout_accounts WHERE seller_id=$1 AND active=TRUE AND verified=TRUE', [order.seller_id])).rows[0];
         if (!payoutAccount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'verified seller payout account is required' }); }
+        const sellerNetAmount = Number(order.seller_net_amount ?? order.total_amount), protectedAmount = Number(escrow.amount), marketplaceFee = Number(order.marketplace_fee ?? 0);
+        if (!Number.isFinite(sellerNetAmount) || sellerNetAmount <= 0 || !Number.isFinite(protectedAmount) || !Number.isFinite(marketplaceFee) || Math.round((sellerNetAmount + marketplaceFee) * 100) / 100 !== protectedAmount || String(order.currency).toUpperCase() !== String(escrow.currency).toUpperCase()) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order accounting does not reconcile with the protected escrow' }); }
         const key = `PAYOUT-${order.id}`;
         const existing = (await client.query('SELECT * FROM marketplace_financial_operations WHERE idempotency_key=$1 FOR UPDATE', [key])).rows[0];
         if (existing) { await client.query('COMMIT'); return res.json({ operation: existing, idempotent: true }); }
         const operationId = crypto.randomUUID();
-        const operation = await client.query(`INSERT INTO marketplace_financial_operations (id,order_id,operation_type,idempotency_key,status,provider,amount,currency,metadata) VALUES ($1,$2,'PAYOUT_RELEASE',$3,'PENDING','paystack',$4,$5,$6::jsonb) RETURNING *`, [operationId,order.id,key,order.total_amount,order.currency,JSON.stringify({ recipientCode: payoutAccount.recipient_code })]);
+        const operation = await client.query(`INSERT INTO marketplace_financial_operations (id,order_id,operation_type,idempotency_key,status,provider,amount,currency,metadata) VALUES ($1,$2,'PAYOUT_RELEASE',$3,'PENDING','paystack',$4,$5,$6::jsonb) RETURNING *`, [operationId,order.id,key,sellerNetAmount,order.currency,JSON.stringify({ recipientCode: payoutAccount.recipient_code, escrowAmount: protectedAmount, sellerNetAmount, marketplaceFee, marketplaceFeeBuyer: Number(order.marketplace_fee_buyer || 0), marketplaceFeeSeller: Number(order.marketplace_fee_seller || 0), feePolicy: order.fee_policy, feePolicyVersion: order.fee_policy_version })]);
         await client.query(`UPDATE marketplace_escrows SET status='RELEASE_PENDING',updated_at=NOW() WHERE id=$1`, [escrow.id]);
         await client.query('COMMIT');
         return res.status(202).json({ operation: operation.rows[0], message: 'payout release queued; provider transfer will be executed by the settlement worker' });
