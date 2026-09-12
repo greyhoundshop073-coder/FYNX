@@ -9,6 +9,8 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
         ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS fulfillment_method TEXT NOT NULL DEFAULT 'DELIVERY' CHECK (fulfillment_method IN ('DELIVERY','PICKUP'));
         ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS shipping_address JSONB;
         ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS buyer_note TEXT NOT NULL DEFAULT '';
+        ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS pickup_handover_at TIMESTAMPTZ;
+        ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS pickup_handover_by BIGINT;
         CREATE INDEX IF NOT EXISTS marketplace_orders_fulfillment_idx ON marketplace_orders (seller_id, status, updated_at DESC);
       `).catch((error) => {
         schemaPromise = undefined;
@@ -76,6 +78,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
         totalAmount: Number(row.total_amount), currency: row.currency, product: row.product_snapshot, status: row.status,
         fulfillmentMethod: row.fulfillment_method, shippingAddress: row.shipping_address, buyerNote: row.buyer_note,
         paymentReference: row.payment_reference, trackingReference: row.tracking_reference, shippedAt: row.shipped_at,
+        pickupHandoverAt: row.pickup_handover_at, pickupHandoverBy: row.pickup_handover_by ? String(row.pickup_handover_by) : null,
         deliveredAt: row.delivered_at, inspectionDeadline: row.inspection_deadline, completedAt: row.completed_at,
         createdAt: row.created_at, updatedAt: row.updated_at
       })) });
@@ -119,12 +122,39 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
       if (!isSeller(order, req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the seller can ship this order' }); }
       if (order.status !== 'PAID') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'only paid orders can be shipped' }); }
+      if (order.fulfillment_method === 'PICKUP') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'pickup orders require seller handover confirmation' }); }
       if (order.fulfillment_method === 'DELIVERY' && !order.shipping_address) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'buyer delivery details are missing' }); }
       const updated = await client.query(`UPDATE marketplace_orders SET status='SHIPPED',tracking_reference=$1,shipped_at=NOW(),updated_at=NOW() WHERE id=$2 RETURNING *`, [tracking || null, id]);
-      await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'ORDER_SHIPPED',$3,'SHIPPED',$4::jsonb)`, [id, req.user.sub, order.status, JSON.stringify({ trackingReference: tracking || null })]);
+      await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'ORDER_SHIPPED',$3,'SHIPPED',$4::jsonb)`, [id, req.user.sub, order.status, JSON.stringify({ trackingReference: tracking || null, fulfillmentMethod: order.fulfillment_method })]);
       await client.query('COMMIT');
       return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, trackingReference: updated.rows[0].tracking_reference, shippedAt: updated.rows[0].shipped_at } });
     } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace ship', error); return res.status(500).json({ error: 'order shipping failed' }); }
+    finally { client.release(); }
+  });
+
+  app.post('/api/marketplace/orders/:id/pickup-handover', auth, async (req, res) => {
+    const id = parseUuid(req.params.id); if (!id) return res.status(400).json({ error: 'invalid order id' });
+    const client = await pool.connect();
+    try {
+      await ensureSchema(); await client.query('BEGIN');
+      const order = (await client.query('SELECT * FROM marketplace_orders WHERE id=$1 FOR UPDATE', [id])).rows[0];
+      if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
+      if (!isSeller(order, req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the seller can confirm pickup handover' }); }
+      if (order.status !== 'PAID') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'only paid orders can be handed over for pickup' }); }
+      if (order.fulfillment_method !== 'PICKUP') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'pickup handover is only for pickup orders' }); }
+      const conflict = (await client.query(`
+        SELECT 1 FROM marketplace_order_disputes WHERE order_id=$1 AND status IN ('OPEN','UNDER_REVIEW')
+        UNION ALL
+        SELECT 1 FROM marketplace_protection_cases WHERE order_id=$1 AND status IN ('OPEN','UNDER_REVIEW')
+        LIMIT 1
+      `, [id])).rowCount > 0;
+      if (conflict) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order has an active protection case or dispute' }); }
+      const updated = await client.query(`UPDATE marketplace_orders SET status='SHIPPED',pickup_handover_at=NOW(),pickup_handover_by=$1,shipped_at=NOW(),updated_at=NOW() WHERE id=$2 AND status='PAID' RETURNING *`, [req.user.sub, id]);
+      if (!updated.rows[0]) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order changed before pickup handover' }); }
+      await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'PICKUP_HANDOVER_CONFIRMED',$3,'SHIPPED',$4::jsonb)`, [id, req.user.sub, order.status, JSON.stringify({ fulfillmentMethod: 'PICKUP' })]);
+      await client.query('COMMIT');
+      return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, pickupHandoverAt: updated.rows[0].pickup_handover_at } });
+    } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace pickup handover', error); return res.status(500).json({ error: 'pickup handover failed' }); }
     finally { client.release(); }
   });
 
@@ -137,6 +167,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
       if (!isBuyer(order, req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the buyer can confirm delivery' }); }
       if (!['SHIPPED','DELIVERED'].includes(order.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order is not ready for delivery confirmation' }); }
+      if (order.fulfillment_method === 'PICKUP' && !order.pickup_handover_at) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'pickup handover must be confirmed by the seller first' }); }
       const deadline = new Date(Date.now() + 48 * 60 * 60 * 1000);
       const updated = await client.query(`UPDATE marketplace_orders SET status='INSPECTION',delivered_at=COALESCE(delivered_at,NOW()),inspection_deadline=$1,updated_at=NOW() WHERE id=$2 RETURNING *`, [deadline.toISOString(), id]);
       await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'DELIVERY_CONFIRMED',$3,'INSPECTION',$4::jsonb)`, [id, req.user.sub, order.status, JSON.stringify({ inspectionHours: 48, fulfillmentMethod: order.fulfillment_method })]);
