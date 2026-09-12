@@ -23,7 +23,7 @@ const checks = [
   ['inspection expiry has its own worker path', expiry.includes('inspection expiry') || expiry.includes('marketplace.inspection.expire')],
   ['settlement remains gated behind completed/release-pending state', settlement.includes("order.status !== 'COMPLETED'") || settlement.includes("escrow.status !== 'RELEASE_PENDING'")],
   ['seller Android uses the dedicated pickup handover route', sellerUi.includes('/api/marketplace/orders/${order.id}/pickup-handover') && sellerUi.includes('Confirm pickup handover')],
-  ['seller Android keeps delivery on the shipping route', sellerUi.includes('/api/marketplace/orders/${order.id}/ship') && sellerUi.includes('Mark shipped')],
+  ['seller Android keeps delivery on the shipping route', sellerUi.includes('/api/marketplace/orders/${order.id}/ship') && sellerUi.includes('Mark dispatched')],
   ['buyer Android reaches the same receive/inspection lifecycle', buyerUi.includes('Confirm received') && buyerUi.includes('Complete order')],
   ['protection creation serializes on the order row', protection.includes('FROM marketplace_orders WHERE id=$1 FOR UPDATE')],
   ['protection changes the order to DISPUTED inside its transaction', protection.includes("UPDATE marketplace_orders SET status='DISPUTED'") && protection.includes('COMMIT')]
