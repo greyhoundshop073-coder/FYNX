@@ -19,6 +19,7 @@ const checks = [
   ['buyer alone selects fulfillment', completion.includes('only the buyer can choose fulfillment')],
   ['delivery enters a protected inspection period', completion.includes("status='INSPECTION'") && completion.includes('inspection_deadline') && completion.includes('48 * 60 * 60 * 1000')],
   ['buyer alone can complete after inspection begins', completion.includes('only the buyer can complete this order') && completion.includes("order.status !== 'INSPECTION'")],
+  ['manual completion is blocked by active disputes and protection cases', completion.includes("marketplace_order_disputes") && completion.includes("marketplace_protection_cases") && completion.includes("status IN ('OPEN','UNDER_REVIEW')") && completion.includes('active protection case or dispute')],
   ['completion consumes reserved inventory once', completion.includes("reserved_quantity=GREATEST(0,reserved_quantity-$1)") && completion.includes("status='COMPLETED'")],
   ['inspection expiry is blocked by active disputes', inspection.includes("marketplace_order_disputes") && inspection.includes("status IN ('OPEN','UNDER_REVIEW')")],
   ['inspection expiry is blocked by protection cases', inspection.includes("marketplace_protection_cases") && inspection.includes("status IN ('OPEN','UNDER_REVIEW')")],
