@@ -4,19 +4,24 @@ const read = (name) => fs.readFileSync(new URL(name, import.meta.url), 'utf8');
 const settlement = read('./marketplaceSettlement.js');
 const worker = read('./marketplaceSettlementWorker.js');
 const webhook = read('./marketplacePaystackWebhook.js');
+const transactions = read('./marketplaceTransactions.js');
+const paymentState = read('./marketplacePaymentState.js');
 
 const checks = [
   ['hold ledger is idempotent', settlement.includes("'ESCROW-HOLD-' || NEW.id") && settlement.includes('ON CONFLICT (idempotency_key) DO NOTHING')],
   ['payout ledger is idempotent', worker.includes('PAYOUT-RELEASE-${operation.order_id}') && worker.includes('ON CONFLICT (idempotency_key) DO NOTHING')],
   ['refund ledger is idempotent', /entry_type[^\n]*['\"]REFUND['\"]/.test(webhook) && webhook.includes('ON CONFLICT (idempotency_key) DO NOTHING')],
-  ['payout amount is tied to escrow', worker.includes('operationAmount !== escrowAmount')],
+  ['payout amount is tied to seller net accounting', worker.includes('operationAmount + marketplaceFee') && worker.includes('=== escrowAmount')],
   ['payout currency is tied to escrow', worker.includes("String(operation.currency).toUpperCase() !== String(escrow.currency).toUpperCase()")],
   ['refund blocks payout', worker.includes("operation_type='REFUND'") && worker.includes("status IN ('PENDING','SUCCEEDED')")],
   ['payout is release-pending only', worker.includes("escrow.status !== 'RELEASE_PENDING'")],
   ['release terminal state is escrow RELEASED', worker.includes("SET status='RELEASED'")],
   ['refund terminal state is escrow REFUNDED', webhook.includes("SET status='REFUNDED'")],
   ['financial operation provider references are unique', settlement.includes('marketplace_fin_ops_provider_ref_idx')],
-  ['ledger idempotency keys are unique', settlement.includes('idempotency_key TEXT NOT NULL UNIQUE')]
+  ['ledger idempotency keys are unique', settlement.includes('idempotency_key TEXT NOT NULL UNIQUE')],
+  ['marketplace fee ledger is idempotent', worker.includes("'fynx_marketplace_fee','FEE'") && worker.includes('MARKETPLACE-FEE-${operation.order_id}')],
+  ['order stores authoritative buyer total and seller net', transactions.includes('buyer_total') && transactions.includes('seller_net_amount') && transactions.includes('fee_policy_version')],
+  ['payment provider fee is recorded', paymentState.includes('payment_provider_fee') && paymentState.includes('providerFee')]
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
