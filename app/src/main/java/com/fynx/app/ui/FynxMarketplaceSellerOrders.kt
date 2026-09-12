@@ -114,8 +114,8 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         val a = order.address
                         if (a != null) Text("Deliver to: ${a.optString("name")} • ${a.optString("phone")}\n${a.optString("address")}${a.optString("city").let { if (it.isBlank()) "" else ", $it" }}")
                         else Text("Waiting for buyer delivery details.")
-                    } else Text("Buyer selected pickup.")
-                    if (order.status == "PAID") OutlinedTextField(tracking, { tracking = it }, label = { Text("Tracking reference (optional)") }, singleLine = true)
+                    } else Text("Buyer selected pickup. Confirm the handover when the buyer receives the item.")
+                    if (order.status == "PAID" && order.fulfillment == "DELIVERY") OutlinedTextField(tracking, { tracking = it }, label = { Text("Tracking reference (optional)") }, singleLine = true)
                     message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
@@ -124,12 +124,18 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                     "PAID" -> Button(enabled = !busy, onClick = {
                         busy = true
                         scope.launch {
-                            FynxBackendClient.postJson(context, "/api/marketplace/orders/${order.id}/ship", JSONObject().put("trackingReference", tracking.trim()).toString())
+                            val path = if (order.fulfillment == "PICKUP") {
+                                "/api/marketplace/orders/${order.id}/pickup-handover"
+                            } else {
+                                "/api/marketplace/orders/${order.id}/ship"
+                            }
+                            val body = if (order.fulfillment == "PICKUP") JSONObject().toString() else JSONObject().put("trackingReference", tracking.trim()).toString()
+                            FynxBackendClient.postJson(context, path, body)
                                 .onSuccess { selected = null; load(); onChanged() }
-                                .onFailure { message = it.message ?: "Could not mark order as shipped." }
+                                .onFailure { message = it.message ?: if (order.fulfillment == "PICKUP") "Could not confirm pickup handover." else "Could not mark order as shipped." }
                             busy = false
                         }
-                    }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Mark shipped") }
+                    }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(if (order.fulfillment == "PICKUP") "Confirm pickup handover" else "Mark shipped") }
                     else -> TextButton(onClick = { selected = null }) { Text("Done") }
                 }
             },
