@@ -235,22 +235,30 @@ fun FynxMarketplaceSellerCenterPanel() {
             item { Text("Your listings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) }
             items(listings, key = { it.id }) { listing ->
                 Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
-                    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(listing.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            Text(formatSellerMoney(listing.price, listing.currency), color = MaterialTheme.colorScheme.primary)
-                            Text("${listing.quantity} in stock • ${listing.category} • ${listing.condition}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        if (deletingId == listing.id) CircularProgressIndicator(Modifier.size(24.dp))
-                        else IconButton(onClick = {
-                            deletingId = listing.id
-                            scope.launch {
-                                FynxMarketplaceClient.deleteListing(context, listing.id)
-                                    .onSuccess { listings = listings.filterNot { it.id == listing.id } }
-                                    .onFailure { error = it.message ?: "Listing could not be removed." }
-                                deletingId = null
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(listing.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                Text(formatSellerMoney(listing.price, listing.currency), color = MaterialTheme.colorScheme.primary)
+                                Text("${listing.quantity} in stock • ${listing.category} • ${listing.condition}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                        }) { Icon(Icons.Default.Delete, "Remove listing") }
+                            if (deletingId == listing.id) CircularProgressIndicator(Modifier.size(24.dp))
+                            else IconButton(onClick = {
+                                deletingId = listing.id
+                                scope.launch {
+                                    FynxMarketplaceClient.deleteListing(context, listing.id)
+                                        .onSuccess { listings = listings.filterNot { it.id == listing.id } }
+                                        .onFailure { error = it.message ?: "Listing could not be removed." }
+                                    deletingId = null
+                                }
+                            }) { Icon(Icons.Default.Delete, "Remove listing") }
+                        }
+                        FynxMarketplaceShippingSettingsCard(
+                            context = context,
+                            listingId = listing.id,
+                            deliveryAvailable = listing.deliveryAvailable,
+                            pickupAvailable = listing.pickupAvailable
+                        )
                     }
                 }
             }
