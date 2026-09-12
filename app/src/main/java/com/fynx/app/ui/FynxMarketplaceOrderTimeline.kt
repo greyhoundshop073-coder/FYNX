@@ -68,8 +68,18 @@ fun FynxMarketplaceOrderTimeline(
         loading = false
     }
 
+    val latestException = events.asReversed().firstOrNull {
+        it.eventType == "FULFILLMENT_FAILED_DELIVERY" || it.eventType == "FULFILLMENT_RETURNED"
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
         Text("Order progress")
+        latestException?.let { event ->
+            when (event.eventType) {
+                "FULFILLMENT_FAILED_DELIVERY" -> Text("Delivery exception: the seller reported a failed delivery attempt. Your protected payment is not released because of this event.")
+                "FULFILLMENT_RETURNED" -> Text("Return exception: the seller marked the delivery for return. Your protected payment remains under the existing FYNX protection process.")
+            }
+        }
         when {
             loading -> Row { CircularProgressIndicator(Modifier.size(16.dp)); Spacer(Modifier.width(8.dp)); Text("Loading…") }
             error != null -> Text(error!!)
