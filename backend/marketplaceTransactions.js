@@ -7,7 +7,27 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
     if (!schemaPromise) schemaPromise = pool.query(`
       ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS reserved_quantity INTEGER NOT NULL DEFAULT 0 CHECK (reserved_quantity >= 0);
       CREATE TABLE IF NOT EXISTS marketplace_orders (id UUID PRIMARY KEY,buyer_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,seller_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,listing_id BIGINT NOT NULL REFERENCES marketplace_listings(id) ON DELETE RESTRICT,quantity INTEGER NOT NULL CHECK (quantity > 0),unit_price NUMERIC(14,2) NOT NULL CHECK (unit_price > 0),delivery_fee NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (delivery_fee >= 0),total_amount NUMERIC(14,2) NOT NULL CHECK (total_amount > 0),currency TEXT NOT NULL,product_snapshot JSONB NOT NULL,status TEXT NOT NULL CHECK (status IN ('PAYMENT_PENDING','PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED','DISPUTED','CANCELLED','REFUNDED')),payment_reference TEXT,tracking_reference TEXT,shipped_at TIMESTAMPTZ,delivered_at TIMESTAMPTZ,inspection_deadline TIMESTAMPTZ,completed_at TIMESTAMPTZ,cancelled_at TIMESTAMPTZ,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-      CREATE UNIQUE INDEX IF NOT EXISTS marketplace_orders_buyer_idempotency_idx ON marketplace_orders (buyer_id, id);
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS product_subtotal NUMERIC(14,2);
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS marketplace_fee NUMERIC(14,2);
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS marketplace_fee_buyer NUMERIC(14,2);
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS marketplace_fee_seller NUMERIC(14,2);
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS payment_provider_fee NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (payment_provider_fee >= 0);
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (discount_amount >= 0);
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS buyer_total NUMERIC(14,2);
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS seller_net_amount NUMERIC(14,2);
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS fee_policy TEXT;
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS fee_policy_version TEXT;
+      ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS provider_fee_payer TEXT;
+      UPDATE marketplace_orders SET product_subtotal=COALESCE(product_subtotal,ROUND(unit_price*quantity,2)),marketplace_fee=COALESCE(marketplace_fee,0),marketplace_fee_buyer=COALESCE(marketplace_fee_buyer,0),marketplace_fee_seller=COALESCE(marketplace_fee_seller,0),buyer_total=COALESCE(buyer_total,total_amount),seller_net_amount=COALESCE(seller_net_amount,total_amount),fee_policy=COALESCE(fee_policy,'ZERO'),fee_policy_version=COALESCE(fee_policy_version,'legacy'),provider_fee_payer=COALESCE(provider_fee_payer,'FYNX') WHERE product_subtotal IS NULL OR marketplace_fee IS NULL OR marketplace_fee_buyer IS NULL OR marketplace_fee_seller IS NULL OR buyer_total IS NULL OR seller_net_amount IS NULL OR fee_policy IS NULL OR fee_policy_version IS NULL OR provider_fee_payer IS NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN product_subtotal SET NOT NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN marketplace_fee SET NOT NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN marketplace_fee_buyer SET NOT NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN marketplace_fee_seller SET NOT NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN buyer_total SET NOT NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN seller_net_amount SET NOT NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN fee_policy SET NOT NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN fee_policy_version SET NOT NULL;
+      ALTER TABLE marketplace_orders ALTER COLUMN provider_fee_payer SET NOT NULL;
       CREATE INDEX IF NOT EXISTS marketplace_orders_buyer_idx ON marketplace_orders (buyer_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS marketplace_orders_seller_idx ON marketplace_orders (seller_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS marketplace_orders_seller_status_idx ON marketplace_orders (seller_id, status, created_at DESC);
@@ -27,7 +47,17 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
   const parsePositiveInt = (value) => { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : null; };
   const parseUuid = (value) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value.trim()) ? value.trim() : null;
   const isParticipant = (order, userId) => String(order.buyer_id) === String(userId) || String(order.seller_id) === String(userId);
-  const publicOrder = (row) => ({id:String(row.id),buyerId:String(row.buyer_id),sellerId:String(row.seller_id),listingId:String(row.listing_id),quantity:Number(row.quantity),unitPrice:Number(row.unit_price),deliveryFee:Number(row.delivery_fee),totalAmount:Number(row.total_amount),currency:row.currency,product:row.product_snapshot,status:row.status,paymentReference:row.payment_reference||null,trackingReference:row.tracking_reference||null,shippedAt:row.shipped_at,deliveredAt:row.delivered_at,inspectionDeadline:row.inspection_deadline,completedAt:row.completed_at,cancelledAt:row.cancelled_at,createdAt:row.created_at,updatedAt:row.updated_at});
+  const publicOrder = (row) => ({id:String(row.id),buyerId:String(row.buyer_id),sellerId:String(row.seller_id),listingId:String(row.listing_id),quantity:Number(row.quantity),unitPrice:Number(row.unit_price),deliveryFee:Number(row.delivery_fee),productSubtotal:Number(row.product_subtotal ?? (Number(row.unit_price)*Number(row.quantity))),marketplaceFee:Number(row.marketplace_fee ?? 0),marketplaceFeeBuyer:Number(row.marketplace_fee_buyer ?? 0),marketplaceFeeSeller:Number(row.marketplace_fee_seller ?? 0),paymentProviderFee:Number(row.payment_provider_fee ?? 0),discountAmount:Number(row.discount_amount ?? 0),buyerTotal:Number(row.buyer_total ?? row.total_amount),sellerNetAmount:Number(row.seller_net_amount ?? row.total_amount),totalAmount:Number(row.total_amount),currency:row.currency,feePolicy:row.fee_policy || 'ZERO',feePolicyVersion:row.fee_policy_version || 'legacy',providerFeePayer:row.provider_fee_payer || 'FYNX',product:row.product_snapshot,status:row.status,paymentReference:row.payment_reference||null,trackingReference:row.tracking_reference||null,shippedAt:row.shipped_at,deliveredAt:row.delivered_at,inspectionDeadline:row.inspection_deadline,completedAt:row.completed_at,cancelledAt:row.cancelled_at,createdAt:row.created_at,updatedAt:row.updated_at});
+
+  const feeConfig = () => {
+    const mode = ['ZERO','BUYER','SELLER','SPLIT'].includes(String(process.env.FYNX_MARKETPLACE_FEE_MODE || 'ZERO').toUpperCase()) ? String(process.env.FYNX_MARKETPLACE_FEE_MODE || 'ZERO').toUpperCase() : 'ZERO';
+    const bps = Math.min(10000, Math.max(0, Number.parseInt(process.env.FYNX_MARKETPLACE_FEE_BPS || '0', 10) || 0));
+    const fixed = Math.max(0, Number(process.env.FYNX_MARKETPLACE_FEE_FIXED || '0') || 0);
+    const buyerShare = Math.min(10000, Math.max(0, Number.parseInt(process.env.FYNX_MARKETPLACE_FEE_BUYER_SHARE_BPS || '5000', 10) || 0));
+    const version = String(process.env.FYNX_MARKETPLACE_FEE_POLICY_VERSION || '1').trim().slice(0, 64) || '1';
+    const providerFeePayer = ['BUYER','SELLER','FYNX'].includes(String(process.env.FYNX_MARKETPLACE_PROVIDER_FEE_PAYER || 'FYNX').toUpperCase()) ? String(process.env.FYNX_MARKETPLACE_PROVIDER_FEE_PAYER || 'FYNX').toUpperCase() : 'FYNX';
+    return { mode, bps, fixed, buyerShare, version, providerFeePayer };
+  };
 
   app.post('/api/marketplace/orders', auth, async (req,res) => {
     const listingId=parsePositiveInt(req.body?.listingId), quantity=parsePositiveInt(req.body?.quantity), clientOrderId=parseUuid(req.body?.orderId);
@@ -50,11 +80,20 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       }
       const available=Number(listing.quantity)-Number(listing.reserved_quantity||0); if(quantity>available){await client.query('ROLLBACK');return res.status(409).json({error:'requested quantity is not available'});}
       if(clientOrderId){const existing=(await client.query('SELECT * FROM marketplace_orders WHERE id=$1 AND buyer_id=$2',[clientOrderId,req.user.sub])).rows[0];if(existing){await client.query('ROLLBACK');return res.status(200).json({order:publicOrder(existing),idempotent:true});}}
-      const orderId=clientOrderId||crypto.randomUUID(), unitPrice=Number(listing.price), deliveryFee=listing.delivery_fee==null?0:Number(listing.delivery_fee), totalAmount=(unitPrice*quantity)+deliveryFee;
-      const snapshot={listingId:String(listing.id),sellerId:String(listing.seller_id),sellerUsername:listing.seller_username,sellerDisplayName:listing.seller_display_name,storeName:listing.store_name,title:listing.title,description:listing.description,price:unitPrice,currency:listing.currency,category:listing.category,condition:listing.condition,location:listing.location,deliveryAvailable:Boolean(listing.delivery_available),pickupAvailable:Boolean(listing.pickup_available),deliveryFee,mediaIds:Array.isArray(listing.media_ids)?listing.media_ids.map(String):[]};
-      const inserted=await client.query(`INSERT INTO marketplace_orders (id,buyer_id,seller_id,listing_id,quantity,unit_price,delivery_fee,total_amount,currency,product_snapshot,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,'PAYMENT_PENDING') RETURNING *`,[orderId,req.user.sub,listing.seller_id,listing.id,quantity,unitPrice,deliveryFee,totalAmount,listing.currency,JSON.stringify(snapshot)]);
+      const orderId=clientOrderId||crypto.randomUUID(), unitPrice=Number(listing.price), deliveryFee=listing.delivery_fee==null?0:Number(listing.delivery_fee), productSubtotal=Math.round(unitPrice*quantity*100)/100;
+      const config=feeConfig();
+      const rawFee=Math.round((productSubtotal*(config.bps/10000)+config.fixed)*100)/100;
+      const totalFee=Math.max(0,rawFee);
+      const buyerShare=config.mode==='BUYER'?1:config.mode==='SELLER'?0:config.mode==='SPLIT'?(config.buyerShare/10000):0;
+      const marketplaceFeeBuyer=Math.round(totalFee*buyerShare*100)/100;
+      const marketplaceFeeSeller=Math.round((totalFee-marketplaceFeeBuyer)*100)/100;
+      const buyerTotal=Math.round((productSubtotal+deliveryFee+marketplaceFeeBuyer)*100)/100;
+      const sellerNetAmount=Math.round((productSubtotal+deliveryFee-marketplaceFeeSeller)*100)/100;
+      if(!(buyerTotal>0) || sellerNetAmount<0 || Math.round((sellerNetAmount+marketplaceFeeSeller)*100)/100>buyerTotal || Math.round((productSubtotal+deliveryFee+marketplaceFeeBuyer)*100)/100!==buyerTotal){await client.query('ROLLBACK');return res.status(500).json({error:'marketplace accounting calculation failed'});}
+      const snapshot={listingId:String(listing.id),sellerId:String(listing.seller_id),sellerUsername:listing.seller_username,sellerDisplayName:listing.seller_display_name,storeName:listing.store_name,title:listing.title,description:listing.description,price:unitPrice,currency:listing.currency,category:listing.category,condition:listing.condition,location:listing.location,deliveryAvailable:Boolean(listing.delivery_available),pickupAvailable:Boolean(listing.pickup_available),deliveryFee,productSubtotal,marketplaceFee:totalFee,marketplaceFeeBuyer,marketplaceFeeSeller,paymentProviderFee:0,discountAmount:0,buyerTotal,sellerNetAmount,feePolicy:config.mode,feePolicyVersion:config.version,providerFeePayer:config.providerFeePayer,mediaIds:Array.isArray(listing.media_ids)?listing.media_ids.map(String):[]};
+      const inserted=await client.query(`INSERT INTO marketplace_orders (id,buyer_id,seller_id,listing_id,quantity,unit_price,delivery_fee,product_subtotal,marketplace_fee,marketplace_fee_buyer,marketplace_fee_seller,payment_provider_fee,discount_amount,buyer_total,seller_net_amount,fee_policy,fee_policy_version,provider_fee_payer,total_amount,currency,product_snapshot,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,0,$12,$13,$14,$15,$16,$12,$17,$18::jsonb,'PAYMENT_PENDING') RETURNING *`,[orderId,req.user.sub,listing.seller_id,listing.id,quantity,unitPrice,deliveryFee,productSubtotal,totalFee,marketplaceFeeBuyer,marketplaceFeeSeller,buyerTotal,sellerNetAmount,config.mode,config.version,config.providerFeePayer,listing.currency,JSON.stringify(snapshot)]);
       await client.query('UPDATE marketplace_listings SET reserved_quantity=reserved_quantity+$1,updated_at=NOW() WHERE id=$2',[quantity,listing.id]);
-      await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'ORDER_CREATED',NULL,'PAYMENT_PENDING',$3::jsonb)`,[orderId,req.user.sub,JSON.stringify({quantity,protected:true,safetyChecked:Boolean(safety.marketplace_safety)})]);
+      await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'ORDER_CREATED',NULL,'PAYMENT_PENDING',$3::jsonb)`,[orderId,req.user.sub,JSON.stringify({quantity,protected:true,safetyChecked:Boolean(safety.marketplace_safety),accounting:{productSubtotal,deliveryFee,marketplaceFee:totalFee,marketplaceFeeBuyer,marketplaceFeeSeller,buyerTotal,sellerNetAmount,feePolicy:config.mode,feePolicyVersion:config.version,providerFeePayer:config.providerFeePayer}})]);
       await client.query('COMMIT'); return res.status(201).json({order:publicOrder(inserted.rows[0]),protection:{enabled:true,payment:'provider_required',payout:'not_released'}});
     }catch(error){try{await client.query('ROLLBACK');}catch{} if(error?.code==='23505')return res.status(409).json({error:'order already exists'});console.error('marketplace order create',error);return res.status(500).json({error:'protected order creation failed'});}finally{client.release();}
   });
