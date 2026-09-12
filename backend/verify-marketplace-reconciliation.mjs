@@ -4,6 +4,8 @@ const read = (name) => fs.readFileSync(new URL(name, import.meta.url), 'utf8');
 const worker = read('./marketplaceSettlementWorker.js');
 const webhook = read('./marketplacePaystackWebhook.js');
 const settlement = read('./marketplaceSettlement.js');
+const checkout = read('./marketplaceCheckout.js');
+const checkoutOrder = read('./marketplaceCheckoutOrder.js');
 
 const checks = [
   ['deterministic payout reference', worker.includes('fynx-payout-${operation.order_id}')],
@@ -25,7 +27,11 @@ const checks = [
   ['refund invalid data blocks protected funds', webhook.includes("status='BLOCKED'") && webhook.includes("status='DISPUTED'") && webhook.includes('refund webhook amount or currency')],
   ['refund remains asynchronous and idempotent', webhook.includes("eventName.startsWith('refund.')") && webhook.includes("eventName === 'refund.processed'") && webhook.includes("eventName === 'refund.failed'") && webhook.includes('ON CONFLICT (idempotency_key) DO NOTHING')],
   ['financial operation provider reference uniqueness', settlement.includes('marketplace_fin_ops_provider_ref_idx')],
-  ['ledger idempotency uniqueness', settlement.includes('idempotency_key TEXT NOT NULL UNIQUE')]
+  ['ledger idempotency uniqueness', settlement.includes('idempotency_key TEXT NOT NULL UNIQUE')],
+  ['checkout requires a normalized three-letter listing currency', checkout.includes('normalizeCurrency') && checkout.includes('listing.currency')],
+  ['protected order stores the listing currency', checkoutOrder.includes('normalizeCurrency') && checkoutOrder.includes('currency: listing.currency')],
+  ['protected escrow is created from the order currency', settlement.includes('NEW.total_amount,NEW.currency')],
+  ['payout account currency is matched to the order currency', read('./marketplacePayoutRetry.js').includes('payoutAccount.currency') && read('./marketplacePayoutRetry.js').includes('order.currency')]
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
