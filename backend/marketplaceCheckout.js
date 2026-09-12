@@ -5,6 +5,7 @@ import { calculateMarketplaceShipping, ensureMarketplaceShippingSchema, isMarket
 export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
   const parsePositiveInt = (value) => { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : null; };
   const normalizeMethod = (value) => { const method = typeof value === 'string' ? value.trim().toUpperCase() : ''; return method === 'DELIVERY' || method === 'PICKUP' ? method : null; };
+  const normalizeCurrency = (value) => { const currency = typeof value === 'string' ? value.trim().toUpperCase() : ''; return /^[A-Z]{3}$/.test(currency) ? currency : null; };
   const feeConfig = () => {
     const modeValue = String(process.env.FYNX_MARKETPLACE_FEE_MODE || 'ZERO').toUpperCase();
     const mode = ['ZERO', 'BUYER', 'SELLER', 'SPLIT'].includes(modeValue) ? modeValue : 'ZERO';
@@ -45,6 +46,8 @@ export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
         const safetyResult = inspectTrustSafetyText([listing.title, listing.description, listing.location].filter(Boolean).join(' '));
         if (safetyResult.shouldBlock) { await client.query('ROLLBACK'); return res.status(422).json({ error: 'listing blocked by marketplace safety protection', code: 'SAFETY_BLOCK' }); }
       }
+      const currency = normalizeCurrency(listing.currency);
+      if (!currency) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'listing currency is invalid or not configured', code: 'INVALID_CURRENCY' }); }
       const available = Number(listing.quantity) - Number(listing.reserved_quantity || 0);
       if (quantity > available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'requested quantity is not available', availableQuantity: Math.max(0, available) }); }
       if (fulfillmentMethod === 'DELIVERY' && !Boolean(listing.delivery_available)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery is not available for this listing' }); }
@@ -62,7 +65,7 @@ export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
       if (!(buyerTotal > 0) || sellerNetAmount < 0) { await client.query('ROLLBACK'); return res.status(500).json({ error: 'checkout total calculation failed' }); }
       const quoteId = crypto.randomUUID(); const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
       await client.query('COMMIT');
-      return res.json({ quote: { id: quoteId, expiresAt, listingId: String(listing.id), listingUpdatedAt: listing.updated_at || null, sellerId: String(listing.seller_id), sellerUsername: listing.seller_username, sellerDisplayName: listing.seller_display_name, productTitle: listing.title, quantity, unitPrice, currency: listing.currency, fulfillmentMethod, shippingAddress, shippingProvider: shipping.provider, shippingFeePolicy: shipping.feePolicy, shippingNote: shipping.note, subtotal: productSubtotal, deliveryFee, marketplaceFee, marketplaceFeeBuyer, marketplaceFeeSeller, discountAmount, total: buyerTotal, feePolicy: config.mode, feePolicyVersion: config.version, providerFeePayer: config.providerFeePayer, discount: { amount: 0, code: null, status: 'NOT_APPLIED' }, protection: { payment: 'PROTECTED', payout: 'RELEASED_AFTER_BUYER_CONFIRMATION' } } });
+      return res.json({ quote: { id: quoteId, expiresAt, listingId: String(listing.id), listingUpdatedAt: listing.updated_at || null, sellerId: String(listing.seller_id), sellerUsername: listing.seller_username, sellerDisplayName: listing.seller_display_name, productTitle: listing.title, quantity, unitPrice, currency, fulfillmentMethod, shippingAddress, shippingProvider: shipping.provider, shippingFeePolicy: shipping.feePolicy, shippingNote: shipping.note, subtotal: productSubtotal, deliveryFee, marketplaceFee, marketplaceFeeBuyer, marketplaceFeeSeller, discountAmount, total: buyerTotal, feePolicy: config.mode, feePolicyVersion: config.version, providerFeePayer: config.providerFeePayer, discount: { amount: 0, code: null, status: 'NOT_APPLIED' }, protection: { payment: 'PROTECTED', payout: 'RELEASED_AFTER_BUYER_CONFIRMATION' } } });
     } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace checkout quote', error); return res.status(500).json({ error: 'checkout quote could not be prepared' }); }
     finally { client.release(); }
   });
