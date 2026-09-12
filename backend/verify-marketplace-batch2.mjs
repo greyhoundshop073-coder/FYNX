@@ -29,6 +29,8 @@ const checks = [
   ['pending refunds are reconciled against the provider', finalHardening.includes('reconcilePendingRefunds') && finalHardening.includes('/refund?transaction=')],
   ['refund recovery revalidates amount and currency against escrow', finalHardening.includes('refund recovery amount or currency does not reconcile with the protected escrow')],
   ['refund recovery mismatch freezes the escrow', finalHardening.includes("SET status='DISPUTED'") && finalHardening.includes('REFUND_RECOVERY_BLOCKED')],
+  ['post-success payout reversal is detected and re-protected', finalHardening.includes('reconcilePostSuccessPayoutReversals') && finalHardening.includes("providerStatus === 'reversed'") && finalHardening.includes('PAYOUT_REVERSAL_RECONCILED')],
+  ['post-success payout reversal blocks the financial operation and disputes escrow', finalHardening.includes("status='BLOCKED'") && finalHardening.includes("status='DISPUTED'") && finalHardening.includes('reprotected_escrow_and_blocked_payout')],
   ['financial recovery writes explicit order audit events', finalHardening.includes('PAYOUT_RECOVERY_RECONCILED') && finalHardening.includes('REFUND_RECOVERY_RECONCILED')],
   ['recovery audit events are idempotently guarded', finalHardening.includes('NOT EXISTS') && finalHardening.includes("metadata->>'operationId'")]
 ];

@@ -156,6 +156,68 @@ async function reconcileRefundRecovery({ logger = console } = {}) {
   }
 }
 
+async function reconcilePostSuccessPayoutReversals({ logger = console } = {}) {
+  if (!pool || !process.env.PAYSTACK_SECRET_KEY) return 0;
+  const rows = await pool.query(`
+    SELECT f.id,f.order_id,f.amount,f.currency,f.provider_reference,f.metadata,f.status AS operation_status,
+           e.id AS escrow_id,e.amount AS escrow_amount,e.currency AS escrow_currency,e.status AS escrow_status,
+           o.status AS order_status
+    FROM marketplace_financial_operations f
+    JOIN marketplace_escrows e ON e.order_id=f.order_id
+    JOIN marketplace_orders o ON o.id=f.order_id
+    WHERE f.operation_type='PAYOUT_RELEASE'
+      AND f.status='SUCCEEDED'
+      AND e.status='RELEASED'
+      AND f.provider_reference IS NOT NULL
+    ORDER BY f.updated_at ASC
+    LIMIT 25
+  `);
+  let repaired = 0;
+  for (const row of rows.rows) {
+    try {
+      const response = await fetch(`https://api.paystack.co/transfer/verify/${encodeURIComponent(row.provider_reference)}`, { headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` } });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.status !== true || !data?.data) continue;
+      const transfer = data.data;
+      const providerStatus = String(transfer.status || '').toLowerCase();
+      const expectedAmount = amountSubunit(row.amount, row.currency);
+      const providerAmount = Number(transfer.amount);
+      const providerCurrency = String(transfer.currency || '').toUpperCase();
+      const expectedCurrency = String(row.currency || '').toUpperCase();
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const locked = (await client.query(`
+          SELECT f.id,f.order_id,f.amount,f.currency,f.provider_reference,f.metadata,f.status AS operation_status,
+                 e.id AS escrow_id,e.amount AS escrow_amount,e.currency AS escrow_currency,e.status AS escrow_status,
+                 o.status AS order_status
+          FROM marketplace_financial_operations f
+          JOIN marketplace_escrows e ON e.order_id=f.order_id
+          JOIN marketplace_orders o ON o.id=f.order_id
+          WHERE f.id=$1 FOR UPDATE
+        `, [row.id])).rows[0];
+        if (!locked || locked.operation_status !== 'SUCCEEDED' || locked.escrow_status !== 'RELEASED') { await client.query('COMMIT'); continue; }
+        if (expectedAmount === null || providerAmount !== expectedAmount || providerCurrency !== expectedCurrency) {
+          await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='SUCCEEDED'`, ['post-success payout provider amount or currency no longer matches the protected operation', JSON.stringify({ ...(locked.metadata || {}), providerStatus, providerAmount, expectedAmount, providerCurrency, expectedCurrency, source: 'batch2-post-success-payout-recovery' }), locked.id]);
+          await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status='RELEASED'`, [locked.escrow_id]);
+          await insertRecoveryEvent(client, locked, 'PAYOUT_REVERSAL_BLOCKED', { reason: 'provider_amount_or_currency_mismatch', providerStatus, providerAmount, expectedAmount, providerCurrency, expectedCurrency });
+        } else if (providerStatus === 'reversed') {
+          await client.query(`UPDATE marketplace_financial_operations SET status='BLOCKED',failure_reason=$1,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status='SUCCEEDED'`, ['Paystack payout was reversed after success; seller funds are re-protected pending review', JSON.stringify({ ...(locked.metadata || {}), providerStatus, providerReference: locked.provider_reference, providerAmount, providerCurrency, source: 'batch2-post-success-payout-recovery' }), locked.id]);
+          await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status='RELEASED'`, [locked.escrow_id]);
+          const caseId = locked.metadata?.caseId ? String(locked.metadata.caseId) : null;
+          if (caseId) await client.query(`UPDATE marketplace_protection_cases SET status='UNDER_REVIEW',updated_at=NOW() WHERE id=$1 AND status NOT IN ('REFUNDED','RESOLVED')`, [caseId]);
+          await insertRecoveryEvent(client, locked, 'PAYOUT_REVERSAL_RECONCILED', { providerReference: locked.provider_reference, providerStatus, amount: Number(locked.amount), currency: String(locked.currency).toUpperCase(), action: 'reprotected_escrow_and_blocked_payout' });
+          repaired += 1;
+        }
+        await client.query('COMMIT');
+      } catch (error) { await client.query('ROLLBACK').catch(() => {}); logger.error('[fynx-marketplace] post-success payout reversal recovery failed', error?.message || error); }
+      finally { client.release(); }
+    } catch (error) { if (error?.code !== 'PAYSTACK_TIMEOUT') logger.error('[fynx-marketplace] payout reversal provider check failed', error?.message || error); }
+  }
+  if (repaired) logger.log(`[fynx-marketplace] re-protected ${repaired} post-success reversed payout(s)`);
+  return repaired;
+}
+
 async function auditCompletedRecovery({ logger = console } = {}) {
   if (!pool) return;
   const rows = await pool.query(`SELECT f.id,f.order_id,f.operation_type,f.provider_reference,f.amount,f.currency,e.amount AS escrow_amount,e.currency AS escrow_currency,e.status AS escrow_status,o.status AS order_status FROM marketplace_financial_operations f JOIN marketplace_escrows e ON e.order_id=f.order_id JOIN marketplace_orders o ON o.id=f.order_id WHERE f.status='SUCCEEDED' AND ((f.operation_type='PAYOUT_RELEASE' AND e.status='RELEASED') OR (f.operation_type='REFUND' AND e.status='REFUNDED')) AND f.updated_at >= NOW() - INTERVAL '24 hours' ORDER BY f.updated_at DESC LIMIT 100`);
@@ -169,7 +231,7 @@ async function auditCompletedRecovery({ logger = console } = {}) {
 export function registerMarketplaceBatch2FinalHardening({ logger = console } = {}) {
   installPaystackTimeoutGuard();
   if (!pool) return;
-  const run = async () => { await recoverPaymentWithoutLocalReference({ logger }); await reconcilePendingRefunds({ logger }); await reconcileRefundRecovery({ logger }); await auditCompletedRecovery({ logger }); };
+  const run = async () => { await recoverPaymentWithoutLocalReference({ logger }); await reconcilePendingRefunds({ logger }); await reconcileRefundRecovery({ logger }); await reconcilePostSuccessPayoutReversals({ logger }); await auditCompletedRecovery({ logger }); };
   const timer = setInterval(() => { void run(); }, 30_000); timer.unref(); void run();
   logger.log(`[fynx-marketplace] Batch 2 final hardening active; Paystack timeout=${PAYSTACK_TIMEOUT_MS}ms`);
 }
