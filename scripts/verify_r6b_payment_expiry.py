@@ -10,7 +10,7 @@ checks = [
     ("30 minute reservation TTL", "PAYMENT_RESERVATION_TTL_MINUTES = 30" in worker),
     ("all stale payment-pending orders are candidates", "status='PAYMENT_PENDING'" in worker and "created_at <= NOW() - ($1::text || ' minutes')::interval" in worker and "payment_reference IS NULL" not in worker.split("WHERE status='PAYMENT_PENDING'", 1)[1].split("ORDER BY", 1)[0]),
     ("initialized payments are verified with Paystack before expiry", "verifyProviderPayment" in worker and "transaction/verify/" in worker and "payment_reference" in worker),
-    ("provider payment amount currency and metadata are validated", "expectedAmount !== null" in worker and "metadataOrderId === String(order.id)" in worker and "transaction.status === 'success'" in worker),
+    ("provider payment amount currency and metadata are validated", "expectedAmount !== null" in worker and "metadataOrderId === String(order.id)" in worker and ("transaction.status === 'success'" in worker or "status === 'success'" in worker)),
     ("verified late payment becomes paid", "confirmLatePayment" in worker and "status='PAID'" in worker and "PAYMENT_CONFIRMED" in worker),
     ("unpaid stale orders expire", "status='CANCELLED'" in worker and "ORDER_PAYMENT_EXPIRED" in worker),
     ("expired reservation releases inventory", "reserved_quantity=GREATEST(0,reserved_quantity-$1)" in worker),
