@@ -16,6 +16,8 @@ object FynxGroupRemoteClient {
         val disappearingSeconds:Int = 0
     )
     data class RemoteMember(val username:String,val role:String,val joinedAt:Long)
+    data class RemoteInvite(val groupId:String,val token:String,val name:String,val description:String,val memberCount:Int,val approveNewMembers:Boolean,val alreadyMember:Boolean,val pending:Boolean)
+    data class RemoteJoinRequest(val username:String,val requestedAt:Long)
 
     suspend fun syncGroup(context:Context,group:FynxGroup):Result<Unit> = runCatching {
         val body=JSONObject().apply{
@@ -24,12 +26,7 @@ object FynxGroupRemoteClient {
             put("description",group.description)
             put("visibility",group.visibility.name)
             put("members",JSONArray().apply{
-                group.members.forEach { member ->
-                    put(JSONObject().apply {
-                        put("username",member.username.trim().removePrefix("@"))
-                        put("role",member.role.name)
-                    })
-                }
+                group.members.forEach { member -> put(JSONObject().apply { put("username",member.username.trim().removePrefix("@")); put("role",member.role.name) }) }
             })
         }
         FynxBackendClient.postJson(context,"/api/groups/${group.id}/sync",body.toString()).getOrThrow()
@@ -39,81 +36,60 @@ object FynxGroupRemoteClient {
     suspend fun loadMembers(context:Context,groupId:String):Result<List<RemoteMember>> = runCatching {
         val raw=FynxBackendClient.get(context,"/api/groups/$groupId/members").getOrThrow()
         val a=JSONObject(raw).optJSONArray("members")?:JSONArray()
-        buildList {
-            for(i in 0 until a.length()) {
-                val o=a.getJSONObject(i)
-                add(RemoteMember(o.optString("username"),o.optString("role","MEMBER"),o.optLong("joinedAt")))
-            }
-        }
+        buildList { for(i in 0 until a.length()) { val o=a.getJSONObject(i); add(RemoteMember(o.optString("username"),o.optString("role","MEMBER"),o.optLong("joinedAt"))) } }
     }
 
     suspend fun loadPermissions(context:Context,groupId:String):Result<RemotePermissions> = runCatching {
         val raw=FynxBackendClient.get(context,"/api/groups/$groupId/permissions").getOrThrow()
         val o=JSONObject(raw).optJSONObject("permissions")?:JSONObject()
-        RemotePermissions(
-            sendMessages=o.optBoolean("send_messages",true),
-            sendMedia=o.optBoolean("send_media",true),
-            addMembers=o.optBoolean("add_members",true),
-            inviteLinks=o.optBoolean("invite_links",true),
-            approveNewMembers=o.optBoolean("approve_new_members",false),
-            disappearingSeconds=o.optInt("disappearing_seconds",0)
-        )
+        RemotePermissions(o.optBoolean("send_messages",true),o.optBoolean("send_media",true),o.optBoolean("add_members",true),o.optBoolean("invite_links",true),o.optBoolean("approve_new_members",false),o.optInt("disappearing_seconds",0))
     }
 
-    suspend fun updatePermissions(
-        context:Context,
-        groupId:String,
-        permissions:RemotePermissions
-    ):Result<RemotePermissions> = runCatching {
-        val body=JSONObject().apply{
-            put("sendMessages",permissions.sendMessages)
-            put("sendMedia",permissions.sendMedia)
-            put("addMembers",permissions.addMembers)
-            put("inviteLinks",permissions.inviteLinks)
-            put("approveNewMembers",permissions.approveNewMembers)
-            put("disappearingSeconds",permissions.disappearingSeconds)
-        }
+    suspend fun updatePermissions(context:Context,groupId:String,permissions:RemotePermissions):Result<RemotePermissions> = runCatching {
+        val body=JSONObject().apply{ put("sendMessages",permissions.sendMessages); put("sendMedia",permissions.sendMedia); put("addMembers",permissions.addMembers); put("inviteLinks",permissions.inviteLinks); put("approveNewMembers",permissions.approveNewMembers); put("disappearingSeconds",permissions.disappearingSeconds) }
         val raw=FynxBackendClient.patchJson(context,"/api/groups/$groupId/permissions",body.toString()).getOrThrow()
         val o=JSONObject(raw).optJSONObject("permissions")?:JSONObject()
-        RemotePermissions(
-            sendMessages=o.optBoolean("send_messages",permissions.sendMessages),
-            sendMedia=o.optBoolean("send_media",permissions.sendMedia),
-            addMembers=o.optBoolean("add_members",permissions.addMembers),
-            inviteLinks=o.optBoolean("invite_links",permissions.inviteLinks),
-            approveNewMembers=o.optBoolean("approve_new_members",permissions.approveNewMembers),
-            disappearingSeconds=o.optInt("disappearing_seconds",permissions.disappearingSeconds)
-        )
+        RemotePermissions(o.optBoolean("send_messages",permissions.sendMessages),o.optBoolean("send_media",permissions.sendMedia),o.optBoolean("add_members",permissions.addMembers),o.optBoolean("invite_links",permissions.inviteLinks),o.optBoolean("approve_new_members",permissions.approveNewMembers),o.optInt("disappearing_seconds",permissions.disappearingSeconds))
     }
 
+    suspend fun createInvite(context:Context,groupId:String):Result<Pair<String,String>> = runCatching {
+        val raw=FynxBackendClient.postJson(context,"/api/groups/$groupId/invites",JSONObject().toString()).getOrThrow()
+        val o=JSONObject(raw)
+        o.getString("token") to o.getString("inviteUri")
+    }
+
+    suspend fun revokeInvite(context:Context,groupId:String,token:String):Result<Unit> = runCatching {
+        FynxBackendClient.postJson(context,"/api/groups/$groupId/invites/${Uri.encode(token)}/revoke",JSONObject().toString()).getOrThrow(); Unit
+    }
+
+    suspend fun previewInvite(context:Context,groupId:String,token:String):Result<RemoteInvite> = runCatching {
+        val raw=FynxBackendClient.get(context,"/api/groups/$groupId/invites/${Uri.encode(token)}").getOrThrow()
+        val o=JSONObject(raw); val i=o.getJSONObject("invite")
+        RemoteInvite(i.getString("groupId"),i.getString("token"),i.optString("name","Group"),i.optString("description"),i.optInt("memberCount"),i.optBoolean("approveNewMembers"),o.optBoolean("alreadyMember"),o.optBoolean("pending"))
+    }
+
+    suspend fun joinInvite(context:Context,groupId:String,token:String):Result<JSONObject> = runCatching {
+        JSONObject(FynxBackendClient.postJson(context,"/api/groups/$groupId/invites/${Uri.encode(token)}/join",JSONObject().toString()).getOrThrow())
+    }
+
+    suspend fun loadJoinRequests(context:Context,groupId:String):Result<List<RemoteJoinRequest>> = runCatching {
+        val raw=FynxBackendClient.get(context,"/api/groups/$groupId/join-requests").getOrThrow(); val a=JSONObject(raw).optJSONArray("requests")?:JSONArray()
+        buildList { for(i in 0 until a.length()){val o=a.getJSONObject(i); add(RemoteJoinRequest(o.optString("username"),o.optLong("requestedAt")))} }
+    }
+
+    suspend fun approveJoinRequest(context:Context,groupId:String,username:String):Result<Unit> = runCatching { FynxBackendClient.postJson(context,"/api/groups/$groupId/join-requests/${Uri.encode(username)}/approve",JSONObject().toString()).getOrThrow(); Unit }
+    suspend fun rejectJoinRequest(context:Context,groupId:String,username:String):Result<Unit> = runCatching { FynxBackendClient.postJson(context,"/api/groups/$groupId/join-requests/${Uri.encode(username)}/reject",JSONObject().toString()).getOrThrow(); Unit }
+
     suspend fun loadMessages(context:Context,groupId:String):Result<List<RemoteMessage>> = runCatching {
-        val raw=FynxBackendClient.get(context,"/api/groups/$groupId/messages").getOrThrow()
-        val a=JSONObject(raw).optJSONArray("messages")?:JSONArray()
-        buildList {
-            for(i in 0 until a.length()) {
-                val o=a.getJSONObject(i)
-                add(RemoteMessage(o.getString("id"),o.optString("text"),o.optString("senderUsername"),o.optLong("timestamp"),o.optString("attachmentMediaId").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentType").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentUrl").takeIf{it.isNotBlank()&&it!="null"}))
-            }
-        }
+        val raw=FynxBackendClient.get(context,"/api/groups/$groupId/messages").getOrThrow(); val a=JSONObject(raw).optJSONArray("messages")?:JSONArray()
+        buildList { for(i in 0 until a.length()) { val o=a.getJSONObject(i); add(RemoteMessage(o.getString("id"),o.optString("text"),o.optString("senderUsername"),o.optLong("timestamp"),o.optString("attachmentMediaId").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentType").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentUrl").takeIf{it.isNotBlank()&&it!="null"})) } }
     }
 
     suspend fun sendMessage(context:Context,groupId:String,message:ChatMessage):Result<RemoteMessage> = runCatching {
-        var mediaId:String?=message.attachmentUri?.substringAfterLast('/').takeIf{it?.all(Char::isDigit)==true}
-        var mediaType=message.attachmentType
-        if(mediaId==null && message.attachmentUri!=null){
-            val uri=Uri.parse(message.attachmentUri!!)
-            val mime=context.contentResolver.getType(uri)?.lowercase()?:when(mediaType){"video"->"video/mp4";"audio"->"audio/mp4";else->"image/jpeg"}
-            val uploaded=FynxProductionMessaging.uploadMedia(context,uri,mime).getOrThrow()
-            mediaId=uploaded.id
-            mediaType=mediaType?:mime.substringBefore('/')
-        }
-        val body=JSONObject().apply{
-            put("id",message.id)
-            put("text",message.text)
-            if(mediaId!=null)put("attachmentMediaId",mediaId)
-            if(mediaType!=null)put("attachmentType",mediaType)
-        }
-        val raw=FynxBackendClient.postJson(context,"/api/groups/$groupId/messages",body.toString()).getOrThrow()
-        val o=JSONObject(raw).getJSONObject("message")
+        var mediaId:String?=message.attachmentUri?.substringAfterLast('/').takeIf{it?.all(Char::isDigit)==true}; var mediaType=message.attachmentType
+        if(mediaId==null&&message.attachmentUri!=null){ val uri=Uri.parse(message.attachmentUri!!); val mime=context.contentResolver.getType(uri)?.lowercase()?:when(mediaType){"video"->"video/mp4";"audio"->"audio/mp4";else->"image/jpeg"}; val uploaded=FynxProductionMessaging.uploadMedia(context,uri,mime).getOrThrow(); mediaId=uploaded.id; mediaType=mediaType?:mime.substringBefore('/') }
+        val body=JSONObject().apply{ put("id",message.id); put("text",message.text); if(mediaId!=null)put("attachmentMediaId",mediaId); if(mediaType!=null)put("attachmentType",mediaType) }
+        val raw=FynxBackendClient.postJson(context,"/api/groups/$groupId/messages",body.toString()).getOrThrow(); val o=JSONObject(raw).getJSONObject("message")
         RemoteMessage(o.getString("id"),o.optString("text"),o.optString("senderUsername"),o.optLong("timestamp"),o.optString("attachmentMediaId").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentType").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentUrl").takeIf{it.isNotBlank()&&it!="null"})
     }
 
