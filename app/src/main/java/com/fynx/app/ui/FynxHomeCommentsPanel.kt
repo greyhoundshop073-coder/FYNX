@@ -96,7 +96,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
                 comments = (comments + comment).distinctBy { it.id }
                 if (comment.parentCommentId != null) {
                     val parent = comment.parentCommentId!!
-                    expandedReplies = expandedReplies + mapOf(parent to ((expandedReplies[parent].orEmpty() + comment).distinctBy { it.id })
+                    expandedReplies = expandedReplies + mapOf(parent to ((expandedReplies[parent].orEmpty() + comment).distinctBy { it.id }))
                 }
                 text = ""
                 replyingTo = null
