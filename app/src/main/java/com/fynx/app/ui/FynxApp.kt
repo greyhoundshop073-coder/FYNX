@@ -123,6 +123,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo, initialOutgoing = callTarget != null)
             "To-Do" -> TodoPanel()
             "Privacy" -> FynxPrivacySettingsPanel(onBack = { selected = "Profile" })
+            "Saved Posts" -> FynxSavedPostsPanel(onOpenAuthorProfile = { profileUser = it })
             "Seller Center" -> FynxMarketplaceSellerCenterPanel()
             "AI" -> FynxAiAssistantPanel(onOpenDestination = { destination -> selected = destination })
             "AI Creation" -> FynxAiCreationPanel(onUseCaptionForPost = { caption -> aiCaptionDraft = caption; selected = "Home" }, onOpenPhotoEditor = { selected = "AI Photo Editor" })
