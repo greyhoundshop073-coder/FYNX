@@ -1,0 +1,47 @@
+name: FYNX CI Sequence Gate
+
+on:
+  workflow_run:
+    workflows: ["FYNX Android Build"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  sequence-gate:
+    if: ${{ github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce GREEN before next batch
+        env:
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          echo "FYNX CI result: $CONCLUSION"
+          echo "Commit: $SHA"
+          if [ "$CONCLUSION" != "success" ]; then
+            echo "RED: the current batch is not complete. Investigate and fix before continuing."
+            exit 1
+          fi
+          echo "GREEN: current batch is cleared for the next planned batch."
+
+      - name: Publish sequence status
+        env:
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          {
+            echo "## FYNX CI Sequence"
+            echo ""
+            echo "- Commit: \`$SHA\`"
+            echo "- Android Build: **$CONCLUSION**"
+            echo "- Run: $RUN_ID"
+            echo ""
+            if [ "$CONCLUSION" = "success" ]; then
+              echo "**GREEN — next batch may proceed.**"
+            else
+              echo "**RED — stop the sequence and fix the exact failure.**"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
