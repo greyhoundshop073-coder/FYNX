@@ -5,22 +5,28 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Keeps the existing Home experience intact while adding real multi-media creation and sound attachment. */
+/** Keeps the existing Home experience intact while providing a real, large social post composer. */
 @Composable
 fun FynxHomeSocialHubPanel(
     currentUsername: String,
@@ -42,6 +48,7 @@ fun FynxHomeSocialHubPanel(
     val defaultPostVisibility = if (configuredPostVisibility == "Everyone") FynxPostVisibility.PUBLIC else FynxPostVisibility.FRIENDS_ONLY
     var showComposer by remember { mutableStateOf(false) }
     var showCamera by remember { mutableStateOf(false) }
+    var showVoiceRecorder by remember { mutableStateOf(false) }
     var showPhotoEditor by remember { mutableStateOf(false) }
     var capturedUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var capturedTypes by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -93,6 +100,16 @@ fun FynxHomeSocialHubPanel(
         capturedTypes = capturedUris.map { item -> when { context.contentResolver.getType(item)?.startsWith("video/") == true -> "video"; context.contentResolver.getType(item)?.startsWith("audio/") == true -> "audio"; else -> "image" } }
     }
 
+    fun clearComposer() {
+        if (!posting && !aiCaptionLoading) {
+            showComposer = false
+            capturedUris = emptyList()
+            capturedTypes = emptyList()
+            text = ""
+            notice = null
+        }
+    }
+
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (networkLevel != FynxNetworkQuality.Level.GOOD) Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) { Text(if (networkLevel == FynxNetworkQuality.Level.OFFLINE) "You are offline. FYNX will keep the app usable while you reconnect." else "Weak connection detected. Media uploads may take longer.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) }
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -101,42 +118,98 @@ fun FynxHomeSocialHubPanel(
     }
 
     if (showComposer) {
-        FynxPlainDialog(onDismissRequest = { if (!posting && !aiCaptionLoading) { showComposer = false; capturedUris = emptyList(); capturedTypes = emptyList() } }, title = { Text("Create a FYNX post") }, text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (!postingAllowed) Text("Posting is disabled by your Posts privacy setting.", color = MaterialTheme.colorScheme.error)
-                OutlinedTextField(value = text, onValueChange = { text = it.take(4000) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 7, placeholder = { Text("Share something with your FYNX circle…") }, enabled = !posting && !aiCaptionLoading && postingAllowed, trailingIcon = { IconButton(onClick = ::requestInlineCaptionHelp, enabled = !posting && !aiCaptionLoading && postingAllowed && text.trim().isNotBlank()) { Icon(Icons.Default.AutoAwesome, contentDescription = "Improve caption with FYNX AI") } })
-                if (aiCaptionLoading) Text("FYNX AI is improving your caption…", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { showComposer = false; showCamera = true }, modifier = Modifier.weight(1f), enabled = !posting && !aiCaptionLoading && postingAllowed) { Icon(Icons.Default.CameraAlt, null); Spacer(Modifier.width(4.dp)); Text("Camera") }
-                    OutlinedButton(onClick = { gallery.launch(arrayOf("image/*", "video/*")) }, modifier = Modifier.weight(1f), enabled = !posting && !aiCaptionLoading && postingAllowed) { Icon(Icons.Default.VideoLibrary, null); Spacer(Modifier.width(4.dp)); Text("Gallery") }
-                    OutlinedButton(onClick = { soundPicker.launch(arrayOf("audio/*")) }, modifier = Modifier.weight(1f), enabled = !posting && !aiCaptionLoading && postingAllowed) { Icon(Icons.Default.MusicNote, null); Spacer(Modifier.width(4.dp)); Text("Sound") }
-                }
-                if (capturedUris.isNotEmpty()) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        val audioCount = capturedTypes.count { it == "audio" }
-                        val visualCount = capturedTypes.count { it == "image" || it == "video" }
-                        Text("${capturedUris.size} media item${if (capturedUris.size == 1) "" else "s"} ready${if (audioCount > 0) " • $audioCount sound${if (audioCount == 1) "" else "s"}" else ""}", color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
-                        if (visualCount == 1 && audioCount == 0 && capturedTypes.firstOrNull() == "image") TextButton(onClick = { showComposer = false; showPhotoEditor = true }, enabled = !posting && !aiCaptionLoading) { Icon(Icons.Default.AutoAwesome, null); Spacer(Modifier.width(4.dp)); Text("AI edit") }
+        Dialog(
+            onDismissRequest = { clearComposer() },
+            properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = !posting && !aiCaptionLoading, dismissOnClickOutside = !posting && !aiCaptionLoading)
+        ) {
+            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.fillMaxSize().imePadding()) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { clearComposer() }, enabled = !posting && !aiCaptionLoading) { Icon(Icons.Default.Close, "Close") }
+                        Text("Create post", style = MaterialTheme.typography.titleLarge)
+                        Button(enabled = !posting && !aiCaptionLoading && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUris.isNotEmpty()), onClick = {
+                            if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) { notice = "You are offline. Reconnect before publishing this post."; return@Button }
+                            posting = true; notice = null
+                            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris) }; result.onSuccess { clearComposer() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
+                        }) { Text(if (posting) "Publishing…" else "Post") }
                     }
-                    if (audioCountLabel(capturedTypes) > 0) Text("Sound is attached as a real audio item and will be published with this post.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                    Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        if (!postingAllowed) Text("Posting is disabled by your Posts privacy setting.", color = MaterialTheme.colorScheme.error)
+
+                        Text("Share something with your FYNX circle", style = MaterialTheme.typography.headlineSmall)
+                        OutlinedTextField(
+                            value = text,
+                            onValueChange = { text = it.take(4000) },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 190.dp),
+                            minLines = 7,
+                            maxLines = 14,
+                            placeholder = { Text("What's on your mind? Write your post here…", style = MaterialTheme.typography.titleMedium) },
+                            textStyle = MaterialTheme.typography.bodyLarge,
+                            enabled = !posting && !aiCaptionLoading && postingAllowed,
+                            trailingIcon = { IconButton(onClick = ::requestInlineCaptionHelp, enabled = !posting && !aiCaptionLoading && postingAllowed && text.trim().isNotBlank()) { Icon(Icons.Default.AutoAwesome, "Improve caption with FYNX AI") } }
+                        )
+                        if (aiCaptionLoading) Text("FYNX AI is improving your caption…", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+
+                        Text("Add to your post", style = MaterialTheme.typography.titleMedium)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            ComposerAction("Photo", Icons.Default.Image, { gallery.launch(arrayOf("image/*")) }, !posting && !aiCaptionLoading && postingAllowed, Modifier.weight(1f))
+                            ComposerAction("Video", Icons.Default.VideoLibrary, { gallery.launch(arrayOf("video/*")) }, !posting && !aiCaptionLoading && postingAllowed, Modifier.weight(1f))
+                            ComposerAction("Camera", Icons.Default.CameraAlt, { showComposer = false; showCamera = true }, !posting && !aiCaptionLoading && postingAllowed, Modifier.weight(1f))
+                            ComposerAction("Voice", Icons.Default.Mic, { showComposer = false; showVoiceRecorder = true }, !posting && !aiCaptionLoading && postingAllowed, Modifier.weight(1f))
+                        }
+
+                        if (capturedUris.isNotEmpty()) {
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    val audioCount = capturedTypes.count { it == "audio" }
+                                    val visualCount = capturedTypes.count { it == "image" || it == "video" }
+                                    Text("Attached media", style = MaterialTheme.typography.titleMedium)
+                                    Text("${capturedUris.size} item${if (capturedUris.size == 1) "" else "s"} ready${if (audioCount > 0) " • $audioCount audio" else ""}", color = MaterialTheme.colorScheme.primary)
+                                    if (visualCount == 1 && audioCount == 0 && capturedTypes.firstOrNull() == "image") TextButton(onClick = { showComposer = false; showPhotoEditor = true }, enabled = !posting && !aiCaptionLoading) { Icon(Icons.Default.AutoAwesome, null); Spacer(Modifier.width(4.dp)); Text("Edit this photo with FYNX AI") }
+                                    Text("You can add a caption above before publishing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+
+                        Text("Who can see this?", style = MaterialTheme.typography.titleMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected = visibility == FynxPostVisibility.PUBLIC, onClick = { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") }, enabled = !posting && !aiCaptionLoading && postingAllowed && configuredPostVisibility == "Everyone")
+                            FilterChip(selected = visibility == FynxPostVisibility.FRIENDS_ONLY, onClick = { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") }, enabled = !posting && !aiCaptionLoading && postingAllowed)
+                        }
+                        if (networkLevel == FynxNetworkQuality.Level.OFFLINE) Text("You are offline. Reconnect before publishing this post.", color = MaterialTheme.colorScheme.error)
+                        notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    }
                 }
-                Text("Who can see this?", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = visibility == FynxPostVisibility.PUBLIC, onClick = { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") }, enabled = !posting && !aiCaptionLoading && postingAllowed && configuredPostVisibility == "Everyone")
-                    FilterChip(selected = visibility == FynxPostVisibility.FRIENDS_ONLY, onClick = { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") }, enabled = !posting && !aiCaptionLoading && postingAllowed)
-                }
-                if (networkLevel == FynxNetworkQuality.Level.OFFLINE) Text("You are offline. Reconnect before publishing this post.", color = MaterialTheme.colorScheme.error)
-                notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
-        }, confirmButton = { Button(enabled = !posting && !aiCaptionLoading && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUris.isNotEmpty()), onClick = {
-            if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) { notice = "You are offline. Reconnect before publishing this post."; return@Button }
-            posting = true; notice = null
-            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris) }; result.onSuccess { showComposer = false; capturedUris = emptyList(); capturedTypes = emptyList(); text = "" }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
-        }) { Text(if (posting) "Publishing…" else "Post") } }, dismissButton = { TextButton(onClick = { if (!posting && !aiCaptionLoading) { showComposer = false; capturedUris = emptyList(); capturedTypes = emptyList() } }, enabled = !posting && !aiCaptionLoading) { Text("Cancel") } })
+        }
+    }
+
+    if (showVoiceRecorder) {
+        FynxVoicePostRecorder(
+            onRecorded = { uri ->
+                capturedUris = (capturedUris.filterNot { it == uri } + uri).take(12)
+                recomputeTypes()
+                showVoiceRecorder = false
+                showComposer = true
+            },
+            onDismiss = { showVoiceRecorder = false; showComposer = true }
+        )
     }
 
     if (showPhotoEditor) Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { FynxAiPhotoEditorPanel(initialUri = capturedUris.firstOrNull(), onDone = { editedUri -> if (editedUri != null) { capturedUris = listOf(editedUri); capturedTypes = listOf("image") }; showPhotoEditor = false; showComposer = true }) }
     if (showCamera) Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { FynxCameraCapturePanel(onCaptured = { uri, type -> capturedUris = (capturedUris + uri).take(12); recomputeTypes(); showCamera = false; showComposer = true }, onDismiss = { showCamera = false; showComposer = true }) }
+}
+
+@Composable
+private fun ComposerAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier) {
+    OutlinedButton(onClick = onClick, enabled = enabled, modifier = modifier.height(76.dp), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)) {
+        Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Icon(icon, contentDescription = label, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.height(5.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge)
+        }
+    }
 }
 
 private fun audioCountLabel(types: List<String>): Int = types.count { it == "audio" }
