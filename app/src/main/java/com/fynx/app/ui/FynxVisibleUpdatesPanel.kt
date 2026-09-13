@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
@@ -17,10 +18,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -85,6 +88,41 @@ fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, 
                 items(grouped.filterNot { it.first.ownerUsername.equals(currentUsername, true) }) { (status, count) ->
                     FynxStatusPreviewCircle(status, status.ownerUsername, status.ownerDisplayName.ifBlank { status.ownerUsername }, true, onOpenStories, count)
                 }
+            }
+        }
+    }
+
+    Card(
+        onClick = onOpenAi,
+        modifier = Modifier.fillMaxWidth(),
+        shape = FynxDesign.LargeCardShape,
+        colors = CardDefaults.cardColors(containerColor = FynxDesign.SurfaceRaised, contentColor = MaterialTheme.colorScheme.onSurface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.32f))
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.layout.Box(
+                    Modifier.size(44.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("FYNX AI", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    Text("Ask, create, translate and get help", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                IconButton(onClick = onOpenAi) {
+                    Icon(Icons.Default.Mic, contentDescription = "Talk to FYNX AI", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AssistChip(onClick = onOpenAi, label = { Text("Ask anything") }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })
+                AssistChip(onClick = onOpenAi, label = { Text("Translate") })
+                AssistChip(onClick = onOpenAi, label = { Text("Write") })
             }
         }
     }
