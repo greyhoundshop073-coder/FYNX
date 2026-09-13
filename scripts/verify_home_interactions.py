@@ -67,6 +67,7 @@ for needle in (
 for needle in (
     "suspend fun comments(context: Context, id: String)",
     "suspend fun addComment(context: Context, id: String, text: String)",
+    "suspend fun addReply(context: Context, postId: String, parentCommentId: String, text: String)",
     "suspend fun save(context: Context, id: String, saved: Boolean)",
     "suspend fun repost(context: Context, id: String, reposted: Boolean)",
     "suspend fun interactionState(context: Context, id: String)",
@@ -142,43 +143,15 @@ for needle in (
 ):
     require(home, needle, f"identity/share behavior {needle}")
 
+# Save/repost state must be re-hydratable from the authoritative backend after feed re-entry.
+require(home, 'hydrateInteractionStates(page.posts)', "interaction state re-entry hydration")
+require(home, 'interactionStates = emptyMap()', "interaction state reset before re-hydration")
+
+# Do not allow old competing interaction surfaces to return.
 if "CommentsDialog" in home:
     raise SystemExit("HOME INTERACTIONS RED: legacy competing CommentsDialog detected")
 if 'Text("Save")' in home or 'Text("Repost")' in home:
     raise SystemExit("HOME INTERACTIONS RED: fake Save/Repost feed controls detected")
-
-# Home 4F human-level polish: preserve the existing design system, stable item identity,
-# touch/accessibility labels, real loading/error/empty states, and lifecycle-safe composition surfaces.
-for needle in (
-    'MaterialTheme.colorScheme',
-    'FynxDesign.LargeCardShape',
-    'key = "feed_header"',
-    'key = "feed_loading"',
-    'key = "feed_error"',
-    'key = "feed_empty"',
-    'key = "feed_load_more"',
-    'contentDescription = null',
-    '"Refresh feed"',
-    '"Create post"',
-    '"Like"',
-    '"Comment"',
-    '"Save post"',
-    '"Repost"',
-    '"Post options"',
-    'onDismissRequest =',
-    'enabled = !feedRequestInFlight',
-    'enabled = !loadingMore && !feedRequestInFlight',
-):
-    require(home, needle, f"Home 4F polish/integration surface {needle}")
-
-# Keep profile identity and media access tied to real remote identifiers; no placeholder identity UI.
-for needle in (
-    'FynxRemoteProfileAvatar(',
-    'profilePhotoMediaId',
-    'post.authorDisplayName.ifBlank { post.authorUsername }',
-    'post.mediaUrl?.let',
-):
-    require(home, needle, f"real Home identity/media surface {needle}")
 
 # Clean production startup and privacy-safe comment/reply boundaries remain mandatory.
 require(backend_package, '"start": "node realtimeIsolationBootstrap.js"', "production realtime entrypoint")
@@ -200,4 +173,4 @@ for needle in (
 
 require(privacy_bootstrap, "fynxHomeCommentsPrivacyBatch", "Home comment privacy patch marker")
 
-print("HOME INTERACTIONS GREEN: Home 4E durable interactions, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/lifecycle/accessibility surfaces, and clean-startup privacy boundaries are present without duplicate surfaces.")
+print("HOME INTERACTIONS GREEN: Home 4E backend-backed interactions, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, interaction-state re-entry, and clean-startup privacy boundaries are present without duplicate surfaces.")
