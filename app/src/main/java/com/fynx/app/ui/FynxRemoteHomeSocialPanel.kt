@@ -1,6 +1,5 @@
 package com.fynx.app.ui
 
-import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.media.MediaMetadataRetriever
@@ -124,13 +123,14 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
     }
 
-    fun runInteraction(id: String, desired: Boolean, isActive: (FynxRemoteSocialClient.SocialInteractionState) -> Boolean, action: suspend () -> Result<Pair<Boolean, Int>>, update: (FynxRemoteSocialClient.SocialInteractionState, Boolean, Int) -> FynxRemoteSocialClient.SocialInteractionState) {
+    fun runInteraction(id: String, desired: Boolean, isActive: (FynxRemoteSocialClient.SocialInteractionState) -> Boolean, count: (FynxRemoteSocialClient.SocialInteractionState) -> Int, action: suspend () -> Result<Pair<Boolean, Int>>, update: (FynxRemoteSocialClient.SocialInteractionState, Boolean, Int) -> FynxRemoteSocialClient.SocialInteractionState) {
         if (id in interactionBusy) return
         val previous = interactionStates[id] ?: FynxRemoteSocialClient.SocialInteractionState(false, false, 0, 0)
+        val currentCount = count(previous)
         val optimisticCount = when {
-            desired && !isActive(previous) -> previous.savedCount + 1
-            !desired && isActive(previous) -> (previous.savedCount - 1).coerceAtLeast(0)
-            else -> previous.savedCount
+            desired && !isActive(previous) -> currentCount + 1
+            !desired && isActive(previous) -> (currentCount - 1).coerceAtLeast(0)
+            else -> currentCount
         }
         interactionStates = interactionStates + (id to update(previous, desired, optimisticCount))
         interactionBusy = interactionBusy + id
@@ -220,8 +220,8 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                 onComment = { commentsPost = post },
                 onFollow = { following -> runFollow(post.authorUsername, following) },
                 onDelete = { deletePost = post },
-                onSave = { id, saved -> runInteraction(id, saved, { it.saved }, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } },
-                onRepost = { id, reposted -> runInteraction(id, reposted, { it.reposted }, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } },
+                onSave = { id, saved -> runInteraction(id, saved, { it.saved }, { it.savedCount }, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } },
+                onRepost = { id, reposted -> runInteraction(id, reposted, { it.reposted }, { it.repostCount }, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } },
                 onShare = { runShare(post) }, onOpenMarketplace = onOpenMarketplace)
         }
         if (!loading && hasMore) item(key = "feed_load_more") { OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore && !feedRequestInFlight, modifier = Modifier.fillMaxWidth()) { Text(if (loadingMore) "Loading more posts…" else "Load more posts") } }
