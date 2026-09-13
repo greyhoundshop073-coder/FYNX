@@ -10,7 +10,7 @@ async function installHomeCommentPrivacy() {
   const backendDir = path.dirname(fileURLToPath(import.meta.url));
   const socialPath = path.join(backendDir, "socialRoutes.js");
   let source = await readFile(socialPath, "utf8");
-  if (source.includes("fynxHomeCommentsPrivacyBatch")) return;
+  if (source.includes("fynxHomeCommentsBatch4b") || source.includes("fynxHomeCommentsPrivacyBatch")) return;
 
   const schemaNeedle = "CREATE INDEX IF NOT EXISTS social_post_comments_post_idx ON social_post_comments(post_id, created_at ASC);";
   if (!source.includes(schemaNeedle)) throw new Error("Home comment privacy patch could not locate social comment schema marker");
@@ -20,7 +20,9 @@ async function installHomeCommentPrivacy() {
   if (!source.includes(routeMarker)) throw new Error("Home comment privacy patch could not locate social follow route marker");
 
   const routes = `
-  // fynxHomeCommentsPrivacyBatch: privacy-safe paginated comments and replies.
+  // fynxHomeCommentsBatch4b: privacy-safe paginated comments and replies.
+  // fynxHomeCommentsPrivacyBatch: preserves the existing 4B route marker while
+  // adding symmetric block filtering and removed/private post boundaries.
   app.get('/api/social/posts/:id/comments/page', auth, async (req, res) => {
     try {
       await ensureSocialSchema();
@@ -133,7 +135,6 @@ async function installHomeCommentPrivacy() {
           WHERE c.id=$1 AND c.post_id=$2
             AND NOT EXISTS (
               SELECT 1 FROM blocks b
-               JOIN users u ON u.id=c.author_id
                WHERE (b.blocker_id=$3 AND b.blocked_id=c.author_id)
                   OR (b.blocker_id=c.author_id AND b.blocked_id=$3)
             )`,
