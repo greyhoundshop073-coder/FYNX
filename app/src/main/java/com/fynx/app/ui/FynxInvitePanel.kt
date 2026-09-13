@@ -1,6 +1,5 @@
 package com.fynx.app.ui
 
-import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -18,7 +17,7 @@ import kotlinx.coroutines.launch
 fun FynxInvitePanel(
     code: String?,
     groupId: String? = null,
-    onShare: (String) -> Unit,
+    onShare: () -> Unit = {},
     onOpenGroup: (String) -> Unit = {},
     onBack: () -> Unit
 ) {
@@ -97,7 +96,7 @@ fun FynxInvitePanel(
         if (invite != null) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 val link = FynxDeepLinkParser.inviteWebLink(invite!!.token, invite!!.groupId)
-                OutlinedButton(onClick = { onShare(link) }, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = { FynxShareActions.share(context, FynxSharePayload("FYNX group invite", "Join ${invite!!.name} on FYNX.", link)) }, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Default.Share, null); Spacer(Modifier.width(6.dp)); Text("Share")
                 }
                 if (!invite!!.alreadyMember && !invite!!.pending) Button(onClick = ::join, enabled = !joining, modifier = Modifier.weight(1f)) { Text(if (joining) "Joining…" else "Join group") }
