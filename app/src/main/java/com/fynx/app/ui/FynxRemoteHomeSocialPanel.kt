@@ -54,6 +54,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var authorPhotos by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var interactionStates by remember { mutableStateOf<Map<String, FynxRemoteSocialClient.SocialInteractionState>>(emptyMap()) }
     var interactionBusy by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var deletePost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
 
     fun resolveAuthorPhotos(items: List<FynxRemoteSocialClient.RemotePost>) {
         val names = items.map { it.authorUsername.removePrefix("@").trim() }.filter { it.isNotBlank() }.distinct()
@@ -147,6 +148,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             FynxRemoteSocialClient.deletePost(context, id).onSuccess {
                 posts = posts.filterNot { it.id == id }
                 interactionStates = interactionStates - id
+                deletePost = null
             }.onFailure { error = it.message ?: "Unable to delete this post." }
             interactionBusy = interactionBusy - id
         }
@@ -171,7 +173,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                 onLike = { id -> runLike(id) },
                 onComment = { commentsPost = post },
                 onFollow = { following -> runFollow(post.authorUsername, following) },
-                onDelete = { runDelete(post.id) },
+                onDelete = { deletePost = post },
                 onSave = { id, saved -> runInteraction(id, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } },
                 onRepost = { id, reposted -> runInteraction(id, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } },
                 onShare = { scope.launch { FynxDiscoveryClient.recordEngagement(context, "SHARE", post.id) }; sharePost(context, post) }, onOpenMarketplace = onOpenMarketplace)
@@ -179,6 +181,15 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         if (!loading && hasMore) item(key = "feed_load_more") { OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore && !feedRequestInFlight, modifier = Modifier.fillMaxWidth()) { Text(if (loadingMore) "Loading more posts…" else "Load more posts") } }
     }
     commentsPost?.let { post -> FynxHomeCommentsPanel(post = post, onClose = { commentsPost = null }, onCommentCountChanged = { newCount -> posts = posts.map { if (it.id == post.id) it.copy(commentCount = newCount) else it } }) }
+    deletePost?.let { post ->
+        AlertDialog(
+            onDismissRequest = { if (post.id !in interactionBusy) deletePost = null },
+            title = { Text("Delete post?") },
+            text = { Text("This will permanently remove your post from FYNX. This action cannot be undone.") },
+            confirmButton = { TextButton(onClick = { runDelete(post.id) }, enabled = post.id !in interactionBusy) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { deletePost = null }, enabled = post.id !in interactionBusy) { Text("Cancel") } }
+        )
+    }
 }
 
 @Composable
