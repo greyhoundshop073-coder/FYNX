@@ -1,64 +1,110 @@
 package com.fynx.app.ui
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import android.content.Context
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
 @Composable
 fun FynxInvitePanel(
     code: String?,
-    onShare: () -> Unit,
+    groupId: String? = null,
+    onShare: (String) -> Unit,
+    onOpenGroup: (String) -> Unit = {},
     onBack: () -> Unit
 ) {
-    Column(
-        Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Text("FYNX Invite", style = MaterialTheme.typography.headlineSmall)
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var invite by remember(code, groupId) { mutableStateOf<FynxGroupRemoteClient.RemoteInvite?>(null) }
+    var loading by remember(code, groupId) { mutableStateOf(true) }
+    var joining by remember(code, groupId) { mutableStateOf(false) }
+    var message by remember(code, groupId) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(code, groupId) {
+        if (code.isNullOrBlank() || groupId.isNullOrBlank()) { loading = false; return@LaunchedEffect }
+        FynxGroupRemoteClient.previewInvite(context, groupId, code)
+            .onSuccess { invite = it; message = null }
+            .onFailure { message = it.message ?: "This invite could not be validated." }
+        loading = false
+    }
+
+    fun join() {
+        val id = groupId ?: return
+        val token = code ?: return
+        joining = true; message = null
+        scope.launch {
+            FynxGroupRemoteClient.joinInvite(context, id, token)
+                .onSuccess { result ->
+                    when {
+                        result.optBoolean("joined") -> { message = "You joined ${invite?.name ?: "the group"}."; onOpenGroup(id) }
+                        result.optBoolean("pending") -> message = "Your join request was sent for admin approval."
+                        else -> message = "The group join request could not be completed."
+                    }
+                }
+                .onFailure { message = it.message ?: "Unable to join this group." }
+            joining = false
+        }
+    }
+
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") }
+            Column(Modifier.weight(1f)) {
+                Text("Group invite", style = MaterialTheme.typography.headlineSmall)
+                Text("Review before joining", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.Default.GroupAdd, null, tint = MaterialTheme.colorScheme.primary)
+        }
+
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.GroupAdd, contentDescription = "Invite")
-                    Spacer(Modifier.weight(1f))
-                }
-                Text(
-                    if (code.isNullOrBlank()) {
-                        "You opened a FYNX invite link."
-                    } else {
-                        "You opened a FYNX invite link with code: $code"
-                    },
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    "This safe local foundation does not automatically add friends or accept memberships. A future FYNX account service can validate the invite before any relationship is created.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Button(onClick = onShare, Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Share, contentDescription = null)
-                    Spacer(Modifier.height(0.dp))
-                    Text("Share FYNX")
+                if (loading) {
+                    CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                    Text("Checking invite…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else if (invite != null) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(Icons.Default.Group, null, tint = MaterialTheme.colorScheme.primary)
+                        Column(Modifier.weight(1f)) {
+                            Text(invite!!.name, style = MaterialTheme.typography.titleLarge)
+                            Text("${invite!!.memberCount} members", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    if (invite!!.description.isNotBlank()) Text(invite!!.description, style = MaterialTheme.typography.bodyMedium)
+                    when {
+                        invite!!.alreadyMember -> Text("You are already a member of this group.", color = MaterialTheme.colorScheme.primary)
+                        invite!!.pending -> Text("Your join request is waiting for an admin.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        invite!!.approveNewMembers -> Text("An admin must approve new members before you can enter.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else -> Text("You can join this group now.", color = MaterialTheme.colorScheme.primary)
+                    }
+                } else {
+                    Text("Invite unavailable", style = MaterialTheme.typography.titleLarge)
+                    Text(message ?: "This invite is invalid, expired, or revoked.", color = MaterialTheme.colorScheme.error)
                 }
             }
         }
-        OutlinedButton(onClick = onBack, Modifier.fillMaxWidth()) {
-            Text("Back to FYNX")
+
+        message?.let { if (invite != null) Text(it, color = if (it.contains("joined", true)) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
+
+        if (invite != null) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                val link = FynxDeepLinkParser.inviteWebLink(invite!!.token, invite!!.groupId)
+                OutlinedButton(onClick = { onShare(link) }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.Share, null); Spacer(Modifier.width(6.dp)); Text("Share")
+                }
+                if (!invite!!.alreadyMember && !invite!!.pending) Button(onClick = ::join, enabled = !joining, modifier = Modifier.weight(1f)) { Text(if (joining) "Joining…" else "Join group") }
+                if (invite!!.alreadyMember) Button(onClick = { onOpenGroup(invite!!.groupId) }, modifier = Modifier.weight(1f)) { Text("Open group") }
+            }
         }
+        Spacer(Modifier.weight(1f))
+        Text("FYNX checks the invite with the server before membership changes are made.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
