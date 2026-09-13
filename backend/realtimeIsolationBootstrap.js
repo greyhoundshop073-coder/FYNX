@@ -151,10 +151,11 @@ async function installHomeCommentBackend() {
                 u.id AS author_id,u.username,u.display_name
            FROM social_post_comments c
            JOIN users u ON u.id=c.author_id
-          WHERE c.post_id=$1${cursorClause}
+          WHERE c.post_id=$1
+            AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$2))${cursorClause}
           ORDER BY c.id DESC
-          LIMIT $2`,
-        params
+          LIMIT $3`,
+        before === null ? [postId, req.user.sub, limit + 1] : [postId, req.user.sub, limit + 1, before]
       );
       const rows = result.rows.slice(0, limit).reverse();
       const nextCursor = result.rows.length > limit ? String(result.rows[result.rows.length - 1].id) : null;
@@ -216,6 +217,9 @@ async function installHomeCommentBackend() {
   await writeFile(socialPath, source);
 }
 
-await installHomeCommentPrivacy();
+// Install the base comments routes first, then apply the privacy hardening to
+// that same route source. This preserves the real production entrypoint and
+// also works correctly on a clean deployment where Batch 4B has not yet run.
 await installHomeCommentBackend();
+await installHomeCommentPrivacy();
 await import("./serverBootstrap.js");
