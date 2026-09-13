@@ -15,6 +15,7 @@ object FynxRemoteSocialClient {
     data class RemoteUser(val id: String, val username: String, val displayName: String)
     data class MarketplaceListing(val id: String, val sellerId: String, val sellerUsername: String, val sellerDisplayName: String, val storeName: String, val title: String, val description: String, val price: Double, val currency: String, val category: String, val condition: String, val quantity: Int, val location: String, val deliveryAvailable: Boolean, val pickupAvailable: Boolean, val deliveryFee: Double?, val mediaIds: List<String>, val active: Boolean = true)
     data class MarketplaceOrder(val id: String, val buyerId: String, val sellerId: String, val listingId: String, val quantity: Int, val unitPrice: Double, val deliveryFee: Double, val totalAmount: Double, val currency: String, val productTitle: String, val sellerUsername: String?, val status: String, val trackingReference: String?, val fulfillmentMethod: String, val shippingAddress: JSONObject?, val buyerNote: String, val inspectionDeadline: String?, val deliveryAvailable: Boolean, val pickupAvailable: Boolean)
+    data class SocialInteractionState(val saved: Boolean, val reposted: Boolean, val savedCount: Int, val repostCount: Int)
 
     private const val FEED_PAGE_SIZE = 20
     private const val FEED_CACHE_TTL_MS = 120_000L
@@ -123,6 +124,25 @@ object FynxRemoteSocialClient {
     suspend fun reviewMarketplaceOrder(context: Context, id: String, rating: Int, comment: String): Result<Unit> { require(rating in 1..5) { "Rating must be between 1 and 5." }; return FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/review", JSONObject().apply { put("rating", rating); put("comment", comment.trim().take(1000)) }.toString()).map { Unit } }
 
     suspend fun like(context: Context, id: String): Result<Pair<Boolean, Int>> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); return FynxBackendClient.postJson(context, "/api/social/posts/$numericId/like", "{}").mapCatching { val o = JSONObject(it); o.optBoolean("liked") to o.optInt("likeCount") } }
+    suspend fun save(context: Context, id: String, saved: Boolean): Result<Pair<Boolean, Int>> {
+        val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        val path = "/api/social/posts/$numericId/save"
+        return if (saved) FynxBackendClient.postJson(context, path, "{}").mapCatching { val o = JSONObject(it); o.optBoolean("saved", true) to o.optInt("savedCount") }
+        else FynxBackendClient.delete(context, path).mapCatching { val o = JSONObject(it); o.optBoolean("saved", false) to o.optInt("savedCount") }
+    }
+    suspend fun repost(context: Context, id: String, reposted: Boolean): Result<Pair<Boolean, Int>> {
+        val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        val path = "/api/social/posts/$numericId/repost"
+        return if (reposted) FynxBackendClient.postJson(context, path, "{}").mapCatching { val o = JSONObject(it); o.optBoolean("reposted", true) to o.optInt("repostCount") }
+        else FynxBackendClient.delete(context, path).mapCatching { val o = JSONObject(it); o.optBoolean("reposted", false) to o.optInt("repostCount") }
+    }
+    suspend fun interactionState(context: Context, id: String): Result<SocialInteractionState> {
+        val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        return FynxBackendClient.get(context, "/api/social/posts/$numericId/interaction-state").mapCatching { raw ->
+            val o = JSONObject(raw)
+            SocialInteractionState(o.optBoolean("saved"), o.optBoolean("reposted"), o.optInt("savedCount"), o.optInt("repostCount"))
+        }
+    }
     suspend fun comments(context: Context, id: String): Result<List<RemoteComment>> = commentsPage(context, id, null).map { it.comments }
     suspend fun commentsPage(context: Context, id: String, before: String?, limit: Int = 50): Result<CommentPage> {
         val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
