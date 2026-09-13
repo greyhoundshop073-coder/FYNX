@@ -9,12 +9,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -55,19 +56,22 @@ private suspend fun downloadRemoteMedia(context: android.content.Context, resolv
 fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val resolvedUrl = remember(mediaUrl) { resolveFynxMediaUrl(context, mediaUrl) }
+    val scope = rememberCoroutineScope()
     var kind by remember(resolvedUrl, type) { mutableStateOf("loading") }
     var bitmap by remember(resolvedUrl, type) { mutableStateOf<android.graphics.Bitmap?>(null) }
     var localFile by remember(resolvedUrl, type) { mutableStateOf<File?>(null) }
     var reloadNonce by remember(resolvedUrl, type) { mutableIntStateOf(0) }
+    var videoView by remember(resolvedUrl, type) { mutableStateOf<android.widget.VideoView?>(null) }
+    var videoPlaying by remember(resolvedUrl, type) { mutableStateOf(false) }
     LaunchedEffect(resolvedUrl, type, reloadNonce) {
         kind = "loading"
         bitmap = null
         localFile = null
+        videoView = null
+        videoPlaying = false
         try {
             val loaded = withContext(Dispatchers.IO) {
                 val isKnownVideo = type.equals("video", true)
-                // Auto media cannot safely cache a video because the cache does not persist content type.
-                // Decode the authoritative response first so a cached video can never be mistaken for an image.
                 val cacheTarget = if (isKnownVideo) remoteMediaCacheFile(context, resolvedUrl, ".media") else null
                 val target = cacheTarget ?: File.createTempFile("fynx_media_", ".media", context.cacheDir)
                 val result = if (cacheTarget?.exists() == true && cacheTarget.length() > 0L) {
@@ -79,8 +83,6 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
                     val contentType = downloaded.contentType.orEmpty()
                     val isVideo = isKnownVideo || (type.equals("auto", true) && contentType.startsWith("video/"))
                     if (isVideo) {
-                        // Keep the stable .media cache target. VideoView reads the file bytes, not the suffix,
-                        // and retaining the same path makes subsequent cache hits actually hit.
                         MediaLoadResult.Video(target)
                     } else {
                         val decoded = BitmapFactory.decodeFile(target.absolutePath) ?: throw IllegalStateException("Unable to decode media")
@@ -99,9 +101,68 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
             kind = "error"
         }
     }
+    DisposableEffect(resolvedUrl, type) {
+        onDispose {
+            videoView?.stopPlayback()
+            videoView = null
+        }
+    }
     when (kind) {
         "image" -> bitmap?.let { Image(it.asImageBitmap(), "Media", modifier.clip(RoundedCornerShape(14.dp)), contentScale = ContentScale.Crop) }
-        "video" -> localFile?.let { file -> AndroidView(factory = { ctx -> android.widget.VideoView(ctx).apply { setVideoPath(file.absolutePath); setOnPreparedListener { player -> player.isLooping = true; start() } } }, modifier = modifier.clip(RoundedCornerShape(14.dp))) }
+        "video" -> localFile?.let { file ->
+            Box(modifier.clip(RoundedCornerShape(14.dp))) {
+                AndroidView(
+                    factory = { ctx ->
+                        android.widget.VideoView(ctx).apply {
+                            setVideoPath(file.absolutePath)
+                            setOnPreparedListener { player ->
+                                player.isLooping = true
+                                start()
+                                videoPlaying = true
+                            }
+                            setOnCompletionListener { videoPlaying = false }
+                            setOnErrorListener { _, _, _ -> videoPlaying = false; true }
+                            videoView = this
+                        }
+                    },
+                    update = { view ->
+                        if (view.tag != file.absolutePath) {
+                            view.tag = file.absolutePath
+                            view.setVideoPath(file.absolutePath)
+                            view.setOnPreparedListener { player ->
+                                player.isLooping = true
+                                start()
+                                videoPlaying = true
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+                Surface(
+                    color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier.align(Alignment.Center)
+                ) {
+                    IconButton(onClick = {
+                        videoView?.let { view ->
+                            if (view.isPlaying) {
+                                view.pause()
+                                videoPlaying = false
+                            } else {
+                                view.start()
+                                videoPlaying = true
+                            }
+                        }
+                    }) {
+                        Icon(
+                            if (videoPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            if (videoPlaying) "Pause video" else "Play video",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
         "error" -> Box(modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 Icon(Icons.Default.BrokenImage, "Media unavailable")
@@ -154,8 +215,6 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier) {
                     val target = cached ?: File.createTempFile("fynx_audio_", ".audio", context.cacheDir)
                     val result = if (cached?.exists() == true && cached.length() > 0L) Result.success(FynxBackendClient.DownloadedMedia(null, cached.length())) else downloadRemoteMedia(context, resolvedUrl, target)
                     result.getOrThrow()
-                    // Keep the stable .audio cache target; MediaPlayer uses the file bytes and this avoids
-                    // renaming away from the path used for future cache lookups.
                     val finalFile = target
                     val p = MediaPlayer()
                     p.setDataSource(finalFile.absolutePath)
