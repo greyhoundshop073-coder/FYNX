@@ -56,7 +56,6 @@ private suspend fun downloadRemoteMedia(context: android.content.Context, resolv
 fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val resolvedUrl = remember(mediaUrl) { resolveFynxMediaUrl(context, mediaUrl) }
-    val scope = rememberCoroutineScope()
     var kind by remember(resolvedUrl, type) { mutableStateOf("loading") }
     var bitmap by remember(resolvedUrl, type) { mutableStateOf<android.graphics.Bitmap?>(null) }
     var localFile by remember(resolvedUrl, type) { mutableStateOf<File?>(null) }
@@ -117,7 +116,7 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
                             setVideoPath(file.absolutePath)
                             setOnPreparedListener { player ->
                                 player.isLooping = true
-                                start()
+                                player.start()
                                 videoPlaying = true
                             }
                             setOnCompletionListener { videoPlaying = false }
@@ -131,7 +130,7 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
                             view.setVideoPath(file.absolutePath)
                             view.setOnPreparedListener { player ->
                                 player.isLooping = true
-                                start()
+                                player.start()
                                 videoPlaying = true
                             }
                         }
