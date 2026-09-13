@@ -8,6 +8,18 @@ export async function installHomeCommentPrivacy() {
   const backendDir = path.dirname(fileURLToPath(import.meta.url));
   const socialPath = path.join(backendDir, "socialRoutes.js");
   let source = await readFile(socialPath, "utf8");
+
+  // Home 4D cursor hardening: the comments route binds LIMIT to $3, so a
+  // supplied `before` cursor must be bound to $4. Apply this even when the
+  // privacy marker already exists because the route source may have been
+  // installed by an earlier startup before this correction was deployed.
+  const oldCursorBinding = "const cursorClause = before === null ? '' : ' AND c.id < $3';";
+  const fixedCursorBinding = "const cursorClause = before === null ? '' : ' AND c.id < $4';";
+  if (source.includes(oldCursorBinding)) {
+    source = source.replace(oldCursorBinding, fixedCursorBinding);
+    await writeFile(socialPath, source);
+  }
+
   if (source.includes("fynxHomeCommentsPrivacyBatch")) return;
 
   if (source.includes("fynxHomeCommentsBatch4b")) {
