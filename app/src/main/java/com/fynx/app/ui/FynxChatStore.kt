@@ -113,8 +113,11 @@ object FynxChatStore {
     }
 
     fun savePreview(context: Context, preview: ChatPreview) {
-        val previews = loadPreviews(context).filterNot { it.username.equals(preview.username, ignoreCase = true) }
-        val updated = listOf(preview) + previews
+        val unreadCount = load(context, preview.username)
+            .count { !it.fromMe && !it.read }
+        val normalizedPreview = preview.copy(unreadCount = unreadCount)
+        val previews = loadPreviews(context).filterNot { it.username.equals(normalizedPreview.username, ignoreCase = true) }
+        val updated = listOf(normalizedPreview) + previews
         val array = JSONArray()
         updated.forEach { item ->
             array.put(JSONObject().apply {
