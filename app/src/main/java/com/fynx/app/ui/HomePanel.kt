@@ -28,7 +28,8 @@ fun HomePanel(
     onOpenNotifications: () -> Unit = {},
     onOpenFindPeople: () -> Unit = {},
     onOpenAi: () -> Unit = {},
-    onCreatePost: () -> Unit = {}
+    onCreatePost: () -> Unit = {},
+    onOpenAuthorProfile: (String) -> Unit = {}
 ) {
     val displayUsername = currentUsername.trim().removePrefix("@").trim()
 
@@ -47,7 +48,8 @@ fun HomePanel(
             currentUsername = displayUsername,
             onOpenFindPeople = onOpenFindPeople,
             onOpenMarketplace = onOpenMarketplace,
-            onCreatePost = onCreatePost
+            onCreatePost = onCreatePost,
+            onOpenAuthorProfile = onOpenAuthorProfile
         )
     }
 }
