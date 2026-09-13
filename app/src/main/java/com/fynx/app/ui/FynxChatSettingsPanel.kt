@@ -36,14 +36,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-private const val CHAT_PREFS = "fynx_chat_settings"
-
-private fun chatPrefs(context: Context) = context.getSharedPreferences(CHAT_PREFS, Context.MODE_PRIVATE)
-
 @Composable
 fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val prefs = remember(chatUsername) { chatPrefs(context) }
+    // Use the same account-scoped preference store consumed by conversation behavior.
+    // This prevents chat settings from leaking across accounts and keeps the panel and
+    // runtime preference helpers reading the same values.
+    val prefs = remember(chatUsername) { FynxConversationPreferences.chat(context, chatUsername) }
     var notifications by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("notifications_$chatUsername", true)) }
     var muted by rememberSaveable(chatUsername) { mutableStateOf(FynxPreferencesStore.isChatMuted(context, chatUsername)) }
     var previews by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("previews_$chatUsername", true)) }
