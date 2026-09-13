@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.media.MediaMetadataRetriever
@@ -61,10 +62,12 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         val missing = names.filterNot { authorPhotos.containsKey(it.lowercase()) }
         if (missing.isEmpty()) return
         scope.launch {
-            val resolved = mutableMapOf<String, String?>()
-            missing.forEach { username ->
-                FynxSocialClient.searchUsers(context, username).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(username, true) }?.let { resolved[username.lowercase()] = it.profilePhotoMediaId } ?: run { resolved[username.lowercase()] = null }
-            }
+            val resolved = missing.map { username ->
+                async(Dispatchers.IO) {
+                    username.lowercase() to (FynxSocialClient.searchUsers(context, username).getOrNull()
+                        ?.firstOrNull { it.username.removePrefix("@").equals(username, true) }?.profilePhotoMediaId)
+                }
+            }.awaitAll().toMap()
             authorPhotos = authorPhotos + resolved
         }
     }
@@ -73,7 +76,8 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         val ids = items.map { it.id }.filter { it.isNotBlank() && !interactionStates.containsKey(it) }.distinct()
         if (ids.isEmpty()) return
         scope.launch {
-            val resolved = ids.map { id -> async(Dispatchers.IO) { id to FynxRemoteSocialClient.interactionState(context, id).getOrNull() } }.awaitAll().mapNotNull { (id, state) -> state?.let { id to it } }.toMap()
+            val resolved = ids.map { id -> async(Dispatchers.IO) { id to FynxRemoteSocialClient.interactionState(context, id).getOrNull() } }
+                .awaitAll().mapNotNull { (id, state) -> state?.let { id to it } }.toMap()
             if (resolved.isNotEmpty()) interactionStates = interactionStates + resolved
         }
     }
@@ -87,9 +91,17 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         scope.launch {
             loading = true
             FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh).onSuccess { page ->
-                posts = page.posts; hasMore = page.hasMore; error = null; interactionStates = emptyMap(); resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts)
-            }.onFailure { error = if (it.message?.contains("HTTP 404", true) == true) "Your FYNX feed service is temporarily unavailable." else it.message ?: "Unable to load your feed." }
-            loading = false; feedRequestInFlight = false
+                posts = page.posts
+                hasMore = page.hasMore
+                error = null
+                interactionStates = emptyMap()
+                resolveAuthorPhotos(page.posts)
+                hydrateInteractionStates(page.posts)
+            }.onFailure {
+                error = if (it.message?.contains("HTTP 404", true) == true) "Your FYNX feed service is temporarily unavailable." else it.message ?: "Unable to load your feed."
+            }
+            loading = false
+            feedRequestInFlight = false
         }
     }
 
@@ -99,32 +111,55 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         scope.launch {
             loadingMore = true
             FynxRemoteSocialClient.feedPage(context, limit = 20, offset = posts.size, useCache = false).onSuccess { page ->
-                val existing = posts.map { it.id }.toSet(); val additions = page.posts.filterNot { it.id in existing }; posts = posts + additions; hasMore = page.hasMore; error = null; resolveAuthorPhotos(additions); hydrateInteractionStates(additions)
+                val existing = posts.map { it.id }.toSet()
+                val additions = page.posts.filterNot { it.id in existing }
+                posts = posts + additions
+                hasMore = page.hasMore
+                error = null
+                resolveAuthorPhotos(additions)
+                hydrateInteractionStates(additions)
             }.onFailure { error = it.message ?: "Unable to load more posts." }
-            loadingMore = false; feedRequestInFlight = false
+            loadingMore = false
+            feedRequestInFlight = false
         }
     }
 
-    fun runInteraction(id: String, action: suspend () -> Result<Pair<Boolean, Int>>, update: (FynxRemoteSocialClient.SocialInteractionState, Boolean, Int) -> FynxRemoteSocialClient.SocialInteractionState) {
+    fun runInteraction(id: String, desired: Boolean, isActive: (FynxRemoteSocialClient.SocialInteractionState) -> Boolean, action: suspend () -> Result<Pair<Boolean, Int>>, update: (FynxRemoteSocialClient.SocialInteractionState, Boolean, Int) -> FynxRemoteSocialClient.SocialInteractionState) {
         if (id in interactionBusy) return
+        val previous = interactionStates[id] ?: FynxRemoteSocialClient.SocialInteractionState(false, false, 0, 0)
+        val optimisticCount = when {
+            desired && !isActive(previous) -> previous.savedCount + 1
+            !desired && isActive(previous) -> (previous.savedCount - 1).coerceAtLeast(0)
+            else -> previous.savedCount
+        }
+        interactionStates = interactionStates + (id to update(previous, desired, optimisticCount))
         interactionBusy = interactionBusy + id
         scope.launch {
             action().onSuccess { result ->
-                val current = interactionStates[id] ?: FynxRemoteSocialClient.SocialInteractionState(false, false, 0, 0)
-                interactionStates = interactionStates + (id to update(current, result.first, result.second))
-            }.onFailure { error = it.message ?: "Unable to update this post." }
+                interactionStates = interactionStates + (id to update(previous, result.first, result.second.coerceAtLeast(0)))
+            }.onFailure {
+                interactionStates = interactionStates + (id to previous)
+                error = it.message ?: "Unable to update this post."
+            }
             interactionBusy = interactionBusy - id
         }
     }
 
     fun runLike(id: String) {
         if (id in interactionBusy) return
+        val previous = posts.firstOrNull { it.id == id } ?: return
+        val optimisticLiked = !previous.likedByCurrentUser
+        val optimisticCount = (previous.likeCount + if (optimisticLiked) 1 else -1).coerceAtLeast(0)
+        posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = optimisticLiked, likeCount = optimisticCount) else it }
         interactionBusy = interactionBusy + id
         scope.launch {
             FynxRemoteSocialClient.like(context, id).onSuccess { result ->
                 val (liked, count) = result
-                posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = liked, likeCount = count) else it }
-            }.onFailure { error = it.message ?: "Unable to update this like." }
+                posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = liked, likeCount = count.coerceAtLeast(0)) else it }
+            }.onFailure {
+                posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = previous.likedByCurrentUser, likeCount = previous.likeCount) else it }
+                error = it.message ?: "Unable to update this like."
+            }
             interactionBusy = interactionBusy - id
         }
     }
@@ -154,6 +189,17 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
     }
 
+    fun runShare(post: FynxRemoteSocialClient.RemotePost) {
+        if (post.id in interactionBusy) return
+        interactionBusy = interactionBusy + post.id
+        scope.launch {
+            sharePost(context, post).onSuccess {
+                runCatching { FynxDiscoveryClient.recordEngagement(context, "SHARE", post.id) }
+            }.onFailure { error = it.message ?: "No app is available to share this post." }
+            interactionBusy = interactionBusy - post.id
+        }
+    }
+
     LaunchedEffect(Unit) { reload() }
 
     LazyColumn(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -174,9 +220,9 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                 onComment = { commentsPost = post },
                 onFollow = { following -> runFollow(post.authorUsername, following) },
                 onDelete = { deletePost = post },
-                onSave = { id, saved -> runInteraction(id, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } },
-                onRepost = { id, reposted -> runInteraction(id, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } },
-                onShare = { scope.launch { FynxDiscoveryClient.recordEngagement(context, "SHARE", post.id) }; sharePost(context, post) }, onOpenMarketplace = onOpenMarketplace)
+                onSave = { id, saved -> runInteraction(id, saved, { it.saved }, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } },
+                onRepost = { id, reposted -> runInteraction(id, reposted, { it.reposted }, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } },
+                onShare = { runShare(post) }, onOpenMarketplace = onOpenMarketplace)
         }
         if (!loading && hasMore) item(key = "feed_load_more") { OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore && !feedRequestInFlight, modifier = Modifier.fillMaxWidth()) { Text(if (loadingMore) "Loading more posts…" else "Load more posts") } }
     }
@@ -218,27 +264,64 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
     }
 }
 
-private fun sharePost(context: Context, post: FynxRemoteSocialClient.RemotePost) { val text = if (post.text.startsWith(MARKETPLACE_AD_MARKER)) "${post.text.removePrefix(MARKETPLACE_AD_MARKER).trim()}\n\nSee this product on FYNX Marketplace." else "${post.authorDisplayName.ifBlank { post.authorUsername }} on FYNX:\n${post.text}".trim(); val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text); putExtra(Intent.EXTRA_TITLE, "Share from FYNX") }; context.startActivity(Intent.createChooser(intent, "Share with…")) }
+private fun sharePost(context: Context, post: FynxRemoteSocialClient.RemotePost): Result<Unit> = runCatching {
+    val text = if (post.text.startsWith(MARKETPLACE_AD_MARKER)) "${post.text.removePrefix(MARKETPLACE_AD_MARKER).trim()}\n\nSee this product on FYNX Marketplace." else "${post.authorDisplayName.ifBlank { post.authorUsername }} on FYNX:\n${post.text}".trim()
+    val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text); putExtra(Intent.EXTRA_TITLE, "Share from FYNX") }
+    context.startActivity(Intent.createChooser(intent, "Share with…"))
+}
 
 @Composable
 private fun RemoteSocialMedia(path: String, type: String?) {
     val context = LocalContext.current
     var file by remember(path) { mutableStateOf<File?>(null) }
     var videoAspectRatio by remember(path) { mutableFloatStateOf(16f / 9f) }
+    var videoView by remember(path) { mutableStateOf<VideoView?>(null) }
     LaunchedEffect(path) { file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, path, type) } }
-    LaunchedEffect(file, type) { if (file != null && type == "video") videoAspectRatio = withContext(Dispatchers.IO) { runCatching { MediaMetadataRetriever().run { setDataSource(file!!.absolutePath); val width = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 16f; val height = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 9f; val rotation = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0; release(); if (rotation == 90 || rotation == 270) height / width else width / height }.coerceIn(0.56f, 1.91f) }.getOrDefault(16f / 9f) } }
+    LaunchedEffect(file, type) {
+        if (file != null && type == "video") videoAspectRatio = withContext(Dispatchers.IO) {
+            runCatching {
+                MediaMetadataRetriever().run {
+                    setDataSource(file!!.absolutePath)
+                    val width = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 16f
+                    val height = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 9f
+                    val rotation = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+                    release()
+                    if (rotation == 90 || rotation == 270) height / width else width / height
+                }.coerceIn(0.56f, 1.91f)
+            }.getOrDefault(16f / 9f)
+        }
+    }
+    DisposableEffect(videoView) { onDispose { videoView?.stopPlayback() } }
     if (file == null) Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     else if (type == "audio") AudioPostPlayer(file!!)
-    else if (type == "video") AndroidView(factory = { ctx -> VideoView(ctx).apply { layoutParams = ViewGroup.LayoutParams(-1, -1); setMediaController(MediaController(ctx)); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxWidth().aspectRatio(videoAspectRatio))
-    else { var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }; LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }; bitmap?.let { Image(it.asImageBitmap(), "Post media", Modifier.fillMaxWidth().aspectRatio((it.width.toFloat() / it.height.toFloat()).coerceIn(0.62f, 1.9f)), contentScale = ContentScale.Crop) } }
+    else if (type == "video") AndroidView(factory = { ctx ->
+        VideoView(ctx).apply {
+            videoView = this
+            layoutParams = ViewGroup.LayoutParams(-1, -1)
+            setMediaController(MediaController(ctx))
+            setVideoURI(Uri.fromFile(file))
+            setOnPreparedListener { it.isLooping = true; start() }
+        }
+    }, modifier = Modifier.fillMaxWidth().aspectRatio(videoAspectRatio))
+    else {
+        var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
+        LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }
+        bitmap?.let { Image(it.asImageBitmap(), "Post media", Modifier.fillMaxWidth().aspectRatio((it.width.toFloat() / it.height.toFloat()).coerceIn(0.62f, 1.9f)), contentScale = ContentScale.Crop) }
+    }
 }
 
-private fun relative(timestamp: Long): String { val minutes = TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L)); return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" } }
+private fun relative(timestamp: Long): String {
+    val minutes = TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L))
+    return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" }
+}
 
 @Composable
 private fun AudioPostPlayer(file: File) {
     val player = remember(file) { MediaPlayer().apply { setDataSource(file.absolutePath); prepare() } }
     var playing by remember(file) { mutableStateOf(false) }
     DisposableEffect(player) { onDispose { player.release() } }
-    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Button(onClick = { if (player.isPlaying) { player.pause(); playing = false } else { player.start(); playing = true } }) { Text(if (playing) "Pause" else "Play voice") }; Spacer(Modifier.width(10.dp)); Text("${(player.duration / 1000).coerceAtLeast(0)}s") }
+    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Button(onClick = { if (player.isPlaying) { player.pause(); playing = false } else { player.start(); playing = true } }) { Text(if (playing) "Pause" else "Play voice") }
+        Spacer(Modifier.width(10.dp)); Text("${(player.duration / 1000).coerceAtLeast(0)}s")
+    }
 }
