@@ -172,6 +172,7 @@ export function registerGroupMembershipRoutes({ app }) {
   });
 
   app.post('/api/groups/:groupId/ownership', auth, async (req, res) => {
+    let client;
     try {
       await ensureSchema();
       const groupId = String(req.params?.groupId || '');
@@ -181,15 +182,23 @@ export function registerGroupMembershipRoutes({ app }) {
       if (!group || !targetUser) return res.status(404).json({ error: 'group or target member not found' });
       if (!isAdmin(actor?.role) || String(group.owner_id) !== String(req.user.sub)) return res.status(403).json({ error: 'group owner permission required' });
       if (String(targetUser.user_id) === String(req.user.sub)) return res.status(400).json({ error: 'target must be another member' });
-      await pool.query('BEGIN');
+      client = await pool.connect();
       try {
-        await pool.query(`UPDATE fynx_groups SET owner_id=$1,updated_at=NOW() WHERE id=$2`, [targetUser.user_id,groupId]);
-        await pool.query(`UPDATE fynx_group_members SET role='MODERATOR' WHERE group_id=$1 AND user_id=$2`, [groupId,req.user.sub]);
-        await pool.query(`UPDATE fynx_group_members SET role='ADMIN' WHERE group_id=$1 AND user_id=$2`, [groupId,targetUser.user_id]);
-        await pool.query('COMMIT');
-      } catch (error) { await pool.query('ROLLBACK'); throw error; }
+        await client.query('BEGIN');
+        await client.query(`UPDATE fynx_groups SET owner_id=$1,updated_at=NOW() WHERE id=$2`, [targetUser.user_id,groupId]);
+        await client.query(`UPDATE fynx_group_members SET role='MODERATOR' WHERE group_id=$1 AND user_id=$2`, [groupId,req.user.sub]);
+        await client.query(`UPDATE fynx_group_members SET role='ADMIN' WHERE group_id=$1 AND user_id=$2`, [groupId,targetUser.user_id]);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+        client = undefined;
+      }
       return res.json({ transferred: true, ownerUsername: targetUser.username });
     } catch (error) {
+      if (client) client.release();
       console.error('group ownership transfer', error);
       return res.status(500).json({ error: 'group ownership transfer failed' });
     }
