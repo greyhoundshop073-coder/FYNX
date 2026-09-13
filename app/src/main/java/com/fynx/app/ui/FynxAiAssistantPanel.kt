@@ -77,6 +77,13 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
             "AI Creation" to "AI Creation"
         )
     }
+    val discoveryPrompts = remember {
+        listOf(
+            "People" to "Find people I may want to follow on FYNX",
+            "Trending" to "Show me what's trending on FYNX",
+            "Saved" to "Show me my saved FYNX posts"
+        )
+    }
     fun copyText(text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("FYNX AI", text))
@@ -133,6 +140,11 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
         LazyRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(toolLinks) { (destination, label) ->
                 AssistChip(onClick = { onOpenDestination(destination) }, label = { Text(label) }, leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) })
+            }
+        }
+        LazyRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(discoveryPrompts) { (label, prompt) ->
+                AssistChip(onClick = { input = prompt; errorMessage = null }, label = { Text(label) }, leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) })
             }
         }
         if (errorMessage != null) {
