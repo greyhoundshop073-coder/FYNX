@@ -67,7 +67,14 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
     if (showResetDialog) {
         AlertDialog(onDismissRequest = { showResetDialog = false }, title = { Text("Reset chat settings?") }, text = { Text("All settings for this chat will return to their FYNX defaults.") }, confirmButton = {
             TextButton(onClick = {
-                prefs.edit().remove("notifications_$normalizedChatKey").remove("previews_$normalizedChatKey").remove("sounds_$normalizedChatKey").remove("vibration_$normalizedChatKey").remove("autodownload_$normalizedChatKey").remove("gallery_$normalizedChatKey").remove("linkpreviews_$normalizedChatKey").remove("read_$normalizedChatKey").remove("animations_$normalizedChatKey").remove("lastseen_$normalizedChatKey").remove("wallpaper_$normalizedChatKey").remove("textsize_$normalizedChatKey").apply()
+                val legacyChatKey = chatUsername.trim()
+                val keys = listOf("notifications", "previews", "sounds", "vibration", "autodownload", "gallery", "linkpreviews", "read", "animations", "lastseen", "wallpaper", "textsize")
+                val editor = prefs.edit()
+                keys.forEach { key ->
+                    editor.remove("${key}_$normalizedChatKey")
+                    editor.remove("${key}_$legacyChatKey")
+                }
+                editor.apply()
                 FynxPreferencesStore.setChatMuted(context, chatUsername, false)
                 notifications = true; muted = false; previews = true; sounds = true; vibration = true; autoDownload = true; saveGallery = false; linkPreviews = true; readReceipts = true; animations = true; lastSeen = "Everybody"; wallpaper = "FYNX Default"; textSize = "Medium"; showResetDialog = false
             }) { Text("Reset") }
