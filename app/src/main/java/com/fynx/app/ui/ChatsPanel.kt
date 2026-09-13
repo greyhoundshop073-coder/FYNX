@@ -96,7 +96,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             chat.name.contains(normalizedChatSearch, ignoreCase = true) ||
             chat.username.contains(normalizedChatSearch, ignoreCase = true) ||
             chat.lastMessage.contains(normalizedChatSearch, ignoreCase = true)
-    }.sortedWith(compareByDescending<ChatPreview> { FynxPreferencesStore.isChatPinned(context, it.username) }.thenByDescending { it.time })
+    }.sortedWith(compareByDescending<ChatPreview> { FynxPreferencesStore.isChatPinned(context, it.username) })
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
