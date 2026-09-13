@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -33,12 +34,20 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     var listView by remember { mutableStateOf(FynxPreferencesStore.loadChatListView(context)) }
     var showArchived by remember { mutableStateOf(false) }
     var openMenuFor by remember { mutableStateOf<String?>(null) }
+    var chatSearch by remember { mutableStateOf("") }
 
-    fun refreshChats() { chats = FynxChatStore.loadPreviews(context) }
+    fun refreshChats() {
+        chats = FynxChatStore.loadPreviews(context).map { preview ->
+            val unread = FynxChatStore.load(context, preview.username).count { !it.fromMe && !it.read }
+            preview.copy(unreadCount = unread)
+        }
+        chats.forEach { FynxChatStore.savePreview(context, it) }
+    }
 
     LaunchedEffect(Unit) {
         listView = FynxPreferencesStore.loadChatListView(context)
         selfUsername = (FynxAuthStore.load(context).username ?: "").removePrefix("@").trim().lowercase()
+        refreshChats()
         val stored = FynxChatStore.loadPreviews(context)
         val refreshed = stored.map { chat ->
             val normalized = chat.username.removePrefix("@").trim()
@@ -75,12 +84,18 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
 
     val rowSpacing = when (listView) { "Compact" -> 2.dp; "Large" -> 14.dp; else -> 8.dp }
     val avatarSize = when (listView) { "Compact" -> 38.dp; "Large" -> 54.dp; else -> 42.dp }
+    val normalizedChatSearch = chatSearch.trim()
     val visibleChats = chats.filterNot { chat ->
         val candidate = chat.username.removePrefix("@").trim().lowercase()
         selfUsername.isNotBlank() && candidate == selfUsername
     }.filter { chat ->
         val archived = FynxPreferencesStore.isChatArchived(context, chat.username)
         archived == showArchived
+    }.filter { chat ->
+        normalizedChatSearch.isBlank() ||
+            chat.name.contains(normalizedChatSearch, ignoreCase = true) ||
+            chat.username.contains(normalizedChatSearch, ignoreCase = true) ||
+            chat.lastMessage.contains(normalizedChatSearch, ignoreCase = true)
     }.sortedWith(compareByDescending<ChatPreview> { FynxPreferencesStore.isChatPinned(context, it.username) }.thenByDescending { it.time })
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
@@ -99,13 +114,23 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 OutlinedButton(onClick = { username = ""; selectedUser = null; searchResults = emptyList(); searchError = null; showNewChat = true }, shape = FynxDesign.ControlShape, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) { Text("＋ New chat") }
                 TextButton(onClick = { showArchived = !showArchived }) { Text(if (showArchived) "All chats" else "Archived") }
             }
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = chatSearch,
+                onValueChange = { chatSearch = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = FynxDesign.ControlShape,
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search chats") },
+                placeholder = { Text("Search chats") },
+            )
             Spacer(Modifier.height(14.dp))
             if (visibleChats.isEmpty()) {
                 Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(if (showArchived) "No archived chats" else "Messages", style = MaterialTheme.typography.titleLarge)
-                        Text(if (showArchived) "Chats you archive will stay here until you restore them." else "Your private conversations will appear here. Start one with a real FYNX user.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (!showArchived) Button(onClick = { showNewChat = true; username = ""; selectedUser = null }) { Text("Start a conversation") }
+                        Text(if (showArchived) "No archived chats" else if (normalizedChatSearch.isNotBlank()) "No matching chats" else "Messages", style = MaterialTheme.typography.titleLarge)
+                        Text(if (showArchived) "Chats you archive will stay here until you restore them." else if (normalizedChatSearch.isNotBlank()) "Try another name, username or message." else "Your private conversations will appear here. Start one with a real FYNX user.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (!showArchived && normalizedChatSearch.isBlank()) Button(onClick = { showNewChat = true; username = ""; selectedUser = null }) { Text("Start a conversation") }
                     }
                 }
             } else {
@@ -113,6 +138,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                     items(visibleChats, key = { it.username }) { chat ->
                         val pinned = FynxPreferencesStore.isChatPinned(context, chat.username)
                         val muted = FynxPreferencesStore.isChatMuted(context, chat.username)
+                        val unread = FynxChatStore.load(context, chat.username).count { !it.fromMe && !it.read }
                         Card(modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                             ListItem(
                                 modifier = Modifier.clickable { onOpenChat(chat) },
@@ -133,8 +159,15 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                                     }
                                 },
                                 trailingContent = {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text(chat.time, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                        Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
+                                            Text(chat.time, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            if (unread > 0) {
+                                                Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
+                                                    Text(if (unread > 99) "99+" else unread.toString(), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp))
+                                                }
+                                            }
+                                        }
                                         Box {
                                             IconButton(onClick = { openMenuFor = chat.username }) { Icon(Icons.Default.MoreVert, contentDescription = "Chat options") }
                                             DropdownMenu(expanded = openMenuFor == chat.username, onDismissRequest = { openMenuFor = null }) {
