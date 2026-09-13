@@ -25,10 +25,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -41,48 +44,46 @@ private data class SavedPostEntry(
 fun FynxSavedPostsPanel(
     onOpenAuthorProfile: (String) -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var posts by remember { mutableStateOf<List<SavedPostEntry>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var refreshToken by remember { mutableStateOf(0) }
 
-    fun load() {
+    LaunchedEffect(refreshToken) {
         loading = true
         error = null
-        FynxCoroutineScope.launch {
-            FynxBackendClient.get(LocalContextHolder.context, "/api/social/saved?limit=50&offset=0")
-                .mapCatching { raw ->
-                    val root = JSONObject(raw)
-                    val array = root.optJSONArray("posts") ?: JSONArray()
-                    buildList {
-                        for (i in 0 until array.length()) {
-                            val o = array.getJSONObject(i)
-                            val post = FynxRemoteSocialClient.RemotePost(
-                                id = o.optString("id"),
-                                authorId = o.optString("authorId"),
-                                authorUsername = o.optString("authorUsername"),
-                                authorDisplayName = o.optString("authorDisplayName"),
-                                text = o.optString("text"),
-                                visibility = o.optString("visibility"),
-                                mediaId = o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" },
-                                mediaType = o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" },
-                                mediaUrl = null,
-                                timestamp = o.optLong("timestamp"),
-                                likeCount = 0,
-                                commentCount = 0,
-                                likedByCurrentUser = false,
-                                followedByCurrentUser = false
-                            )
-                            add(SavedPostEntry(post, o.optLong("savedAtMillis")))
-                        }
+        FynxBackendClient.get(context, "/api/social/saved?limit=50&offset=0")
+            .mapCatching { raw ->
+                val root = JSONObject(raw)
+                val array = root.optJSONArray("posts") ?: JSONArray()
+                buildList {
+                    for (i in 0 until array.length()) {
+                        val o = array.getJSONObject(i)
+                        val post = FynxRemoteSocialClient.RemotePost(
+                            id = o.optString("id"),
+                            authorId = o.optString("authorId"),
+                            authorUsername = o.optString("authorUsername"),
+                            authorDisplayName = o.optString("authorDisplayName"),
+                            text = o.optString("text"),
+                            visibility = o.optString("visibility"),
+                            mediaId = o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" },
+                            mediaType = o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" },
+                            mediaUrl = null,
+                            timestamp = o.optLong("timestamp"),
+                            likeCount = 0,
+                            commentCount = 0,
+                            likedByCurrentUser = false,
+                            followedByCurrentUser = false
+                        )
+                        add(SavedPostEntry(post, o.optLong("savedAtMillis")))
                     }
                 }
-                .onSuccess { result -> posts = result; loading = false }
-                .onFailure { cause -> error = cause.message ?: "Saved posts could not be loaded."; loading = false }
-        }
+            }
+            .onSuccess { result -> posts = result; loading = false }
+            .onFailure { cause -> error = cause.message ?: "Saved posts could not be loaded."; loading = false }
     }
-
-    LaunchedEffect(refreshToken) { load() }
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -122,8 +123,8 @@ fun FynxSavedPostsPanel(
                                     )
                                 }
                                 IconButton(onClick = {
-                                    FynxCoroutineScope.launch {
-                                        FynxRemoteSocialClient.save(LocalContextHolder.context, entry.post.id, false)
+                                    scope.launch {
+                                        FynxRemoteSocialClient.save(context, entry.post.id, false)
                                             .onSuccess { posts = posts.filterNot { it.post.id == entry.post.id } }
                                     }
                                 }) {
@@ -150,16 +151,5 @@ fun FynxSavedPostsPanel(
                 }
             }
         }
-    }
-}
-
-private object LocalContextHolder {
-    val context: android.content.Context
-        @Composable get() = androidx.compose.ui.platform.LocalContext.current
-}
-
-private object FynxCoroutineScope {
-    fun launch(block: suspend () -> Unit) {
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main.immediate).launch { block() }
     }
 }
