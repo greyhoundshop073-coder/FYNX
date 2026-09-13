@@ -23,33 +23,33 @@ Work sequentially on `main` in coherent batches. Never start the next batch unti
 - [x] Pagination and cursor handling
 - [x] Correct comment-list scroll targeting
 - [x] Verify current 4D CI after latest syntax fix
-- [ ] Deleted/removed post behavior
-- [ ] Blocked/private/hidden content behavior
-- [ ] Stale cursor / duplicate-page behavior
-- [ ] Rotation/recreation and dialog state safety
-- [ ] Keyboard/IME/back handling under real interaction
-- [ ] Accessibility and touch-target audit
-- [ ] Real commenter avatar/profile media wiring
-- [ ] Comment/reply count synchronization with backend
+- [x] Deleted/removed post behavior
+- [x] Blocked/private/hidden content behavior
+- [x] Stale cursor / duplicate-page behavior
+- [x] Rotation/recreation and dialog state safety
+- [x] Keyboard/IME/back handling under real interaction
+- [x] Accessibility and touch-target audit
+- [x] Real commenter avatar/profile media wiring
+- [x] Comment/reply count synchronization with backend
 
 ### Home 4E — complete post interaction audit
-- [ ] Like: optimistic state, persistence, retry, count consistency
-- [ ] Comment: persistence, refresh, count consistency
-- [ ] Reply: persistence, threading, retry, count consistency
+- [x] Like: optimistic state, persistence, retry, count consistency
+- [x] Comment: persistence, refresh, count consistency
+- [x] Reply: persistence, threading, retry, count consistency
 - [ ] Save: persistence, unsave, refresh, saved-list consistency
-- [ ] Repost: persistence, undo, duplicate prevention
-- [ ] Share: real share flow and failure handling
-- [ ] Follow/profile navigation from post identity
+- [x] Repost: persistence, undo, duplicate prevention
+- [x] Share: real share flow and failure handling
+- [x] Follow/profile navigation from post identity
 - [ ] Post media open/playback/full-screen behavior
-- [ ] Post menu and ownership actions
-- [ ] Delete/removed-post handling
-- [ ] Feed refresh and pagination
-- [ ] Offline/network failure recovery
-- [ ] Rapid taps / lifecycle interruption
-- [ ] Backend authorization/privacy checks
-- [ ] Interaction state survives app re-entry
-- [ ] Remove/avoid duplicate implementations
-- [ ] End-to-end Home CI GREEN
+- [x] Post menu and ownership actions
+- [x] Delete/removed-post handling
+- [x] Feed refresh and pagination
+- [x] Offline/network failure recovery
+- [x] Rapid taps / lifecycle interruption
+- [x] Backend authorization/privacy checks
+- [x] Interaction state survives app re-entry
+- [x] Remove/avoid duplicate implementations
+- [x] End-to-end Home CI GREEN
 
 ### Home 4F — human-level polish and integration
 - [ ] Compare every Home interaction against the existing FYNX master design

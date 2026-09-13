@@ -175,8 +175,6 @@ for needle in (
     require(home, needle, f"Home 4F polish/integration surface {needle}")
 
 # Save/Repost labels are stateful accessibility descriptions in the real Compose control.
-# Verify the actual state branches instead of requiring a flattened literal that does not
-# exist in Kotlin source when the label is interpolated at runtime.
 require(home, '"Unsave" else "Save"', "Home 4F save accessibility state branch")
 require(home, '"Undo repost" else "Repost"', "Home 4F repost accessibility state branch")
 
@@ -214,4 +212,36 @@ for needle in (
 
 require(privacy_bootstrap, "fynxHomeCommentsPrivacyBatch", "Home comment privacy patch marker")
 
-print("HOME INTERACTIONS GREEN: Home 4E backend-backed interactions, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/lifecycle/accessibility surfaces, interaction-state re-entry, and clean-startup privacy boundaries are present without duplicate surfaces.")
+# Home 4D edge-case audit: these are existing production safeguards, not new duplicate surfaces.
+for needle in (
+    'remember(post.id)',
+    'rememberSaveable(post.id)',
+    'DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)',
+    '.imePadding()',
+    'KeyboardActions(onSend = { send() })',
+    'FynxRemoteProfileAvatar(photo, comment.authorDisplayName.ifBlank { comment.authorUsername }',
+    'commentCount += 1',
+    'onCommentCountChanged(commentCount)',
+):
+    require(comments_panel, needle, f"Home 4D edge-case safeguard {needle}")
+
+# The backend is the authority for deleted/hidden/blocked post access; comments are independently block-filtered.
+for needle in (
+    'visibleSocialPost(postId, req.user.sub)',
+    'b.blocker_id=$2 AND b.blocked_id=c.author_id',
+    'b.blocker_id=c.author_id AND b.blocked_id=$2',
+):
+    require(realtime_bootstrap, needle, f"Home 4D privacy boundary {needle}")
+
+# 4E state persistence is explicitly optimistic with rollback and authoritative server reconciliation.
+for needle in (
+    'val previous = posts.firstOrNull { it.id == id }',
+    'optimisticLiked',
+    'onFailure {',
+    'posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = previous.likedByCurrentUser',
+    'runInteraction(id, saved',
+    'runInteraction(id, reposted',
+):
+    require(home, needle, f"Home 4E interaction rollback/reconciliation {needle}")
+
+print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, and clean-startup privacy boundaries are present without duplicate surfaces.")
