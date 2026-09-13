@@ -1,6 +1,5 @@
 package com.fynx.app.ui
 
-import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -24,63 +23,16 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun FynxGroupSettingsPanel(groupId:String,groupName:String="Group",isAdmin:Boolean=false,onBack:()->Unit={}){
-    val context=LocalContext.current
-    val scope=rememberCoroutineScope()
-    val prefs=remember(groupId){FynxConversationPreferences.group(context,groupId)}
-    val storedGroup=remember(groupId){FynxGroupsStore.load(context).firstOrNull{it.id==groupId}}
-    var currentGroup by remember(groupId){mutableStateOf(storedGroup)}
-    var notifications by remember(groupId){mutableStateOf(prefs.getBoolean("notifications",true))}
-    var mute by remember(groupId){mutableStateOf(prefs.getBoolean("mute",false))}
-    var sendMessages by remember(groupId){mutableStateOf(true)}
-    var sendMedia by remember(groupId){mutableStateOf(true)}
-    var addMembers by remember(groupId){mutableStateOf(true)}
-    var inviteLinks by remember(groupId){mutableStateOf(true)}
-    var approveNewMembers by remember(groupId){mutableStateOf(false)}
-    var permissionsLoading by remember(groupId){mutableStateOf(false)}
-    var permissionsSaving by remember(groupId){mutableStateOf(false)}
-    var permissionsMessage by remember(groupId){mutableStateOf<String?>(null)}
-    var saveMedia by remember(groupId){mutableStateOf(prefs.getBoolean("save_media",false))}
-    var chatHistory by remember(groupId){mutableStateOf(prefs.getBoolean("chat_history",true))}
-    var appearance by remember(groupId){mutableStateOf(prefs.getString("appearance","FYNX Default")?:"FYNX Default")}
-    var showWallpaper by remember{mutableStateOf(false)}
-    var showClearDialog by remember{mutableStateOf(false)}
-    var showResetDialog by remember{mutableStateOf(false)}
-    var showEditInfo by remember{mutableStateOf(false)}
-    var editName by remember{mutableStateOf(currentGroup?.name?:groupName)}
-    var editDescription by remember{mutableStateOf(currentGroup?.description.orEmpty())}
-    var infoMessage by remember{mutableStateOf<String?>(null)}
-    var savingInfo by remember{mutableStateOf(false)}
-    var inviteMessage by remember{mutableStateOf<String?>(null)}
-    var activeInviteToken by remember(groupId){mutableStateOf<String?>(null)}
-    var joinRequests by remember(groupId){mutableStateOf<List<FynxGroupRemoteClient.RemoteJoinRequest>>(emptyList())}
-    var requestsLoading by remember(groupId){mutableStateOf(false)}
-    var requestAction by remember(groupId){mutableStateOf<String?>(null)}
-
+    val context=LocalContext.current;val scope=rememberCoroutineScope();val prefs=remember(groupId){FynxConversationPreferences.group(context,groupId)};val storedGroup=remember(groupId){FynxGroupsStore.load(context).firstOrNull{it.id==groupId}}
+    var currentGroup by remember(groupId){mutableStateOf(storedGroup)};var notifications by remember(groupId){mutableStateOf(prefs.getBoolean("notifications",true))};var mute by remember(groupId){mutableStateOf(prefs.getBoolean("mute",false))};var sendMessages by remember(groupId){mutableStateOf(true)};var sendMedia by remember(groupId){mutableStateOf(true)};var addMembers by remember(groupId){mutableStateOf(true)};var inviteLinks by remember(groupId){mutableStateOf(true)};var approveNewMembers by remember(groupId){mutableStateOf(false)};var permissionsLoading by remember(groupId){mutableStateOf(false)};var permissionsSaving by remember(groupId){mutableStateOf(false)};var permissionsMessage by remember(groupId){mutableStateOf<String?>(null)};var saveMedia by remember(groupId){mutableStateOf(prefs.getBoolean("save_media",false))};var chatHistory by remember(groupId){mutableStateOf(prefs.getBoolean("chat_history",true))};var appearance by remember(groupId){mutableStateOf(prefs.getString("appearance","FYNX Default")?:"FYNX Default")};var showWallpaper by remember{mutableStateOf(false)};var showClearDialog by remember{mutableStateOf(false)};var showResetDialog by remember{mutableStateOf(false)};var showEditInfo by remember{mutableStateOf(false)};var editName by remember{mutableStateOf(currentGroup?.name?:groupName)};var editDescription by remember{mutableStateOf(currentGroup?.description.orEmpty())};var infoMessage by remember{mutableStateOf<String?>(null)};var savingInfo by remember{mutableStateOf(false)};var inviteMessage by remember{mutableStateOf<String?>(null)};var activeInviteToken by remember(groupId){mutableStateOf<String?>(null)};var joinRequests by remember(groupId){mutableStateOf<List<FynxGroupRemoteClient.RemoteJoinRequest>>(emptyList())};var requestsLoading by remember(groupId){mutableStateOf(false)};var requestAction by remember(groupId){mutableStateOf<String?>(null)}
     fun save(key:String,value:Boolean)=prefs.edit().putBoolean(key,value).apply()
-
-    LaunchedEffect(groupId,isAdmin){
-        if(!FynxBackendClient.hasAccessToken(context))return@LaunchedEffect
-        permissionsLoading=true
-        FynxGroupRemoteClient.loadPermissions(context,groupId).onSuccess{remote->sendMessages=remote.sendMessages;sendMedia=remote.sendMedia;addMembers=remote.addMembers;inviteLinks=remote.inviteLinks;approveNewMembers=remote.approveNewMembers;permissionsMessage=null}.onFailure{permissionsMessage=it.message?:"Unable to load group permissions."}
-        permissionsLoading=false
-    }
-
-    fun refreshRequests(){
-        if(!isAdmin||!approveNewMembers)return
-        requestsLoading=true
-        scope.launch{FynxGroupRemoteClient.loadJoinRequests(context,groupId).onSuccess{joinRequests=it}.onFailure{inviteMessage=it.message?:"Unable to load join requests."};requestsLoading=false}
-    }
+    LaunchedEffect(groupId,isAdmin){if(!FynxBackendClient.hasAccessToken(context))return@LaunchedEffect;permissionsLoading=true;FynxGroupRemoteClient.loadPermissions(context,groupId).onSuccess{remote->sendMessages=remote.sendMessages;sendMedia=remote.sendMedia;addMembers=remote.addMembers;inviteLinks=remote.inviteLinks;approveNewMembers=remote.approveNewMembers;permissionsMessage=null}.onFailure{permissionsMessage=it.message?:"Unable to load group permissions."};permissionsLoading=false}
+    fun refreshRequests(){if(!isAdmin||!approveNewMembers)return;requestsLoading=true;scope.launch{FynxGroupRemoteClient.loadJoinRequests(context,groupId).onSuccess{joinRequests=it}.onFailure{inviteMessage=it.message?:"Unable to load join requests."};requestsLoading=false}}
     LaunchedEffect(groupId,isAdmin,approveNewMembers){refreshRequests()}
-
-    fun updatePermissions(next:FynxGroupRemoteClient.RemotePermissions){
-        permissionsSaving=true;permissionsMessage=null
-        scope.launch{FynxGroupRemoteClient.updatePermissions(context,groupId,next).onSuccess{remote->sendMessages=remote.sendMessages;sendMedia=remote.sendMedia;addMembers=remote.addMembers;inviteLinks=remote.inviteLinks;approveNewMembers=remote.approveNewMembers}.onFailure{permissionsMessage=it.message?:"Group permissions could not be saved."};permissionsSaving=false}
-    }
-
+    fun updatePermissions(next:FynxGroupRemoteClient.RemotePermissions){permissionsSaving=true;permissionsMessage=null;scope.launch{FynxGroupRemoteClient.updatePermissions(context,groupId,next).onSuccess{remote->sendMessages=remote.sendMessages;sendMedia=remote.sendMedia;addMembers=remote.addMembers;inviteLinks=remote.inviteLinks;approveNewMembers=remote.approveNewMembers}.onFailure{permissionsMessage=it.message?:"Group permissions could not be saved."};permissionsSaving=false}}
     if(showClearDialog)AlertDialog(onDismissRequest={showClearDialog=false},title={Text("Clear local group history?")},text={Text("This removes the saved copy of this group's conversation on this device. It does not delete messages from the FYNX server.")},confirmButton={TextButton(onClick={FynxChatStore.clear(context,"group_$groupId");showClearDialog=false}){Text("Clear")}},dismissButton={TextButton(onClick={showClearDialog=false}){Text("Cancel")}})
     if(showResetDialog)AlertDialog(onDismissRequest={showResetDialog=false},title={Text("Reset group settings?")},text={Text("Local notification, media, history and appearance preferences will return to their FYNX defaults. Server permissions are not reset by this local action.")},confirmButton={TextButton(onClick={prefs.edit().clear().apply();notifications=true;mute=false;saveMedia=false;chatHistory=true;appearance="FYNX Default";showResetDialog=false}){Text("Reset")}},dismissButton={TextButton(onClick={showResetDialog=false}){Text("Cancel")}})
     if(showEditInfo&&currentGroup!=null)AlertDialog(onDismissRequest={if(!savingInfo)showEditInfo=false},title={Text("Group information")},text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)){OutlinedTextField(editName,{editName=it},modifier=Modifier.fillMaxWidth(),singleLine=true,label={Text("Group name")});OutlinedTextField(editDescription,{editDescription=it},modifier=Modifier.fillMaxWidth(),minLines=2,maxLines=4,label={Text("Description")});infoMessage?.let{Text(it,color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)}}},confirmButton={TextButton(enabled=!savingInfo,onClick={val existing=currentGroup?:return@TextButton;val name=editName.trim();val description=editDescription.trim();if(name.length<2||description.length<2){infoMessage="Group name and description must be at least 2 characters.";return@TextButton};val updated=existing.copy(name=name,description=description);if(FynxGroupsBatch1.validate(updated).isNotEmpty()){infoMessage="The group information could not be saved.";return@TextButton};savingInfo=true;infoMessage=null;if(!FynxGroupsStore.updateGroup(context,updated)){savingInfo=false;infoMessage="Could not save group information on this device.";return@TextButton};currentGroup=updated;scope.launch{FynxGroupRemoteClient.syncGroup(context,updated).onSuccess{savingInfo=false;showEditInfo=false}.onFailure{savingInfo=false;infoMessage=it.message?:"Group information could not sync."}}}){Text(if(savingInfo)"Saving…" else "Save")}},dismissButton={TextButton(enabled=!savingInfo,onClick={showEditInfo=false}){Text("Cancel")}})
-
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=16.dp,vertical=12.dp)){
         Row(Modifier.fillMaxWidth().statusBarsPadding().padding(bottom=14.dp),verticalAlignment=Alignment.CenterVertically){IconButton(onClick=onBack){Icon(Icons.Default.ArrowBack,"Back")};Column(Modifier.weight(1f)){Text(currentGroup?.name?:groupName,style=MaterialTheme.typography.titleLarge);Text("Group settings",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)};Icon(Icons.Default.Group,null,tint=MaterialTheme.colorScheme.primary)}
         GroupSettingsSection("Group information",Icons.Default.Edit){Text(currentGroup?.name?:groupName,style=MaterialTheme.typography.titleMedium);Spacer(Modifier.height(3.dp));Text(currentGroup?.description?:"Group information",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant);if(isAdmin&&currentGroup!=null){Spacer(Modifier.height(8.dp));OutlinedButton(onClick={editName=currentGroup?.name.orEmpty();editDescription=currentGroup?.description.orEmpty();infoMessage=null;showEditInfo=true}){Icon(Icons.Default.Edit,null);Spacer(Modifier.width(8.dp));Text("Edit group information")}}}
@@ -88,29 +40,11 @@ fun FynxGroupSettingsPanel(groupId:String,groupName:String="Group",isAdmin:Boole
         GroupSettingsSection("Permissions",Icons.Default.Security){if(permissionsLoading)Text("Loading server permissions…",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);permissionsMessage?.let{Text(it,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)};GroupSwitchRow("Members can send messages",sendMessages,isAdmin&&!permissionsSaving){updatePermissions(FynxGroupRemoteClient.RemotePermissions(it,sendMedia,addMembers,inviteLinks,approveNewMembers))};GroupSwitchRow("Members can send media and files",sendMedia,isAdmin&&!permissionsSaving){updatePermissions(FynxGroupRemoteClient.RemotePermissions(sendMessages,it,addMembers,inviteLinks,approveNewMembers))};GroupSwitchRow("Members can add people",addMembers,isAdmin&&!permissionsSaving){updatePermissions(FynxGroupRemoteClient.RemotePermissions(sendMessages,sendMedia,it,inviteLinks,approveNewMembers))};GroupSwitchRow("Invite links",inviteLinks,isAdmin&&!permissionsSaving){updatePermissions(FynxGroupRemoteClient.RemotePermissions(sendMessages,sendMedia,addMembers,it,approveNewMembers));if(!it){inviteMessage=null;activeInviteToken=null}};GroupSwitchRow("Approve new members",approveNewMembers,isAdmin&&!permissionsSaving){updatePermissions(FynxGroupRemoteClient.RemotePermissions(sendMessages,sendMedia,addMembers,inviteLinks,it))}}
         GroupSettingsSection("Media & history",Icons.Default.Settings){GroupSwitchRow("Save received media",saveMedia){saveMedia=it;save("save_media",it)};GroupSwitchRow("Show chat history to new members",chatHistory,isAdmin){chatHistory=it;save("chat_history",it)}}
         GroupSettingsSection("Appearance",Icons.Default.Settings){Text("Chat appearance",style=MaterialTheme.typography.titleSmall);Spacer(Modifier.height(6.dp));Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf("FYNX Default","Light","Dark").forEach{option->FilterChip(selected=appearance==option,onClick={appearance=option;prefs.edit().putString("appearance",option).apply()},label={Text(option)})}};Spacer(Modifier.height(8.dp));OutlinedButton(onClick={showWallpaper=true},modifier=Modifier.fillMaxWidth()){Text("Group wallpaper")}}
-
         GroupSettingsSection("Invitations & approvals",Icons.Default.GroupAdd){
-            if(isAdmin&&inviteLinks){
-                GroupActionRow("Create new invite link","Generate a server-backed shareable link",Icons.Default.GroupAdd){
-                    scope.launch{FynxGroupRemoteClient.createInvite(context,groupId).onSuccess{(token,inviteUri)->activeInviteToken=token;inviteMessage="Invite link created.";FynxShareActions.share(context,FynxSharePayload("FYNX group invite","Join ${currentGroup?.name?:groupName} on FYNX.",FynxDeepLinkParser.inviteWebLink(token,groupId)))}.onFailure{inviteMessage=it.message?:"Invite link could not be created."}}
-                }
-                activeInviteToken?.let{token->
-                    Text("A current server invite is ready to share.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                        OutlinedButton(onClick={FynxShareActions.share(context,FynxSharePayload("FYNX group invite","Join ${currentGroup?.name?:groupName} on FYNX.",FynxDeepLinkParser.inviteWebLink(token,groupId)))},modifier=Modifier.weight(1f)){Text("Share link")}
-                        OutlinedButton(onClick={scope.launch{FynxGroupRemoteClient.revokeInvite(context,groupId,token).onSuccess{activeInviteToken=null;inviteMessage="Invite link revoked."}.onFailure{inviteMessage=it.message?:"Invite link could not be revoked."}}},modifier=Modifier.weight(1f)){Text("Revoke")}
-                    }
-                }
-            }
-            if(isAdmin&&approveNewMembers){
-                Spacer(Modifier.height(10.dp));Text("Pending join requests",style=MaterialTheme.typography.titleSmall)
-                if(requestsLoading)Text("Loading requests…",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                else if(joinRequests.isEmpty())Text("No pending requests.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                else joinRequests.forEach{request->Card(Modifier.fillMaxWidth().padding(top=8.dp)){Row(Modifier.padding(10.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("@${request.username}",style=MaterialTheme.typography.bodyLarge);Text("Waiting for approval",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)};TextButton(enabled=requestAction==null,onClick={requestAction=request.username;scope.launch{FynxGroupRemoteClient.approveJoinRequest(context,groupId,request.username).onSuccess{joinRequests=joinRequests.filterNot{it.username.equals(request.username,true)}}.onFailure{inviteMessage=it.message?:"Could not approve request."};requestAction=null}}){Text("Approve")};TextButton(enabled=requestAction==null,onClick={requestAction=request.username;scope.launch{FynxGroupRemoteClient.rejectJoinRequest(context,groupId,request.username).onSuccess{joinRequests=joinRequests.filterNot{it.username.equals(request.username,true)}}.onFailure{inviteMessage=it.message?:"Could not reject request."};requestAction=null}}){Text("Reject")}}}}
-            }
+            if(isAdmin&&inviteLinks){GroupActionRow("Create new invite link","Generate a server-backed shareable link",Icons.Default.GroupAdd){scope.launch{FynxGroupRemoteClient.createInvite(context,groupId).onSuccess{(token,_)->activeInviteToken=token;inviteMessage="Invite link created.";FynxShareActions.share(context,FynxSharePayload("FYNX group invite","Join ${currentGroup?.name?:groupName} on FYNX.",FynxDeepLinkParser.inviteWebLink(token,groupId)))}.onFailure{inviteMessage=it.message?:"Invite link could not be created."}}};activeInviteToken?.let{token->Text("A current server invite is ready to share.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){OutlinedButton(onClick={FynxShareActions.share(context,FynxSharePayload("FYNX group invite","Join ${currentGroup?.name?:groupName} on FYNX.",FynxDeepLinkParser.inviteWebLink(token,groupId)))},modifier=Modifier.weight(1f)){Text("Share link")};OutlinedButton(onClick={scope.launch{FynxGroupRemoteClient.revokeInvite(context,groupId,token).onSuccess{activeInviteToken=null;inviteMessage="Invite link revoked."}.onFailure{inviteMessage=it.message?:"Invite link could not be revoked."}}},modifier=Modifier.weight(1f)){Text("Revoke")}}}}
+            if(isAdmin&&approveNewMembers){Spacer(Modifier.height(10.dp));Text("Pending join requests",style=MaterialTheme.typography.titleSmall);if(requestsLoading)Text("Loading requests…",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)else if(joinRequests.isEmpty())Text("No pending requests.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)else joinRequests.forEach{request->Card(Modifier.fillMaxWidth().padding(top=8.dp)){Row(Modifier.padding(10.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("@${request.username}",style=MaterialTheme.typography.bodyLarge);Text("Waiting for approval",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)};TextButton(enabled=requestAction==null,onClick={requestAction=request.username;scope.launch{FynxGroupRemoteClient.approveJoinRequest(context,groupId,request.username).onSuccess{joinRequests=joinRequests.filterNot{it.username.equals(request.username,true)}}.onFailure{inviteMessage=it.message?:"Could not approve request."};requestAction=null}}){Text("Approve")};TextButton(enabled=requestAction==null,onClick={requestAction=request.username;scope.launch{FynxGroupRemoteClient.rejectJoinRequest(context,groupId,request.username).onSuccess{joinRequests=joinRequests.filterNot{it.username.equals(request.username,true)}}.onFailure{inviteMessage=it.message?:"Could not reject request."};requestAction=null}}){Text("Reject")}}}}}
             inviteMessage?.let{Text(it,Modifier.padding(top=6.dp),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
         }
-
         GroupSettingsSection("Group management",Icons.Default.Settings){GroupActionRow("Clear local group history","Remove the saved conversation from this device",Icons.Default.DeleteOutline){showClearDialog=true};GroupActionRow("Reset local group settings","Restore FYNX defaults for local preferences",Icons.Default.RestartAlt){showResetDialog=true}}
         if(!isAdmin)Text("Admin-only permissions are locked for members.",Modifier.padding(horizontal=4.dp,vertical=10.dp),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
     }
