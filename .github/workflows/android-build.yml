@@ -81,6 +81,8 @@ jobs:
           node backend/verify-stage15d-advanced.mjs
       - name: Verify Stage 16 camera and media integration
         run: python3 scripts/verify_stage16_camera.py
+      - name: Verify FYNX AI security and tool integrity
+        run: python3 scripts/verify_ai_security.py
       - name: Verify consolidated FYNX user journey integration
         run: python3 scripts/verify_fynx_journey.py
       - name: Verify R2-C realtime recovery invariants
