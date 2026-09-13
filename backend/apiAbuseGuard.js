@@ -1,4 +1,7 @@
 const LIMITS = [
+  [/^\/api\/assistant\/agent$/, 30],
+  [/^\/api\/assistant\/tools$/, 60],
+  [/^\/api\/assistant\/realtime-session$/, 20],
   [/^\/api\/marketplace\//, 90],
   [/^\/api\/advertising\//, 60]
 ];
