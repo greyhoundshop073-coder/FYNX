@@ -6,9 +6,11 @@ import android.widget.ImageView
 import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
@@ -56,6 +58,7 @@ fun FynxHomeSocialHubPanel(
     var showPhotoEditor by remember { mutableStateOf(false) }
     var capturedUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var capturedTypes by remember { mutableStateOf<List<String>>(emptyList()) }
+    var selectedVisualIndex by remember { mutableIntStateOf(0) }
     var text by remember { mutableStateOf("") }
     var visibility by remember { mutableStateOf(defaultPostVisibility) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -73,6 +76,7 @@ fun FynxHomeSocialHubPanel(
             val selected = uris.distinct().take(12)
             capturedUris = (capturedUris.filterNot { it in selected } + selected).take(12)
             capturedTypes = capturedUris.map { uri -> if (context.contentResolver.getType(uri)?.startsWith("video/") == true) "video" else "image" }
+            selectedVisualIndex = 0
             showComposer = true
         }
     }
@@ -87,7 +91,7 @@ fun FynxHomeSocialHubPanel(
     }
 
     LaunchedEffect(initialCaption) {
-        if (!initialCaption.isNullOrBlank()) { text = initialCaption.trim().take(4000); capturedUris = emptyList(); capturedTypes = emptyList(); notice = null; showComposer = true; onCaptionConsumed() }
+        if (!initialCaption.isNullOrBlank()) { text = initialCaption.trim().take(4000); capturedUris = emptyList(); capturedTypes = emptyList(); selectedVisualIndex = 0; notice = null; showComposer = true; onCaptionConsumed() }
     }
 
     fun requestInlineCaptionHelp() {
@@ -102,6 +106,14 @@ fun FynxHomeSocialHubPanel(
 
     fun recomputeTypes() {
         capturedTypes = capturedUris.map { item -> when { context.contentResolver.getType(item)?.startsWith("video/") == true -> "video"; context.contentResolver.getType(item)?.startsWith("audio/") == true -> "audio"; else -> "image" } }
+        val visualCount = capturedTypes.count { it == "image" || it == "video" }
+        selectedVisualIndex = selectedVisualIndex.coerceIn(0, (visualCount - 1).coerceAtLeast(0))
+    }
+
+    fun removeCapturedUri(uri: Uri) {
+        if (posting || aiCaptionLoading) return
+        capturedUris = capturedUris.filterNot { it == uri }
+        recomputeTypes()
     }
 
     fun clearComposer() {
@@ -109,6 +121,7 @@ fun FynxHomeSocialHubPanel(
             showComposer = false
             capturedUris = emptyList()
             capturedTypes = emptyList()
+            selectedVisualIndex = 0
             text = ""
             notice = null
         }
@@ -118,6 +131,7 @@ fun FynxHomeSocialHubPanel(
         showComposer = false
         capturedUris = emptyList()
         capturedTypes = emptyList()
+        selectedVisualIndex = 0
         text = ""
         notice = null
     }
@@ -175,22 +189,41 @@ fun FynxHomeSocialHubPanel(
                             Card(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     val audioCount = capturedTypes.count { it == "audio" }
-                                    val visualIndex = capturedTypes.indexOfFirst { it == "image" || it == "video" }
-                                    val visualUri = capturedUris.getOrNull(visualIndex)
-                                    val visualType = capturedTypes.getOrNull(visualIndex)
+                                    val visualItems = capturedUris.mapIndexedNotNull { index, uri ->
+                                        capturedTypes.getOrNull(index)?.takeIf { it == "image" || it == "video" }?.let { type -> Triple(index, uri, type) }
+                                    }
+                                    val selectedVisual = visualItems.getOrNull(selectedVisualIndex.coerceIn(0, (visualItems.size - 1).coerceAtLeast(0)))
                                     Text("Attached media", style = MaterialTheme.typography.titleMedium)
-                                    if (visualUri != null && visualType != null) {
+                                    if (selectedVisual != null) {
                                         Box(Modifier.fillMaxWidth().heightIn(min = 150.dp, max = 280.dp)) {
-                                            if (visualType == "video") {
-                                                AndroidView(factory = { VideoView(it).apply { setVideoURI(visualUri); setOnPreparedListener { player -> player.isLooping = true; start() } } }, update = { view -> if (view.tag != visualUri.toString()) { view.tag = visualUri.toString(); view.setVideoURI(visualUri); view.start() } }, modifier = Modifier.fillMaxSize())
+                                            if (selectedVisual.third == "video") {
+                                                AndroidView(factory = { VideoView(it).apply { setVideoURI(selectedVisual.second); setOnPreparedListener { player -> player.isLooping = true; start() } } }, update = { view -> if (view.tag != selectedVisual.second.toString()) { view.tag = selectedVisual.second.toString(); view.setVideoURI(selectedVisual.second); view.start() } }, modifier = Modifier.fillMaxSize())
                                             } else {
-                                                AndroidView(factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.FIT_CENTER } }, update = { view -> view.setImageURI(visualUri) }, modifier = Modifier.fillMaxSize())
+                                                AndroidView(factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.FIT_CENTER } }, update = { view -> view.setImageURI(selectedVisual.second) }, modifier = Modifier.fillMaxSize())
                                             }
                                         }
                                     }
+                                    if (visualItems.size > 1) {
+                                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            visualItems.forEachIndexed { visualIndex, (_, uri, type) ->
+                                                Box(Modifier.size(76.dp).clickable(enabled = !posting && !aiCaptionLoading) { selectedVisualIndex = visualIndex }) {
+                                                    Card(Modifier.fillMaxSize()) {
+                                                        if (type == "video") {
+                                                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(Icons.Default.VideoLibrary, "Video ${visualIndex + 1}", modifier = Modifier.size(28.dp)) }
+                                                        } else {
+                                                            AndroidView(factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.CENTER_CROP } }, update = { view -> view.setImageURI(uri) }, modifier = Modifier.fillMaxSize())
+                                                        }
+                                                    }
+                                                    IconButton(onClick = { removeCapturedUri(uri) }, enabled = !posting && !aiCaptionLoading, modifier = Modifier.align(Alignment.TopEnd).size(30.dp)) { Icon(Icons.Default.Close, "Remove media") }
+                                                }
+                                            }
+                                        }
+                                    } else if (visualItems.size == 1) {
+                                        TextButton(onClick = { removeCapturedUri(visualItems.first().second) }, enabled = !posting && !aiCaptionLoading) { Icon(Icons.Default.Close, null); Spacer(Modifier.width(4.dp)); Text("Remove photo/video") }
+                                    }
                                     Text("${capturedUris.size} item${if (capturedUris.size == 1) "" else "s"} ready${if (audioCount > 0) " • $audioCount audio" else ""}", color = MaterialTheme.colorScheme.primary)
-                                    if (visualIndex >= 0 && capturedTypes.count { it == "image" } == 1 && audioCount == 0) TextButton(onClick = { showComposer = false; showPhotoEditor = true }, enabled = !posting && !aiCaptionLoading) { Icon(Icons.Default.AutoAwesome, null); Spacer(Modifier.width(4.dp)); Text("Edit this photo with FYNX AI") }
-                                    Text("Preview before publishing. You can add a caption above.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (visualItems.size == 1 && visualItems.first().third == "image" && audioCount == 0) TextButton(onClick = { showComposer = false; showPhotoEditor = true }, enabled = !posting && !aiCaptionLoading) { Icon(Icons.Default.AutoAwesome, null); Spacer(Modifier.width(4.dp)); Text("Edit this photo with FYNX AI") }
+                                    Text("Preview before publishing. Select any thumbnail to inspect it, or remove media you don't want to post.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
@@ -220,8 +253,8 @@ fun FynxHomeSocialHubPanel(
         )
     }
 
-    if (showPhotoEditor) Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { FynxAiPhotoEditorPanel(initialUri = capturedUris.firstOrNull(), onDone = { editedUri -> if (editedUri != null) { capturedUris = listOf(editedUri); capturedTypes = listOf("image") }; showPhotoEditor = false; showComposer = true }) }
-    if (showCamera) Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { FynxCameraCapturePanel(onCaptured = { uri, type -> capturedUris = (capturedUris + uri).take(12); recomputeTypes(); showCamera = false; showComposer = true }, onDismiss = { showCamera = false; showComposer = true }) }
+    if (showPhotoEditor) Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { FynxAiPhotoEditorPanel(initialUri = capturedUris.firstOrNull(), onDone = { editedUri -> if (editedUri != null) { capturedUris = listOf(editedUri); capturedTypes = listOf("image") }; selectedVisualIndex = 0; showPhotoEditor = false; showComposer = true }) }
+    if (showCamera) Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { FynxCameraCapturePanel(onCaptured = { uri, type -> capturedUris = (capturedUris + uri).take(12); recomputeTypes(); selectedVisualIndex = 0; showCamera = false; showComposer = true }, onDismiss = { showCamera = false; showComposer = true }) }
 }
 
 @Composable
