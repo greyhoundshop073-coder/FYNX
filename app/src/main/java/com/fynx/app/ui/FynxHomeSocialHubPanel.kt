@@ -2,6 +2,8 @@ package com.fynx.app.ui
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.ImageView
+import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -20,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
@@ -170,13 +173,24 @@ fun FynxHomeSocialHubPanel(
 
                         if (capturedUris.isNotEmpty()) {
                             Card(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     val audioCount = capturedTypes.count { it == "audio" }
-                                    val visualCount = capturedTypes.count { it == "image" || it == "video" }
+                                    val visualIndex = capturedTypes.indexOfFirst { it == "image" || it == "video" }
+                                    val visualUri = capturedUris.getOrNull(visualIndex)
+                                    val visualType = capturedTypes.getOrNull(visualIndex)
                                     Text("Attached media", style = MaterialTheme.typography.titleMedium)
+                                    if (visualUri != null && visualType != null) {
+                                        Box(Modifier.fillMaxWidth().heightIn(min = 150.dp, max = 280.dp)) {
+                                            if (visualType == "video") {
+                                                AndroidView(factory = { VideoView(it).apply { setVideoURI(visualUri); setOnPreparedListener { player -> player.isLooping = true; start() } } }, update = { view -> if (view.tag != visualUri.toString()) { view.tag = visualUri.toString(); view.setVideoURI(visualUri); view.start() } }, modifier = Modifier.fillMaxSize())
+                                            } else {
+                                                AndroidView(factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.FIT_CENTER } }, update = { view -> view.setImageURI(visualUri) }, modifier = Modifier.fillMaxSize())
+                                            }
+                                        }
+                                    }
                                     Text("${capturedUris.size} item${if (capturedUris.size == 1) "" else "s"} ready${if (audioCount > 0) " • $audioCount audio" else ""}", color = MaterialTheme.colorScheme.primary)
-                                    if (visualCount == 1 && audioCount == 0 && capturedTypes.firstOrNull() == "image") TextButton(onClick = { showComposer = false; showPhotoEditor = true }, enabled = !posting && !aiCaptionLoading) { Icon(Icons.Default.AutoAwesome, null); Spacer(Modifier.width(4.dp)); Text("Edit this photo with FYNX AI") }
-                                    Text("You can add a caption above before publishing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (visualIndex >= 0 && capturedTypes.count { it == "image" } == 1 && audioCount == 0) TextButton(onClick = { showComposer = false; showPhotoEditor = true }, enabled = !posting && !aiCaptionLoading) { Icon(Icons.Default.AutoAwesome, null); Spacer(Modifier.width(4.dp)); Text("Edit this photo with FYNX AI") }
+                                    Text("Preview before publishing. You can add a caption above.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
