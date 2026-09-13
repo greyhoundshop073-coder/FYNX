@@ -15,8 +15,7 @@ def require(text: str, needle: str, label: str) -> None:
 
 def normalize_source(text: str) -> str:
     text = " ".join(text.split())
-    text = re.sub(r"\s*([(),:])\s*", r"\1", text)
-    return text
+    return re.sub(r"\s*([(),:])\s*", r"\1", text)
 
 
 def require_normalized(text: str, needle: str, label: str) -> None:
@@ -32,6 +31,7 @@ privacy_bootstrap = read("backend/homeCommentsPrivacyBootstrap.js")
 realtime_bootstrap = read("backend/realtimeIsolationBootstrap.js")
 backend_package = read("backend/package.json")
 
+# Durable post interactions must have one authenticated backend source of truth.
 for route in (
     'app.post("/api/social/posts/:id/save"',
     'app.delete("/api/social/posts/:id/save"',
@@ -51,12 +51,15 @@ for needle in (
 ):
     require(discovery, needle, f"interaction protection {needle}")
 
+# Home must use the real client/backend paths for every interaction rather than local fake state.
 for needle in (
     "FynxRemoteSocialClient.feedPage",
     "FynxRemoteSocialClient.like",
     "FynxRemoteSocialClient.save",
     "FynxRemoteSocialClient.repost",
     "FynxRemoteSocialClient.interactionState",
+    "FynxRemoteSocialClient.follow",
+    "FynxRemoteSocialClient.deletePost",
     "FynxHomeCommentsPanel",
 ):
     require(home, needle, f"Home interaction path {needle}")
@@ -73,19 +76,78 @@ for needle in (
 ):
     require_normalized(client, needle, f"existing social client API {needle}")
 
+# Real interaction UX and protection against rapid taps/re-entry races.
 for needle in (
+    'Icons.Default.Favorite',
+    'Icons.Default.ChatBubbleOutline',
     'Icons.Default.Bookmark',
     'Icons.Default.BookmarkBorder',
     'Icons.Default.Repeat',
+    'Icons.Default.MoreHoriz',
+    'Icons.Default.Refresh',
     'interactionBusy',
+    'feedRequestInFlight',
+    'lastFeedRequestAt',
+    'FEED_REFRESH_DEBOUNCE_MS',
+    'posts = posts.filterNot { it.id == id }',
+    'deletePost = null',
+    'AlertDialog(',
+    'sharePost(context, post)',
 ):
-    require(home, needle, f"professional durable interaction surface {needle}")
+    require(home, needle, f"Home reliability surface {needle}")
+
+# Feed refresh/pagination and duplicate-page protection.
+for needle in (
+    'feedPage(context, limit = 20, offset = 0',
+    'feedPage(context, limit = 20, offset = posts.size',
+    'val existing = posts.map { it.id }.toSet()',
+    'filterNot { it.id in existing }',
+    'if (!loading && hasMore)',
+):
+    require(home, needle, f"feed recovery/pagination {needle}")
+
+# Cached-first load plus stale-cache fallback provides network failure recovery without fake posts.
+for needle in (
+    'FEED_CACHE_TTL_MS',
+    'readCachedFeed(context)',
+    'readStaleCachedFeed(context)',
+    'if (safeOffset == 0 && remote.isFailure)',
+):
+    require(client, needle, f"offline feed recovery {needle}")
+
+# Comments/replies remain on the existing authoritative comments panel and synchronize count back to Home.
+for needle in (
+    'onCommentCountChanged',
+    'expandedReplies',
+    'parentCommentId',
+    'nextCursor',
+):
+    require(comments_panel, needle, f"comment/reply lifecycle {needle}")
+
+# Media must remain a real post-media surface rather than placeholder content.
+for needle in (
+    'post.mediaUrl?.let',
+    'RemoteSocialMedia',
+    'MediaController',
+    'VideoView',
+):
+    require(home, needle, f"post media behavior {needle}")
+
+# Profile/follow/share paths must stay connected to existing systems.
+for needle in (
+    'onOpenAuthorProfile',
+    'FynxRemoteSocialClient.follow',
+    'FynxDiscoveryClient.recordEngagement',
+    'Intent.ACTION_SEND',
+):
+    require(home, needle, f"identity/share behavior {needle}")
 
 if "CommentsDialog" in home:
     raise SystemExit("HOME INTERACTIONS RED: legacy competing CommentsDialog detected")
 if 'Text("Save")' in home or 'Text("Repost")' in home:
     raise SystemExit("HOME INTERACTIONS RED: fake Save/Repost feed controls detected")
 
+# Clean production startup and privacy-safe comment/reply boundaries remain mandatory.
 require(backend_package, '"start": "node realtimeIsolationBootstrap.js"', "production realtime entrypoint")
 require(realtime_bootstrap, 'import { installHomeCommentPrivacy } from "./homeCommentsPrivacyBootstrap.js";', "Home comment privacy integration")
 require(realtime_bootstrap, "await installHomeCommentBackend();", "base Home comments installation")
@@ -105,4 +167,4 @@ for needle in (
 
 require(privacy_bootstrap, "fynxHomeCommentsPrivacyBatch", "Home comment privacy patch marker")
 
-print("HOME INTERACTIONS GREEN: durable Save/Repost backend, Home client/UI wiring, rapid-tap protection, and clean-startup privacy-safe comment/reply boundaries are present without duplicate surfaces.")
+print("HOME INTERACTIONS GREEN: Home 4E durable interactions, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, and clean-startup privacy boundaries are present without duplicate surfaces.")
