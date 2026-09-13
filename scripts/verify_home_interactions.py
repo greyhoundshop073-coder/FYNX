@@ -167,14 +167,18 @@ for needle in (
     '"Create post"',
     '"Like"',
     '"Comment"',
-    '"Save post"',
-    '"Repost"',
     '"Post options"',
     'onDismissRequest =',
     'enabled = !feedRequestInFlight',
     'enabled = !loadingMore && !feedRequestInFlight',
 ):
     require(home, needle, f"Home 4F polish/integration surface {needle}")
+
+# Save/Repost labels are stateful accessibility descriptions in the real Compose control.
+# Verify the actual state branches instead of requiring a flattened literal that does not
+# exist in Kotlin source when the label is interpolated at runtime.
+require(home, '"Unsave" else "Save"', "Home 4F save accessibility state branch")
+require(home, '"Undo repost" else "Repost"', "Home 4F repost accessibility state branch")
 
 # Decorative icons may use Compose's positional null content description; require that real form
 # instead of incorrectly requiring the literal named argument `contentDescription = null`.
