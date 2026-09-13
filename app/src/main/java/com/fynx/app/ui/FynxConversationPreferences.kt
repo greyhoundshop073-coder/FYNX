@@ -21,41 +21,57 @@ object FynxConversationPreferences {
     fun group(context: Context, groupId: String) =
         context.getSharedPreferences("fynx_group_settings_${accountKey(context)}_${groupKey(groupId)}", Context.MODE_PRIVATE)
 
+    private fun chatBoolean(context: Context, username: String, suffix: String, default: Boolean): Boolean {
+        val prefs = chat(context, username)
+        val normalizedKey = "${suffix}_${chatKey(username)}"
+        if (prefs.contains(normalizedKey)) return prefs.getBoolean(normalizedKey, default)
+        val legacyKey = "${suffix}_${username.trim()}"
+        return prefs.getBoolean(legacyKey, default)
+    }
+
+    private fun chatString(context: Context, username: String, suffix: String, default: String): String {
+        val prefs = chat(context, username)
+        val normalizedKey = "${suffix}_${chatKey(username)}"
+        if (prefs.contains(normalizedKey)) return prefs.getString(normalizedKey, default) ?: default
+        val legacyKey = "${suffix}_${username.trim()}"
+        return prefs.getString(legacyKey, default) ?: default
+    }
+
     fun chatNotifications(context: Context, username: String): Boolean =
-        chat(context, username).getBoolean("notifications_${chatKey(username)}", true)
+        chatBoolean(context, username, "notifications", true)
 
     fun chatMessagePreviews(context: Context, username: String): Boolean =
-        chat(context, username).getBoolean("previews_${chatKey(username)}", true)
+        chatBoolean(context, username, "previews", true)
 
     fun chatSounds(context: Context, username: String): Boolean =
-        chat(context, username).getBoolean("sounds_${chatKey(username)}", true)
+        chatBoolean(context, username, "sounds", true)
 
     fun chatVibration(context: Context, username: String): Boolean =
-        chat(context, username).getBoolean("vibration_${chatKey(username)}", true)
+        chatBoolean(context, username, "vibration", true)
 
     fun chatReadReceipts(context: Context, username: String): Boolean =
-        chat(context, username).getBoolean("read_${chatKey(username)}", true)
+        chatBoolean(context, username, "read", true)
 
     fun chatAutoDownload(context: Context, username: String): Boolean =
-        chat(context, username).getBoolean("autodownload_${chatKey(username)}", true)
+        chatBoolean(context, username, "autodownload", true)
 
     fun chatSaveGallery(context: Context, username: String): Boolean =
-        chat(context, username).getBoolean("gallery_${chatKey(username)}", false)
+        chatBoolean(context, username, "gallery", false)
 
     fun chatLinkPreviews(context: Context, username: String): Boolean =
-        chat(context, username).getBoolean("linkpreviews_${chatKey(username)}", true)
+        chatBoolean(context, username, "linkpreviews", true)
 
     fun chatAnimations(context: Context, username: String): Boolean =
-        chat(context, username).getBoolean("animations_${chatKey(username)}", true)
+        chatBoolean(context, username, "animations", true)
 
     fun chatLastSeen(context: Context, username: String): String =
-        chat(context, username).getString("lastseen_${chatKey(username)}", "Everybody") ?: "Everybody"
+        chatString(context, username, "lastseen", "Everybody")
 
     fun chatWallpaper(context: Context, username: String): String =
-        chat(context, username).getString("wallpaper_${chatKey(username)}", "FYNX Default") ?: "FYNX Default"
+        chatString(context, username, "wallpaper", "FYNX Default")
 
     fun chatTextSize(context: Context, username: String): String =
-        chat(context, username).getString("textsize_${chatKey(username)}", "Medium") ?: "Medium"
+        chatString(context, username, "textsize", "Medium")
 
     fun groupNotifications(context: Context, groupId: String): Boolean =
         group(context, groupId).getBoolean("notifications", true)
