@@ -7,6 +7,19 @@ object FynxNotificationPreferencesClient {
     private const val PREFS = "fynx_notification_preferences"
     private const val KEY_SERVER = "server_preferences"
 
+    private fun accountKey(context: Context): String =
+        FynxAuthStore.accountStorageKey(context)
+            ?.trim()
+            ?.lowercase()
+            ?.map { c -> if (c.isLetterOrDigit()) c else '_' }
+            ?.joinToString("")
+            ?.take(80)
+            ?.ifBlank { "account" }
+            ?: "signed_out"
+
+    private fun prefs(context: Context) =
+        context.getSharedPreferences("${PREFS}_${accountKey(context)}", Context.MODE_PRIVATE)
+
     suspend fun load(context: Context): Result<FynxNotificationPreferences> =
         FynxBackendClient.get(context, "/api/notification-preferences").mapCatching { raw ->
             parse(JSONObject(raw).optJSONObject("preferences") ?: JSONObject()).also { cache(context, it) }
@@ -26,12 +39,12 @@ object FynxNotificationPreferencesClient {
 
     fun cached(context: Context): FynxNotificationPreferences =
         runCatching {
-            val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_SERVER, null) ?: return FynxNotificationPreferences()
+            val raw = prefs(context).getString(KEY_SERVER, null) ?: return FynxNotificationPreferences()
             parse(JSONObject(raw))
         }.getOrDefault(FynxNotificationPreferences())
 
     private fun cache(context: Context, preferences: FynxNotificationPreferences) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        prefs(context).edit()
             .putString(KEY_SERVER, toJson(preferences).toString()).apply()
     }
 
