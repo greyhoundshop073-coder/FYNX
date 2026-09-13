@@ -27,5 +27,6 @@ data class ChatMessage(
     val mediaId: String? = null,
     val senderName: String? = null,
     val senderUsername: String? = null,
-    val senderAvatarUri: String? = null
+    val senderAvatarUri: String? = null,
+    val pinned: Boolean = false
 )
