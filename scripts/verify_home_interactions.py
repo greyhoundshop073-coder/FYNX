@@ -98,7 +98,8 @@ for needle in (
 
 # The privacy module remains a reusable, idempotent hardening pass and must not
 # create a second comments API. Its source checks describe the same protections
-# it applies when an older 4B route marker is encountered.
+# it applies when an older 4B route marker is encountered. SQL templates are
+# checked normalized because the template intentionally uses multiline SQL.
 require(privacy_bootstrap, "fynxHomeCommentsPrivacyBatch", "Home comment privacy patch marker")
 for needle in (
     "b.blocker_id=$2 AND b.blocked_id=c.author_id",
@@ -110,6 +111,6 @@ for needle in (
     "LIMIT $3`,",
     "ORDER BY c.id ASC LIMIT $4`,",
 ):
-    require(privacy_bootstrap, needle, f"privacy hardening template {needle}")
+    require_normalized(privacy_bootstrap, needle, f"privacy hardening template {needle}")
 
 print("HOME INTERACTIONS GREEN: durable Save/Repost backend, dedicated Home comments/feed wiring, and clean-startup privacy-safe comment/reply boundaries are present without duplicate surfaces.")
