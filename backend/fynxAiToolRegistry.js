@@ -10,7 +10,10 @@ const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL, ssl: proc
 
 const TOOL_DEFINITIONS = [
   { type: "function", name: "get_my_profile", description: "Read the authenticated FYNX user's basic profile. Use this when the user asks about their own FYNX account or profile.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } },
-  { type: "function", name: "get_conversation", description: "Read the authenticated user's recent one-to-one FYNX messages with a named username. Use only when the user asks about that conversation or its messages.", strict: true, parameters: { type: "object", properties: { username: { type: "string", description: "The other FYNX user's username." } }, required: ["username"], additionalProperties: false } }
+  { type: "function", name: "get_conversation", description: "Read the authenticated user's recent one-to-one FYNX messages with a named username. Use only when the user asks about that conversation or its messages.", strict: true, parameters: { type: "object", properties: { username: { type: "string", description: "The other FYNX user's username." } }, required: ["username"], additionalProperties: false } },
+  { type: "function", name: "search_users", description: "Search real FYNX users by username or display name. Never use this to reveal phone numbers. Use when the user asks to find a person on FYNX.", strict: true, parameters: { type: "object", properties: { query: { type: "string", description: "At least 2 characters of a FYNX username or display name." } }, required: ["query"], additionalProperties: false } },
+  { type: "function", name: "get_my_friends", description: "Read the authenticated user's accepted FYNX friends. Use when the user asks who their friends are or asks about their own friend list.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } },
+  { type: "function", name: "search_marketplace", description: "Search real active FYNX marketplace listings available to the authenticated user. Use for product discovery only; never claim a purchase or payment happened.", strict: true, parameters: { type: "object", properties: { query: { type: "string", description: "Optional product, seller, or description search text." }, category: { type: "string", description: "Optional marketplace category." } }, required: ["query", "category"], additionalProperties: false } }
 ];
 
 function normalizeUsername(value) { return String(value || "").trim().replace(/^@+/, "").toLowerCase(); }
@@ -28,12 +31,14 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
   if (!userId) throw new Error("authenticated user is required");
   let args = {};
   try { args = argumentsJson ? JSON.parse(argumentsJson) : {}; } catch { throw new Error("invalid tool arguments"); }
+
   if (name === "get_my_profile") {
     const result = await databasePool.query("SELECT id,username,display_name FROM users WHERE id=$1 LIMIT 1", [userId]);
     const row = result.rows[0];
     if (!row) throw new Error("profile not found");
     return { id: String(row.id), username: row.username, displayName: row.display_name || "" };
   }
+
   if (name === "get_conversation") {
     const username = normalizeUsername(args.username);
     if (!username || username.length > 100) throw new Error("invalid username");
@@ -45,6 +50,31 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
     const messages = await databasePool.query(`SELECT m.id,m.sender_id,m.recipient_id,m.text,EXTRACT(EPOCH FROM m.created_at)*1000 AS timestamp,m.edited,m.deleted FROM messages m WHERE (m.sender_id=$1 AND m.recipient_id=$2) OR (m.sender_id=$2 AND m.recipient_id=$1) ORDER BY m.created_at DESC LIMIT 30`, [userId, otherUser.id]);
     return { username: otherUser.username, displayName: otherUser.display_name || "", messages: messages.rows.reverse().map(row => ({ id: String(row.id), fromMe: String(row.sender_id) === String(userId), text: row.deleted ? "[deleted]" : String(row.text || ""), timestamp: Number(row.timestamp), edited: Boolean(row.edited), deleted: Boolean(row.deleted) })) };
   }
+
+  if (name === "search_users") {
+    const query = String(args.query || "").trim().slice(0, 80);
+    if (query.length < 2) throw new Error("search query must be at least 2 characters");
+    const normalized = query.replace(/^@+/, "").toLowerCase().slice(0, 32);
+    const result = await databasePool.query(`SELECT id,username,display_name,created_at FROM users WHERE username ILIKE $1 OR display_name ILIKE $2 ORDER BY CASE WHEN lower(username) = $3 THEN 0 ELSE 1 END, username LIMIT 10`, [`%${normalized}%`, `%${query.toLowerCase()}%`, normalized]);
+    return { users: result.rows.map(row => ({ id: String(row.id), username: row.username, displayName: row.display_name || "", createdAt: row.created_at })) };
+  }
+
+  if (name === "get_my_friends") {
+    const result = await databasePool.query(`SELECT u.id,u.username,u.display_name,f.created_at FROM friendships f JOIN users u ON u.id = CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END WHERE (f.user_id=$1 OR f.friend_id=$1) AND f.status='accepted' ORDER BY u.username LIMIT 100`, [userId]);
+    return { friends: result.rows.map(row => ({ id: String(row.id), username: row.username, displayName: row.display_name || "", since: row.created_at })) };
+  }
+
+  if (name === "search_marketplace") {
+    const query = String(args.query || "").trim().slice(0, 80);
+    const category = String(args.category || "").trim().slice(0, 40);
+    const params = [userId];
+    const where = ["l.active=TRUE", "l.quantity>0", "l.seller_id<>$1"];
+    if (query) { params.push(`%${query}%`); where.push(`(l.title ILIKE $${params.length} OR l.description ILIKE $${params.length} OR u.username ILIKE $${params.length} OR u.display_name ILIKE $${params.length})`); }
+    if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category=$${params.length}`); }
+    const result = await databasePool.query(`SELECT l.id,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,l.location,u.username AS seller_username,u.display_name AS seller_display_name FROM marketplace_listings l JOIN users u ON u.id=l.seller_id WHERE ${where.join(" AND ")} ORDER BY l.created_at DESC LIMIT 20`, params);
+    return { listings: result.rows.map(row => ({ id: String(row.id), title: row.title, description: row.description, price: Number(row.price), currency: row.currency, category: row.category, condition: row.condition, quantity: Number(row.quantity), location: row.location, sellerUsername: row.seller_username, sellerDisplayName: row.seller_display_name || "" })) };
+  }
+
   throw new Error(`unsupported FYNX AI tool: ${name}`);
 }
 
