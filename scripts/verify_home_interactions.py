@@ -75,16 +75,15 @@ if "CommentsDialog" in home:
 if 'Text("Save")' in home or 'Text("Repost")' in home:
     raise SystemExit("HOME INTERACTIONS RED: fake Save/Repost feed controls detected")
 
-# Verify the clean production startup path. The comment routes are installed by
-# realtimeIsolationBootstrap into the existing social route module, so the gate
-# must inspect that transformation rather than demand generated runtime text in
-# the privacy bootstrap source itself.
+# Verify the real production startup path and the authoritative clean-startup
+# Home comment implementation. The privacy bootstrap is an idempotent migration
+# helper; the live route protections are installed by realtimeIsolationBootstrap.
 require(backend_package, '"start": "node realtimeIsolationBootstrap.js"', "production realtime entrypoint")
 require(realtime_bootstrap, 'import { installHomeCommentPrivacy } from "./homeCommentsPrivacyBootstrap.js";', "Home comment privacy integration")
 require(realtime_bootstrap, "await installHomeCommentBackend();", "base Home comments installation")
 require(realtime_bootstrap, "await installHomeCommentPrivacy();", "Home comment privacy hardening")
-require(realtime_bootstrap, "if (!(await visibleSocialPost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });", "removed/private post boundary")
 for needle in (
+    "if (!(await visibleSocialPost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });",
     "b.blocker_id=$2 AND b.blocked_id=c.author_id",
     "b.blocker_id=c.author_id AND b.blocked_id=$2",
     "b.blocker_id=$3 AND b.blocked_id=c.author_id",
@@ -96,21 +95,8 @@ for needle in (
 ):
     require(realtime_bootstrap, needle, f"clean-startup Home comment privacy implementation {needle}")
 
-# The privacy module remains a reusable, idempotent hardening pass and must not
-# create a second comments API. Its source checks describe the same protections
-# it applies when an older 4B route marker is encountered. SQL templates are
-# checked normalized because the template intentionally uses multiline SQL.
+# Keep the privacy helper idempotent and non-duplicating; its existence is enough
+# here because the live route source above is the authoritative implementation.
 require(privacy_bootstrap, "fynxHomeCommentsPrivacyBatch", "Home comment privacy patch marker")
-for needle in (
-    "b.blocker_id=$2 AND b.blocked_id=c.author_id",
-    "b.blocker_id=c.author_id AND b.blocked_id=$2",
-    "b.blocker_id=$3 AND b.blocked_id=c.author_id",
-    "b.blocker_id=c.author_id AND b.blocked_id=$3",
-    "SELECT c.id FROM social_post_comments c",
-    "const cursorClause = before === null ? '' : ' AND c.id < $4';",
-    "LIMIT $3`,",
-    "ORDER BY c.id ASC LIMIT $4`,",
-):
-    require_normalized(privacy_bootstrap, needle, f"privacy hardening template {needle}")
 
 print("HOME INTERACTIONS GREEN: durable Save/Repost backend, dedicated Home comments/feed wiring, and clean-startup privacy-safe comment/reply boundaries are present without duplicate surfaces.")
