@@ -19,7 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextAlign
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -140,7 +140,7 @@ fun FynxHomeCommentsPanel(
                 onCommentCountChanged(commentCount)
                 if (comment.parentCommentId != null) {
                     val parent = comment.parentCommentId!!
-                    expandedReplies = expandedReplies + mapOf(parent to ((expandedReplies[parent].orEmpty() + comment).distinctBy { it.id })
+                    expandedReplies = expandedReplies + mapOf(parent to ((expandedReplies[parent].orEmpty() + comment).distinctBy { it.id }))
                 }
                 text = ""
                 replyingToId = null
