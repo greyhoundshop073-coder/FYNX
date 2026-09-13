@@ -3,6 +3,7 @@ import { WebSocketServer } from "ws";
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { installSocialFeed } from "./socialFeedBootstrap.js";
 import { installHomeCommentPrivacy } from "./homeCommentsPrivacyBootstrap.js";
 
 // R3 connection isolation layer. server.js is intentionally kept intact; this
@@ -143,9 +144,7 @@ async function installHomeCommentBackend() {
       const limit = Math.min(Math.max(Number.isInteger(requestedLimit) ? requestedLimit : 50, 1), 100);
       const before = req.query?.before == null || req.query.before === '' ? null : Number(req.query.before);
       if (before !== null && (!Number.isSafeInteger(before) || before < 1)) return res.status(400).json({ error: 'invalid comment cursor' });
-      const params = [postId, limit + 1];
       const cursorClause = before === null ? '' : ' AND c.id < $3';
-      if (before !== null) params.push(before);
       const result = await pool.query(
         `SELECT c.id,c.post_id,c.parent_comment_id,c.text,EXTRACT(EPOCH FROM c.created_at)*1000 AS timestamp,
                 u.id AS author_id,u.username,u.display_name
@@ -220,6 +219,7 @@ async function installHomeCommentBackend() {
 // Install the base comments routes first, then apply the privacy hardening to
 // that same route source. This preserves the real production entrypoint and
 // also works correctly on a clean deployment where Batch 4B has not yet run.
+await installSocialFeed();
 await installHomeCommentBackend();
 await installHomeCommentPrivacy();
 await import("./serverBootstrap.js");
