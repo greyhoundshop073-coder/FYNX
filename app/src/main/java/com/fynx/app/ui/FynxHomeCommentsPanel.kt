@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,47 +35,65 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     var comments by remember(post.id) { mutableStateOf<List<FynxRemoteSocialClient.RemoteComment>>(emptyList()) }
-    var text by remember(post.id) { mutableStateOf("") }
+    var text by rememberSaveable(post.id) { mutableStateOf("") }
     var loading by remember(post.id) { mutableStateOf(true) }
     var loadingMore by remember(post.id) { mutableStateOf(false) }
     var sending by remember(post.id) { mutableStateOf(false) }
     var error by remember(post.id) { mutableStateOf<String?>(null) }
     var nextCursor by remember(post.id) { mutableStateOf<String?>(null) }
-    var replyingTo by remember(post.id) { mutableStateOf<FynxRemoteSocialClient.RemoteComment?>(null) }
+    var replyingToId by rememberSaveable(post.id) { mutableStateOf<String?>(null) }
     var replyLoadingId by remember(post.id) { mutableStateOf<String?>(null) }
     var replyErrorId by remember(post.id) { mutableStateOf<String?>(null) }
     var expandedReplies by remember(post.id) { mutableStateOf<Map<String, List<FynxRemoteSocialClient.RemoteComment>>>(emptyMap()) }
+    val consumedCursors = remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
+    val replyingTo = replyingToId?.let { id -> comments.firstOrNull { it.id == id } }
+
+    fun resetPagingState() {
+        nextCursor = null
+        consumedCursors.value = emptySet()
+        loadingMore = false
+    }
 
     fun loadComments() {
-        if (sending) return
+        if (sending || loading) return
         loading = true
         error = null
         replyLoadingId = null
         replyErrorId = null
         expandedReplies = emptyMap()
+        resetPagingState()
         scope.launch {
             FynxRemoteSocialClient.commentsPage(context, post.id, null, COMMENT_PAGE_SIZE)
                 .onSuccess { page ->
                     comments = page.comments.distinctBy { it.id }
                     nextCursor = page.nextCursor
                 }
-                .onFailure { error = it.message ?: "Unable to load comments." }
+                .onFailure { failure ->
+                    comments = emptyList()
+                    error = if (failure.message?.contains("404") == true) "This post is no longer available." else failure.message ?: "Unable to load comments."
+                }
             loading = false
         }
     }
 
     fun loadMore() {
         val cursor = nextCursor ?: return
-        if (loadingMore || loading || sending) return
+        if (loadingMore || loading || sending || consumedCursors.value.contains(cursor)) return
+        consumedCursors.value = consumedCursors.value + cursor
         loadingMore = true
         error = null
         scope.launch {
             FynxRemoteSocialClient.commentsPage(context, post.id, cursor, COMMENT_PAGE_SIZE)
                 .onSuccess { page ->
-                    comments = (page.comments + comments).distinctBy { it.id }
-                    nextCursor = page.nextCursor
+                    val existingIds = comments.asSequence().map { it.id }.toHashSet()
+                    val fresh = page.comments.filterNot { existingIds.contains(it.id) }
+                    comments = (fresh + comments).distinctBy { it.id }
+                    nextCursor = page.nextCursor?.takeUnless { it == cursor || consumedCursors.value.contains(it) }
                 }
-                .onFailure { error = it.message ?: "Unable to load more comments." }
+                .onFailure { failure ->
+                    consumedCursors.value = consumedCursors.value - cursor
+                    error = failure.message ?: "Unable to load more comments."
+                }
             loadingMore = false
         }
     }
@@ -82,7 +101,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
     fun send() {
         val value = text.trim()
         if (value.isEmpty() || sending || loading || value.length > MAX_COMMENT_LENGTH) return
-        val parentId = replyingTo?.id
+        val parentId = replyingToId
         sending = true
         error = null
         replyErrorId = null
@@ -99,7 +118,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
                     expandedReplies = expandedReplies + mapOf(parent to ((expandedReplies[parent].orEmpty() + comment).distinctBy { it.id }))
                 }
                 text = ""
-                replyingTo = null
+                replyingToId = null
                 if (comment.parentCommentId == null) {
                     scope.launch {
                         val topLevelCount = comments.count { it.parentCommentId == null }
@@ -138,7 +157,15 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
         }
     }
 
-    LaunchedEffect(post.id) { loadComments() }
+    LaunchedEffect(post.id) {
+        comments = emptyList()
+        text = ""
+        replyingToId = null
+        resetPagingState()
+        loading = true
+        loadComments()
+    }
+
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize()) {
@@ -180,7 +207,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
                                         Text(comment.text, style = MaterialTheme.typography.bodyMedium)
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(relative(comment.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            TextButton(onClick = { if (!sending) replyingTo = comment }) { Text("Reply") }
+                                            TextButton(onClick = { if (!sending) replyingToId = comment.id }) { Text("Reply") }
                                             TextButton(onClick = { toggleReplies(comment) }, enabled = replyLoadingId == null && !sending) {
                                                 val loadedReplyCount = expandedReplies[comment.id]?.size
                                                 Text(if (loadedReplyCount != null) { if (loadedReplyCount == 0) "No replies" else "$loadedReplyCount replies" } else "Replies")
@@ -216,7 +243,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
                 HorizontalDivider()
                 if (replyingTo != null) Row(Modifier.fillMaxWidth().padding(12.dp, 6.dp, 12.dp, 0.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Replying to ${replyingTo!!.authorDisplayName.ifBlank { replyingTo!!.authorUsername }}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { replyingTo = null }) { Text("Cancel") }
+                    TextButton(onClick = { replyingToId = null }) { Text("Cancel") }
                 }
                 Row(Modifier.fillMaxWidth().imePadding().padding(10.dp), verticalAlignment = Alignment.Bottom) {
                     Column(Modifier.weight(1f)) {
