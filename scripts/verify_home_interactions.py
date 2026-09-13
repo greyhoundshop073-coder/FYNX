@@ -27,13 +27,13 @@ for route in (
 ):
     require(discovery, route, f"durable interaction route {route}")
 
-# Persistence must be account-scoped by user_id and protected by visibility/block checks.
+# Persistence must be account-scoped and protected by the backend's real visibility helper.
 for needle in (
     "CREATE TABLE IF NOT EXISTS social_saved_posts",
     "CREATE TABLE IF NOT EXISTS social_post_reposts",
     "post_id BIGINT NOT NULL",
     "user_id BIGINT NOT NULL",
-    "visibleSocialPost",
+    "const visiblePost = async (postId, userId)",
 ):
     require(discovery, needle, f"interaction protection {needle}")
 
