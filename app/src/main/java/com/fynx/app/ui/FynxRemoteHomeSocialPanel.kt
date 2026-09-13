@@ -22,6 +22,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -173,7 +174,13 @@ fun FynxRemoteHomeSocialPanel(
         }
         if (!loading && hasMore) item(key = "feed_load_more") { OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore && !feedRequestInFlight, modifier = Modifier.fillMaxWidth()) { Text(if (loadingMore) "Loading more posts…" else "Load more posts") } }
     }
-    commentsPost?.let { post: FynxRemoteSocialClient.RemotePost -> FynxHomeCommentsPanel(post) { commentsPost = null } }
+    commentsPost?.let { post: FynxRemoteSocialClient.RemotePost ->
+        FynxHomeCommentsPanel(
+            post = post,
+            onClose = { commentsPost = null },
+            onCommentCountChanged = { newCount -> posts = posts.map { if (it.id == post.id) it.copy(commentCount = newCount) else it } }
+        )
+    }
 }
 
 @Composable
