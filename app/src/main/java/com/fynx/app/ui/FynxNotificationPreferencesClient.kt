@@ -39,8 +39,18 @@ object FynxNotificationPreferencesClient {
 
     fun cached(context: Context): FynxNotificationPreferences =
         runCatching {
-            val raw = prefs(context).getString(KEY_SERVER, null) ?: return FynxNotificationPreferences()
-            parse(JSONObject(raw))
+            val accountPrefs = prefs(context)
+            val raw = accountPrefs.getString(KEY_SERVER, null)
+            if (!raw.isNullOrBlank()) return@runCatching parse(JSONObject(raw))
+
+            val legacyPrefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val legacyRaw = legacyPrefs.getString(KEY_SERVER, null)
+            if (legacyRaw.isNullOrBlank()) return@runCatching FynxNotificationPreferences()
+
+            val migrated = parse(JSONObject(legacyRaw))
+            accountPrefs.edit().putString(KEY_SERVER, toJson(migrated).toString()).apply()
+            legacyPrefs.edit().remove(KEY_SERVER).apply()
+            migrated
         }.getOrDefault(FynxNotificationPreferences())
 
     private fun cache(context: Context, preferences: FynxNotificationPreferences) {
