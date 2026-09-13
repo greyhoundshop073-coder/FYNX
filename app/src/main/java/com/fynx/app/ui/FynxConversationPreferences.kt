@@ -26,7 +26,10 @@ object FynxConversationPreferences {
         val normalizedKey = "${suffix}_${chatKey(username)}"
         if (prefs.contains(normalizedKey)) return prefs.getBoolean(normalizedKey, default)
         val legacyKey = "${suffix}_${username.trim()}"
-        return prefs.getBoolean(legacyKey, default)
+        if (!prefs.contains(legacyKey)) return default
+        val value = prefs.getBoolean(legacyKey, default)
+        prefs.edit().putBoolean(normalizedKey, value).remove(legacyKey).apply()
+        return value
     }
 
     private fun chatString(context: Context, username: String, suffix: String, default: String): String {
@@ -34,7 +37,10 @@ object FynxConversationPreferences {
         val normalizedKey = "${suffix}_${chatKey(username)}"
         if (prefs.contains(normalizedKey)) return prefs.getString(normalizedKey, default) ?: default
         val legacyKey = "${suffix}_${username.trim()}"
-        return prefs.getString(legacyKey, default) ?: default
+        if (!prefs.contains(legacyKey)) return default
+        val value = prefs.getString(legacyKey, default) ?: default
+        prefs.edit().putString(normalizedKey, value).remove(legacyKey).apply()
+        return value
     }
 
     fun chatNotifications(context: Context, username: String): Boolean =
