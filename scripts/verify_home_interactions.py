@@ -32,6 +32,7 @@ home = read("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt")
 comments_panel = read("app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt")
 client = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
 privacy_bootstrap = read("backend/homeCommentsPrivacyBootstrap.js")
+realtime_bootstrap = read("backend/realtimeIsolationBootstrap.js")
 backend_package = read("backend/package.json")
 
 # Durable Save/Repost must remain server-backed; never replace these with UI-only state.
@@ -86,8 +87,12 @@ if "CommentsDialog" in home:
 if 'Text("Save")' in home or 'Text("Repost")' in home:
     raise SystemExit("HOME INTERACTIONS RED: fake Save/Repost feed controls detected")
 
-# Comment/reply reads must apply the same symmetric block boundary as the rest of Social.
-require(backend_package, '"start": "node homeCommentsPrivacyBootstrap.js"', "privacy-safe backend entrypoint")
+# Comment/reply reads must use the real production entrypoint and the existing
+# 4B route transformation before the privacy hardening pass runs.
+require(backend_package, '"start": "node realtimeIsolationBootstrap.js"', "production realtime entrypoint")
+require(realtime_bootstrap, 'import { installHomeCommentPrivacy } from "./homeCommentsPrivacyBootstrap.js";', "Home comment privacy integration")
+require(realtime_bootstrap, "await installHomeCommentBackend();", "base Home comments installation")
+require(realtime_bootstrap, "await installHomeCommentPrivacy();", "Home comment privacy hardening")
 require(privacy_bootstrap, "fynxHomeCommentsPrivacyBatch", "Home comment privacy patch marker")
 require(privacy_bootstrap, "if (!(await visibleSocialPost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });", "removed/private post boundary")
 require(privacy_bootstrap, "b.blocker_id=$2 AND b.blocked_id=c.author_id", "blocked comment author filter")
