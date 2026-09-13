@@ -43,7 +43,8 @@ fun FynxRemoteHomeSocialPanel(
     currentUsername: String,
     onOpenFindPeople: () -> Unit,
     onOpenMarketplace: () -> Unit = {},
-    onCreatePost: () -> Unit = {}
+    onCreatePost: () -> Unit = {},
+    onOpenAuthorProfile: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -55,6 +56,21 @@ fun FynxRemoteHomeSocialPanel(
     var feedRequestInFlight by remember { mutableStateOf(false) }
     var lastFeedRequestAt by remember { mutableLongStateOf(0L) }
     var commentsPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
+    var authorPhotos by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
+
+    fun resolveAuthorPhotos(items: List<FynxRemoteSocialClient.RemotePost>) {
+        val names = items.map { it.authorUsername.removePrefix("@").trim() }.filter { it.isNotBlank() }.distinct()
+        val missing = names.filterNot { authorPhotos.containsKey(it.lowercase()) }
+        if (missing.isEmpty()) return
+        scope.launch {
+            val resolved = mutableMapOf<String, String?>()
+            missing.forEach { username ->
+                FynxSocialClient.searchUsers(context, username).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(username, true) }?.let { resolved[username.lowercase()] = it.profilePhotoMediaId }
+                    ?: run { resolved[username.lowercase()] = null }
+            }
+            authorPhotos = authorPhotos + resolved
+        }
+    }
 
     fun reload(forceRefresh: Boolean = false) {
         val now = System.currentTimeMillis()
@@ -65,7 +81,7 @@ fun FynxRemoteHomeSocialPanel(
         scope.launch {
             loading = true
             FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
-                .onSuccess { page -> posts = page.posts; hasMore = page.hasMore; error = null }
+                .onSuccess { page -> posts = page.posts; hasMore = page.hasMore; error = null; resolveAuthorPhotos(page.posts) }
                 .onFailure { error = when { it.message?.contains("HTTP 404", true) == true -> "Your FYNX feed service is temporarily unavailable." else -> it.message ?: "Unable to load your feed." } }
             loading = false
             feedRequestInFlight = false
@@ -80,9 +96,11 @@ fun FynxRemoteHomeSocialPanel(
             FynxRemoteSocialClient.feedPage(context, limit = 20, offset = posts.size, useCache = false)
                 .onSuccess { page ->
                     val existing = posts.map { it.id }.toSet()
-                    posts = posts + page.posts.filterNot { it.id in existing }
+                    val additions = page.posts.filterNot { it.id in existing }
+                    posts = posts + additions
                     hasMore = page.hasMore
                     error = null
+                    resolveAuthorPhotos(additions)
                 }
                 .onFailure { error = it.message ?: "Unable to load more posts." }
             loadingMore = false
@@ -106,7 +124,9 @@ fun FynxRemoteHomeSocialPanel(
         error?.let { message -> item(key = "feed_error") { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Text("Retry") } } } } }
         if (!loading && posts.isEmpty() && error == null) item(key = "feed_empty") { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Your feed is ready", style = MaterialTheme.typography.titleMedium); Text("There are no visible posts yet. Create a post or find real people to build your FYNX circle."); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = onCreatePost) { Text("Create Post") }; OutlinedButton(onClick = onOpenFindPeople) { Text("Find People") } } } } }
         items(items = posts, key = { it.id }) { post ->
-            RemotePostCard(post = post, currentUsername = currentUsername,
+            val photoId = authorPhotos[post.authorUsername.removePrefix("@").trim().lowercase()]
+            RemotePostCard(post = post, currentUsername = currentUsername, profilePhotoMediaId = photoId,
+                onOpenProfile = { onOpenAuthorProfile(post.authorUsername.removePrefix("@").trim()) },
                 onLike = { id -> scope.launch { FynxRemoteSocialClient.like(context, id).onSuccess { result -> val (liked, count) = result; posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = liked, likeCount = count) else it } }.onFailure { error = it.message } } },
                 onComment = { commentsPost = post },
                 onFollow = { following -> scope.launch { FynxRemoteSocialClient.follow(context, post.authorUsername, following).onSuccess { now -> posts = posts.map { if (it.authorUsername.equals(post.authorUsername, true)) it.copy(followedByCurrentUser = now) else it } }.onFailure { error = it.message } } },
@@ -120,13 +140,14 @@ fun FynxRemoteHomeSocialPanel(
 }
 
 @Composable
-private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsername: String, onLike: (String) -> Unit, onComment: () -> Unit, onFollow: (Boolean) -> Unit, onDelete: () -> Unit, onShare: () -> Unit, onOpenMarketplace: () -> Unit) {
+private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsername: String, profilePhotoMediaId: String?, onOpenProfile: () -> Unit, onLike: (String) -> Unit, onComment: () -> Unit, onFollow: (Boolean) -> Unit, onDelete: () -> Unit, onShare: () -> Unit, onOpenMarketplace: () -> Unit) {
     val mine = post.authorUsername.equals(currentUsername.removePrefix("@"), true)
     val marketplaceAd = post.text.startsWith(MARKETPLACE_AD_MARKER)
     val displayText = if (marketplaceAd) post.text.removePrefix(MARKETPLACE_AD_MARKER).trim() else post.text
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            FynxAvatar(post.authorUsername, Modifier.size(46.dp).clip(CircleShape)); Spacer(Modifier.width(10.dp))
+            IconButton(onClick = onOpenProfile, modifier = Modifier.size(50.dp)) { FynxRemoteProfileAvatar(profilePhotoMediaId, post.authorDisplayName.ifBlank { post.authorUsername }, Modifier.size(46.dp).clip(CircleShape)) }
+            Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) { Text(post.authorDisplayName.ifBlank { post.authorUsername }, style = MaterialTheme.typography.titleSmall); Text("${post.authorUsername.removePrefix("@")} • ${relative(post.timestamp)}", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary) }
             if (mine) IconButton(onClick = onDelete) { Icon(Icons.Default.MoreHoriz, "Post options") } else TextButton(onClick = { onFollow(post.followedByCurrentUser) }) { Text(if (post.followedByCurrentUser) "Following" else "Follow") }
         }
@@ -154,8 +175,7 @@ private fun RemoteSocialMedia(path: String, type: String?) {
     var file by remember(path) { mutableStateOf<File?>(null) }
     var videoAspectRatio by remember(path) { mutableFloatStateOf(16f / 9f) }
     LaunchedEffect(path) { file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, path, type) } }
-    LaunchedEffect(file, type) { if (file != null && type == "video") videoAspectRatio = withContext(Dispatchers.IO) { runCatching { MediaMetadataRetriever().run { setDataSource(file!!.absolutePath); val width = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 16f; val height = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 9f; val rotation = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0; release(); if (rotation == 90 || rotation == 270) height / width else width / height }.coerceIn(0.56f, 1.91f) }.getOrDefault(16f / 9f) }
-    }
+    LaunchedEffect(file, type) { if (file != null && type == "video") videoAspectRatio = withContext(Dispatchers.IO) { runCatching { MediaMetadataRetriever().run { setDataSource(file!!.absolutePath); val width = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 16f; val height = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 9f; val rotation = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0; release(); if (rotation == 90 || rotation == 270) height / width else width / height }.coerceIn(0.56f, 1.91f) }.getOrDefault(16f / 9f) } }
     if (file == null) Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     else if (type == "audio") AudioPostPlayer(file!!)
     else if (type == "video") AndroidView(factory = { ctx -> VideoView(ctx).apply { layoutParams = ViewGroup.LayoutParams(-1, -1); setMediaController(MediaController(ctx)); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxWidth().aspectRatio(videoAspectRatio))
