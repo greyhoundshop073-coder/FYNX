@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -12,10 +13,16 @@ def require(text: str, needle: str, label: str) -> None:
         raise SystemExit(f"HOME INTERACTIONS RED: missing {label}: {needle}")
 
 
+def normalize_source(text: str) -> str:
+    """Normalize harmless Kotlin whitespace around punctuation and type separators."""
+    text = " ".join(text.split())
+    text = re.sub(r"\s*([(),:])\s*", r"\1", text)
+    return text
+
+
 def require_normalized(text: str, needle: str, label: str) -> None:
-    """Match source APIs without making harmless Kotlin whitespace formatting a failure."""
-    normalized_text = " ".join(text.split())
-    normalized_needle = " ".join(needle.split())
+    normalized_text = normalize_source(text)
+    normalized_needle = normalize_source(needle)
     if normalized_needle not in normalized_text:
         raise SystemExit(f"HOME INTERACTIONS RED: missing {label}: {needle}")
 
@@ -62,8 +69,7 @@ for needle in (
     require(comments_panel, needle, f"dedicated comments client path {needle}")
 
 # Existing comments client must remain the source used by Home; do not introduce a duplicate client.
-# Kotlin permits harmless spacing differences, so the gate checks the actual API signature
-# structurally instead of requiring one exact whitespace layout.
+# Kotlin permits harmless formatting differences, including omitted spaces around ':' and ','.
 for needle in (
     "suspend fun comments(context: Context, id: String)",
     "suspend fun addComment(context: Context, id: String, text: String)",
