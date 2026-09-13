@@ -12,6 +12,14 @@ def require(text: str, needle: str, label: str) -> None:
         raise SystemExit(f"HOME INTERACTIONS RED: missing {label}: {needle}")
 
 
+def require_normalized(text: str, needle: str, label: str) -> None:
+    """Match source APIs without making harmless Kotlin whitespace formatting a failure."""
+    normalized_text = " ".join(text.split())
+    normalized_needle = " ".join(needle.split())
+    if normalized_needle not in normalized_text:
+        raise SystemExit(f"HOME INTERACTIONS RED: missing {label}: {needle}")
+
+
 discovery = read("backend/discoveryRoutes.js")
 home = read("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt")
 comments_panel = read("app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt")
@@ -54,11 +62,13 @@ for needle in (
     require(comments_panel, needle, f"dedicated comments client path {needle}")
 
 # Existing comments client must remain the source used by Home; do not introduce a duplicate client.
+# Kotlin permits harmless spacing differences, so the gate checks the actual API signature
+# structurally instead of requiring one exact whitespace layout.
 for needle in (
-    "suspend fun comments(context:Context,id:String)",
+    "suspend fun comments(context: Context, id: String)",
     "suspend fun addComment(context: Context, id: String, text: String)",
 ):
-    require(client, needle, f"existing social client API {needle}")
+    require_normalized(client, needle, f"existing social client API {needle}")
 
 # The old competing comments dialog must not return alongside the dedicated surface.
 if "CommentsDialog" in home:
