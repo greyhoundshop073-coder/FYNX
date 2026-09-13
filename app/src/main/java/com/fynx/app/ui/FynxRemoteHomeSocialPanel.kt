@@ -3,14 +3,11 @@ package com.fynx.app.ui
 import android.content.Context
 import android.content.Intent
 import android.media.MediaMetadataRetriever
-import android.media.MediaPlayer
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.view.ViewGroup
 import android.widget.MediaController
 import android.widget.VideoView
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -34,13 +31,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 private const val MARKETPLACE_AD_MARKER = "[FYNX_MARKETPLACE_AD]"
 private const val FEED_REFRESH_DEBOUNCE_MS = 1000L
 
 @Composable
-fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}) {
+fun FynxRemoteHomeSocialPanel(
+    modifier: Modifier = Modifier,
+    currentUsername: String,
+    onOpenFindPeople: () -> Unit,
+    onOpenMarketplace: () -> Unit = {},
+    onCreatePost: () -> Unit = {}
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var posts by remember { mutableStateOf<List<FynxRemoteSocialClient.RemotePost>>(emptyList()) }
@@ -48,17 +50,9 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
     var loadingMore by remember { mutableStateOf(false) }
     var hasMore by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var composerOpen by remember { mutableStateOf(false) }
-    var voiceRecorderOpen by remember { mutableStateOf(false) }
-    var selectedMedia by remember { mutableStateOf<Uri?>(null) }
-    var selectedMediaType by remember { mutableStateOf<String?>(null) }
-    var composerText by remember { mutableStateOf("") }
-    var visibility by remember { mutableStateOf(FynxPostVisibility.PUBLIC) }
-    var busy by remember { mutableStateOf(false) }
     var feedRequestInFlight by remember { mutableStateOf(false) }
     var lastFeedRequestAt by remember { mutableLongStateOf(0L) }
     var commentsPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> selectedMedia = uri; selectedMediaType = uri?.let { context.contentResolver.getType(it)?.substringBefore("/") } }
 
     fun reload(forceRefresh: Boolean = false) {
         val now = System.currentTimeMillis()
@@ -69,8 +63,17 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
         scope.launch {
             loading = true
             FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
-                .onSuccess { page -> posts = page.posts; hasMore = page.hasMore; error = null }
-                .onFailure { error = when { it.message?.contains("HTTP 404", true) == true -> "Your FYNX feed service is temporarily unavailable. Tap refresh to try again." else -> it.message ?: "Unable to load your feed." } }
+                .onSuccess { page ->
+                    posts = page.posts
+                    hasMore = page.hasMore
+                    error = null
+                }
+                .onFailure {
+                    error = when {
+                        it.message?.contains("HTTP 404", true) == true -> "Your FYNX feed service is temporarily unavailable."
+                        else -> it.message ?: "Unable to load your feed."
+                    }
+                }
             loading = false
             feedRequestInFlight = false
         }
@@ -96,19 +99,59 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
 
     LaunchedEffect(Unit) { reload() }
 
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Column { Text("Your feed", style = MaterialTheme.typography.titleMedium); Text("Real posts from your FYNX network", style = MaterialTheme.typography.bodySmall) }
-            Row { IconButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Icon(Icons.Default.Refresh, "Refresh feed") }; IconButton(onClick = { composerOpen = true }) { Icon(Icons.Default.Add, "Create post") } }
-        }
-        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        if (!loading && posts.isEmpty() && error == null) {
-            Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Your feed is ready", style = MaterialTheme.typography.titleMedium); Text("There are no visible posts yet. Create a post or find real people to build your FYNX circle."); OutlinedButton(onClick = onOpenFindPeople) { Text("Find People") } }
+    LazyColumn(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(bottom = 24.dp)
+    ) {
+        item(key = "feed_header") {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Text("Your feed", style = MaterialTheme.typography.titleMedium)
+                    Text("Real posts from your FYNX network", style = MaterialTheme.typography.bodySmall)
+                }
+                Row {
+                    IconButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) {
+                        Icon(Icons.Default.Refresh, "Refresh feed")
+                    }
+                    IconButton(onClick = onCreatePost) {
+                        Icon(Icons.Default.Add, "Create post")
+                    }
+                }
             }
         }
-        posts.forEach { post ->
+
+        if (loading) {
+            item(key = "feed_loading") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+        }
+
+        error?.let { message ->
+            item(key = "feed_error") {
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
+                        TextButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Text("Retry") }
+                    }
+                }
+            }
+        }
+
+        if (!loading && posts.isEmpty() && error == null) {
+            item(key = "feed_empty") {
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Your feed is ready", style = MaterialTheme.typography.titleMedium)
+                        Text("There are no visible posts yet. Create a post or find real people to build your FYNX circle.")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = onCreatePost) { Text("Create Post") }
+                            OutlinedButton(onClick = onOpenFindPeople) { Text("Find People") }
+                        }
+                    }
+                }
+            }
+        }
+
+        items(items = posts, key = { it.id }) { post ->
             RemotePostCard(
                 post = post,
                 currentUsername = currentUsername,
@@ -141,65 +184,19 @@ fun FynxRemoteHomeSocialPanel(currentUsername: String, onOpenFindPeople: () -> U
                     scope.launch { FynxDiscoveryClient.recordEngagement(context, "SHARE", post.id) }
                     sharePost(context, post)
                 },
-                onRepost = {
-                    scope.launch {
-                        FynxDiscoveryClient.recordEngagement(context, "REPOST", post.id)
-                            .onFailure { error = it.message }
-                    }
-                },
-                onSave = {
-                    scope.launch {
-                        FynxDiscoveryClient.recordEngagement(context, "SAVE", post.id)
-                            .onFailure { error = it.message }
-                    }
-                },
                 onOpenMarketplace = onOpenMarketplace
             )
         }
+
         if (!loading && hasMore) {
-            OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore && !feedRequestInFlight, modifier = Modifier.fillMaxWidth()) { Text(if (loadingMore) "Loading more posts…" else "Load more posts") }
+            item(key = "feed_load_more") {
+                OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore && !feedRequestInFlight, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (loadingMore) "Loading more posts…" else "Load more posts")
+                }
+            }
         }
     }
 
-    if (composerOpen) {
-        FynxPlainDialog(
-            onDismissRequest = { if (!busy) { composerOpen = false; selectedMedia = null } },
-            title = { Text("Create a post", style = MaterialTheme.typography.headlineSmall) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(value = composerText, onValueChange = { composerText = it.take(4000) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 7, placeholder = { Text("Share something with your FYNX circle…") })
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { picker.launch("image/*") }, Modifier.weight(1f)) { Text("Photo") }
-                        OutlinedButton(onClick = { picker.launch("video/*") }, Modifier.weight(1f)) { Text("Video") }
-                        OutlinedButton(onClick = { voiceRecorderOpen = true }, Modifier.weight(1f)) { Text("Voice") }
-                    }
-                    if (selectedMedia != null) Text(if (selectedMediaType == "audio") "Voice recording ready" else "Media selected", style = MaterialTheme.typography.bodySmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(visibility == FynxPostVisibility.PUBLIC, { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") })
-                        FilterChip(visibility == FynxPostVisibility.FRIENDS_ONLY, { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") })
-                    }
-                }
-            },
-            confirmButton = {
-                Button(enabled = !busy, onClick = {
-                    scope.launch {
-                        busy = true
-                        FynxRemoteSocialClient.createPost(context, composerText, visibility, selectedMedia)
-                            .onSuccess { composerOpen = false; composerText = ""; selectedMedia = null; selectedMediaType = null; reload(true) }
-                            .onFailure { error = it.message ?: "Post failed." }
-                        busy = false
-                    }
-                }) { Text(if (busy) "Publishing…" else "Post") }
-            },
-            dismissButton = { TextButton(enabled = !busy, onClick = { composerOpen = false; selectedMedia = null; selectedMediaType = null }) { Text("Cancel") } }
-        )
-    }
-    if (voiceRecorderOpen) {
-        FynxVoicePostRecorder(
-            onRecorded = { uri -> selectedMedia = uri; selectedMediaType = "audio"; voiceRecorderOpen = false },
-            onDismiss = { voiceRecorderOpen = false }
-        )
-    }
     commentsPost?.let { post -> CommentsDialog(post) { commentsPost = null } }
 }
 
@@ -212,15 +209,12 @@ private fun RemotePostCard(
     onFollow: (Boolean) -> Unit,
     onDelete: () -> Unit,
     onShare: () -> Unit,
-    onRepost: () -> Unit,
-    onSave: () -> Unit,
     onOpenMarketplace: () -> Unit
 ) {
     val mine = post.authorUsername.equals(currentUsername.removePrefix("@"), true)
     val marketplaceAd = post.text.startsWith(MARKETPLACE_AD_MARKER)
     val displayText = if (marketplaceAd) post.text.removePrefix(MARKETPLACE_AD_MARKER).trim() else post.text
 
-    // No outer Card around the post. Caption/text stays above the media and the media itself reaches the full feed width.
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             FynxAvatar(post.authorUsername, Modifier.size(46.dp).clip(CircleShape))
@@ -229,20 +223,24 @@ private fun RemotePostCard(
                 Text(post.authorDisplayName.ifBlank { post.authorUsername }, style = MaterialTheme.typography.titleSmall)
                 Text("${post.authorUsername.removePrefix("@")} • ${relative(post.timestamp)}", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
             }
-            if (mine) IconButton(onClick = onDelete) { Icon(Icons.Default.MoreHoriz, "Post options") }
-            else TextButton(onClick = { onFollow(post.followedByCurrentUser) }) { Text(if (post.followedByCurrentUser) "Following" else "Follow") }
+            if (mine) {
+                IconButton(onClick = onDelete) { Icon(Icons.Default.MoreHoriz, "Post options") }
+            } else {
+                TextButton(onClick = { onFollow(post.followedByCurrentUser) }) { Text(if (post.followedByCurrentUser) "Following" else "Follow") }
+            }
         }
         if (marketplaceAd) Text("MARKETPLACE", Modifier.padding(horizontal = 12.dp, vertical = 3.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-
-        if (displayText.isNotBlank()) {
-            Text(displayText, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), style = MaterialTheme.typography.bodyLarge)
-        }
-
+        if (displayText.isNotBlank()) Text(displayText, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), style = MaterialTheme.typography.bodyLarge)
         post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType) }
-
-        if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = onOpenMarketplace) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
-
-        // Instagram-style primary actions: Like, Comment, Repost, Share, Save.
+        if (marketplaceAd) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) {
+                OutlinedButton(onClick = onOpenMarketplace) {
+                    Icon(Icons.Default.ShoppingBag, null)
+                    Spacer(Modifier.width(5.dp))
+                    Text("View in Marketplace")
+                }
+            }
+        }
         Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { onLike(post.id) }, modifier = Modifier.size(50.dp)) {
                 Icon(if (post.likedByCurrentUser) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Like", tint = if (post.likedByCurrentUser) MaterialTheme.colorScheme.error else FynxDesign.TextPrimary, modifier = Modifier.size(30.dp))
@@ -250,18 +248,24 @@ private fun RemotePostCard(
             Text("${post.likeCount}", style = MaterialTheme.typography.labelLarge)
             IconButton(onClick = onComment, modifier = Modifier.size(50.dp)) { Icon(Icons.Default.ChatBubbleOutline, "Comment", modifier = Modifier.size(30.dp)) }
             Text("${post.commentCount}", style = MaterialTheme.typography.labelLarge)
-            IconButton(onClick = onRepost, modifier = Modifier.size(50.dp)) { Icon(Icons.Default.Repeat, "Repost", modifier = Modifier.size(30.dp)) }
             IconButton(onClick = onShare, modifier = Modifier.size(50.dp)) { Icon(Icons.Default.Share, "Share", modifier = Modifier.size(30.dp)) }
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = onSave, modifier = Modifier.size(50.dp)) { Icon(Icons.Default.BookmarkBorder, "Save", modifier = Modifier.size(30.dp)) }
         }
         Spacer(Modifier.height(10.dp))
     }
 }
 
 private fun sharePost(context: Context, post: FynxRemoteSocialClient.RemotePost) {
-    val text = if (post.text.startsWith(MARKETPLACE_AD_MARKER)) "${post.text.removePrefix(MARKETPLACE_AD_MARKER).trim()}\n\nSee this product on FYNX Marketplace." else "${post.authorDisplayName.ifBlank { post.authorUsername }} on FYNX:\n${post.text}".trim()
-    val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text); putExtra(Intent.EXTRA_TITLE, "Share from FYNX") }
+    val text = if (post.text.startsWith(MARKETPLACE_AD_MARKER)) {
+        "${post.text.removePrefix(MARKETPLACE_AD_MARKER).trim()}\n\nSee this product on FYNX Marketplace."
+    } else {
+        "${post.authorDisplayName.ifBlank { post.authorUsername }} on FYNX:\n${post.text}".trim()
+    }
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, text)
+        putExtra(Intent.EXTRA_TITLE, "Share from FYNX")
+    }
     context.startActivity(Intent.createChooser(intent, "Share with…"))
 }
 
@@ -307,66 +311,16 @@ private fun RemoteSocialMedia(path: String, type: String?) {
         )
     } else {
         var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
-        LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }
-        bitmap?.let {
-            Image(it.asImageBitmap(), "Post media", Modifier.fillMaxWidth().aspectRatio((it.width.toFloat() / it.height.toFloat()).coerceIn(0.62f, 1.9f)), contentScale = ContentScale.Crop)
+        LaunchedEffect(file) {
+            bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() }
         }
-    }
-}
-
-@Composable
-private fun CommentsDialog(post: FynxRemoteSocialClient.RemotePost, onClose: () -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var list by remember(post.id) { mutableStateOf<List<FynxRemoteSocialClient.RemoteComment>>(emptyList()) }
-    var text by remember { mutableStateOf("") }
-    LaunchedEffect(post.id) { FynxRemoteSocialClient.comments(context, post.id).onSuccess { list = it } }
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text("Comments") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                list.forEach { comment ->
-                    Column {
-                        Text(comment.authorDisplayName.ifBlank { comment.authorUsername })
-                        Text(comment.text)
-                        Text(relative(comment.timestamp), style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-                if (list.isEmpty()) Text("No comments yet.")
-                OutlinedTextField(text, { text = it.take(1000) }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text("Write a comment…") })
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                if (text.isNotBlank()) scope.launch {
-                    FynxRemoteSocialClient.addComment(context, post.id, text)
-                        .onSuccess { list = list + it; text = "" }
-                }
-            }) { Text("Comment") }
-        },
-        dismissButton = { TextButton(onClick = onClose) { Text("Close") } }
-    )
-}
-
-private fun relative(timestamp: Long): String {
-    val minutes = TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L))
-    return when {
-        minutes < 1 -> "now"
-        minutes < 60 -> "${minutes}m"
-        minutes < 1440 -> "${minutes / 60}h"
-        else -> "${minutes / 1440}d"
-    }
-}
-
-@Composable
-private fun AudioPostPlayer(file: File) {
-    val player = remember(file) { MediaPlayer().apply { setDataSource(file.absolutePath); prepare() } }
-    var playing by remember(file) { mutableStateOf(false) }
-    DisposableEffect(player) { onDispose { player.release() } }
-    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Button(onClick = { if (player.isPlaying) { player.pause(); playing = false } else { player.start(); playing = true } }) { Text(if (playing) "Pause" else "Play voice") }
-        Spacer(Modifier.width(10.dp))
-        Text("${(player.duration / 1000).coerceAtLeast(0)}s")
+        bitmap?.let {
+            Image(
+                it.asImageBitmap(),
+                "Post media",
+                Modifier.fillMaxWidth().aspectRatio((it.width.toFloat() / it.height.toFloat()).coerceIn(0.62f, 1.9f)),
+                contentScale = ContentScale.Crop
+            )
+        }
     }
 }

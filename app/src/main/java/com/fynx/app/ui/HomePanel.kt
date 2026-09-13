@@ -5,7 +5,6 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,11 +13,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Production Home shell. Real social content is rendered by FynxRemoteHomeSocialPanel. */
+/** Production Home shell. The status strip stays above one authoritative, virtualized social feed. */
 @Composable
 fun HomePanel(
     currentUsername: String = "",
@@ -33,26 +31,23 @@ fun HomePanel(
 ) {
     val displayUsername = currentUsername.trim().removePrefix("@").trim()
 
-    LazyColumn(
+    Column(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
-            FynxVisibleUpdatesPanel(
-                currentUsername = displayUsername,
-                onOpenStories = onOpenStories,
-                onOpenAi = onOpenAi
-            )
-        }
+        FynxVisibleUpdatesPanel(
+            currentUsername = displayUsername,
+            onOpenStories = onOpenStories,
+            onOpenAi = onOpenAi
+        )
 
-        item {
-            FynxRemoteHomeSocialPanel(
-                currentUsername = displayUsername,
-                onOpenFindPeople = onOpenFindPeople,
-                onOpenMarketplace = onOpenMarketplace
-            )
-        }
+        FynxRemoteHomeSocialPanel(
+            modifier = Modifier.weight(1f),
+            currentUsername = displayUsername,
+            onOpenFindPeople = onOpenFindPeople,
+            onOpenMarketplace = onOpenMarketplace,
+            onCreatePost = onCreatePost
+        )
     }
 }
 
