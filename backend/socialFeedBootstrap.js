@@ -2,16 +2,14 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-const backendDir = path.dirname(fileURLToPath(import.meta.url));
-const socialPath = path.join(backendDir, "socialRoutes.js");
-const source = await readFile(socialPath, "utf8");
+export async function installSocialFeed() {
+  const backendDir = path.dirname(fileURLToPath(import.meta.url));
+  const socialPath = path.join(backendDir, "socialRoutes.js");
+  const source = await readFile(socialPath, "utf8");
 
-if (!source.includes("/api/social/feed")) {
+  if (source.includes("/api/social/feed")) return;
   if (!source.includes("const ensureSocialSchema = async")) {
     throw new Error("FYNX social feed bootstrap could not locate social schema initializer");
-  }
-  if (!source.includes("const visibleSocialPost = async")) {
-    throw new Error("FYNX social feed bootstrap could not locate social visibility guard");
   }
 
   const route = `
@@ -79,5 +77,3 @@ if (!source.includes("/api/social/feed")) {
   if (index < 0) throw new Error("FYNX social feed bootstrap could not locate social route closing marker");
   await writeFile(socialPath, source.slice(0, index) + route + source.slice(index), "utf8");
 }
-
-await import("./realtimeIsolationBootstrap.js");
