@@ -16,6 +16,7 @@ registry = read("backend/fynxAiToolRegistry.js")
 realtime = read("backend/aiRealtimeRoutes.js")
 voice = read("backend/aiVoiceSession.js")
 android = read("app/src/main/java/com/fynx/app/ui/FynxAiWebRtcEngine.kt")
+abuse = read("backend/apiAbuseGuard.js")
 
 check("AI registry exposes strict function definitions", 'strict: true' in registry and 'type: "function"' in registry)
 check("AI agent requires authenticated user", 'const userId = authenticate(req);' in registry and 'if (!userId) return res.status(401)' in registry)
@@ -28,6 +29,10 @@ check("Realtime tool execution uses approved registry", 'executeFynxAiTool' in r
 check("Realtime voice keeps provider credential server-side", 'process.env.OPENAI_API_KEY' in voice)
 check("Android voice transport calls the FYNX session endpoint", 'FynxAiVoiceSession.requestSession' in android)
 check("Android realtime tool calls use the authenticated FYNX session", 'FynxAiVoiceSession.executeTool' in android)
+check("Assistant agent has an abuse limit", '[/^\\/api\\/assistant\\/agent$/, 30]' in abuse)
+check("Assistant direct-tool endpoint has an abuse limit", '[/^\\/api\\/assistant\\/tools$/, 60]' in abuse)
+check("Realtime session endpoint has an abuse limit", '[/^\\/api\\/assistant\\/realtime-session$/, 20]' in abuse)
+check("Abuse guard is installed before production routes", 'installApiAbuseGuard(app);' in read("backend/scalability.js"))
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
