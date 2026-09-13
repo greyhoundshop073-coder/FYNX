@@ -146,7 +146,8 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
                     IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Close comments") }
                     Column(Modifier.weight(1f)) {
                         Text("Comments", style = MaterialTheme.typography.titleLarge)
-                        Text("${comments.size.coerceAtLeast(post.commentCount)} comments", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val visibleTopLevelCount = comments.count { it.parentCommentId == null }
+                        Text("${visibleTopLevelCount.coerceAtLeast(post.commentCount)} comments", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = { if (!loading && !sending && replyLoadingId == null) loadComments() }, enabled = !loading && !sending && replyLoadingId == null) { Icon(Icons.Default.Refresh, "Refresh comments") }
                 }
@@ -181,7 +182,8 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
                                             Text(relative(comment.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             TextButton(onClick = { if (!sending) replyingTo = comment }) { Text("Reply") }
                                             TextButton(onClick = { toggleReplies(comment) }, enabled = replyLoadingId == null && !sending) {
-                                                Text(if (expandedReplies.containsKey(comment.id)) "Hide replies" else "Replies")
+                                                val loadedReplyCount = expandedReplies[comment.id]?.size
+                                                Text(if (loadedReplyCount != null) { if (loadedReplyCount == 0) "No replies" else "$loadedReplyCount replies" } else "Replies")
                                             }
                                         }
                                     }
