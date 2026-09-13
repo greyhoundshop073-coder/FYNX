@@ -1,10 +1,12 @@
 /**
  * FYNX realtime voice session policy and OpenAI WebRTC proxy helpers.
  *
- * This module intentionally keeps the OpenAI API key server-side. The Android
- * client must never receive OPENAI_API_KEY. The exported helpers are designed
- * to be wired into the authenticated /api/assistant realtime route.
+ * The OpenAI credential remains server-side. Realtime voice uses the same
+ * approved FYNX AI tool definitions as text AI, while tool execution stays
+ * behind authenticated FYNX backend authorization.
  */
+
+import { getFynxAiTools } from "./fynxAiToolRegistry.js";
 
 export const FYNX_AI_VOICE_MODEL = process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2.1";
 export const FYNX_AI_VOICE = process.env.OPENAI_REALTIME_VOICE || "marin";
@@ -17,8 +19,9 @@ export const FYNX_AI_VOICE_INSTRUCTIONS = [
   "Never expose API keys, tokens, passwords, private account data or internal secrets.",
   "Never claim to have completed a sensitive FYNX action unless an authorized backend function actually completed it.",
   "Never independently make payments, refunds, transfers, campaign activations or other financial actions.",
+  "Use only the approved FYNX tools supplied to this realtime session when FYNX account data is needed.",
+  "When a requested FYNX action is not available as an approved tool, say so clearly instead of pretending it happened.",
   "When current information is required, use an approved web-search capability rather than guessing.",
-  "Clearly distinguish current web information from general knowledge when useful.",
 ].join(" ");
 
 export function buildRealtimeSessionConfig() {
@@ -28,6 +31,8 @@ export function buildRealtimeSessionConfig() {
     voice: FYNX_AI_VOICE,
     output_modalities: ["audio"],
     instructions: FYNX_AI_VOICE_INSTRUCTIONS,
+    tools: getFynxAiTools(),
+    tool_choice: "auto",
     audio: {
       input: {
         noise_reduction: { type: "near_field" },

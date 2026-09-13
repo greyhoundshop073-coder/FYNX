@@ -2,7 +2,13 @@ package com.fynx.app.ui
 
 import android.content.Context
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import org.json.JSONObject
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
 import org.webrtc.DataChannel
@@ -21,6 +27,7 @@ class FynxAiWebRtcEngine(
     enum class State { IDLE, CONNECTING, CONNECTED, FAILED, CLOSED }
     private val appContext = context.applicationContext
     private val factory: PeerConnectionFactory
+    private val toolScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var peerConnection: PeerConnection? = null
     private var audioSource: AudioSource? = null
     private var audioTrack: AudioTrack? = null
@@ -47,13 +54,30 @@ class FynxAiWebRtcEngine(
     fun setMicrophoneEnabled(enabled: Boolean) { audioTrack?.setEnabled(enabled) }
     fun sendEvent(json: String): Boolean { val channel = eventsChannel ?: return false; if (channel.state() != DataChannel.State.OPEN) return false; return channel.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(json.toByteArray(StandardCharsets.UTF_8)), false)) }
     fun close() {
-        localDescriptionReady?.cancel(); localDescriptionReady = null; iceGatheringReady?.cancel(); iceGatheringReady = null; eventsChannel?.dispose(); eventsChannel = null; remoteAudioTrack?.setEnabled(false); remoteAudioTrack = null; peerConnection?.close(); peerConnection?.dispose(); peerConnection = null; audioTrack?.dispose(); audioTrack = null; audioSource?.dispose(); audioSource = null; if (state != State.FAILED) setState(State.CLOSED, null)
+        localDescriptionReady?.cancel(); localDescriptionReady = null; iceGatheringReady?.cancel(); iceGatheringReady = null; eventsChannel?.dispose(); eventsChannel = null; remoteAudioTrack?.setEnabled(false); remoteAudioTrack = null; peerConnection?.close(); peerConnection?.dispose(); peerConnection = null; audioTrack?.dispose(); audioTrack = null; audioSource?.dispose(); audioSource = null; toolScope.cancel(); if (state != State.FAILED) setState(State.CLOSED, null)
     }
     private suspend fun createOffer(connection: PeerConnection): SessionDescription = CompletableDeferred<SessionDescription>().also { deferred -> connection.createOffer(object : SdpObserverAdapter() { override fun onCreateSuccess(description: SessionDescription) { deferred.complete(description) }; override fun onCreateFailure(error: String) { deferred.completeExceptionally(IllegalStateException(error)) } }, MediaConstraints()) }.awaitWithTimeout()
     private suspend fun awaitLocalDescription() { localDescriptionReady?.awaitWithTimeout() ?: error("Local FYNX AI SDP was not prepared") }
     private fun PeerConnection.setLocalDescriptionAwait(description: SessionDescription) { localDescriptionReady = CompletableDeferred(); setLocalDescription(object : SdpObserverAdapter() { override fun onSetSuccess() { localDescriptionReady?.complete(description.description) }; override fun onSetFailure(error: String) { localDescriptionReady?.completeExceptionally(IllegalStateException(error)) } }, description) }
     private suspend fun PeerConnection.setRemoteDescriptionAwait(description: SessionDescription) = CompletableDeferred<Unit>().also { deferred -> setRemoteDescription(object : SdpObserverAdapter() { override fun onSetSuccess() { deferred.complete(Unit) }; override fun onSetFailure(error: String) { deferred.completeExceptionally(IllegalStateException(error)) } }, description) }.awaitWithTimeout()
-    private fun dataChannelObserver() = object : DataChannel.Observer { override fun onBufferedAmountChange(previousAmount: Long) = Unit; override fun onStateChange() = Unit; override fun onMessage(buffer: DataChannel.Buffer) { if (buffer.binary) return; val bytes = ByteArray(buffer.data.remaining()); buffer.data.get(bytes); val event = String(bytes, StandardCharsets.UTF_8); if (event.isNotBlank()) onEvent?.invoke(event) } }
+    private fun dataChannelObserver() = object : DataChannel.Observer { override fun onBufferedAmountChange(previousAmount: Long) = Unit; override fun onStateChange() = Unit; override fun onMessage(buffer: DataChannel.Buffer) { if (buffer.binary) return; val bytes = ByteArray(buffer.data.remaining()); buffer.data.get(bytes); val event = String(bytes, StandardCharsets.UTF_8); if (event.isNotBlank()) { onEvent?.invoke(event); handleRealtimeToolEvent(event) } } }
+    private fun handleRealtimeToolEvent(event: String) {
+        val json = runCatching { JSONObject(event) }.getOrNull() ?: return
+        if (json.optString("type") != "response.function_call_arguments.done") return
+        val callId = json.optString("call_id").trim()
+        val name = json.optString("name").trim()
+        val arguments = json.optString("arguments", "{}")
+        if (callId.isBlank() || name.isBlank()) return
+        toolScope.launch {
+            val result = FynxAiVoiceSession.executeTool(appContext, name, arguments)
+            val output = result.getOrElse { error -> JSONObject().put("error", error.message ?: "tool request failed").toString() }
+            val response = JSONObject()
+                .put("type", "conversation.item.create")
+                .put("item", JSONObject().put("type", "function_call_output").put("call_id", callId).put("output", output))
+            sendEvent(response.toString())
+            sendEvent("{\"type\":\"response.create\"}")
+        }
+    }
     private suspend fun <T> CompletableDeferred<T>.awaitWithTimeout(): T = withTimeout(15_000) { await() }
     private fun observer() = object : PeerConnection.Observer {
         override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
