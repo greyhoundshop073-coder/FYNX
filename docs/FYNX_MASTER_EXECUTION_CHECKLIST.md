@@ -22,7 +22,7 @@ Work sequentially on `main` in coherent batches. Never start the next batch unti
 - [x] Reply loading/retry protection
 - [x] Pagination and cursor handling
 - [x] Correct comment-list scroll targeting
-- [ ] Verify current 4D CI after latest syntax fix
+- [x] Verify current 4D CI after latest syntax fix
 - [ ] Deleted/removed post behavior
 - [ ] Blocked/private/hidden content behavior
 - [ ] Stale cursor / duplicate-page behavior
