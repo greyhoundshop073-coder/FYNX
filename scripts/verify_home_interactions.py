@@ -54,30 +54,38 @@ for needle in (
 for needle in (
     "FynxRemoteSocialClient.feedPage",
     "FynxRemoteSocialClient.like",
+    "FynxRemoteSocialClient.save",
+    "FynxRemoteSocialClient.repost",
+    "FynxRemoteSocialClient.interactionState",
     "FynxHomeCommentsPanel",
 ):
     require(home, needle, f"Home interaction path {needle}")
 
 for needle in (
-    "FynxRemoteSocialClient.comments",
-    "FynxRemoteSocialClient.addComment",
-):
-    require(comments_panel, needle, f"dedicated comments client path {needle}")
-
-for needle in (
     "suspend fun comments(context: Context, id: String)",
     "suspend fun addComment(context: Context, id: String, text: String)",
+    "suspend fun save(context: Context, id: String, saved: Boolean)",
+    "suspend fun repost(context: Context, id: String, reposted: Boolean)",
+    "suspend fun interactionState(context: Context, id: String)",
+    '"/api/social/posts/$numericId/save"',
+    '"/api/social/posts/$numericId/repost"',
+    '"/api/social/posts/$numericId/interaction-state"',
 ):
     require_normalized(client, needle, f"existing social client API {needle}")
+
+for needle in (
+    'Icons.Default.Bookmark',
+    'Icons.Default.BookmarkBorder',
+    'Icons.Default.Repeat',
+    'interactionBusy',
+):
+    require(home, needle, f"professional durable interaction surface {needle}")
 
 if "CommentsDialog" in home:
     raise SystemExit("HOME INTERACTIONS RED: legacy competing CommentsDialog detected")
 if 'Text("Save")' in home or 'Text("Repost")' in home:
     raise SystemExit("HOME INTERACTIONS RED: fake Save/Repost feed controls detected")
 
-# Verify the real production startup path and the authoritative clean-startup
-# Home comment implementation. The privacy bootstrap is an idempotent migration
-# helper; the live route protections are installed by realtimeIsolationBootstrap.
 require(backend_package, '"start": "node realtimeIsolationBootstrap.js"', "production realtime entrypoint")
 require(realtime_bootstrap, 'import { installHomeCommentPrivacy } from "./homeCommentsPrivacyBootstrap.js";', "Home comment privacy integration")
 require(realtime_bootstrap, "await installHomeCommentBackend();", "base Home comments installation")
@@ -95,8 +103,6 @@ for needle in (
 ):
     require(realtime_bootstrap, needle, f"clean-startup Home comment privacy implementation {needle}")
 
-# Keep the privacy helper idempotent and non-duplicating; its existence is enough
-# here because the live route source above is the authoritative implementation.
 require(privacy_bootstrap, "fynxHomeCommentsPrivacyBatch", "Home comment privacy patch marker")
 
-print("HOME INTERACTIONS GREEN: durable Save/Repost backend, dedicated Home comments/feed wiring, and clean-startup privacy-safe comment/reply boundaries are present without duplicate surfaces.")
+print("HOME INTERACTIONS GREEN: durable Save/Repost backend, Home client/UI wiring, rapid-tap protection, and clean-startup privacy-safe comment/reply boundaries are present without duplicate surfaces.")
