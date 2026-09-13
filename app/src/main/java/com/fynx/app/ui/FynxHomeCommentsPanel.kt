@@ -42,53 +42,98 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
     var nextCursor by remember(post.id) { mutableStateOf<String?>(null) }
     var replyingTo by remember(post.id) { mutableStateOf<FynxRemoteSocialClient.RemoteComment?>(null) }
     var replyLoadingId by remember(post.id) { mutableStateOf<String?>(null) }
+    var replyErrorId by remember(post.id) { mutableStateOf<String?>(null) }
     var expandedReplies by remember(post.id) { mutableStateOf<Map<String, List<FynxRemoteSocialClient.RemoteComment>>>(emptyMap()) }
 
     fun loadComments() {
-        loading = true; error = null
+        if (sending) return
+        loading = true
+        error = null
+        replyLoadingId = null
+        replyErrorId = null
+        expandedReplies = emptyMap()
         scope.launch {
             FynxRemoteSocialClient.commentsPage(context, post.id, null, COMMENT_PAGE_SIZE)
-                .onSuccess { page -> comments = page.comments.distinctBy { it.id }; nextCursor = page.nextCursor }
+                .onSuccess { page ->
+                    comments = page.comments.distinctBy { it.id }
+                    nextCursor = page.nextCursor
+                }
                 .onFailure { error = it.message ?: "Unable to load comments." }
             loading = false
         }
     }
+
     fun loadMore() {
         val cursor = nextCursor ?: return
-        if (loadingMore || loading) return
+        if (loadingMore || loading || sending) return
         loadingMore = true
+        error = null
         scope.launch {
             FynxRemoteSocialClient.commentsPage(context, post.id, cursor, COMMENT_PAGE_SIZE)
-                .onSuccess { page -> comments = (page.comments + comments).distinctBy { it.id }; nextCursor = page.nextCursor }
+                .onSuccess { page ->
+                    comments = (page.comments + comments).distinctBy { it.id }
+                    nextCursor = page.nextCursor
+                }
                 .onFailure { error = it.message ?: "Unable to load more comments." }
             loadingMore = false
         }
     }
+
     fun send() {
         val value = text.trim()
-        if (value.isEmpty() || sending || value.length > MAX_COMMENT_LENGTH) return
-        sending = true; error = null
+        if (value.isEmpty() || sending || loading || value.length > MAX_COMMENT_LENGTH) return
+        val parentId = replyingTo?.id
+        sending = true
+        error = null
+        replyErrorId = null
         scope.launch {
-            val result = replyingTo?.let { FynxRemoteSocialClient.addReply(context, post.id, it.id, value) } ?: FynxRemoteSocialClient.addComment(context, post.id, value)
+            val result = if (parentId != null) {
+                FynxRemoteSocialClient.addReply(context, post.id, parentId, value)
+            } else {
+                FynxRemoteSocialClient.addComment(context, post.id, value)
+            }
             result.onSuccess { comment ->
                 comments = (comments + comment).distinctBy { it.id }
                 if (comment.parentCommentId != null) {
                     val parent = comment.parentCommentId!!
-                    expandedReplies = expandedReplies + mapOf(parent to ((expandedReplies[parent].orEmpty() + comment).distinctBy { it.id }))
+                    expandedReplies = expandedReplies + mapOf(parent to ((expandedReplies[parent].orEmpty() + comment).distinctBy { it.id })
                 }
-                text = ""; replyingTo = null
-                scope.launch { if (comments.isNotEmpty()) listState.animateScrollToItem(comments.lastIndex) }
-            }.onFailure { error = it.message ?: "Unable to send comment." }
+                text = ""
+                replyingTo = null
+                if (comment.parentCommentId == null) {
+                    scope.launch {
+                        val topLevelCount = comments.count { it.parentCommentId == null }
+                        val targetIndex = (topLevelCount - 1 + if (nextCursor != null) 1 else 0).coerceAtLeast(0)
+                        listState.animateScrollToItem(targetIndex)
+                    }
+                }
+            }.onFailure { failure ->
+                if (parentId != null) replyErrorId = parentId
+                error = failure.message ?: if (parentId != null) "Unable to send reply." else "Unable to send comment."
+            }
             sending = false
         }
     }
+
     fun toggleReplies(comment: FynxRemoteSocialClient.RemoteComment) {
-        if (expandedReplies.containsKey(comment.id)) { expandedReplies = expandedReplies - comment.id; return }
+        if (replyLoadingId != null || sending) return
+        if (expandedReplies.containsKey(comment.id)) {
+            expandedReplies = expandedReplies - comment.id
+            replyErrorId = null
+            return
+        }
         replyLoadingId = comment.id
+        replyErrorId = null
+        error = null
         scope.launch {
             FynxRemoteSocialClient.replies(context, post.id, comment.id)
-                .onSuccess { loaded -> expandedReplies = expandedReplies + mapOf(comment.id to loaded.distinctBy { it.id }) }
-                .onFailure { error = it.message ?: "Unable to load replies." }
+                .onSuccess { loaded ->
+                    expandedReplies = expandedReplies + mapOf(comment.id to loaded.distinctBy { it.id })
+                }
+                .onFailure { failure ->
+                    replyErrorId = comment.id
+                    error = failure.message ?: "Unable to load replies."
+                }
             replyLoadingId = null
         }
     }
@@ -103,45 +148,69 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
                         Text("Comments", style = MaterialTheme.typography.titleLarge)
                         Text("${comments.size.coerceAtLeast(post.commentCount)} comments", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    IconButton(onClick = { if (!loading && !sending) loadComments() }, enabled = !loading && !sending) { Icon(Icons.Default.Refresh, "Refresh comments") }
+                    IconButton(onClick = { if (!loading && !sending && replyLoadingId == null) loadComments() }, enabled = !loading && !sending && replyLoadingId == null) { Icon(Icons.Default.Refresh, "Refresh comments") }
                 }
                 HorizontalDivider()
                 when {
                     loading -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                    error != null && comments.isEmpty() -> Column(Modifier.fillMaxWidth().weight(1f).padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text(error!!, color = MaterialTheme.colorScheme.error); Spacer(Modifier.height(12.dp)); OutlinedButton(onClick = { loadComments() }) { Text("Retry") } }
-                    comments.isEmpty() -> Column(Modifier.fillMaxWidth().weight(1f).padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) { Text("No comments yet", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Start the conversation.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    error != null && comments.isEmpty() -> Column(Modifier.fillMaxWidth().weight(1f).padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(error!!, color = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(onClick = { loadComments() }) { Text("Retry") }
+                    }
+                    comments.isEmpty() -> Column(Modifier.fillMaxWidth().weight(1f).padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("No comments yet", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(6.dp))
+                        Text("Start the conversation.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     else -> LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        if (nextCursor != null) item(key = "comments_load_more") { OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore, modifier = Modifier.fillMaxWidth()) { Text(if (loadingMore) "Loading more comments…" else "Load earlier comments") } }
+                        if (nextCursor != null) item(key = "comments_load_more") {
+                            OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore && !sending, modifier = Modifier.fillMaxWidth()) {
+                                Text(if (loadingMore) "Loading more comments…" else "Load earlier comments")
+                            }
+                        }
                         items(comments.filter { it.parentCommentId == null }, key = { it.id }) { comment ->
                             Column(Modifier.fillMaxWidth()) {
                                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                                     Surface(Modifier.size(38.dp).clip(CircleShape), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {}
-                                    Spacer(Modifier.width(10.dp)); Column(Modifier.weight(1f)) {
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(Modifier.weight(1f)) {
                                         Text(comment.authorDisplayName.ifBlank { comment.authorUsername }, style = MaterialTheme.typography.labelLarge)
                                         Text(comment.text, style = MaterialTheme.typography.bodyMedium)
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(relative(comment.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            TextButton(onClick = { replyingTo = comment }) { Text("Reply") }
-                                            TextButton(onClick = { toggleReplies(comment) }) { Text(if (expandedReplies.containsKey(comment.id)) "Hide replies" else "Replies") }
+                                            TextButton(onClick = { if (!sending) replyingTo = comment }) { Text("Reply") }
+                                            TextButton(onClick = { toggleReplies(comment) }, enabled = replyLoadingId == null && !sending) {
+                                                Text(if (expandedReplies.containsKey(comment.id)) "Hide replies" else "Replies")
+                                            }
                                         }
                                     }
                                 }
                                 expandedReplies[comment.id].orEmpty().forEach { reply ->
                                     Row(Modifier.fillMaxWidth().padding(48.dp, 8.dp, 0.dp, 0.dp), verticalAlignment = Alignment.Top) {
                                         Surface(Modifier.size(30.dp).clip(CircleShape), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {}
-                                        Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) {
+                                        Spacer(Modifier.width(8.dp))
+                                        Column(Modifier.weight(1f)) {
                                             Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium)
                                             Text(reply.text, style = MaterialTheme.typography.bodyMedium)
                                             Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                     }
                                 }
-                                if (replyLoadingId == comment.id) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(48.dp, 4.dp, 0.dp, 0.dp))
+                                if (replyLoadingId == comment.id) {
+                                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(48.dp, 4.dp, 0.dp, 0.dp))
+                                }
+                                if (replyErrorId == comment.id && replyLoadingId == null) {
+                                    Row(Modifier.fillMaxWidth().padding(start = 48.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text("Replies couldn't be loaded.", modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                                        TextButton(onClick = { toggleReplies(comment) }, enabled = !sending) { Text("Retry") }
+                                    }
+                                }
                             }
                         }
                     }
                 }
-                if (error != null && comments.isNotEmpty()) Text(error!!, modifier = Modifier.fillMaxWidth().padding(16.dp, 4.dp, 16.dp, 4.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                if (error != null && comments.isNotEmpty() && replyErrorId == null) Text(error!!, modifier = Modifier.fillMaxWidth().padding(16.dp, 4.dp, 16.dp, 4.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
                 HorizontalDivider()
                 if (replyingTo != null) Row(Modifier.fillMaxWidth().padding(12.dp, 6.dp, 12.dp, 0.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Replying to ${replyingTo!!.authorDisplayName.ifBlank { replyingTo!!.authorUsername }}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
@@ -149,13 +218,25 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
                 }
                 Row(Modifier.fillMaxWidth().imePadding().padding(10.dp), verticalAlignment = Alignment.Bottom) {
                     Column(Modifier.weight(1f)) {
-                        OutlinedTextField(value = text, onValueChange = { text = it.take(MAX_COMMENT_LENGTH) }, modifier = Modifier.fillMaxWidth(), placeholder = { Text(if (replyingTo == null) "Write a comment…" else "Write a reply…") }, maxLines = 4, enabled = !sending, singleLine = false, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, keyboardType = KeyboardType.Text, imeAction = ImeAction.Send), keyboardActions = KeyboardActions(onSend = { send() }))
+                        OutlinedTextField(value = text, onValueChange = { text = it.take(MAX_COMMENT_LENGTH) }, modifier = Modifier.fillMaxWidth(), placeholder = { Text(if (replyingTo == null) "Write a comment…" else "Write a reply…") }, maxLines = 4, enabled = !sending && !loading, singleLine = false, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, keyboardType = KeyboardType.Text, imeAction = ImeAction.Send), keyboardActions = KeyboardActions(onSend = { send() }))
                         Text("${text.length}/$MAX_COMMENT_LENGTH", modifier = Modifier.fillMaxWidth().padding(0.dp, 2.dp, 4.dp, 0.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Spacer(Modifier.width(8.dp)); IconButton(onClick = { send() }, enabled = text.trim().isNotEmpty() && !sending) { if (sending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Send, "Send comment") }
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(onClick = { send() }, enabled = text.trim().isNotEmpty() && !sending && !loading) {
+                        if (sending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Send, "Send comment")
+                    }
                 }
             }
         }
     }
 }
-private fun relative(timestamp: Long): String { val minutes = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L)); return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" } }
+
+private fun relative(timestamp: Long): String {
+    val minutes = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L))
+    return when {
+        minutes < 1 -> "now"
+        minutes < 60 -> "${minutes}m"
+        minutes < 1440 -> "${minutes / 60}h"
+        else -> "${minutes / 1440}d"
+    }
+}
