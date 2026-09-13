@@ -43,14 +43,18 @@ fun HomePanel(
             onOpenAi = onOpenAi
         )
 
-        FynxRemoteHomeSocialPanel(
-            modifier = Modifier.weight(1f),
-            currentUsername = displayUsername,
-            onOpenFindPeople = onOpenFindPeople,
-            onOpenMarketplace = onOpenMarketplace,
-            onCreatePost = onCreatePost,
-            onOpenAuthorProfile = onOpenAuthorProfile
-        )
+        FynxHomeLifecycleRefresh { refreshKey ->
+            key(refreshKey) {
+                FynxRemoteHomeSocialPanel(
+                    modifier = Modifier.weight(1f),
+                    currentUsername = displayUsername,
+                    onOpenFindPeople = onOpenFindPeople,
+                    onOpenMarketplace = onOpenMarketplace,
+                    onCreatePost = onCreatePost,
+                    onOpenAuthorProfile = onOpenAuthorProfile
+                )
+            }
+        }
     }
 }
 
