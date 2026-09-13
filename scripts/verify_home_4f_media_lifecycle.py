@@ -27,7 +27,7 @@ required_home = {
     "FynxRemoteProfileAvatar": "real author identity media",
     "MaterialTheme.colorScheme": "theme-aware Home presentation",
     'Icon(Icons.Default.Refresh, "Refresh feed")': "refresh accessibility action",
-    'Icon(Icons.Default.Share, "Share")': "share accessibility action",
+    'Icon(Icons.Default.Share, "Share"': "share accessibility action",
 }
 
 missing = [label for token, label in required_home.items() if token not in home]
