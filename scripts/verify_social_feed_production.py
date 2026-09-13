@@ -7,8 +7,8 @@ realtime = (ROOT / "backend/realtimeIsolationBootstrap.js").read_text()
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt").read_text()
 
 checks = [
-    ("production start uses social feed bootstrap", '"start": "node socialFeedBootstrap.js"' in package),
-    ("feed bootstrap delegates to existing production isolation bootstrap", 'import("./realtimeIsolationBootstrap.js")' in bootstrap),
+    ("production start uses realtime isolation entrypoint", '"start": "node realtimeIsolationBootstrap.js"' in package),
+    ("realtime entrypoint installs the feed before server startup", 'await installSocialFeed();' in realtime and 'import("./serverBootstrap.js")' in realtime),
     ("feed bootstrap patches the real social route source", 'socialRoutes.js' in bootstrap and 'writeFile(socialPath' in bootstrap),
     ("production feed route is installed", "app.get('/api/social/feed'" in bootstrap),
     ("feed uses authenticated user identity", "req.user.sub" in bootstrap),
