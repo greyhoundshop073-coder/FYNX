@@ -14,6 +14,7 @@ def require(text: str, needle: str, label: str) -> None:
 
 discovery = read("backend/discoveryRoutes.js")
 home = read("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt")
+comments_panel = read("app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt")
 client = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
 
 # Durable Save/Repost must remain server-backed; never replace these with UI-only state.
@@ -37,25 +38,34 @@ for needle in (
 ):
     require(discovery, needle, f"interaction protection {needle}")
 
-# Home must continue using the existing authoritative feed/comments system.
+# Home must use the authoritative feed and the single dedicated comments experience.
 for needle in (
     "FynxRemoteSocialClient.feedPage",
     "FynxRemoteSocialClient.like",
+    "FynxHomeCommentsPanel",
+):
+    require(home, needle, f"Home interaction path {needle}")
+
+# The dedicated comments surface must continue using the existing social client APIs.
+for needle in (
     "FynxRemoteSocialClient.comments",
     "FynxRemoteSocialClient.addComment",
-    "CommentsDialog",
 ):
-    require(home, needle, f"existing Home interaction path {needle}")
+    require(comments_panel, needle, f"dedicated comments client path {needle}")
 
 # Existing comments client must remain the source used by Home; do not introduce a duplicate client.
 for needle in (
-    "suspend fun comments(context: Context, id: String)",
+    "suspend fun comments(context:Context,id:String)",
     "suspend fun addComment(context: Context, id: String, text: String)",
 ):
     require(client, needle, f"existing social client API {needle}")
+
+# The old competing comments dialog must not return alongside the dedicated surface.
+if "CommentsDialog" in home:
+    raise SystemExit("HOME INTERACTIONS RED: legacy competing CommentsDialog detected")
 
 # The old fake controls must not silently return to the feed card.
 if 'Text("Save")' in home or 'Text("Repost")' in home:
     raise SystemExit("HOME INTERACTIONS RED: fake Save/Repost feed controls detected")
 
-print("HOME INTERACTIONS GREEN: durable Save/Repost backend and existing Home comments/feed wiring are present; no fake Save/Repost controls detected.")
+print("HOME INTERACTIONS GREEN: durable Save/Repost backend and dedicated Home comments/feed wiring are present; no duplicate comments dialog or fake Save/Repost controls detected.")
