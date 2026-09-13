@@ -9,7 +9,7 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
 const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL, ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false, max: 4, min: 0, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000, statement_timeout: 10_000, query_timeout: 12_000, keepAlive: true }) : null;
 
 const TOOL_DEFINITIONS = [
-  { type: "function", name: "get_my_profile", description: "Read the authenticated FYNX user's basic profile. Use this when the user asks about their own FYNX account or profile.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } },
+  { type: "function", name: "get_my_profile", description: "Read the authenticated FYNX user's server-authoritative profile summary, including their real post, follower and following counts. Use this when the user asks about their own FYNX account or profile.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } },
   { type: "function", name: "get_conversation", description: "Read the authenticated user's recent one-to-one FYNX messages with a named username. Use only when the user asks about that conversation or its messages.", strict: true, parameters: { type: "object", properties: { username: { type: "string", description: "The other FYNX user's username." } }, required: ["username"], additionalProperties: false } },
   { type: "function", name: "search_users", description: "Search real FYNX users by username or display name. Never use this to reveal phone numbers. Use when the user asks to find a person on FYNX.", strict: true, parameters: { type: "object", properties: { query: { type: "string", description: "At least 2 characters of a FYNX username or display name." } }, required: ["query"], additionalProperties: false } },
   { type: "function", name: "get_my_friends", description: "Read the authenticated user's accepted FYNX friends. Use when the user asks who their friends are or asks about their own friend list.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } },
@@ -35,10 +35,14 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
   try { args = argumentsJson ? JSON.parse(argumentsJson) : {}; } catch { throw new Error("invalid tool arguments"); }
 
   if (name === "get_my_profile") {
-    const result = await databasePool.query("SELECT id,username,display_name FROM users WHERE id=$1 LIMIT 1", [userId]);
+    const result = await databasePool.query(`SELECT u.id,u.username,u.display_name,u.bio,u.country,u.verified,
+      (SELECT COUNT(*)::int FROM social_posts p WHERE p.author_id=u.id) AS post_count,
+      (SELECT COUNT(*)::int FROM social_follows f WHERE f.followed_id=u.id) AS follower_count,
+      (SELECT COUNT(*)::int FROM social_follows f WHERE f.follower_id=u.id) AS following_count
+      FROM users u WHERE u.id=$1 LIMIT 1`, [userId]);
     const row = result.rows[0];
     if (!row) throw new Error("profile not found");
-    return { id: String(row.id), username: row.username, displayName: row.display_name || "" };
+    return { id: String(row.id), username: row.username, displayName: row.display_name || "", bio: row.bio || "", country: row.country || "", verified: Boolean(row.verified), postCount: Number(row.post_count || 0), followerCount: Number(row.follower_count || 0), followingCount: Number(row.following_count || 0), connectionsVisible: true };
   }
 
   if (name === "get_conversation") {
