@@ -80,9 +80,8 @@ fun FynxRemoteHomeSocialPanel(
         val ids = items.map { it.id }.filter { it.isNotBlank() && !interactionStates.containsKey(it) }.distinct()
         if (ids.isEmpty()) return
         scope.launch {
-            val resolved = ids.map { id ->
-                async(Dispatchers.IO) { id to FynxRemoteSocialClient.interactionState(context, id).getOrNull() }
-            }.awaitAll().mapNotNull { (id, state) -> state?.let { id to it } }.toMap()
+            val resolved = ids.map { id -> async(Dispatchers.IO) { id to FynxRemoteSocialClient.interactionState(context, id).getOrNull() } }
+                .awaitAll().mapNotNull { (id, state) -> state?.let { id to it } }.toMap()
             if (resolved.isNotEmpty()) interactionStates = interactionStates + resolved
         }
     }
@@ -166,7 +165,7 @@ fun FynxRemoteHomeSocialPanel(
                 onLike = { id -> scope.launch { FynxRemoteSocialClient.like(context, id).onSuccess { result -> val (liked, count) = result; posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = liked, likeCount = count) else it } }.onFailure { error = it.message } } },
                 onComment = { commentsPost = post },
                 onFollow = { following -> scope.launch { FynxRemoteSocialClient.follow(context, post.authorUsername, following).onSuccess { now -> posts = posts.map { if (it.authorUsername.equals(post.authorUsername, true)) it.copy(followedByCurrentUser = now) else it } }.onFailure { error = it.message } } },
-                onDelete = { scope.launch { FynxRemoteSocialClient.deletePost(context, post.id).onSuccess { posts = posts.filterNot { it.id != post.id }; interactionStates = interactionStates - post.id }.onFailure { error = it.message } } },
+                onDelete = { scope.launch { FynxRemoteSocialClient.deletePost(context, post.id).onSuccess { posts = posts.filterNot { it.id == post.id }; interactionStates = interactionStates - post.id }.onFailure { error = it.message } } },
                 onSave = { id, saved -> runInteraction(id, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } },
                 onRepost = { id, reposted -> runInteraction(id, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } },
                 onShare = { scope.launch { FynxDiscoveryClient.recordEngagement(context, "SHARE", post.id) }; sharePost(context, post) },
