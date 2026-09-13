@@ -36,7 +36,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
     val listState = rememberLazyListState()
     var comments by remember(post.id) { mutableStateOf<List<FynxRemoteSocialClient.RemoteComment>>(emptyList()) }
     var text by rememberSaveable(post.id) { mutableStateOf("") }
-    var loading by remember(post.id) { mutableStateOf(true) }
+    var loading by remember(post.id) { mutableStateOf(false) }
     var loadingMore by remember(post.id) { mutableStateOf(false) }
     var sending by remember(post.id) { mutableStateOf(false) }
     var error by remember(post.id) { mutableStateOf<String?>(null) }
@@ -162,7 +162,6 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
         text = ""
         replyingToId = null
         resetPagingState()
-        loading = true
         loadComments()
     }
 
