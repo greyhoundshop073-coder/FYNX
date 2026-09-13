@@ -3,6 +3,7 @@ import { WebSocketServer } from "ws";
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { installHomeCommentPrivacy } from "./homeCommentsPrivacyBootstrap.js";
 
 // R3 connection isolation layer. server.js is intentionally kept intact; this
 // wrapper makes the existing WebSocket connection handler reject stale/replaced
@@ -157,15 +158,7 @@ async function installHomeCommentBackend() {
       );
       const rows = result.rows.slice(0, limit).reverse();
       const nextCursor = result.rows.length > limit ? String(result.rows[result.rows.length - 1].id) : null;
-      return res.json({
-        comments: rows.map(row => ({
-          id: String(row.id), postId: String(row.post_id),
-          parentCommentId: row.parent_comment_id == null ? null : String(row.parent_comment_id),
-          text: row.text, timestamp: Number(row.timestamp), authorId: String(row.author_id),
-          authorUsername: row.username, authorDisplayName: row.display_name
-        })),
-        nextCursor
-      });
+      return res.json({ comments: rows.map(row => ({ id: String(row.id), postId: String(row.post_id), parentCommentId: row.parent_comment_id == null ? null : String(row.parent_comment_id), text: row.text, timestamp: Number(row.timestamp), authorId: String(row.author_id), authorUsername: row.username, authorDisplayName: row.display_name })), nextCursor });
     } catch (error) {
       console.error('social comments page', error);
       return res.status(500).json({ error: 'comments page failed' });
@@ -182,50 +175,21 @@ async function installHomeCommentBackend() {
       if (!Number.isSafeInteger(postId) || postId < 1 || !Number.isSafeInteger(parentId) || parentId < 1) return res.status(400).json({ error: 'invalid comment reference' });
       if (!text || text.length > 1000) return res.status(400).json({ error: 'reply text must be 1-1000 characters' });
       if (!(await visibleSocialPost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });
-
-      const parent = await pool.query(
-        `SELECT c.id,c.post_id,c.parent_comment_id,c.author_id
-           FROM social_post_comments c
-           JOIN users u ON u.id=c.author_id
-          WHERE c.id=$1 AND c.post_id=$2
-            AND NOT EXISTS (
-              SELECT 1 FROM blocks b
-               WHERE (b.blocker_id=$3 AND b.blocked_id=c.author_id)
-                  OR (b.blocker_id=c.author_id AND b.blocked_id=$3)
-            )`,
-        [parentId, postId, req.user.sub]
-      );
+      const parent = await pool.query(`SELECT c.id,c.post_id,c.parent_comment_id,c.author_id FROM social_post_comments c JOIN users u ON u.id=c.author_id WHERE c.id=$1 AND c.post_id=$2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$3 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$3))`, [parentId, postId, req.user.sub]);
       if (!parent.rows[0]) return res.status(404).json({ error: 'parent comment not found' });
-
-      // Keep replies one level deep. A reply to a reply targets the original
-      // top-level comment, preventing unbounded nesting while preserving thread context.
       const rootId = parent.rows[0].parent_comment_id == null ? parentId : Number(parent.rows[0].parent_comment_id);
       const author = await pool.query('SELECT id,username,display_name FROM users WHERE id=$1', [req.user.sub]);
       if (!author.rows[0]) return res.status(401).json({ error: 'author not found' });
-
       await client.query('BEGIN');
-      const inserted = await client.query(
-        `INSERT INTO social_post_comments(post_id,author_id,parent_comment_id,text)
-         VALUES($1,$2,$3,$4)
-         RETURNING id,post_id,parent_comment_id,text,EXTRACT(EPOCH FROM created_at)*1000 AS timestamp`,
-        [postId, req.user.sub, rootId, text]
-      );
+      const inserted = await client.query(`INSERT INTO social_post_comments(post_id,author_id,parent_comment_id,text) VALUES($1,$2,$3,$4) RETURNING id,post_id,parent_comment_id,text,EXTRACT(EPOCH FROM created_at)*1000 AS timestamp`, [postId, req.user.sub, rootId, text]);
       await client.query('COMMIT');
       const row = inserted.rows[0];
-      return res.status(201).json({
-        comment: {
-          id: String(row.id), postId: String(row.post_id), parentCommentId: String(row.parent_comment_id),
-          text: row.text, timestamp: Number(row.timestamp), authorId: String(req.user.sub),
-          authorUsername: author.rows[0].username || '', authorDisplayName: author.rows[0].display_name || ''
-        }
-      });
+      return res.status(201).json({ comment: { id: String(row.id), postId: String(row.post_id), parentCommentId: String(row.parent_comment_id), text: row.text, timestamp: Number(row.timestamp), authorId: String(req.user.sub), authorUsername: author.rows[0].username || '', authorDisplayName: author.rows[0].display_name || '' } });
     } catch (error) {
       try { await client.query('ROLLBACK'); } catch {}
       console.error('social comment reply', error);
       return res.status(500).json({ error: 'reply failed' });
-    } finally {
-      client.release();
-    }
+    } finally { client.release(); }
   });
 
   app.get('/api/social/posts/:id/comments/:commentId/replies', auth, async (req, res) => {
@@ -235,36 +199,23 @@ async function installHomeCommentBackend() {
       const parentId = Number(req.params.commentId);
       if (!Number.isSafeInteger(postId) || postId < 1 || !Number.isSafeInteger(parentId) || parentId < 1) return res.status(400).json({ error: 'invalid comment reference' });
       if (!(await visibleSocialPost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });
-      const parent = await pool.query('SELECT id FROM social_post_comments WHERE id=$1 AND post_id=$2', [parentId, postId]);
+      const parent = await pool.query(`SELECT c.id FROM social_post_comments c WHERE c.id=$1 AND c.post_id=$2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$3 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$3))`, [parentId, postId, req.user.sub]);
       if (!parent.rows[0]) return res.status(404).json({ error: 'parent comment not found' });
       const requestedLimit = Number(req.query?.limit);
       const limit = Math.min(Math.max(Number.isInteger(requestedLimit) ? requestedLimit : 50, 1), 100);
-      const result = await pool.query(
-        `SELECT c.id,c.post_id,c.parent_comment_id,c.text,EXTRACT(EPOCH FROM c.created_at)*1000 AS timestamp,
-                u.id AS author_id,u.username,u.display_name
-           FROM social_post_comments c
-           JOIN users u ON u.id=c.author_id
-          WHERE c.post_id=$1 AND c.parent_comment_id=$2
-          ORDER BY c.id ASC LIMIT $3`,
-        [postId, parentId, limit]
-      );
-      return res.json({ comments: result.rows.map(row => ({
-        id: String(row.id), postId: String(row.post_id),
-        parentCommentId: row.parent_comment_id == null ? null : String(row.parent_comment_id),
-        text: row.text, timestamp: Number(row.timestamp), authorId: String(row.author_id),
-        authorUsername: row.username, authorDisplayName: row.display_name
-      })) });
+      const result = await pool.query(`SELECT c.id,c.post_id,c.parent_comment_id,c.text,EXTRACT(EPOCH FROM c.created_at)*1000 AS timestamp, u.id AS author_id,u.username,u.display_name FROM social_post_comments c JOIN users u ON u.id=c.author_id WHERE c.post_id=$1 AND c.parent_comment_id=$2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$3 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$3)) ORDER BY c.id ASC LIMIT $4`, [postId, parentId, req.user.sub, limit]);
+      return res.json({ comments: result.rows.map(row => ({ id: String(row.id), postId: String(row.post_id), parentCommentId: row.parent_comment_id == null ? null : String(row.parent_comment_id), text: row.text, timestamp: Number(row.timestamp), authorId: String(row.author_id), authorUsername: row.username, authorDisplayName: row.display_name })) });
     } catch (error) {
       console.error('social comment replies', error);
       return res.status(500).json({ error: 'replies lookup failed' });
     }
   });
-
-`;
+  `;
   if (!source.includes(routeMarker)) throw new Error("Batch 4B could not locate social follow route marker");
   source = source.replace(routeMarker, routes + routeMarker);
   await writeFile(socialPath, source);
 }
 
+await installHomeCommentPrivacy();
 await installHomeCommentBackend();
 await import("./serverBootstrap.js");
