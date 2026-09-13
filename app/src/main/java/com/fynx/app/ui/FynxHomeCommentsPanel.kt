@@ -97,7 +97,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Close comments") }
                     Column(Modifier.weight(1f)) {
                         Text("Comments", style = MaterialTheme.typography.titleLarge)
@@ -127,7 +127,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
                                     }
                                 }
                                 expandedReplies[comment.id].orEmpty().forEach { reply ->
-                                    Row(Modifier.fillMaxWidth().padding(start = 48.dp, top = 8.dp), verticalAlignment = Alignment.Top) {
+                                    Row(Modifier.fillMaxWidth().padding(48.dp, 8.dp, 0.dp, 0.dp), verticalAlignment = Alignment.Top) {
                                         Surface(Modifier.size(30.dp).clip(CircleShape), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {}
                                         Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) {
                                             Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium)
@@ -136,21 +136,21 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
                                         }
                                     }
                                 }
-                                if (replyLoadingId == comment.id) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(start = 48.dp, top = 4.dp))
+                                if (replyLoadingId == comment.id) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(48.dp, 4.dp, 0.dp, 0.dp))
                             }
                         }
                     }
                 }
-                if (error != null && comments.isNotEmpty()) Text(error!!, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                if (error != null && comments.isNotEmpty()) Text(error!!, modifier = Modifier.fillMaxWidth().padding(16.dp, 4.dp, 16.dp, 4.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
                 HorizontalDivider()
-                if (replyingTo != null) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (replyingTo != null) Row(Modifier.fillMaxWidth().padding(12.dp, 6.dp, 12.dp, 0.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Replying to ${replyingTo!!.authorDisplayName.ifBlank { replyingTo!!.authorUsername }}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
                     TextButton(onClick = { replyingTo = null }) { Text("Cancel") }
                 }
                 Row(Modifier.fillMaxWidth().imePadding().padding(10.dp), verticalAlignment = Alignment.Bottom) {
                     Column(Modifier.weight(1f)) {
                         OutlinedTextField(value = text, onValueChange = { text = it.take(MAX_COMMENT_LENGTH) }, modifier = Modifier.fillMaxWidth(), placeholder = { Text(if (replyingTo == null) "Write a comment…" else "Write a reply…") }, maxLines = 4, enabled = !sending, singleLine = false, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, keyboardType = KeyboardType.Text, imeAction = ImeAction.Send), keyboardActions = KeyboardActions(onSend = { send() }))
-                        Text("${text.length}/$MAX_COMMENT_LENGTH", modifier = Modifier.fillMaxWidth().padding(top = 2.dp, end = 4.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${text.length}/$MAX_COMMENT_LENGTH", modifier = Modifier.fillMaxWidth().padding(0.dp, 2.dp, 4.dp, 0.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(Modifier.width(8.dp)); IconButton(onClick = { send() }, enabled = text.trim().isNotEmpty() && !sending) { if (sending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Send, "Send comment") }
                 }
