@@ -160,4 +160,112 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       return res.status(500).json({ error: "marketplace listing unavailable" });
     }
   });
+
+  // Home Batch 4: durable save/repost state. Unlike discovery analytics, these
+  // tables represent actual user intent and are idempotent per account/post.
+  const ensureSocialInteractionSchema = async () => {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS social_saved_posts (
+        post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (post_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS social_saved_posts_user_idx ON social_saved_posts(user_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS social_post_reposts (
+        post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (post_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS social_post_reposts_post_idx ON social_post_reposts(post_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS social_post_reposts_user_idx ON social_post_reposts(user_id, created_at DESC);
+    `);
+  };
+
+  const visiblePost = async (postId, userId) => {
+    const result = await pool.query(`
+      SELECT p.id
+      FROM social_posts p
+      WHERE p.id=$1
+        AND (
+          p.author_id=$2
+          OR (p.visibility='PUBLIC' AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$2)))
+          OR (p.visibility='FRIENDS_ONLY' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted'))
+        )
+      LIMIT 1
+    `, [postId, userId]);
+    return Boolean(result.rows[0]);
+  };
+
+  app.post("/api/social/posts/:id/save", auth, async (req, res) => {
+    try {
+      await ensureSocialInteractionSchema();
+      const postId = validPostId(req.params?.id);
+      if (!postId || !(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
+      await pool.query("INSERT INTO social_saved_posts(post_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [postId, req.user.sub]);
+      const count = await pool.query("SELECT COUNT(*)::int AS count FROM social_saved_posts WHERE post_id=$1", [postId]);
+      return res.json({ saved: true, savedCount: Number(count.rows[0]?.count || 0) });
+    } catch (error) { console.error("save social post", error); return res.status(500).json({ error: "save failed" }); }
+  });
+
+  app.delete("/api/social/posts/:id/save", auth, async (req, res) => {
+    try {
+      await ensureSocialInteractionSchema();
+      const postId = validPostId(req.params?.id);
+      if (!postId || !(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
+      await pool.query("DELETE FROM social_saved_posts WHERE post_id=$1 AND user_id=$2", [postId, req.user.sub]);
+      const count = await pool.query("SELECT COUNT(*)::int AS count FROM social_saved_posts WHERE post_id=$1", [postId]);
+      return res.json({ saved: false, savedCount: Number(count.rows[0]?.count || 0) });
+    } catch (error) { console.error("unsave social post", error); return res.status(500).json({ error: "unsave failed" }); }
+  });
+
+  app.get("/api/social/saved", auth, async (req, res) => {
+    try {
+      await ensureSocialInteractionSchema();
+      const limit = Math.min(Math.max(Number(req.query?.limit) || 30, 1), 100);
+      const offset = Math.max(Number(req.query?.offset) || 0, 0);
+      const result = await pool.query(`
+        SELECT p.id,p.author_id,u.username author_username,u.display_name author_display_name,p.text,p.visibility,p.media_id,p.media_type,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp,sp.created_at saved_at
+        FROM social_saved_posts sp JOIN social_posts p ON p.id=sp.post_id JOIN users u ON u.id=p.author_id
+        WHERE sp.user_id=$1 AND (${`p.author_id=$1 OR p.visibility='PUBLIC'`} OR (p.visibility='FRIENDS_ONLY' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$1) OR (f.user_id=$1 AND f.friend_id=p.author_id)) AND f.status='accepted')))
+          AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$1))
+        ORDER BY sp.created_at DESC LIMIT $2 OFFSET $3
+      `, [req.user.sub, limit, offset]);
+      return res.json({ posts: result.rows.map(row => ({ id:String(row.id), authorId:String(row.author_id), authorUsername:row.author_username, authorDisplayName:row.author_display_name, text:row.text, visibility:row.visibility, mediaId:row.media_id==null?null:String(row.media_id), mediaType:row.media_type||null, timestamp:Number(row.timestamp), savedAtMillis:new Date(row.saved_at).getTime() })), hasMore: result.rows.length === limit });
+    } catch (error) { console.error("saved social posts", error); return res.status(500).json({ error: "saved posts lookup failed" }); }
+  });
+
+  app.post("/api/social/posts/:id/repost", auth, async (req, res) => {
+    try {
+      await ensureSocialInteractionSchema();
+      const postId = validPostId(req.params?.id);
+      if (!postId || !(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
+      await pool.query("INSERT INTO social_post_reposts(post_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [postId, req.user.sub]);
+      const count = await pool.query("SELECT COUNT(*)::int AS count FROM social_post_reposts WHERE post_id=$1", [postId]);
+      return res.json({ reposted: true, repostCount: Number(count.rows[0]?.count || 0) });
+    } catch (error) { console.error("repost social post", error); return res.status(500).json({ error: "repost failed" }); }
+  });
+
+  app.delete("/api/social/posts/:id/repost", auth, async (req, res) => {
+    try {
+      await ensureSocialInteractionSchema();
+      const postId = validPostId(req.params?.id);
+      if (!postId || !(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
+      await pool.query("DELETE FROM social_post_reposts WHERE post_id=$1 AND user_id=$2", [postId, req.user.sub]);
+      const count = await pool.query("SELECT COUNT(*)::int AS count FROM social_post_reposts WHERE post_id=$1", [postId]);
+      return res.json({ reposted: false, repostCount: Number(count.rows[0]?.count || 0) });
+    } catch (error) { console.error("unrepost social post", error); return res.status(500).json({ error: "unrepost failed" }); }
+  });
+
+  app.get("/api/social/posts/:id/interaction-state", auth, async (req, res) => {
+    try {
+      await ensureSocialInteractionSchema();
+      const postId = validPostId(req.params?.id);
+      if (!postId || !(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
+      const result = await pool.query(`SELECT EXISTS(SELECT 1 FROM social_saved_posts WHERE post_id=$1 AND user_id=$2) saved, EXISTS(SELECT 1 FROM social_post_reposts WHERE post_id=$1 AND user_id=$2) reposted, (SELECT COUNT(*) FROM social_saved_posts WHERE post_id=$1)::int saved_count, (SELECT COUNT(*) FROM social_post_reposts WHERE post_id=$1)::int repost_count`, [postId, req.user.sub]);
+      const row=result.rows[0];
+      return res.json({ saved:Boolean(row.saved), reposted:Boolean(row.reposted), savedCount:Number(row.saved_count||0), repostCount:Number(row.repost_count||0) });
+    } catch (error) { console.error("social interaction state", error); return res.status(500).json({ error: "interaction state failed" }); }
+  });
 }
