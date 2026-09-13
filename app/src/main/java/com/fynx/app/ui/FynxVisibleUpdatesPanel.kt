@@ -21,12 +21,14 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,12 +47,17 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
 fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, onOpenAi: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
     var statuses by remember { mutableStateOf<List<FynxStatus>>(emptyList()) }
+    var aiInput by remember { mutableStateOf("") }
+    var aiReply by remember { mutableStateOf<String?>(null) }
+    var aiLoading by remember { mutableStateOf(false) }
     LaunchedEffect(currentUsername) { statuses = FynxStatusClient.list(context).getOrDefault(emptyList()) }
 
     val activeStatuses = statuses.filter { it.expiresAtMillis <= 0L || it.expiresAtMillis > System.currentTimeMillis() }
@@ -93,7 +101,6 @@ fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, 
     }
 
     Card(
-        onClick = onOpenAi,
         modifier = Modifier.fillMaxWidth(),
         shape = FynxDesign.LargeCardShape,
         colors = CardDefaults.cardColors(containerColor = FynxDesign.SurfaceRaised, contentColor = MaterialTheme.colorScheme.onSurface),
@@ -117,6 +124,46 @@ fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, 
                 }
                 IconButton(onClick = onOpenAi) {
                     Icon(Icons.Default.Mic, contentDescription = "Talk to FYNX AI", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+
+            OutlinedTextField(
+                value = aiInput,
+                onValueChange = { aiInput = it.take(4000) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                enabled = !aiLoading,
+                placeholder = { Text("Ask FYNX AI…") },
+                trailingIcon = {
+                    IconButton(enabled = !aiLoading && aiInput.trim().isNotEmpty(), onClick = {
+                        val prompt = aiInput.trim()
+                        if (prompt.isEmpty()) return@IconButton
+                        val decision = FynxFutureIntelligencePolicy.authorize(
+                            permissions = listOf(FynxAiPermission(FynxAiCapability.ASSISTANT, setOf(FynxAiDataScope.NONE), true)),
+                            request = FynxAiRequest(FynxAiCapability.ASSISTANT, prompt, setOf(FynxAiDataScope.NONE))
+                        )
+                        if (!decision.allowed) {
+                            aiReply = "FYNX AI cannot assist with that request right now."
+                            return@IconButton
+                        }
+                        aiInput = ""
+                        aiReply = null
+                        aiLoading = true
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) { AiAssistantClient.sendMessage(context, prompt) }
+                            result.onSuccess { aiReply = it.trim().ifBlank { "FYNX AI returned no response." } }
+                                .onFailure { aiReply = "FYNX AI is temporarily unavailable. Please try again." }
+                            aiLoading = false
+                        }
+                    }) {
+                        Icon(Icons.Default.Send, contentDescription = "Send to FYNX AI", tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            )
+            if (aiLoading) Text("FYNX AI is thinking…", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            aiReply?.let { reply ->
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Text(reply, modifier = Modifier.fillMaxWidth().padding(10.dp), style = MaterialTheme.typography.bodyMedium)
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
