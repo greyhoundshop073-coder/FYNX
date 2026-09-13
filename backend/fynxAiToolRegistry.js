@@ -13,7 +13,9 @@ const TOOL_DEFINITIONS = [
   { type: "function", name: "get_conversation", description: "Read the authenticated user's recent one-to-one FYNX messages with a named username. Use only when the user asks about that conversation or its messages.", strict: true, parameters: { type: "object", properties: { username: { type: "string", description: "The other FYNX user's username." } }, required: ["username"], additionalProperties: false } },
   { type: "function", name: "search_users", description: "Search real FYNX users by username or display name. Never use this to reveal phone numbers. Use when the user asks to find a person on FYNX.", strict: true, parameters: { type: "object", properties: { query: { type: "string", description: "At least 2 characters of a FYNX username or display name." } }, required: ["query"], additionalProperties: false } },
   { type: "function", name: "get_my_friends", description: "Read the authenticated user's accepted FYNX friends. Use when the user asks who their friends are or asks about their own friend list.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } },
-  { type: "function", name: "search_marketplace", description: "Search real active FYNX marketplace listings available to the authenticated user. Use for product discovery only; never claim a purchase or payment happened.", strict: true, parameters: { type: "object", properties: { query: { type: "string", description: "Optional product, seller, or description search text." }, category: { type: "string", description: "Optional marketplace category." } }, required: ["query", "category"], additionalProperties: false } }
+  { type: "function", name: "search_marketplace", description: "Search real active FYNX marketplace listings available to the authenticated user. Use for product discovery only; never claim a purchase or payment happened.", strict: true, parameters: { type: "object", properties: { query: { type: "string", description: "Optional product, seller, or description search text." }, category: { type: "string", description: "Optional marketplace category." } }, required: ["query", "category"], additionalProperties: false } },
+  { type: "function", name: "get_trending_posts", description: "Read public trending FYNX posts visible to the authenticated user. Blocked users and recent NOT_INTERESTED posts must be excluded. Use when the user asks what is trending or wants public content to discover.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } },
+  { type: "function", name: "get_my_saved_posts", description: "Read the authenticated user's own saved FYNX posts, respecting post visibility and block rules. Never expose another user's private saved-post list.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } }
 ];
 
 function normalizeUsername(value) { return String(value || "").trim().replace(/^@+/, "").toLowerCase(); }
@@ -73,6 +75,37 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
     if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category=$${params.length}`); }
     const result = await databasePool.query(`SELECT l.id,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,l.location,u.username AS seller_username,u.display_name AS seller_display_name FROM marketplace_listings l JOIN users u ON u.id=l.seller_id WHERE ${where.join(" AND ")} ORDER BY l.created_at DESC LIMIT 20`, params);
     return { listings: result.rows.map(row => ({ id: String(row.id), title: row.title, description: row.description, price: Number(row.price), currency: row.currency, category: row.category, condition: row.condition, quantity: Number(row.quantity), location: row.location, sellerUsername: row.seller_username, sellerDisplayName: row.seller_display_name || "" })) };
+  }
+
+  if (name === "get_trending_posts") {
+    const result = await databasePool.query(`
+      SELECT p.id,p.author_id,u.username AS author_username,u.display_name AS author_display_name,p.text,p.visibility,
+        EXTRACT(EPOCH FROM p.created_at)*1000 AS timestamp,
+        COALESCE(l.likes,0) AS like_count,COALESCE(c.comments,0) AS comment_count,
+        COALESCE(e.shares,0) AS share_count,COALESCE(e.saves,0) AS save_count,
+        (COALESCE(l.likes,0)*3+COALESCE(c.comments,0)*5+COALESCE(e.shares,0)*7+COALESCE(e.saves,0)*6)
+          * EXP(-GREATEST(EXTRACT(EPOCH FROM (NOW()-p.created_at))/3600.0,0)/48.0) AS discovery_score
+      FROM social_posts p JOIN users u ON u.id=p.author_id
+      LEFT JOIN (SELECT post_id,COUNT(*) likes FROM social_post_likes GROUP BY post_id) l ON l.post_id=p.id
+      LEFT JOIN (SELECT post_id,COUNT(*) comments FROM social_post_comments GROUP BY post_id) c ON c.post_id=p.id
+      LEFT JOIN (SELECT post_id,COUNT(*) FILTER (WHERE event_type='SHARE') shares,COUNT(*) FILTER (WHERE event_type='SAVE') saves FROM fynx_discovery_events GROUP BY post_id) e ON e.post_id=p.id
+      WHERE p.visibility='PUBLIC'
+        AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$1))
+        AND NOT EXISTS (SELECT 1 FROM fynx_discovery_events n WHERE n.user_id=$1 AND n.post_id=p.id AND n.event_type='NOT_INTERESTED' AND n.created_at>NOW()-INTERVAL '30 days')
+      ORDER BY discovery_score DESC,p.created_at DESC LIMIT 10`, [userId]);
+    return { posts: result.rows.map(row => ({ id:String(row.id), authorUsername:row.author_username, authorDisplayName:row.author_display_name || "", text:String(row.text || ""), visibility:row.visibility, timestamp:Number(row.timestamp), likeCount:Number(row.like_count), commentCount:Number(row.comment_count), shareCount:Number(row.share_count), saveCount:Number(row.save_count), discoveryScore:Number(row.discovery_score || 0) })) };
+  }
+
+  if (name === "get_my_saved_posts") {
+    const result = await databasePool.query(`
+      SELECT p.id,p.author_id,u.username AS author_username,u.display_name AS author_display_name,p.text,p.visibility,
+        EXTRACT(EPOCH FROM p.created_at)*1000 AS timestamp,sp.created_at AS saved_at
+      FROM social_saved_posts sp JOIN social_posts p ON p.id=sp.post_id JOIN users u ON u.id=p.author_id
+      WHERE sp.user_id=$1
+        AND (p.author_id=$1 OR p.visibility='PUBLIC' OR (p.visibility='FRIENDS_ONLY' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$1) OR (f.user_id=$1 AND f.friend_id=p.author_id)) AND f.status='accepted')))
+        AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$1))
+      ORDER BY sp.created_at DESC LIMIT 30`, [userId]);
+    return { posts: result.rows.map(row => ({ id:String(row.id), authorUsername:row.author_username, authorDisplayName:row.author_display_name || "", text:String(row.text || ""), visibility:row.visibility, timestamp:Number(row.timestamp), savedAt:row.saved_at })) };
   }
 
   throw new Error(`unsupported FYNX AI tool: ${name}`);
