@@ -31,6 +31,8 @@ discovery = read("backend/discoveryRoutes.js")
 home = read("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt")
 comments_panel = read("app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt")
 client = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
+privacy_bootstrap = read("backend/homeCommentsPrivacyBootstrap.js")
+backend_package = read("backend/package.json")
 
 # Durable Save/Repost must remain server-backed; never replace these with UI-only state.
 for route in (
@@ -84,4 +86,17 @@ if "CommentsDialog" in home:
 if 'Text("Save")' in home or 'Text("Repost")' in home:
     raise SystemExit("HOME INTERACTIONS RED: fake Save/Repost feed controls detected")
 
-print("HOME INTERACTIONS GREEN: durable Save/Repost backend and dedicated Home comments/feed wiring are present; no duplicate comments dialog or fake Save/Repost controls detected.")
+# Comment/reply reads must apply the same symmetric block boundary as the rest of Social.
+require(backend_package, '"start": "node homeCommentsPrivacyBootstrap.js"', "privacy-safe backend entrypoint")
+require(privacy_bootstrap, "fynxHomeCommentsPrivacyBatch", "Home comment privacy patch marker")
+require(privacy_bootstrap, "if (!(await visibleSocialPost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });", "removed/private post boundary")
+require(privacy_bootstrap, "b.blocker_id=$2 AND b.blocked_id=c.author_id", "blocked comment author filter")
+require(privacy_bootstrap, "b.blocker_id=c.author_id AND b.blocked_id=$2", "reverse blocked comment author filter")
+require(privacy_bootstrap, "b.blocker_id=$3 AND b.blocked_id=c.author_id", "blocked reply author filter")
+require(privacy_bootstrap, "b.blocker_id=c.author_id AND b.blocked_id=$3", "reverse blocked reply author filter")
+require(privacy_bootstrap, "SELECT c.id FROM social_post_comments c", "blocked parent validation")
+require(privacy_bootstrap, "const cursorClause = before === null ? '' : ' AND c.id < $4';", "cursor parameter remains aligned after privacy filter")
+require(privacy_bootstrap, "LIMIT $3`,", "comment page limit parameter remains aligned")
+require(privacy_bootstrap, "ORDER BY c.id ASC LIMIT $4`,", "reply limit parameter remains aligned")
+
+print("HOME INTERACTIONS GREEN: durable Save/Repost backend, dedicated Home comments/feed wiring, and privacy-safe comment/reply boundaries are present; deleted/private/blocked content is rejected or filtered without duplicate surfaces.")
