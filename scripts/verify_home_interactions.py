@@ -14,16 +14,13 @@ def require(text: str, needle: str, label: str) -> None:
 
 
 def normalize_source(text: str) -> str:
-    """Normalize harmless Kotlin whitespace around punctuation and type separators."""
     text = " ".join(text.split())
     text = re.sub(r"\s*([(),:])\s*", r"\1", text)
     return text
 
 
 def require_normalized(text: str, needle: str, label: str) -> None:
-    normalized_text = normalize_source(text)
-    normalized_needle = normalize_source(needle)
-    if normalized_needle not in normalized_text:
+    if normalize_source(needle) not in normalize_source(text):
         raise SystemExit(f"HOME INTERACTIONS RED: missing {label}: {needle}")
 
 
@@ -35,7 +32,6 @@ privacy_bootstrap = read("backend/homeCommentsPrivacyBootstrap.js")
 realtime_bootstrap = read("backend/realtimeIsolationBootstrap.js")
 backend_package = read("backend/package.json")
 
-# Durable Save/Repost must remain server-backed; never replace these with UI-only state.
 for route in (
     'app.post("/api/social/posts/:id/save"',
     'app.delete("/api/social/posts/:id/save"',
@@ -46,7 +42,6 @@ for route in (
 ):
     require(discovery, route, f"durable interaction route {route}")
 
-# Persistence must be account-scoped and protected by the backend's real visibility helper.
 for needle in (
     "CREATE TABLE IF NOT EXISTS social_saved_posts",
     "CREATE TABLE IF NOT EXISTS social_post_reposts",
@@ -56,7 +51,6 @@ for needle in (
 ):
     require(discovery, needle, f"interaction protection {needle}")
 
-# Home must use the authoritative feed and the single dedicated comments experience.
 for needle in (
     "FynxRemoteSocialClient.feedPage",
     "FynxRemoteSocialClient.like",
@@ -64,44 +58,58 @@ for needle in (
 ):
     require(home, needle, f"Home interaction path {needle}")
 
-# The dedicated comments surface must continue using the existing social client APIs.
 for needle in (
     "FynxRemoteSocialClient.comments",
     "FynxRemoteSocialClient.addComment",
 ):
     require(comments_panel, needle, f"dedicated comments client path {needle}")
 
-# Existing comments client must remain the source used by Home; do not introduce a duplicate client.
-# Kotlin permits harmless formatting differences, including omitted spaces around ':' and ','.
 for needle in (
     "suspend fun comments(context: Context, id: String)",
     "suspend fun addComment(context: Context, id: String, text: String)",
 ):
     require_normalized(client, needle, f"existing social client API {needle}")
 
-# The old competing comments dialog must not return alongside the dedicated surface.
 if "CommentsDialog" in home:
     raise SystemExit("HOME INTERACTIONS RED: legacy competing CommentsDialog detected")
-
-# The old fake controls must not silently return to the feed card.
 if 'Text("Save")' in home or 'Text("Repost")' in home:
     raise SystemExit("HOME INTERACTIONS RED: fake Save/Repost feed controls detected")
 
-# Comment/reply reads must use the real production entrypoint and the existing
-# 4B route transformation before the privacy hardening pass runs.
+# Verify the clean production startup path. The comment routes are installed by
+# realtimeIsolationBootstrap into the existing social route module, so the gate
+# must inspect that transformation rather than demand generated runtime text in
+# the privacy bootstrap source itself.
 require(backend_package, '"start": "node realtimeIsolationBootstrap.js"', "production realtime entrypoint")
 require(realtime_bootstrap, 'import { installHomeCommentPrivacy } from "./homeCommentsPrivacyBootstrap.js";', "Home comment privacy integration")
 require(realtime_bootstrap, "await installHomeCommentBackend();", "base Home comments installation")
 require(realtime_bootstrap, "await installHomeCommentPrivacy();", "Home comment privacy hardening")
-require(privacy_bootstrap, "fynxHomeCommentsPrivacyBatch", "Home comment privacy patch marker")
-require(privacy_bootstrap, "if (!(await visibleSocialPost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });", "removed/private post boundary")
-require(privacy_bootstrap, "b.blocker_id=$2 AND b.blocked_id=c.author_id", "blocked comment author filter")
-require(privacy_bootstrap, "b.blocker_id=c.author_id AND b.blocked_id=$2", "reverse blocked comment author filter")
-require(privacy_bootstrap, "b.blocker_id=$3 AND b.blocked_id=c.author_id", "blocked reply author filter")
-require(privacy_bootstrap, "b.blocker_id=c.author_id AND b.blocked_id=$3", "reverse blocked reply author filter")
-require(privacy_bootstrap, "SELECT c.id FROM social_post_comments c", "blocked parent validation")
-require(privacy_bootstrap, "const cursorClause = before === null ? '' : ' AND c.id < $4';", "cursor parameter remains aligned after privacy filter")
-require(privacy_bootstrap, "LIMIT $3`,", "comment page limit parameter remains aligned")
-require(privacy_bootstrap, "ORDER BY c.id ASC LIMIT $4`,", "reply limit parameter remains aligned")
+require(realtime_bootstrap, "if (!(await visibleSocialPost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });", "removed/private post boundary")
+for needle in (
+    "b.blocker_id=$2 AND b.blocked_id=c.author_id",
+    "b.blocker_id=c.author_id AND b.blocked_id=$2",
+    "b.blocker_id=$3 AND b.blocked_id=c.author_id",
+    "b.blocker_id=c.author_id AND b.blocked_id=$3",
+    "SELECT c.id FROM social_post_comments c",
+    "const cursorClause = before === null ? '' : ' AND c.id < $3';",
+    "LIMIT $3`,",
+    "ORDER BY c.id ASC LIMIT $4`,",
+):
+    require(realtime_bootstrap, needle, f"clean-startup Home comment privacy implementation {needle}")
 
-print("HOME INTERACTIONS GREEN: durable Save/Repost backend, dedicated Home comments/feed wiring, and privacy-safe comment/reply boundaries are present; deleted/private/blocked content is rejected or filtered without duplicate surfaces.")
+# The privacy module remains a reusable, idempotent hardening pass and must not
+# create a second comments API. Its source checks describe the same protections
+# it applies when an older 4B route marker is encountered.
+require(privacy_bootstrap, "fynxHomeCommentsPrivacyBatch", "Home comment privacy patch marker")
+for needle in (
+    "b.blocker_id=$2 AND b.blocked_id=c.author_id",
+    "b.blocker_id=c.author_id AND b.blocked_id=$2",
+    "b.blocker_id=$3 AND b.blocked_id=c.author_id",
+    "b.blocker_id=c.author_id AND b.blocked_id=$3",
+    "SELECT c.id FROM social_post_comments c",
+    "const cursorClause = before === null ? '' : ' AND c.id < $4';",
+    "LIMIT $3`,",
+    "ORDER BY c.id ASC LIMIT $4`,",
+):
+    require(privacy_bootstrap, needle, f"privacy hardening template {needle}")
+
+print("HOME INTERACTIONS GREEN: durable Save/Repost backend, dedicated Home comments/feed wiring, and clean-startup privacy-safe comment/reply boundaries are present without duplicate surfaces.")
