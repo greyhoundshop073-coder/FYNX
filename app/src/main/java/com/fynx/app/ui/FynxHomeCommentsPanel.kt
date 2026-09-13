@@ -126,7 +126,7 @@ fun FynxHomeCommentsPanel(
                     }
                     else -> LazyColumn(
                         state = listState,
-                        Modifier.fillMaxWidth().weight(1f),
+                        modifier = Modifier.fillMaxWidth().weight(1f),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
