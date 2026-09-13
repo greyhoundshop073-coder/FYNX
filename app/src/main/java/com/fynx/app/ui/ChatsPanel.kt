@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -142,7 +143,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                         Card(modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                             ListItem(
                                 modifier = Modifier.clickable { onOpenChat(chat) },
-                                headlineContent = { Text(chat.name) },
+                                headlineContent = { Text(chat.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 leadingContent = {
                                     if (chat.avatarUri.isNullOrBlank()) FynxAvatar(chat.name, null, Modifier.size(avatarSize))
                                     else FynxRemoteProfileAvatar(
@@ -155,16 +156,16 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         if (pinned) Text("Pinned", color = MaterialTheme.colorScheme.primary)
                                         if (muted) Text("Muted", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text(chat.lastMessage.ifBlank { "No messages yet" }, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                        Text(chat.lastMessage.ifBlank { "No messages yet" }, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                 },
                                 trailingContent = {
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                                         Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
-                                            Text(chat.time, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(chat.time, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                                             if (unread > 0) {
                                                 Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
-                                                    Text(if (unread > 99) "99+" else unread.toString(), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp))
+                                                    Text(if (unread > 99) "99+" else unread.toString(), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp), maxLines = 1)
                                                 }
                                             }
                                         }
@@ -203,9 +204,9 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                     items(groups, key = { it.id }) { group ->
                         Card(onClick = { onOpenGroup(group.id) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                             ListItem(
-                                headlineContent = { Text(group.name) },
+                                headlineContent = { Text(group.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 leadingContent = { FynxAvatar(group.name, modifier = Modifier.size(avatarSize)) },
-                                supportingContent = { Text("${group.members.size} members${group.description.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                supportingContent = { Text("${group.members.size} members${group.description.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
                             )
                         }
@@ -227,11 +228,11 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                     searchResults.forEach { person ->
                         val personUsername = person.username ?: ""
                         ListItem(
-                            headlineContent = { Text(person.displayName.ifBlank { personUsername }) },
-                            supportingContent = { Text("@$personUsername") },
+                            headlineContent = { Text(person.displayName.ifBlank { personUsername }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            supportingContent = { Text("@$personUsername", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             modifier = Modifier.fillMaxWidth().clickable { selectedUser = person },
                             leadingContent = { FynxRemoteProfileAvatar(person.profilePhotoMediaId, person.displayName.ifBlank { personUsername }, Modifier.size(42.dp)) },
-                            trailingContent = { if (selectedUser?.username == person.username) Text("✓", color = MaterialTheme.colorScheme.primary) },
+                            trailingContent = { if (selectedUser?.username == person.username) Text("✓", color = MaterialTheme.colorScheme.primary, maxLines = 1) },
                             colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         )
                         HorizontalDivider()
