@@ -26,6 +26,7 @@ import { installMarketplaceMediaPrivacyGuard } from "./marketplaceMediaPrivacy.j
 import { installRequestResourceGuard } from "./requestResourceGuard.js";
 import { installApiAbuseGuard } from "./apiAbuseGuard.js";
 import { registerMarketplaceBatch2FinalHardening } from "./marketplaceBatch2FinalHardening.js";
+import { registerFynxAiRoutes } from "./fynxAiToolRegistry.js";
 
 installPresencePrivacyGuard();
 const originalCreateServer = http.createServer;
@@ -34,6 +35,7 @@ http.createServer = function fynxCreateServer(...args) {
   const app = args[0];
   if (app && typeof app.use === "function") {
     registerRealtimeAssistantRoutes({ app });
+    registerFynxAiRoutes({ app });
     setImmediate(() => {
       installSecurityHardening({ app });
       installRequestResourceGuard(app);
