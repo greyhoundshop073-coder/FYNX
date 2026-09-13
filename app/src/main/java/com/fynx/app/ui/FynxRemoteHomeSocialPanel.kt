@@ -116,6 +116,42 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
     }
 
+    fun runLike(id: String) {
+        if (id in interactionBusy) return
+        interactionBusy = interactionBusy + id
+        scope.launch {
+            FynxRemoteSocialClient.like(context, id).onSuccess { result ->
+                val (liked, count) = result
+                posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = liked, likeCount = count) else it }
+            }.onFailure { error = it.message ?: "Unable to update this like." }
+            interactionBusy = interactionBusy - id
+        }
+    }
+
+    fun runFollow(username: String, following: Boolean) {
+        val key = "follow:${username.removePrefix("@").trim().lowercase()}"
+        if (key in interactionBusy) return
+        interactionBusy = interactionBusy + key
+        scope.launch {
+            FynxRemoteSocialClient.follow(context, username, following).onSuccess { now ->
+                posts = posts.map { if (it.authorUsername.equals(username, true)) it.copy(followedByCurrentUser = now) else it }
+            }.onFailure { error = it.message ?: "Unable to update this follow." }
+            interactionBusy = interactionBusy - key
+        }
+    }
+
+    fun runDelete(id: String) {
+        if (id in interactionBusy) return
+        interactionBusy = interactionBusy + id
+        scope.launch {
+            FynxRemoteSocialClient.deletePost(context, id).onSuccess {
+                posts = posts.filterNot { it.id == id }
+                interactionStates = interactionStates - id
+            }.onFailure { error = it.message ?: "Unable to delete this post." }
+            interactionBusy = interactionBusy - id
+        }
+    }
+
     LaunchedEffect(Unit) { reload() }
 
     LazyColumn(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -129,12 +165,13 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         items(items = posts, key = { it.id }) { post ->
             val photoId = authorPhotos[post.authorUsername.removePrefix("@").trim().lowercase()]
             val state = interactionStates[post.id] ?: FynxRemoteSocialClient.SocialInteractionState(false, false, 0, 0)
-            RemotePostCard(post, currentUsername, photoId, state, post.id in interactionBusy,
+            val busy = post.id in interactionBusy || "follow:${post.authorUsername.removePrefix("@").trim().lowercase()}" in interactionBusy
+            RemotePostCard(post, currentUsername, photoId, state, busy,
                 onOpenProfile = { onOpenAuthorProfile(post.authorUsername.removePrefix("@").trim()) },
-                onLike = { id -> scope.launch { FynxRemoteSocialClient.like(context, id).onSuccess { result -> val (liked, count) = result; posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = liked, likeCount = count) else it } }.onFailure { error = it.message } } },
+                onLike = { id -> runLike(id) },
                 onComment = { commentsPost = post },
-                onFollow = { following -> scope.launch { FynxRemoteSocialClient.follow(context, post.authorUsername, following).onSuccess { now -> posts = posts.map { if (it.authorUsername.equals(post.authorUsername, true)) it.copy(followedByCurrentUser = now) else it } }.onFailure { error = it.message } } },
-                onDelete = { scope.launch { FynxRemoteSocialClient.deletePost(context, post.id).onSuccess { posts = posts.filterNot { it.id == post.id }; interactionStates = interactionStates - post.id }.onFailure { error = it.message } } },
+                onFollow = { following -> runFollow(post.authorUsername, following) },
+                onDelete = { runDelete(post.id) },
                 onSave = { id, saved -> runInteraction(id, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } },
                 onRepost = { id, reposted -> runInteraction(id, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } },
                 onShare = { scope.launch { FynxDiscoveryClient.recordEngagement(context, "SHARE", post.id) }; sharePost(context, post) }, onOpenMarketplace = onOpenMarketplace)
@@ -153,7 +190,7 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onOpenProfile, modifier = Modifier.size(50.dp)) { FynxRemoteProfileAvatar(profilePhotoMediaId, post.authorDisplayName.ifBlank { post.authorUsername }, Modifier.size(46.dp).clip(CircleShape)) }
             Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(post.authorDisplayName.ifBlank { post.authorUsername }, style = MaterialTheme.typography.titleSmall); Text("${post.authorUsername.removePrefix("@")} • ${relative(post.timestamp)}", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary) }
-            if (mine) IconButton(onClick = onDelete) { Icon(Icons.Default.MoreHoriz, "Post options") } else TextButton(onClick = { onFollow(post.followedByCurrentUser) }) { Text(if (post.followedByCurrentUser) "Following" else "Follow") }
+            if (mine) IconButton(onClick = onDelete, enabled = !interactionBusy) { Icon(Icons.Default.MoreHoriz, "Post options") } else TextButton(onClick = { onFollow(post.followedByCurrentUser) }, enabled = !interactionBusy) { Text(if (post.followedByCurrentUser) "Following" else "Follow") }
         }
         if (marketplaceAd) Text("MARKETPLACE", Modifier.padding(horizontal = 12.dp, vertical = 3.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
         if (displayText.isNotBlank()) Text(displayText, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), style = MaterialTheme.typography.bodyLarge)
