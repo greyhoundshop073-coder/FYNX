@@ -144,7 +144,7 @@ async function installHomeCommentBackend() {
       const limit = Math.min(Math.max(Number.isInteger(requestedLimit) ? requestedLimit : 50, 1), 100);
       const before = req.query?.before == null || req.query.before === '' ? null : Number(req.query.before);
       if (before !== null && (!Number.isSafeInteger(before) || before < 1)) return res.status(400).json({ error: 'invalid comment cursor' });
-      const cursorClause = before === null ? '' : ' AND c.id < $3';
+      const cursorClause = before === null ? '' : ' AND c.id < $4';
       const result = await pool.query(
         `SELECT c.id,c.post_id,c.parent_comment_id,c.text,EXTRACT(EPOCH FROM c.created_at)*1000 AS timestamp,
                 u.id AS author_id,u.username,u.display_name
@@ -153,7 +153,7 @@ async function installHomeCommentBackend() {
           WHERE c.post_id=$1
             AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$2))${cursorClause}
           ORDER BY c.id DESC
-          LIMIT $4`,
+          LIMIT $3`,
         before === null ? [postId, req.user.sub, limit + 1] : [postId, req.user.sub, limit + 1, before]
       );
       const rows = result.rows.slice(0, limit).reverse();
