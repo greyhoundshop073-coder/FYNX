@@ -182,13 +182,23 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(if (recording) "Recording voice Status" else "Voice Status", style = MaterialTheme.typography.titleMedium)
         Text(if (recording) formatStatusTime(elapsed) else if (hasVoice) "Voice ready" else "Up to 30 seconds")
-        if (recording) LinearProgressIndicator(progress = { (elapsed.toFloat() / FYNX_STATUS_MAX_VOICE_DURATION_MS).coerceIn(0f,1f) }, Modifier.fillMaxWidth())
+        if (recording) LinearProgressIndicator(progress = { (elapsed.toFloat() / FYNX_STATUS_MAX_VOICE_DURATION_MS).coerceIn(0f,1f) }, modifier = Modifier.fillMaxWidth())
         Button(onClick = if (recording) onStop else onRecord, modifier = Modifier.fillMaxWidth()) { Text(if (recording) "Stop recording" else if (hasVoice) "Record again" else "Record voice") }
     } }
 }
 
 @Composable private fun LocalStatusMediaPreview(uri: Uri, kind: String, modifier: Modifier) {
-    if (kind == "video") AndroidView(modifier = modifier, factory = { context -> VideoView(context).apply { setVideoURI(uri); setMediaController(android.widget.MediaController(context)); setOnPreparedListener { it.isLooping = true; start() } }, update = { it.setVideoURI(uri) })
+    if (kind == "video") AndroidView(
+        modifier = modifier,
+        factory = { context ->
+            VideoView(context).apply {
+                setVideoURI(uri)
+                setMediaController(android.widget.MediaController(context))
+                setOnPreparedListener { it.isLooping = true; start() }
+            }
+        },
+        update = { it.setVideoURI(uri) }
+    )
     else AndroidView(modifier = modifier, factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.CENTER_CROP; setImageURI(uri) } }, update = { it.setImageURI(uri) })
 }
 
