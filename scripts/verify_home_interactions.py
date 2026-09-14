@@ -198,17 +198,20 @@ require(realtime_bootstrap, 'import { installHomeCommentPrivacy } from "./homeCo
 require(realtime_bootstrap, "await installHomeCommentBackend();", "base Home comments installation")
 require(realtime_bootstrap, "await installHomeCommentPrivacy();", "Home comment privacy hardening")
 for needle in (
-    "if (!(await visibleSocialPost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });",
+    "if (!(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });",
     "b.blocker_id=$2 AND b.blocked_id=c.author_id",
     "b.blocker_id=c.author_id AND b.blocked_id=$2",
     "b.blocker_id=$3 AND b.blocked_id=c.author_id",
     "b.blocker_id=c.author_id AND b.blocked_id=$3",
     "SELECT c.id FROM social_post_comments c",
-    "const cursorClause = before === null ? '' : ' AND c.id < $3';",
+    "const cursorClause = before === null ? '' : ' AND c.id < $4';",
     "LIMIT $3`,",
     "ORDER BY c.id ASC LIMIT $4`,",
 ):
     require(realtime_bootstrap, needle, f"clean-startup Home comment privacy implementation {needle}")
+
+# The cursor contract is intentionally checked explicitly: $3 is LIMIT and $4 is the optional cursor.
+require(realtime_bootstrap, "before === null ? [postId, req.user.sub, limit + 1] : [postId, req.user.sub, limit + 1, before]", "Home comment cursor parameter binding")
 
 require(privacy_bootstrap, "fynxHomeCommentsPrivacyBatch", "Home comment privacy patch marker")
 
@@ -227,7 +230,7 @@ for needle in (
 
 # The backend is the authority for deleted/hidden/blocked post access; comments are independently block-filtered.
 for needle in (
-    'visibleSocialPost(postId, req.user.sub)',
+    'visiblePost(postId, req.user.sub)',
     'b.blocker_id=$2 AND b.blocked_id=c.author_id',
     'b.blocker_id=c.author_id AND b.blocked_id=$2',
 ):
