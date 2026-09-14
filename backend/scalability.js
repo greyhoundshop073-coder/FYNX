@@ -61,7 +61,7 @@ http.createServer = function fynxCreateServer(...args) {
       installSocialHardening(app);
       installPrivateCachePolicy(app);
       installMarketplaceMediaPrivacyGuard(app);
-      installPeopleResponseHardening(app, globalThis.__fynxPool || null);
+      installPeopleResponseHardening(app);
     });
   }
   server.keepAliveTimeout=65_000;
