@@ -153,7 +153,7 @@ async function installHomeCommentBackend() {
           WHERE c.post_id=$1
             AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$2))${cursorClause}
           ORDER BY c.id DESC
-          LIMIT $3`,
+          LIMIT $4`,
         before === null ? [postId, req.user.sub, limit + 1] : [postId, req.user.sub, limit + 1, before]
       );
       const rows = result.rows.slice(0, limit).reverse();
