@@ -7,6 +7,7 @@ sealed interface FynxDeepLinkDestination {
     data class Invite(val code: String?, val groupId: String? = null) : FynxDeepLinkDestination
     data class Profile(val username: String) : FynxDeepLinkDestination
     data class Chat(val username: String) : FynxDeepLinkDestination
+    data class Call(val username: String, val video: Boolean) : FynxDeepLinkDestination
     data class Group(val id: String) : FynxDeepLinkDestination
     data class Marketplace(val listingId: String?) : FynxDeepLinkDestination
     data object Stories : FynxDeepLinkDestination
@@ -19,6 +20,7 @@ object FynxDeepLinkParser {
     private const val HOME_PATH = "/home"
     private const val PROFILE_PATH = "/profile"
     private const val CHAT_PATH = "/chat"
+    private const val CALL_PATH = "/call"
     private const val GROUP_PATH = "/group"
     private const val MARKETPLACE_PATH = "/marketplace"
     private const val STORIES_PATH = "/stories"
@@ -34,6 +36,7 @@ object FynxDeepLinkParser {
     fun profileAppLink(username:String):String=routeAppLink("profile",username)
     fun chatWebLink(username:String):String=routeWebLink(CHAT_PATH,username)
     fun chatAppLink(username:String):String=routeAppLink("chat",username)
+    fun callAppLink(username:String, video:Boolean=false):String=Uri.Builder().scheme("fynx").authority("call").appendPath(username.trim().removePrefix("@")).appendQueryParameter("video",video.toString()).build().toString()
     fun groupWebLink(id:String):String=routeWebLink(GROUP_PATH,id)
     fun groupAppLink(id:String):String=routeAppLink("group",id)
     fun marketplaceWebLink(listingId:String?=null):String=routeWebLink(MARKETPLACE_PATH,listingId)
@@ -57,12 +60,14 @@ object FynxDeepLinkParser {
         val host=uri.host.orEmpty().lowercase()
         val queryCode=uri.getQueryParameter("code")?.trim()?.takeIf{it.isNotBlank()}
         val queryGroupId=uri.getQueryParameter("groupId")?.trim()?.takeIf{it.isNotBlank()}
+        val queryVideo=uri.getQueryParameter("video")?.equals("true",true)==true
         if(isFynxScheme)return when(host){
             "home"->if(normalizedPath.isEmpty())FynxDeepLinkDestination.Home else null
             "stories"->if(normalizedPath.isEmpty())FynxDeepLinkDestination.Stories else null
             "money"->if(normalizedPath.isEmpty())FynxDeepLinkDestination.Money else null
             "profile"->if(normalizedPath.size==1)value?.let{FynxDeepLinkDestination.Profile(it)}else null
             "chat"->if(normalizedPath.size==1)value?.let{FynxDeepLinkDestination.Chat(it)}else null
+            "call"->if(normalizedPath.size==1)value?.let{FynxDeepLinkDestination.Call(it,queryVideo)}else null
             "group"->when{
                 normalizedPath.size==1->value?.let{FynxDeepLinkDestination.Group(it)}
                 normalizedPath.size==3&&normalizedPath[1].equals("invite",true)->cleanIdentifier(normalizedPath[2])?.let{FynxDeepLinkDestination.Invite("${value.orEmpty()}:$it",value)}
@@ -78,6 +83,7 @@ object FynxDeepLinkParser {
             "invite"->if(normalizedPath.size==1)FynxDeepLinkDestination.Invite(queryCode?:value,queryGroupId)else null
             "profile"->if(normalizedPath.size==2)value?.let{FynxDeepLinkDestination.Profile(it)}else null
             "chat"->if(normalizedPath.size==2)value?.let{FynxDeepLinkDestination.Chat(it)}else null
+            "call"->if(normalizedPath.size==2)value?.let{FynxDeepLinkDestination.Call(it,queryVideo)}else null
             "group"->if(normalizedPath.size==2)value?.let{FynxDeepLinkDestination.Group(it)}else null
             "marketplace"->if(normalizedPath.size<=2)FynxDeepLinkDestination.Marketplace(value)else null
             "stories"->if(normalizedPath.size==1)FynxDeepLinkDestination.Stories else null
