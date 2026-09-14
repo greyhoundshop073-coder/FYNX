@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 def read(path): return (ROOT / path).read_text(encoding='utf-8')
+
+def contains_call(source, function, argument):
+    pattern = rf'{re.escape(function)}\s*\(\s*it\s*,\s*"{re.escape(argument)}"'
+    return re.search(pattern, source) is not None
 
 checks=[]
 def require(label, condition): checks.append((label, bool(condition)))
@@ -26,8 +31,8 @@ require('voice recording','MediaRecorder' in composer and 'FYNX_STATUS_MAX_VOICE
 require('friends-only wording','Friends only' in composer and 'Only me' not in composer)
 require('single backend Status hub','FynxStatusTimelinePanel()' in hub and 'StoriesPanel()' not in hub)
 require('legacy Stories wrapper','FynxStatusTimelinePanel()' in stories and 'SharedPreferences' not in stories)
-require('status viewer image','FynxRemoteMedia(it, "image"' in timeline)
-require('status viewer video','FynxRemoteMedia(it, "video"' in timeline)
+require('status viewer image',contains_call(timeline, 'FynxRemoteMedia', 'image'))
+require('status viewer video',contains_call(timeline, 'FynxRemoteMedia', 'video'))
 require('status viewer voice','FynxRemoteAudio(it)' in timeline)
 require('owner delete UI','FynxStatusClient.delete(context, status.id)' in timeline)
 require('24 hour viewer expiry','FYNX_STATUS_EXPIRY_MS' in timeline)
