@@ -1,6 +1,8 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,14 +38,19 @@ fun FynxChatPersonalizationDialog(onDismiss: () -> Unit) {
     var nightMode by remember { mutableStateOf(FynxPreferencesStore.loadNightMode(context)) }
     var stickerAnimation by remember { mutableStateOf(FynxPreferencesStore.loadStickerAnimation(context)) }
     var emojiSize by remember { mutableStateOf(FynxPreferencesStore.loadEmojiSize(context)) }
-    var language by remember { mutableStateOf(FynxPreferencesStore.loadLanguage(context)) }
     var section by remember { mutableStateOf("Appearance") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Chat & personalization") },
         text = {
-            Column(Modifier.fillMaxWidth().heightIn(max = 560.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 560.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 TabRow(selectedTabIndex = if (section == "Appearance") 0 else 1) {
                     Tab(selected = section == "Appearance", onClick = { section = "Appearance" }, text = { Text("Appearance") })
                     Tab(selected = section == "Chat", onClick = { section = "Chat" }, text = { Text("Chat") })
@@ -86,13 +93,12 @@ fun FynxChatPersonalizationDialog(onDismiss: () -> Unit) {
                     }
                     HorizontalDivider()
                     Text("Language", style = MaterialTheme.typography.titleMedium)
-                    val languages = listOf("Device default", "English", "French", "Arabic", "Portuguese", "Spanish", "German", "Italian", "Dutch", "Turkish", "Hindi", "Hausa", "Yoruba", "Igbo", "Swahili", "Chinese", "Japanese", "Korean", "Russian")
-                    languages.forEach { option ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(option)
-                            RadioButton(selected = language == option, onClick = { language = option; FynxPreferencesStore.saveLanguage(context, option) })
-                        }
-                    }
+                    Text("English", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Additional languages will appear here when full FYNX translations are available.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         },
