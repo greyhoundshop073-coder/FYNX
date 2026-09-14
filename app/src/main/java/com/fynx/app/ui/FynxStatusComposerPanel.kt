@@ -20,6 +20,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -27,6 +30,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.UUID
+
+private val STATUS_BACKGROUNDS = listOf(0xFF111111, 0xFF4527A0, 0xFF6A1B9A, 0xFF1565C0, 0xFF00695C, 0xFF2E7D32, 0xFFEF6C00, 0xFFC62828, 0xFFAD1457, 0xFF37474F)
+private val STATUS_FOREGROUNDS = listOf(0xFFFFFFFF, 0xFF000000, 0xFFFFF3E0, 0xFFE3F2FD, 0xFFE8F5E9)
 
 @Composable
 fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
@@ -40,6 +46,8 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
     var mediaUri by remember { mutableStateOf<Uri?>(null) }
     var background by remember { mutableLongStateOf(0xFF111111) }
     var foreground by remember { mutableLongStateOf(0xFFFFFFFF) }
+    var font by remember { mutableStateOf(FynxStatusTextFont.CLASSIC) }
+    var alignment by remember { mutableIntStateOf(1) }
     var audience by remember { mutableStateOf(FynxStatusAudience.EVERYONE) }
     var preview by remember { mutableStateOf(false) }
     var publishing by remember { mutableStateOf(false) }
@@ -88,7 +96,7 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
                     id = UUID.randomUUID().toString(), ownerUsername = username, ownerDisplayName = displayName,
                     type = type, text = text.trim().ifBlank { null }, createdAtMillis = now,
                     expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS,
-                    textStyle = FynxStatusTextStyle(background, foreground),
+                    textStyle = FynxStatusTextStyle(background, foreground, font, alignment),
                     privateStatus = audience == FynxStatusAudience.FRIENDS,
                     voiceDurationMs = if (type == FynxStatusType.VOICE) elapsed else 0L,
                     audience = audience
@@ -101,11 +109,14 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
     }
 
     if (preview) {
-        FynxStatusPreview(type, mediaUri, text, background, foreground, elapsed, { preview = false }, ::publish)
+        FynxStatusPreview(type, mediaUri, text, background, foreground, font, alignment, elapsed, { preview = false }, ::publish)
         return
     }
 
-    Column(Modifier.fillMaxSize().padding(14.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(
+        Modifier.fillMaxSize().padding(14.dp).navigationBarsPadding().imePadding(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Create Status", style = MaterialTheme.typography.headlineSmall)
@@ -118,16 +129,30 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
         }
         when (type) {
             FynxStatusType.TEXT -> {
-                StatusTextCanvas(text, background, foreground, Modifier.fillMaxWidth().height(300.dp))
+                StatusTextCanvas(text, background, foreground, font, alignment, Modifier.fillMaxWidth().height(300.dp))
                 OutlinedTextField(value = text, onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 6, placeholder = { Text("Write a Status…") }, supportingText = { Text("${text.length}/$FYNX_STATUS_MAX_TEXT_LENGTH") })
                 Text("Background", style = MaterialTheme.typography.labelLarge)
-                ColorChoices(listOf(0xFF111111,0xFF6A1B9A,0xFF1565C0,0xFF00695C,0xFF2E7D32,0xFFEF6C00,0xFFC62828,0xFFAD1457), background) { background = it }
+                ColorChoices(STATUS_BACKGROUNDS, background) { background = it }
+                Text("Text color", style = MaterialTheme.typography.labelLarge)
+                ColorChoices(STATUS_FOREGROUNDS, foreground) { foreground = it }
+                Text("Text style", style = MaterialTheme.typography.labelLarge)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(FynxStatusTextFont.values().toList()) { option -> FilterChip(font == option, { font = option }, label = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() }) }) }
+                }
+                Text("Alignment", style = MaterialTheme.typography.labelLarge)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0 to "Left", 1 to "Center", 2 to "Right").forEach { (value, label) -> item { FilterChip(alignment == value, { alignment = value }, label = { Text(label) }) } }
+                }
             }
             FynxStatusType.PHOTO -> MediaPickerCard("Photo", mediaUri) { pickImage.launch(arrayOf("image/*")) }
             FynxStatusType.VIDEO -> MediaPickerCard("Video", mediaUri) { pickVideo.launch(arrayOf("video/*")) }
-            FynxStatusType.VOICE -> VoiceRecorderCard(recording, elapsed, mediaUri != null, {
-                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startStatusRecording(context) { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true } else micPermission.launch(Manifest.permission.RECORD_AUDIO)
-            }, { stopStatusRecording(recorder, recordingFile) { uri -> mediaUri = uri; recorder = null; recordingFile = null; recording = false; type = FynxStatusType.VOICE } })
+            FynxStatusType.VOICE -> {
+                VoiceRecorderCard(recording, elapsed, mediaUri != null, {
+                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startStatusRecording(context) { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true } else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                }, { stopStatusRecording(recorder, recordingFile) { uri -> mediaUri = uri; recorder = null; recordingFile = null; recording = false; type = FynxStatusType.VOICE } })
+                Text("Voice background", style = MaterialTheme.typography.labelLarge)
+                ColorChoices(STATUS_BACKGROUNDS, background) { background = it }
+            }
         }
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -163,26 +188,34 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
 }
 
 @Composable private fun LocalStatusMediaPreview(uri: Uri, kind: String, modifier: Modifier) {
-    if (kind == "video") AndroidView(modifier = modifier, factory = { context -> VideoView(context).apply { setVideoURI(uri); setMediaController(android.widget.MediaController(context)); setOnPreparedListener { it.isLooping = true; start() } } }, update = { it.setVideoURI(uri) })
+    if (kind == "video") AndroidView(modifier = modifier, factory = { context -> VideoView(context).apply { setVideoURI(uri); setMediaController(android.widget.MediaController(context)); setOnPreparedListener { it.isLooping = true; start() } }, update = { it.setVideoURI(uri) })
     else AndroidView(modifier = modifier, factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.CENTER_CROP; setImageURI(uri) } }, update = { it.setImageURI(uri) })
 }
 
-@Composable private fun FynxStatusPreview(type: FynxStatusType, uri: Uri?, text: String, background: Long, foreground: Long, durationMs: Long, onBack: () -> Unit, onPublish: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+@Composable private fun FynxStatusPreview(type: FynxStatusType, uri: Uri?, text: String, background: Long, foreground: Long, font: FynxStatusTextFont, alignment: Int, durationMs: Long, onBack: () -> Unit, onPublish: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(14.dp).navigationBarsPadding().imePadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) { Text("Status preview", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f)); TextButton(onClick = onBack) { Text("Edit") } }
         Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
             when (type) {
-                FynxStatusType.TEXT -> StatusTextCanvas(text, background, foreground, Modifier.fillMaxSize())
+                FynxStatusType.TEXT -> StatusTextCanvas(text, background, foreground, font, alignment, Modifier.fillMaxSize())
                 FynxStatusType.PHOTO -> uri?.let { LocalStatusMediaPreview(it, "image", Modifier.fillMaxWidth().heightIn(min=320.dp, max=620.dp)) }
                 FynxStatusType.VIDEO -> uri?.let { LocalStatusMediaPreview(it, "video", Modifier.fillMaxWidth().heightIn(min=320.dp, max=620.dp)) }
-                FynxStatusType.VOICE -> Card(Modifier.fillMaxWidth()) { Text("Voice Status • ${formatStatusTime(durationMs)}", Modifier.padding(20.dp)) }
+                FynxStatusType.VOICE -> Box(Modifier.fillMaxWidth().height(220.dp).background(Color(background), RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) { Text("Voice Status • ${formatStatusTime(durationMs)}", color = Color(foreground), fontWeight = FontWeight.Bold) }
             }
         }
         Button(onClick = onPublish, modifier = Modifier.fillMaxWidth()) { Text("Share Status") }
     }
 }
 
-@Composable private fun StatusTextCanvas(text: String, background: Long, foreground: Long, modifier: Modifier) { Box(modifier.background(Color(background), RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) { Text(text.ifBlank { "Your Status" }, color = Color(foreground), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(28.dp)) } }
+@Composable private fun StatusTextCanvas(text: String, background: Long, foreground: Long, font: FynxStatusTextFont, alignment: Int, modifier: Modifier) {
+    val family = when (font) { FynxStatusTextFont.SERIF -> FontFamily.Serif; FynxStatusTextFont.TYPEWRITER -> FontFamily.Monospace; else -> FontFamily.SansSerif }
+    val weight = if (font == FynxStatusTextFont.BOLD) FontWeight.Bold else FontWeight.Normal
+    val textAlign = when (alignment) { 0 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
+    Box(modifier.background(Color(background), RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
+        Text(text.ifBlank { "Your Status" }, color = Color(foreground), fontFamily = family, fontWeight = weight, textAlign = textAlign, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.fillMaxWidth().padding(28.dp))
+    }
+}
+
 @Composable private fun ColorChoices(colors: List<Long>, selected: Long, onSelected: (Long) -> Unit) { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(colors) { color -> FilterChip(selected == color, { onSelected(color) }, label = { Text("●", color = Color(color)) }) } } }
 private fun startStatusRecording(context: Context, onStarted: (MediaRecorder, File) -> Unit) { val file = File(context.cacheDir, "fynx_status_voice_${System.currentTimeMillis()}.m4a"); runCatching { val r = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder(); r.apply { setAudioSource(MediaRecorder.AudioSource.MIC); setOutputFormat(MediaRecorder.OutputFormat.MPEG_4); setAudioEncoder(MediaRecorder.AudioEncoder.AAC); setOutputFile(file.absolutePath); prepare(); start() }; onStarted(r, file) } }
 private fun stopStatusRecording(recorder: MediaRecorder?, file: File?, onStopped: (Uri?) -> Unit) { runCatching { recorder?.stop() }; recorder?.release(); onStopped(file?.takeIf { it.exists() && it.length() > 0L }?.let(Uri::fromFile)) }
