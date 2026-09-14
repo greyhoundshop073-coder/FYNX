@@ -19,7 +19,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -160,12 +162,21 @@ private fun FynxStatusStoryViewer(
                     when (status.type) {
                         FynxStatusType.TEXT -> StatusViewerText(status)
                         FynxStatusType.PHOTO -> status.contentUri?.let { FynxRemoteMedia(it, "image", Modifier.fillMaxSize()) }
-                        FynxStatusType.VIDEO -> status.contentUri?.let { FynxRemoteMedia(it, "video", Modifier.fillMaxSize()) }
+                        FynxStatusType.VIDEO -> status.contentUri?.let {
+                            FynxRemoteMedia(
+                                it,
+                                "video",
+                                Modifier.fillMaxSize(),
+                                loopVideo = false,
+                                onVideoCompleted = { if (index < statuses.lastIndex) index++ else onDismiss() }
+                            )
+                        }
                         FynxStatusType.VOICE -> status.contentUri?.let { FynxRemoteAudio(it) }
                     }
                     Row(Modifier.fillMaxSize()) {
-                        Box(Modifier.weight(0.35f).fillMaxHeight().clickable(enabled = index > 0) { if (index > 0) index-- })
-                        Box(Modifier.weight(0.65f).fillMaxHeight().clickable(enabled = index < statuses.lastIndex) { if (index < statuses.lastIndex) index++ })
+                        Box(Modifier.weight(0.25f).fillMaxHeight().clickable(enabled = index > 0) { if (index > 0) index-- })
+                        Spacer(Modifier.weight(0.50f).fillMaxHeight())
+                        Box(Modifier.weight(0.25f).fillMaxHeight().clickable(enabled = index < statuses.lastIndex) { if (index < statuses.lastIndex) index++ })
                     }
                 }
 
@@ -184,8 +195,27 @@ private fun FynxStatusStoryViewer(
 
 @Composable
 private fun StatusViewerText(status: FynxStatus) {
+    val family = when (status.textStyle.font) {
+        FynxStatusTextFont.SERIF -> FontFamily.Serif
+        FynxStatusTextFont.TYPEWRITER -> FontFamily.Monospace
+        else -> FontFamily.SansSerif
+    }
+    val weight = if (status.textStyle.font == FynxStatusTextFont.BOLD) FontWeight.Bold else FontWeight.Normal
+    val textAlign = when (status.textStyle.alignment) {
+        0 -> TextAlign.Start
+        2 -> TextAlign.End
+        else -> TextAlign.Center
+    }
     Box(Modifier.fillMaxSize().background(Color(status.textStyle.backgroundColor)), contentAlignment = Alignment.Center) {
-        Text(status.text.orEmpty(), color = Color(status.textStyle.foregroundColor), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(30.dp))
+        Text(
+            status.text.orEmpty(),
+            color = Color(status.textStyle.foregroundColor),
+            fontFamily = family,
+            fontWeight = weight,
+            textAlign = textAlign,
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.fillMaxWidth().padding(30.dp)
+        )
     }
 }
 
