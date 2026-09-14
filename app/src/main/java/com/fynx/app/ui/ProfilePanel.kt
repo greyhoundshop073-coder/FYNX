@@ -91,23 +91,17 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                 }
                 val removeRemotePhoto = updatedPhoto == null && (originalPhoto != null || remotePhotoId != null)
                 if (syncError == null) {
-                    FynxProfileRemoteClient.update(
-                        context,
-                        updatedProfile.displayName,
-                        updatedProfile.username,
-                        updatedProfile.bio,
-                        profilePhotoMediaId = photoId,
-                        removeProfilePhoto = removeRemotePhoto
-                    ).onSuccess { remote ->
-                        profile = updatedProfile
-                        description = updatedDescription
-                        photo = updatedPhoto
-                        remotePhotoId = remote.profilePhotoMediaId
-                        FynxPreferencesStore.saveProfile(context, updatedProfile)
-                        FynxPreferencesStore.saveDescription(context, updatedDescription)
-                        FynxPreferencesStore.saveProfilePhoto(context, updatedPhoto)
-                        editing = false
-                    }.onFailure { syncError = it.message ?: "Profile update failed." }
+                    FynxProfileRemoteClient.update(context, updatedProfile.displayName, updatedProfile.username, updatedProfile.bio, profilePhotoMediaId = photoId, removeProfilePhoto = removeRemotePhoto)
+                        .onSuccess { remote ->
+                            profile = updatedProfile
+                            description = updatedDescription
+                            photo = updatedPhoto
+                            remotePhotoId = remote.profilePhotoMediaId
+                            FynxPreferencesStore.saveProfile(context, updatedProfile)
+                            FynxPreferencesStore.saveDescription(context, updatedDescription)
+                            FynxPreferencesStore.saveProfilePhoto(context, updatedPhoto)
+                            editing = false
+                        }.onFailure { syncError = it.message ?: "Profile update failed." }
                 }
                 syncing = false
             }
@@ -116,14 +110,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
     }
 
     if (settingsOpen) {
-        SettingsPanel(
-            settings = settings,
-            onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) },
-            onBack = { settingsOpen = false; onSettingsClosed() },
-            onAppearanceChanged = onAppearanceChanged,
-            onAccentChanged = onAccentChanged,
-            onOpenPrivacy = onOpenPrivacy
-        )
+        SettingsPanel(settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy)
         return
     }
 
@@ -134,11 +121,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(surface), border = BorderStroke(1.dp, outline)) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 20.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        if (remotePhotoId != null) {
-                            FynxRemoteProfileAvatar(remotePhotoId, profile.displayName, Modifier.size(92.dp).clip(CircleShape))
-                        } else {
-                            FynxProfileImage(profile.displayName, photo, Modifier.size(92.dp).clip(CircleShape))
-                        }
+                        if (remotePhotoId != null) FynxRemoteProfileAvatar(remotePhotoId, profile.displayName, Modifier.size(92.dp).clip(CircleShape)) else FynxProfileImage(profile.displayName, photo, Modifier.size(92.dp).clip(CircleShape))
                         Spacer(Modifier.width(18.dp))
                         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly) {
                             ProfileStat("Posts", formatProfileCount(postCount), Modifier.weight(1f))
@@ -190,8 +173,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
 
 private fun formatProfileCount(value: Int): String = when { value >= 1_000_000 -> String.format("%.1fM", value / 1_000_000f).replace(".0M", "M"); value >= 1_000 -> String.format("%.1fK", value / 1_000f).replace(".0K", "K"); else -> value.toString() }
 
-@Composable private fun ProfileInfoRow(title: String, value: String) { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f)); Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-}
+@Composable private fun ProfileInfoRow(title: String, value: String) { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f)); Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) } }
 
 @Composable private fun EditProfilePanel(profile: FynxProfile, description: String, photoUri: String?, syncing: Boolean, syncError: String?, onPhotoChanged: (String?) -> Unit, onSave: (FynxProfile, String, String?) -> Unit, onCancel: () -> Unit) {
     var displayName by remember(profile) { mutableStateOf(profile.displayName) }
@@ -217,13 +199,9 @@ fun SettingsPanel(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Un
     val context = LocalContext.current
     var appearance by remember { mutableStateOf(FynxPreferencesStore.loadAppearance(context)) }
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
-    var language by remember { mutableStateOf(FynxPreferencesStore.loadLanguage(context)) }
     var showAppearance by remember { mutableStateOf(false) }
     var showColors by remember { mutableStateOf(false) }
-    var showLanguage by remember { mutableStateOf(false) }
-    var showAssets by remember { mutableStateOf(false) }
     var showChatPersonalization by remember { mutableStateOf(false) }
-    val assetPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> if (uri != null) FynxPreferencesStore.saveAsset(context, uri.toString()) }
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onBack) { Text("‹ Back") }; Spacer(Modifier.width(4.dp)); Text("Settings & privacy", style = MaterialTheme.typography.titleLarge) }
         HorizontalDivider()
@@ -232,21 +210,15 @@ fun SettingsPanel(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Un
             item { SettingsActionCard("Privacy & Safety", "Profile, online, posts, Status and photo visibility") { onOpenPrivacy() } }
             item { SettingsActionCard("Read receipts", if (settings.readReceipts) "On • managed in Chat settings" else "Off • managed in Chat settings") { showChatPersonalization = true } }
             item { SettingsActionCard("Story replies", if (settings.storyReplies) "On • managed in Privacy & Safety" else "Off • managed in Privacy & Safety") { onOpenPrivacy() } }
-            item { SettingsSectionTitle("Notifications") }
-            item { SettingsActionCard("FYNX notifications", if (settings.notifications) "Enabled on this device" else "Disabled on this device") { onSettingsChange(settings.copy(notifications = !settings.notifications)) } }
             item { SettingsSectionTitle("Look & feel") }
             item { SettingsActionCard("Appearance", appearance) { showAppearance = true } }
             item { SettingsActionCard("Colors & accent", accent.name) { showColors = true } }
-            item { SettingsActionCard("Language", language) { showLanguage = true } }
             item { SettingsSectionTitle("Chats & media") }
             item { SettingsActionCard("Chat & personalization", "Wallpapers, night mode, chat list, stickers and emoji") { showChatPersonalization = true } }
-            item { SettingsActionCard("Assets & media", FynxPreferencesStore.loadAsset(context)?.let { "1 selected asset" } ?: "Choose a device asset") { showAssets = true } }
         }
     }
     if (showAppearance) AlertDialog(onDismissRequest = { showAppearance = false }, title = { Text("Appearance") }, text = { Column { listOf("System", "Light", "Dark", "Black AMOLED").forEach { option -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = appearance == option, onClick = { appearance = option; FynxPreferencesStore.saveAppearance(context, option); onAppearanceChanged(option) }); Text(option) } } } }, confirmButton = { TextButton(onClick = { showAppearance = false }) { Text("Done") } })
     if (showColors) AlertDialog(onDismissRequest = { showColors = false }, title = { Text("FYNX colors") }, text = { Column { FynxAccent.values().forEach { option -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = accent == option, onClick = { accent = option; FynxPreferencesStore.saveAccent(context, option); onAccentChanged(option) }); Text(option.name) } } } }, confirmButton = { TextButton(onClick = { showColors = false }) { Text("Done") } })
-    if (showLanguage) AlertDialog(onDismissRequest = { showLanguage = false }, title = { Text("Language") }, text = { Column { listOf("Device default", "English", "French", "Arabic", "Portuguese", "Spanish", "German", "Italian", "Dutch", "Turkish", "Hindi", "Hausa", "Yoruba", "Igbo", "Swahili", "Chinese", "Japanese", "Korean", "Russian").forEach { option -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { RadioButton(selected = language == option, onClick = { language = option; FynxPreferencesStore.saveLanguage(context, option) }); Text(option) } } } }, confirmButton = { TextButton(onClick = { showLanguage = false }) { Text("Done") } })
-    if (showAssets) AlertDialog(onDismissRequest = { showAssets = false }, title = { Text("Assets & media") }, text = { Text("Choose a personal image asset for FYNX customization.") }, confirmButton = { TextButton(onClick = { assetPicker.launch("image/*") }) { Text("Choose image") } }, dismissButton = { TextButton(onClick = { showAssets = false }) { Text("Done") } })
     if (showChatPersonalization) FynxChatPersonalizationDialog { showChatPersonalization = false }
 }
 
