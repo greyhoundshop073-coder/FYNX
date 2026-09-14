@@ -69,6 +69,17 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     if (openChat != null) FynxChatStore.savePreview(context, openChat!!)
                 }
             }
+            is FynxDeepLinkDestination.Call -> {
+                val normalized = destination.username.removePrefix("@").trim()
+                if (normalized.isNotBlank()) {
+                    callTarget = "@${normalized.lowercase()}"
+                    callVideo = destination.video
+                    openChat = null
+                    openGroup = null
+                    profileUser = null
+                    selected = "Calls"
+                }
+            }
             is FynxDeepLinkDestination.Group -> openGroup = destination.id
             is FynxDeepLinkDestination.Marketplace -> selected = "Marketplace"
             FynxDeepLinkDestination.Stories -> selected = "Stories"
