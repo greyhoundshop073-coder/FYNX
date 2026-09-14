@@ -29,22 +29,27 @@ export function installPeopleResponseHardening(app) {
         const requests = Array.isArray(payload?.requests) ? payload.requests : [];
         const rows = [...users, ...friends, ...requests];
         const ids = [...new Set(rows.map((row) => String(row?.id ?? row?.user_id ?? "")).filter((id) => /^\d+$/.test(id)))];
+        const sanitize = (row, photos) => {
+          const safeRow = { ...row };
+          delete safeRow.phone;
+          return {
+            ...safeRow,
+            profile_photo_media_id: photos.has(String(row?.id ?? row?.user_id))
+              ? photos.get(String(row?.id ?? row?.user_id))
+              : row?.profile_photo_media_id ?? null
+          };
+        };
+        let photos = new Map();
         if (ids.length) {
           const result = await pool.query(
             "SELECT id, profile_photo_media_id FROM users WHERE id = ANY($1::bigint[])",
             [ids]
           );
-          const photos = new Map(result.rows.map((row) => [String(row.id), row.profile_photo_media_id == null ? null : String(row.profile_photo_media_id)]));
-          const enrich = (row) => ({
-            ...row,
-            profile_photo_media_id: photos.has(String(row?.id ?? row?.user_id))
-              ? photos.get(String(row?.id ?? row?.user_id))
-              : row?.profile_photo_media_id ?? null
-          });
-          if (users.length) payload.users = users.map(enrich);
-          if (friends.length) payload.friends = friends.map(enrich);
-          if (requests.length) payload.requests = requests.map(enrich);
+          photos = new Map(result.rows.map((row) => [String(row.id), row.profile_photo_media_id == null ? null : String(row.profile_photo_media_id)]));
         }
+        if (users.length) payload.users = users.map((row) => sanitize(row, photos));
+        if (friends.length) payload.friends = friends.map((row) => sanitize(row, photos));
+        if (requests.length) payload.requests = requests.map((row) => sanitize(row, photos));
       } catch (error) {
         console.error("people response hardening", error);
       }
