@@ -1,4 +1,20 @@
-export function installPeopleResponseHardening(app, pool) {
+import pg from "pg";
+
+const { Pool } = pg;
+const DATABASE_URL = process.env.DATABASE_URL || "";
+const pool = DATABASE_URL ? new Pool({
+  connectionString: DATABASE_URL,
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  max: 2,
+  min: 0,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
+  statement_timeout: 10_000,
+  query_timeout: 12_000,
+  keepAlive: true
+}) : null;
+
+export function installPeopleResponseHardening(app) {
   if (!app?._router?.stack || !pool) return;
   if (app._router.stack.some((layer) => layer.fynxPeopleResponseHardening)) return;
 
@@ -21,7 +37,9 @@ export function installPeopleResponseHardening(app, pool) {
           const photos = new Map(result.rows.map((row) => [String(row.id), row.profile_photo_media_id == null ? null : String(row.profile_photo_media_id)]));
           const enrich = (row) => ({
             ...row,
-            profile_photo_media_id: photos.has(String(row?.id ?? row?.user_id)) ? photos.get(String(row?.id ?? row?.user_id)) : row?.profile_photo_media_id ?? null
+            profile_photo_media_id: photos.has(String(row?.id ?? row?.user_id))
+              ? photos.get(String(row?.id ?? row?.user_id))
+              : row?.profile_photo_media_id ?? null
           });
           if (users.length) payload.users = users.map(enrich);
           if (friends.length) payload.friends = friends.map(enrich);
