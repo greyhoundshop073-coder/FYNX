@@ -351,7 +351,17 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             IconButton(onClick = { replyToId = message.id; menuMessageId = null }) { Icon(Icons.Default.Reply, "Reply") }
                             if (message.fromMe && message.voiceUri == null && message.text.isNotBlank()) {
                                 IconButton(onClick = { editingId = message.id; text = message.text; menuMessageId = null }) { Icon(Icons.Default.Edit, "Edit") }
-                                IconButton(onClick = { messages = messages.filterNot { it.id == message.id }; menuMessageId = null }) { Icon(Icons.Default.Delete, "Delete") }
+                                IconButton(onClick = {
+                                    menuMessageId = null
+                                    scope.launch {
+                                        sending = true
+                                        networkError = null
+                                        FynxProductionMessaging.deleteMessage(context, message.id)
+                                            .onSuccess { messages = messages.filterNot { it.id == message.id } }
+                                            .onFailure { networkError = it.message ?: "Message could not be deleted" }
+                                        sending = false
+                                    }
+                                }, enabled = !sending) { Icon(Icons.Default.Delete, "Delete") }
                             }
                         }
                     }
@@ -394,8 +404,26 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             val value = text.trim()
                             if (value.isNotEmpty() || attachment != null) {
                                 if (editingId != null) {
-                                    messages = messages.map { if (it.id == editingId) it.copy(text = value, edited = true) else it }
-                                    text = ""; editingId = null; replyToId = null
+                                    val targetId = editingId
+                                    if (targetId != null && value.isNotBlank()) {
+                                        sending = true
+                                        networkError = null
+                                        scope.launch {
+                                            FynxProductionMessaging.editMessage(context, targetId, value)
+                                                .onSuccess { remote ->
+                                                    currentUserId?.let { myId ->
+                                                        messages = messages.map { existing ->
+                                                            if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId).let { updated ->
+                                                                if (updated.fromMe) updated else updated.copy(senderAvatarUri = chat.avatarUri)
+                                                            } else existing
+                                                        }
+                                                    }
+                                                    text = ""; editingId = null; replyToId = null
+                                                }
+                                                .onFailure { networkError = it.message ?: "Message could not be edited" }
+                                            sending = false
+                                        }
+                                    }
                                 } else {
                                     val recipient = recipientUserId
                                     if (recipient == null) networkError = "Unable to find this FYNX user."
