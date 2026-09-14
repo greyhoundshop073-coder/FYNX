@@ -46,7 +46,9 @@ check("profile to chat and call navigation exists", "ConversationPanel" in app a
 check("calls panel has permission recovery and realtime events", "RequestMultiplePermissions" in calls and "realtimeClient.connect()" in calls and '"invite"' in calls)
 check("calls panel cleans media on terminal paths", "mediaEngine.disconnect()" in calls and "FynxCallsStore.updateStatus" in calls)
 check("incoming call permission recovery completes acceptance", "pendingIncomingAccept" in calls and "sendCallAccept" in calls and "permissionLauncher.launch(required)" in calls)
-check("incoming calls have a bounded ringing lifecycle", "delay(60_000L)" in calls and '"Missed"' in calls and '"RINGING"' in calls)
+# The production panel represents the state with the Kotlin enum rather than a quoted string.
+# Match the actual state symbol so harmless formatting changes do not create a false RED.
+check("incoming calls have a bounded ringing lifecycle", "delay(60_000L)" in calls and '"Missed"' in calls and re.search(r"FynxCallState\.RINGING|\.RINGING", calls) is not None)
 check("call controls remain connected to the media engine", all(x in calls for x in ["setMicrophoneEnabled", "setCameraEnabled", "switchCamera", "setSpeakerEnabled"]))
 
 check("server notification client delegates to notification API", "object FynxNotificationRemoteClient" in notifications and re.search(r"\bfun\s+load\s*\(", notifications) and "FynxBackendClient.get" in notifications and "/api/notifications" in notifications and re.search(r"\bfun\s+markRead\s*\(", notifications) and "FynxBackendClient.postJson" in notifications and "/read" in notifications)
