@@ -114,7 +114,8 @@ object FynxNotificationFoundation {
         contentIntent: PendingIntent? = null
     ) {
         createChannels(context)
-        val type = typeForChannel(channelId)
+        val effectiveChannelId = if (channelId == MESSAGES_CHANNEL && title.startsWith("Incoming ")) CALLS_CHANNEL else channelId
+        val type = typeForChannel(effectiveChannelId)
         val preferences = FynxNotificationPreferencesClient.cached(context)
         if (!FynxNotificationControlsBatch3.shouldPush(preferences, type)) return
         if (!shouldShow(context, stableKey)) return
@@ -133,16 +134,16 @@ object FynxNotificationFoundation {
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return
 
-        val builder = NotificationCompat.Builder(context, channelId)
+        val builder = NotificationCompat.Builder(context, effectiveChannelId)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(message)
-            .setPriority(if (channelId == CALLS_CHANNEL) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(channelId != CALLS_CHANNEL)
-            .setCategory(if (channelId == CALLS_CHANNEL) NotificationCompat.CATEGORY_CALL else NotificationCompat.CATEGORY_MESSAGE)
-            .setDefaults(if (channelId == CALLS_CHANNEL) NotificationCompat.DEFAULT_ALL else 0)
+            .setPriority(if (effectiveChannelId == CALLS_CHANNEL) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(effectiveChannelId != CALLS_CHANNEL)
+            .setCategory(if (effectiveChannelId == CALLS_CHANNEL) NotificationCompat.CATEGORY_CALL else NotificationCompat.CATEGORY_MESSAGE)
+            .setDefaults(if (effectiveChannelId == CALLS_CHANNEL) NotificationCompat.DEFAULT_ALL else 0)
         if (contentIntent != null) builder.setContentIntent(contentIntent)
-        if (channelId == CALLS_CHANNEL) builder.setTimeoutAfter(60_000L)
+        if (effectiveChannelId == CALLS_CHANNEL) builder.setTimeoutAfter(60_000L)
         NotificationManagerCompat.from(context).notify(id, builder.build())
         speak(context, title, message)
     }
