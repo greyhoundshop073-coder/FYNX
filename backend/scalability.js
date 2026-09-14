@@ -29,6 +29,7 @@ import { installRequestResourceGuard } from "./requestResourceGuard.js";
 import { installApiAbuseGuard } from "./apiAbuseGuard.js";
 import { registerMarketplaceBatch2FinalHardening } from "./marketplaceBatch2FinalHardening.js";
 import { registerFynxAiRoutes } from "./fynxAiToolRegistry.js";
+import { installPeopleResponseHardening } from "./peopleResponseHardening.js";
 
 installPresencePrivacyGuard();
 const originalCreateServer = http.createServer;
@@ -60,6 +61,7 @@ http.createServer = function fynxCreateServer(...args) {
       installSocialHardening(app);
       installPrivateCachePolicy(app);
       installMarketplaceMediaPrivacyGuard(app);
+      installPeopleResponseHardening(app, globalThis.__fynxPool || null);
     });
   }
   server.keepAliveTimeout=65_000;
