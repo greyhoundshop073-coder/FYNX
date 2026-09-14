@@ -134,12 +134,14 @@ async function installHomeCommentBackend() {
   const routeMarker = "  app.post('/api/social/follow/:username'";
   const routes = `
   // fynxHomeCommentsBatch4b: paginated comments and validated replies.
+  // Reuse the authoritative visibility helper already defined by the live social routes.
+  const visiblePost = visibleSocialPost;
   app.get('/api/social/posts/:id/comments/page', auth, async (req, res) => {
     try {
       await ensureSocialSchema();
       const postId = Number(req.params.id);
       if (!Number.isSafeInteger(postId) || postId < 1) return res.status(400).json({ error: 'invalid post id' });
-      if (!(await visibleSocialPost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });
+      if (!(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });
       const requestedLimit = Number(req.query?.limit);
       const limit = Math.min(Math.max(Number.isInteger(requestedLimit) ? requestedLimit : 50, 1), 100);
       const before = req.query?.before == null || req.query.before === '' ? null : Number(req.query.before);
@@ -174,7 +176,7 @@ async function installHomeCommentBackend() {
       const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
       if (!Number.isSafeInteger(postId) || postId < 1 || !Number.isSafeInteger(parentId) || parentId < 1) return res.status(400).json({ error: 'invalid comment reference' });
       if (!text || text.length > 1000) return res.status(400).json({ error: 'reply text must be 1-1000 characters' });
-      if (!(await visibleSocialPost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });
+      if (!(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });
       const parent = await pool.query(`SELECT c.id,c.post_id,c.parent_comment_id,c.author_id FROM social_post_comments c JOIN users u ON u.id=c.author_id WHERE c.id=$1 AND c.post_id=$2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$3 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$3))`, [parentId, postId, req.user.sub]);
       if (!parent.rows[0]) return res.status(404).json({ error: 'parent comment not found' });
       const rootId = parent.rows[0].parent_comment_id == null ? parentId : Number(parent.rows[0].parent_comment_id);
@@ -198,7 +200,7 @@ async function installHomeCommentBackend() {
       const postId = Number(req.params.id);
       const parentId = Number(req.params.commentId);
       if (!Number.isSafeInteger(postId) || postId < 1 || !Number.isSafeInteger(parentId) || parentId < 1) return res.status(400).json({ error: 'invalid comment reference' });
-      if (!(await visibleSocialPost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });
+      if (!(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });
       const parent = await pool.query(`SELECT c.id FROM social_post_comments c WHERE c.id=$1 AND c.post_id=$2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$3 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$3))`, [parentId, postId, req.user.sub]);
       if (!parent.rows[0]) return res.status(404).json({ error: 'parent comment not found' });
       const requestedLimit = Number(req.query?.limit);
