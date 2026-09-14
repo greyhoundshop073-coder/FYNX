@@ -30,8 +30,8 @@ object FynxChatStore {
         val previous = prefs.getString(storageKey, null)?.let { parseMessages(it, null) }.orEmpty()
         val syncInitialized = prefs.getBoolean(syncKey(context, chatKey), false)
 
-        // ConversationPanel already updates its local state for edit/delete. Reconcile
-        // those state transitions with the real server without changing that UI contract.
+        // ConversationPanel keeps local state responsive while production edit/delete
+        // operations are sent to the server. The server remains the source of truth.
         if (syncInitialized && previous.isNotEmpty()) {
             val previousById = previous.associateBy { it.id }
             val currentById = messages.associateBy { it.id }
@@ -135,8 +135,28 @@ object FynxChatStore {
     }
 
     fun clear(context: Context, chatKey: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().remove(key(context, chatKey)).remove(syncKey(context, chatKey)).apply()
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val normalizedChatKey = chatKey.trim().removePrefix("@").lowercase()
+        val updatedPreviews = loadPreviews(context).filterNot {
+            it.username.trim().removePrefix("@").equals(normalizedChatKey, ignoreCase = true)
+        }
+        val array = JSONArray()
+        updatedPreviews.forEach { item ->
+            array.put(JSONObject().apply {
+                put("name", item.name)
+                put("username", item.username)
+                put("lastMessage", item.lastMessage)
+                put("time", item.time)
+                put("unreadCount", item.unreadCount)
+                put("online", item.online)
+                put("avatarUri", item.avatarUri ?: "")
+            })
+        }
+        prefs.edit()
+            .remove(key(context, chatKey))
+            .remove(syncKey(context, chatKey))
+            .putString(previewKey(context), array.toString())
+            .apply()
     }
 
     private fun parseMessages(raw: String, fallback: ChatMessage?): List<ChatMessage> = runCatching {
