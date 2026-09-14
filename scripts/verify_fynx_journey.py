@@ -45,6 +45,9 @@ check("authenticated app gate exists", "FynxAuthGate" in app and "AuthState.SIGN
 check("profile to chat and call navigation exists", "ConversationPanel" in app and "onVoiceCall" in app and "onVideoCall" in app)
 check("calls panel has permission recovery and realtime events", "RequestMultiplePermissions" in calls and "realtimeClient.connect()" in calls and '"invite"' in calls)
 check("calls panel cleans media on terminal paths", "mediaEngine.disconnect()" in calls and "FynxCallsStore.updateStatus" in calls)
+check("incoming call permission recovery completes acceptance", "pendingIncomingAccept" in calls and "sendCallAccept" in calls and "permissionLauncher.launch(required)" in calls)
+check("incoming calls have a bounded ringing lifecycle", "delay(60_000L)" in calls and '"Missed"' in calls and '"RINGING"' in calls)
+check("call controls remain connected to the media engine", all(x in calls for x in ["setMicrophoneEnabled", "setCameraEnabled", "switchCamera", "setSpeakerEnabled"]))
 
 check("server notification client delegates to notification API", "object FynxNotificationRemoteClient" in notifications and re.search(r"\bfun\s+load\s*\(", notifications) and "FynxBackendClient.get" in notifications and "/api/notifications" in notifications and re.search(r"\bfun\s+markRead\s*\(", notifications) and "FynxBackendClient.postJson" in notifications and "/read" in notifications)
 check("server notification API is registered", "app.get('/api/notifications'" in notification_backend and "app.post('/api/notifications/:id/read'" in notification_backend)
@@ -57,7 +60,6 @@ check("shareable deep-link routes cover social, chat, group, marketplace, storie
 check("deep-link destination routing is connected to the live app", all(x in app for x in ["FynxDeepLinkDestination.Profile", "FynxDeepLinkDestination.Chat", "FynxDeepLinkDestination.Group", "FynxDeepLinkDestination.Marketplace", "FynxDeepLinkDestination.Stories", "FynxDeepLinkDestination.Money"]))
 
 check("marketplace uses real remote listings and seller contact", "FynxMarketplaceClient.listings" in marketplace and "FynxMarketplaceClient.createListing" in marketplace and "onContact" in marketplace and "FynxMarketplaceSafety.analyze" in marketplace)
-# The protected order + dispute implementation is intentionally consolidated in marketplaceTransactions.js.
 check("protected marketplace transaction backend remains present", (ROOT / "backend/marketplaceTransactions.js").is_file() and all(x in transactions for x in ["marketplace_orders", "PAYMENT_PENDING", "DISPUTED", "marketplace_order_disputes", "payout:'not_released'"]))
 
 check("Send a Gift remains connected to conversations", "GiftsPanel" in conversation and "showGifts" in conversation and "onGiftSelected" in gifts)
