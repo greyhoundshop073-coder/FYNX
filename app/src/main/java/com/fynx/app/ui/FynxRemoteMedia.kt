@@ -43,9 +43,7 @@ private fun remoteMediaCacheFile(context: android.content.Context, resolvedUrl: 
     val safeAccount = accountKey.map { if (it.isLetterOrDigit()) it else '_' }.joinToString("").take(80).ifBlank { return null }
     val directory = File(context.cacheDir, "fynx_media_remote_$safeAccount")
     if (!directory.exists() && !directory.mkdirs()) return null
-    val digest = MessageDigest.getInstance("SHA-256")
-        .digest(resolvedUrl.toByteArray(Charsets.UTF_8))
-        .joinToString("") { "%02x".format(it) }
+    val digest = MessageDigest.getInstance("SHA-256").digest(resolvedUrl.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
     return File(directory, "media_${digest.take(32)}$extension")
 }
 
@@ -53,7 +51,13 @@ private suspend fun downloadRemoteMedia(context: android.content.Context, resolv
     FynxBackendClient.downloadToFile(context, resolvedUrl, destination, MAX_REMOTE_MEDIA_BYTES)
 
 @Composable
-fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifier) {
+fun FynxRemoteMedia(
+    mediaUrl: String,
+    type: String,
+    modifier: Modifier = Modifier,
+    loopVideo: Boolean = true,
+    onVideoCompleted: (() -> Unit)? = null
+) {
     val context = LocalContext.current
     val resolvedUrl = remember(mediaUrl) { resolveFynxMediaUrl(context, mediaUrl) }
     var kind by remember(resolvedUrl, type) { mutableStateOf("loading") }
@@ -63,27 +67,18 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
     var videoView by remember(resolvedUrl, type) { mutableStateOf<android.widget.VideoView?>(null) }
     var videoPlaying by remember(resolvedUrl, type) { mutableStateOf(false) }
     LaunchedEffect(resolvedUrl, type, reloadNonce) {
-        kind = "loading"
-        bitmap = null
-        localFile = null
-        videoView = null
-        videoPlaying = false
+        kind = "loading"; bitmap = null; localFile = null; videoView = null; videoPlaying = false
         try {
             val loaded = withContext(Dispatchers.IO) {
                 val isKnownVideo = type.equals("video", true)
                 val cacheTarget = if (isKnownVideo) remoteMediaCacheFile(context, resolvedUrl, ".media") else null
                 val target = cacheTarget ?: File.createTempFile("fynx_media_", ".media", context.cacheDir)
-                val result = if (cacheTarget?.exists() == true && cacheTarget.length() > 0L) {
-                    Result.success(FynxBackendClient.DownloadedMedia(null, cacheTarget.length()))
-                } else {
-                    downloadRemoteMedia(context, resolvedUrl, target)
-                }
+                val result = if (cacheTarget?.exists() == true && cacheTarget.length() > 0L) Result.success(FynxBackendClient.DownloadedMedia(null, cacheTarget.length())) else downloadRemoteMedia(context, resolvedUrl, target)
                 result.getOrThrow().let { downloaded ->
                     val contentType = downloaded.contentType.orEmpty()
                     val isVideo = isKnownVideo || (type.equals("auto", true) && contentType.startsWith("video/"))
-                    if (isVideo) {
-                        MediaLoadResult.Video(target)
-                    } else {
+                    if (isVideo) MediaLoadResult.Video(target)
+                    else {
                         val decoded = BitmapFactory.decodeFile(target.absolutePath) ?: throw IllegalStateException("Unable to decode media")
                         if (cacheTarget == null) target.delete()
                         MediaLoadResult.Image(decoded)
@@ -94,18 +89,10 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
                 is MediaLoadResult.Image -> { bitmap = loaded.bitmap; localFile = null; kind = "image" }
                 is MediaLoadResult.Video -> { localFile = loaded.file; bitmap = null; kind = "video" }
             }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Throwable) {
-            kind = "error"
-        }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Throwable) { kind = "error" }
     }
-    DisposableEffect(resolvedUrl, type) {
-        onDispose {
-            videoView?.stopPlayback()
-            videoView = null
-        }
-    }
+    DisposableEffect(resolvedUrl, type) { onDispose { videoView?.stopPlayback(); videoView = null } }
     when (kind) {
         "image" -> bitmap?.let { Image(it.asImageBitmap(), "Media", modifier.clip(RoundedCornerShape(14.dp)), contentScale = ContentScale.Crop) }
         "video" -> localFile?.let { file ->
@@ -114,12 +101,8 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
                     factory = { ctx ->
                         android.widget.VideoView(ctx).apply {
                             setVideoPath(file.absolutePath)
-                            setOnPreparedListener { player ->
-                                player.isLooping = true
-                                player.start()
-                                videoPlaying = true
-                            }
-                            setOnCompletionListener { videoPlaying = false }
+                            setOnPreparedListener { player -> player.isLooping = loopVideo; player.start(); videoPlaying = true }
+                            setOnCompletionListener { videoPlaying = false; onVideoCompleted?.invoke() }
                             setOnErrorListener { _, _, _ -> videoPlaying = false; true }
                             videoView = this
                         }
@@ -128,46 +111,21 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
                         if (view.tag != file.absolutePath) {
                             view.tag = file.absolutePath
                             view.setVideoPath(file.absolutePath)
-                            view.setOnPreparedListener { player ->
-                                player.isLooping = true
-                                player.start()
-                                videoPlaying = true
-                            }
+                            view.setOnPreparedListener { player -> player.isLooping = loopVideo; player.start(); videoPlaying = true }
+                            view.setOnCompletionListener { videoPlaying = false; onVideoCompleted?.invoke() }
                         }
                     },
                     modifier = Modifier.fillMaxSize()
                 )
-                Surface(
-                    color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
-                    shape = RoundedCornerShape(50),
-                    modifier = Modifier.align(Alignment.Center)
-                ) {
-                    IconButton(onClick = {
-                        videoView?.let { view ->
-                            if (view.isPlaying) {
-                                view.pause()
-                                videoPlaying = false
-                            } else {
-                                view.start()
-                                videoPlaying = true
-                            }
-                        }
-                    }) {
-                        Icon(
-                            if (videoPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            if (videoPlaying) "Pause video" else "Play video",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
+                Surface(color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f), shape = RoundedCornerShape(50), modifier = Modifier.align(Alignment.Center)) {
+                    IconButton(onClick = { videoView?.let { view -> if (view.isPlaying) { view.pause(); videoPlaying = false } else { view.start(); videoPlaying = true } } }) {
+                        Icon(if (videoPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (videoPlaying) "Pause video" else "Play video", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             }
         }
         "error" -> Box(modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                Icon(Icons.Default.BrokenImage, "Media unavailable")
-                Text("Media unavailable", style = MaterialTheme.typography.labelSmall)
-                TextButton(onClick = { reloadNonce++ }) { Text("Retry") }
-            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { Icon(Icons.Default.BrokenImage, "Media unavailable"); Text("Media unavailable", style = MaterialTheme.typography.labelSmall); TextButton(onClick = { reloadNonce++ }) { Text("Retry") } }
         }
         else -> Box(modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     }
@@ -175,23 +133,11 @@ fun FynxRemoteMedia(mediaUrl: String, type: String, modifier: Modifier = Modifie
 
 @Composable
 fun FynxRemoteProfileAvatar(mediaId: String?, contentDescription: String?, modifier: Modifier = Modifier) {
-    if (mediaId.isNullOrBlank()) {
-        Box(modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
-            Text(contentDescription.orEmpty().trim().firstOrNull()?.uppercase() ?: "F", color = MaterialTheme.colorScheme.onPrimaryContainer)
-        }
-    } else {
-        FynxRemoteMedia(
-            mediaUrl = "/api/media/${mediaId.trim()}",
-            type = "image",
-            modifier = modifier.clip(RoundedCornerShape(50))
-        )
-    }
+    if (mediaId.isNullOrBlank()) Box(modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Text(contentDescription.orEmpty().trim().firstOrNull()?.uppercase() ?: "F", color = MaterialTheme.colorScheme.onPrimaryContainer) }
+    else FynxRemoteMedia("/api/media/${mediaId.trim()}", "image", modifier.clip(RoundedCornerShape(50)))
 }
 
-private sealed interface MediaLoadResult {
-    data class Image(val bitmap: android.graphics.Bitmap) : MediaLoadResult
-    data class Video(val file: File) : MediaLoadResult
-}
+private sealed interface MediaLoadResult { data class Image(val bitmap: android.graphics.Bitmap) : MediaLoadResult; data class Video(val file: File) : MediaLoadResult }
 
 @Composable
 fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier) {
@@ -220,16 +166,11 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier) {
                     p.setOnPreparedListener { loading = false; playing = true; it.start() }
                     p.setOnCompletionListener { playing = false }
                     p.setOnErrorListener { _, _, _ -> loading = false; playing = false; true }
-                    p.prepareAsync()
-                    player = p
-                    localFile = finalFile
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Throwable) {
-                    loading = false
-                }
+                    p.prepareAsync(); player = p; localFile = finalFile
+                } catch (_: Throwable) { loading = false; playing = false }
             }
-        }) { Icon(if (playing) Icons.Default.GraphicEq else Icons.Default.PlayArrow, if (playing) "Pause" else "Play") }
-        Text(if (loading) "Loading voice message…" else if (playing) "Playing voice message" else "Voice message", color = FynxDesign.TextSecondary)
+        }) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause voice" else "Play voice") }
+        Icon(Icons.Default.GraphicEq, "Voice Status")
+        Text(if (loading) "Loading voice…" else if (playing) "Playing voice" else "Voice Status", style = MaterialTheme.typography.bodyMedium)
     }
 }
