@@ -31,7 +31,11 @@ import kotlinx.coroutines.launch
 private data class DeviceContact(val name: String, val phone: String)
 
 @Composable
-fun FynxContactsPanel(onBack: () -> Unit = {}) {
+fun FynxContactsPanel(
+    onBack: () -> Unit = {},
+    onVoiceCall: (String) -> Unit = {},
+    onVideoCall: (String) -> Unit = {}
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var permission by remember { mutableStateOf(context.checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) }
@@ -94,7 +98,6 @@ fun FynxContactsPanel(onBack: () -> Unit = {}) {
 
     profileUser?.let { username ->
         val normalizedUsername = username.removePrefix("@").trim().lowercase()
-        val matchedProfile = matched.values.firstOrNull { it.username.removePrefix("@").equals(normalizedUsername, true) }
         OtherUserProfilePanel(
             username = normalizedUsername,
             onBack = { profileUser = null },
@@ -121,8 +124,8 @@ fun FynxContactsPanel(onBack: () -> Unit = {}) {
             chat = openChat!!,
             onBack = { openChat = null },
             onOpenProfile = { username -> profileUser = username.removePrefix("@") },
-            onVoiceCall = {},
-            onVideoCall = {}
+            onVoiceCall = { onVoiceCall(openChat!!.username) },
+            onVideoCall = { onVideoCall(openChat!!.username) }
         )
         return
     }
