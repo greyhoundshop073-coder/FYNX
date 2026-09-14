@@ -11,16 +11,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -33,104 +29,138 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 @Composable
 fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    // Keep the panel on the same account-scoped store and the same normalized chat key
-    // used by FynxConversationPreferences so settings remain connected to runtime reads.
-    val prefs = remember(chatUsername) { FynxConversationPreferences.chat(context, chatUsername) }
-    val normalizedChatKey = remember(chatUsername) { chatUsername.trim().removePrefix("@").lowercase().ifBlank { "unknown" } }
-    var notifications by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("notifications_$normalizedChatKey", true)) }
+    val context = LocalContext.current
     var muted by rememberSaveable(chatUsername) { mutableStateOf(FynxPreferencesStore.isChatMuted(context, chatUsername)) }
-    var previews by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("previews_$normalizedChatKey", true)) }
-    var sounds by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("sounds_$normalizedChatKey", true)) }
-    var vibration by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("vibration_$normalizedChatKey", true)) }
-    var autoDownload by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("autodownload_$normalizedChatKey", true)) }
-    var saveGallery by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("gallery_$normalizedChatKey", false)) }
-    var linkPreviews by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("linkpreviews_$normalizedChatKey", true)) }
-    var readReceipts by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("read_$normalizedChatKey", true)) }
-    var animations by rememberSaveable(chatUsername) { mutableStateOf(prefs.getBoolean("animations_$normalizedChatKey", true)) }
-    var lastSeen by rememberSaveable(chatUsername) { mutableStateOf(prefs.getString("lastseen_$normalizedChatKey", "Everybody") ?: "Everybody") }
-    var wallpaper by rememberSaveable(chatUsername) { mutableStateOf(prefs.getString("wallpaper_$normalizedChatKey", "FYNX Default") ?: "FYNX Default") }
-    var textSize by rememberSaveable(chatUsername) { mutableStateOf(prefs.getString("textsize_$normalizedChatKey", "Medium") ?: "Medium") }
     var showClearDialog by rememberSaveable(chatUsername) { mutableStateOf(false) }
     var showResetDialog by rememberSaveable(chatUsername) { mutableStateOf(false) }
 
-    fun put(key: String, value: Boolean) = prefs.edit().putBoolean(key, value).apply()
-    fun put(key: String, value: String) = prefs.edit().putString(key, value).apply()
-
     if (showClearDialog) {
-        AlertDialog(onDismissRequest = { showClearDialog = false }, title = { Text("Clear local chat history?") }, text = { Text("This removes the saved copy of this conversation on this device. It does not delete messages from the FYNX server.") }, confirmButton = { TextButton(onClick = { FynxChatStore.clear(context, chatUsername); showClearDialog = false }) { Text("Clear") } }, dismissButton = { TextButton(onClick = { showClearDialog = false }) { Text("Cancel") } })
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Clear local chat history?") },
+            text = { Text("This removes the saved copy of this conversation from this device. It does not delete messages from the FYNX server.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    FynxChatStore.clear(context, chatUsername)
+                    showClearDialog = false
+                }) { Text("Clear") }
+            },
+            dismissButton = { TextButton(onClick = { showClearDialog = false }) { Text("Cancel") } }
+        )
     }
+
     if (showResetDialog) {
-        AlertDialog(onDismissRequest = { showResetDialog = false }, title = { Text("Reset chat settings?") }, text = { Text("All settings for this chat will return to their FYNX defaults.") }, confirmButton = {
-            TextButton(onClick = {
-                val legacyChatKey = chatUsername.trim()
-                val keys = listOf("notifications", "previews", "sounds", "vibration", "autodownload", "gallery", "linkpreviews", "read", "animations", "lastseen", "wallpaper", "textsize")
-                val editor = prefs.edit()
-                keys.forEach { key ->
-                    editor.remove("${key}_$normalizedChatKey")
-                    editor.remove("${key}_$legacyChatKey")
-                }
-                editor.apply()
-                FynxPreferencesStore.setChatMuted(context, chatUsername, false)
-                notifications = true; muted = false; previews = true; sounds = true; vibration = true; autoDownload = true; saveGallery = false; linkPreviews = true; readReceipts = true; animations = true; lastSeen = "Everybody"; wallpaper = "FYNX Default"; textSize = "Medium"; showResetDialog = false
-            }) { Text("Reset") }
-        }, dismissButton = { TextButton(onClick = { showResetDialog = false }) { Text("Cancel") } })
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Reset chat settings?") },
+            text = { Text("The chat notification preference will return to its FYNX default.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    FynxPreferencesStore.setChatMuted(context, chatUsername, false)
+                    muted = false
+                    showResetDialog = false
+                }) { Text("Reset") }
+            },
+            dismissButton = { TextButton(onClick = { showResetDialog = false }) { Text("Cancel") } }
+        )
     }
 
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         Surface(tonalElevation = 2.dp) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") }
-                Column(Modifier.weight(1f)) { Text("Chat Settings", style = MaterialTheme.typography.titleLarge); Text(chatUsername, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                Column(Modifier.weight(1f)) {
+                    Text("Chat Settings", style = MaterialTheme.typography.titleLarge)
+                    Text(chatUsername, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
+
         ChatSettingsSection("Notifications", Icons.Default.Notifications) {
-            ChatSwitchRow("Notifications", "Messages from this chat", notifications) { notifications = it; put("notifications_$normalizedChatKey", it) }
-            ChatSwitchRow("Mute notifications", "Keep the chat quiet without hiding it", muted) { muted = it; FynxPreferencesStore.setChatMuted(context, chatUsername, it) }
-            ChatSwitchRow("Message previews", "Show message text in notifications", previews) { previews = it; put("previews_$normalizedChatKey", it) }
-            ChatSwitchRow("Sound", "Play notification sounds", sounds) { sounds = it; put("sounds_$normalizedChatKey", it) }
-            ChatSwitchRow("Vibration", "Vibrate for new messages", vibration) { vibration = it; put("vibration_$normalizedChatKey", it) }
-        }
-        ChatSettingsSection("Privacy", Icons.Default.Security) {
-            Text("Last seen & online", style = MaterialTheme.typography.titleSmall)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                listOf("Everybody", "My contacts", "Nobody").forEach { option -> Column(horizontalAlignment = Alignment.CenterHorizontally) { RadioButton(lastSeen == option, { lastSeen = option; put("lastseen_$normalizedChatKey", option) }); Text(option, style = MaterialTheme.typography.labelSmall) } }
+            ChatSwitchRow(
+                "Mute notifications",
+                "Keep this chat quiet without hiding the conversation",
+                muted
+            ) {
+                muted = it
+                FynxPreferencesStore.setChatMuted(context, chatUsername, it)
             }
-            ChatSwitchRow("Read receipts", "Show when messages have been read", readReceipts) { readReceipts = it; put("read_$normalizedChatKey", it) }
+            Text(
+                "Other notification controls are managed by FYNX notification settings until their runtime behavior is connected.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
-        ChatSettingsSection("Data & Storage", Icons.Default.Storage) {
-            ChatSwitchRow("Automatic media download", "Download shared photos and videos automatically", autoDownload) { autoDownload = it; put("autodownload_$normalizedChatKey", it) }
-            ChatSwitchRow("Save to gallery", "Save received media to the device gallery", saveGallery) { saveGallery = it; put("gallery_$normalizedChatKey", it) }
-            ChatSwitchRow("Link previews", "Show previews for shared links", linkPreviews) { linkPreviews = it; put("linkpreviews_$normalizedChatKey", it) }
+
+        ChatSettingsSection("Chat Management", Icons.Default.DeleteOutline) {
+            ChatActionRow(
+                "Clear local chat history",
+                "Remove the saved conversation from this device; server messages remain available",
+                Icons.Default.DeleteOutline
+            ) { showClearDialog = true }
+            ChatActionRow(
+                "Reset chat settings",
+                "Restore this chat's supported local settings to FYNX defaults",
+                Icons.Default.RestartAlt
+            ) { showResetDialog = true }
         }
-        ChatSettingsSection("Chat Appearance", Icons.Default.Palette) {
-            Text("Text size", style = MaterialTheme.typography.titleSmall)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) { listOf("Small", "Medium", "Large").forEach { option -> Column(horizontalAlignment = Alignment.CenterHorizontally) { RadioButton(textSize == option, { textSize = option; put("textsize_$normalizedChatKey", option) }); Text(option, style = MaterialTheme.typography.labelSmall) } } }
-            Text("Wallpaper", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) { listOf("FYNX Default", "Light", "Dark").forEach { option -> Column(horizontalAlignment = Alignment.CenterHorizontally) { RadioButton(wallpaper == option, { wallpaper = option; put("wallpaper_$normalizedChatKey", option) }); Text(option, style = MaterialTheme.typography.labelSmall) } } }
-            ChatSwitchRow("Animations", "Use smooth chat animations", animations) { animations = it; put("animations_$normalizedChatKey", it) }
-        }
-        ChatSettingsSection("Chat Management", Icons.Default.Storage) {
-            ChatActionRow("Clear local chat history", "Remove the saved conversation from this device", Icons.Default.DeleteOutline) { showClearDialog = true }
-            ChatActionRow("Reset chat settings", "Restore FYNX defaults for this chat", Icons.Default.RestartAlt) { showResetDialog = true }
-        }
+
         HorizontalDivider(Modifier.padding(top = 8.dp))
     }
 }
 
-@Composable private fun ChatSettingsSection(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary); Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 10.dp)) }; content() }
+@Composable
+private fun ChatSettingsSection(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    content: @Composable () -> Unit
+) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 10.dp))
+        }
+        content()
+    }
     HorizontalDivider()
 }
 
-@Composable private fun ChatSwitchRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f).padding(end = 12.dp)) { Text(title, style = MaterialTheme.typography.bodyLarge); Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; Switch(checked = checked, onCheckedChange = onCheckedChange) }
+@Composable
+private fun ChatSwitchRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
 }
 
-@Composable private fun ChatActionRow(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Icon(icon, contentDescription = null); Column(Modifier.weight(1f).padding(start = 12.dp), horizontalAlignment = Alignment.Start) { Text(title, style = MaterialTheme.typography.bodyLarge); Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
+@Composable
+private fun ChatActionRow(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null)
+            Column(Modifier.weight(1f).padding(start = 12.dp), horizontalAlignment = Alignment.Start) {
+                Text(title, style = MaterialTheme.typography.bodyLarge)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
 }
