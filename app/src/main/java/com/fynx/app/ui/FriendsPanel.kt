@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -89,8 +90,17 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
                 Text("Find People", style = MaterialTheme.typography.headlineSmall)
                 Text("Connect with real FYNX accounts.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
-            OutlinedButton(onClick = { showUniversalSearch = true }, shape = FynxDesign.ControlShape) {
-                Icon(Icons.Default.Search, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text("Search all FYNX")
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = {
+                    context.startActivity(Intent(context, FynxContactsActivity::class.java))
+                }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
+                    Icon(Icons.Default.PersonAdd, "Open contacts", Modifier.size(17.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Contacts")
+                }
+                OutlinedButton(onClick = { showUniversalSearch = true }, shape = FynxDesign.ControlShape) {
+                    Icon(Icons.Default.Search, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text("Search all FYNX")
+                }
             }
         }
         Spacer(Modifier.height(8.dp))
