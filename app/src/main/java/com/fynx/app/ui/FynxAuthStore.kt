@@ -59,6 +59,12 @@ object FynxAuthStore {
      * Account-created state is intentionally preserved for the login path.
      */
     fun clear(context: Context) {
+        // Revoke this account's FCM device registration before destroying the
+        // authenticated session. The remote DELETE is best-effort so logout
+        // remains reliable when the device is offline; server-side token
+        // ownership is still enforced when another account registers it.
+        runCatching { FynxNotificationDeviceManager.unregisterCurrentAccount(context) }
+
         // Clear the token directly here. FynxBackendClient.saveAccessToken(null)
         // is itself a session-boundary operation, so calling it from this method
         // would recurse when a legacy networking path expires the token.
