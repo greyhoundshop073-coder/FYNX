@@ -47,7 +47,6 @@ object FynxBackendClient {
     fun configureBaseUrl(context: Context, value: String) { val normalized = value.trim().trimEnd('/'); require(normalized.isBlank() || normalized.startsWith("https://")) { "FYNX backend must use HTTPS." }; context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_BASE_URL, normalized).apply() }
     fun saveAccessToken(context: Context, token: String?) { if (token.isNullOrBlank()) { FynxAuthStore.clear(context); return }; FynxSecureTokenStore.save(context, token) }
     fun accessToken(context: Context): String? = FynxSecureTokenStore.load(context) ?: migrateLegacyAccessToken(context)
-    private fun migrateLegacyAccessToken(context: Context): String? { val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE); val legacy = prefs.getString(LEGACY_ACCESS_TOKEN, null)?.takeIf { it.isNotBlank() } ?: return null; return runCatching { FynxSecureTokenStore.save(context, legacy); prefs.edit().remove(LEGACY_ACCESS_TOKEN).apply(); legacy }.getOrNull() }
     fun hasAccessToken(context: Context): Boolean = accessToken(context) != null
     fun isNetworkAvailable(context: Context): Boolean = hasNetwork(context)
     fun isUnauthorizedFailure(error: Throwable): Boolean = generateSequence(error) { it.cause }.any { it is FynxUnauthorizedException }
@@ -108,9 +107,40 @@ object FynxBackendClient {
     }
 
     private suspend fun awaitValidatedNetwork(context: Context) { if (hasNetwork(context)) return; var waited = 0L; while (waited < NETWORK_VALIDATION_WAIT_MS) { delay(NETWORK_VALIDATION_POLL_MS); waited += NETWORK_VALIDATION_POLL_MS; if (hasNetwork(context)) return }; throw FynxNetworkUnavailableException() }
-    private suspend fun executeRequest(context: Context, root: String, method: String, path: String, body: String?): String { val weakNetwork = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK; val connection = (URL(root + path).openConnection() as HttpURLConnection).apply { requestMethod = method; connectTimeout = if (weakNetwork) WEAK_CONNECT_TIMEOUT_MS else CONNECT_TIMEOUT_MS; readTimeout = if (weakNetwork) WEAK_READ_TIMEOUT_MS else READ_TIMEOUT_MS; useCaches = false; setRequestProperty("Accept", "application/json"); setRequestProperty("Accept-Encoding", "identity"); setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0"); setRequestProperty("Pragma", "no-cache"); setRequestProperty("Connection", "close"); setRequestProperty("User-Agent", "FYNX-Android/1"); accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") } }; val cancellationHandle = currentCoroutineContext().job.invokeOnCompletion { connection.disconnect() }; try { if (body != null) { val payload = body.toByteArray(Charsets.UTF_8); connection.doOutput = true; connection.setFixedLengthStreamingMode(payload.size); connection.setRequestProperty("Content-Type", "application/json; charset=utf-8"); connection.outputStream.use { it.write(payload) } }; val status = connection.responseCode; val stream = if (status in 200..299) connection.inputStream else connection.errorStream; val response = stream?.use { input -> val output = StringBuilder(); val buffer = ByteArray(16 * 1024); var total = 0; while (true) { val count = input.read(buffer); if (count < 0) break; total += count; if (total > MAX_RESPONSE_BYTES) throw IOException("FYNX backend response is too large"); output.append(String(buffer, 0, count, Charsets.UTF_8)) }; output.toString() }.orEmpty(); if (status == HttpURLConnection.HTTP_UNAUTHORIZED) { FynxAuthStore.clear(context); throw FynxUnauthorizedException() }; if (status !in 200..299) throw FynxHttpException(status, response); return response } finally { cancellationHandle.dispose(); connection.disconnect() } }
+    private fun isPublicAuthPath(path: String): Boolean = path == "/api/auth/login" || path == "/api/auth/register"
+    private suspend fun executeRequest(context: Context, root: String, method: String, path: String, body: String?): String {
+        val weakNetwork = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK
+        val requiresAuthentication = !isPublicAuthPath(path)
+        val connection = (URL(root + path).openConnection() as HttpURLConnection).apply {
+            requestMethod = method
+            connectTimeout = if (weakNetwork) WEAK_CONNECT_TIMEOUT_MS else CONNECT_TIMEOUT_MS
+            readTimeout = if (weakNetwork) WEAK_READ_TIMEOUT_MS else READ_TIMEOUT_MS
+            useCaches = false
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("Accept-Encoding", "identity")
+            setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0")
+            setRequestProperty("Pragma", "no-cache")
+            setRequestProperty("Connection", "close")
+            setRequestProperty("User-Agent", "FYNX-Android/1")
+            if (requiresAuthentication) accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
+        }
+        val cancellationHandle = currentCoroutineContext().job.invokeOnCompletion { connection.disconnect() }
+        try {
+            if (body != null) { val payload = body.toByteArray(Charsets.UTF_8); connection.doOutput = true; connection.setFixedLengthStreamingMode(payload.size); connection.setRequestProperty("Content-Type", "application/json; charset=utf-8"); connection.outputStream.use { it.write(payload) } }
+            val status = connection.responseCode
+            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+            val response = stream?.use { input -> val output = StringBuilder(); val buffer = ByteArray(16 * 1024); var total = 0; while (true) { val count = input.read(buffer); if (count < 0) break; total += count; if (total > MAX_RESPONSE_BYTES) throw IOException("FYNX backend response is too large"); output.append(String(buffer, 0, count, Charsets.UTF_8)) }; output.toString() }.orEmpty()
+            if (status == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                if (requiresAuthentication) FynxAuthStore.clear(context)
+                throw FynxUnauthorizedException()
+            }
+            if (status !in 200..299) throw FynxHttpException(status, response)
+            return response
+        } finally { cancellationHandle.dispose(); connection.disconnect() }
+    }
     private fun hasNetwork(context: Context): Boolean { val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true; return manager.allNetworks.any { network -> val capabilities = manager.getNetworkCapabilities(network) ?: return@any false; capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) } }
     private fun isRetryableFailure(error: Throwable): Boolean { var current: Throwable? = error; while (current != null) { if (current is SocketTimeoutException || current is ConnectException || current is UnknownHostException || current is IOException) return true; if (current is FynxHttpException && current.status in setOf(408, 425, 429, 500, 502, 503, 504)) return true; current = current.cause }; return false }
+    private fun migrateLegacyAccessToken(context: Context): String? { val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE); val legacy = prefs.getString(LEGACY_ACCESS_TOKEN, null)?.takeIf { it.isNotBlank() } ?: return null; return runCatching { FynxSecureTokenStore.save(context, legacy); prefs.edit().remove(LEGACY_ACCESS_TOKEN).apply(); legacy }.getOrNull() }
     private class FynxNetworkUnavailableException : IOException("FYNX network connection is unavailable")
     private class FynxUnauthorizedException : IOException("FYNX session expired")
     private class FynxHttpException(val status: Int, body: String) : IOException("FYNX backend returned HTTP $status${body.takeIf { it.isNotBlank() }?.let { ": ${it.take(600)}" } ?: ""}")
