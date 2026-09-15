@@ -1,9 +1,10 @@
 package com.fynx.app.ui
 
+import android.content.Intent
 import android.net.Uri
 import android.widget.ImageView
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.compose.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -15,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Collections
@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -70,6 +71,13 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 .onFailure { error = it.message ?: "Marketplace could not load." }
             FynxRemoteSocialClient.orders(context).onSuccess { orders = it }
             loading = false
+        }
+    }
+
+    fun contactSeller(username: String) {
+        val normalized = username.removePrefix("@").trim()
+        if (normalized.isNotBlank()) {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FynxDeepLinkParser.chatAppLink(normalized))))
         }
     }
 
@@ -134,6 +142,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         MarketplaceCard(
                             l = listing,
                             onProfile = { onOpenProfile(listing.sellerUsername) },
+                            onContact = { contactSeller(listing.sellerUsername) },
                             onOpen = { selected = listing }
                         )
                     }
@@ -157,6 +166,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         MarketplaceDetails(
             l = listing,
             onProfile = { onOpenProfile(listing.sellerUsername); selected = null },
+            onContact = { contactSeller(listing.sellerUsername) },
             onBuyNow = { selected = null; checkoutListing = listing },
             onAddToCart = {
                 if (cart.none { it.id == listing.id }) cart = cart + listing
@@ -229,7 +239,7 @@ private fun MarketplaceProtectedOrderDialog(order: FynxRemoteSocialClient.Market
 }
 
 @Composable
-private fun MarketplaceCard(l: FynxRemoteSocialClient.MarketplaceListing, onProfile: () -> Unit, onOpen: () -> Unit) {
+private fun MarketplaceCard(l: FynxRemoteSocialClient.MarketplaceListing, onProfile: () -> Unit, onContact: () -> Unit, onOpen: () -> Unit) {
     Card(
         Modifier.fillMaxWidth(),
         shape = FynxDesign.LargeCardShape,
@@ -274,6 +284,7 @@ private fun MarketplaceCard(l: FynxRemoteSocialClient.MarketplaceListing, onProf
                     if (l.pickupAvailable) Text("Pickup", style = MaterialTheme.typography.labelSmall)
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onContact) { Icon(Icons.Default.ChatBubbleOutline, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Contact") }
                     TextButton(onClick = onOpen) { Text("View product") }
                     Spacer(Modifier.weight(1f))
                     Button(onClick = onOpen, enabled = l.quantity > 0) { Text("Buy now") }
@@ -290,12 +301,12 @@ private fun RemoteMarketMedia(context: android.content.Context, mediaId: String,
 }
 
 @Composable
-private fun MarketplaceDetails(l: FynxRemoteSocialClient.MarketplaceListing, onProfile: () -> Unit, onBuyNow: () -> Unit, onAddToCart: () -> Unit, onClose: () -> Unit) {
+private fun MarketplaceDetails(l: FynxRemoteSocialClient.MarketplaceListing, onProfile: () -> Unit, onContact: () -> Unit, onBuyNow: () -> Unit, onAddToCart: () -> Unit, onClose: () -> Unit) {
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text(l.title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(9.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 if (l.mediaIds.isNotEmpty()) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(l.mediaIds.take(12)) { mediaId ->
@@ -304,7 +315,7 @@ private fun MarketplaceDetails(l: FynxRemoteSocialClient.MarketplaceListing, onP
                     }
                 }
                 Text("${l.currency} ${String.format(Locale.US, "%,.2f", l.price)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-                Text(l.description)
+                if (l.description.isNotBlank()) Text(l.description)
                 Text("Seller: ${l.sellerDisplayName.ifBlank { l.sellerUsername }}")
                 Text("${l.quantity} available • ${l.condition}")
                 if (l.location.isNotBlank()) Text("Location: ${l.location}")
@@ -315,9 +326,16 @@ private fun MarketplaceDetails(l: FynxRemoteSocialClient.MarketplaceListing, onP
             }
         },
         confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onBuyNow, enabled = l.quantity > 0) { Text("Buy now") }
-                OutlinedButton(onClick = onAddToCart, enabled = l.quantity > 0) { Icon(Icons.Default.ShoppingCart, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text("Add to cart") }
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onContact, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.ChatBubbleOutline, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Contact seller")
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onAddToCart, enabled = l.quantity > 0, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Default.ShoppingCart, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text("Add to cart")
+                    }
+                    Button(onClick = onBuyNow, enabled = l.quantity > 0, modifier = Modifier.weight(1f)) { Text("Buy now") }
+                }
             }
         },
         dismissButton = { TextButton(onClick = onProfile) { Text("View seller") } }
@@ -544,7 +562,7 @@ private fun OrderActions(context: android.content.Context, order: FynxRemoteSoci
             else if (order.status == "PAYMENT_PENDING") Text("You can cancel this unpaid order.")
             else if (order.status == "COMPLETED") {
                 Text("Rate seller")
-                Row { (1..5).forEach { star -> TextButton(onClick = { rating = star }) { Text(if (star <= rating) "★" else "☆") } } }
+                Row { (1..5).forEach { star -> TextButton(onClick = { rating = star }) { Text(if (star <= rating) "★" else "☆") } }
                 OutlinedTextField(comment, { comment = it }, label = { Text("Review") }, minLines = 2)
             }
         }
