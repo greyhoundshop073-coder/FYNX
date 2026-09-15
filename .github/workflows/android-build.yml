@@ -129,6 +129,14 @@ jobs:
         run: python3 scripts/verify_fynx_production.py
       - name: Build, test and lint
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
+      - name: Enable KVM for Android emulator tests
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo usermod -aG kvm "$USER"
+          groups
+          ls -l /dev/kvm
       - name: Run Android instrumentation tests on a real emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
