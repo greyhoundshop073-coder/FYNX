@@ -14,8 +14,6 @@ def read(path):
     p = ROOT / path
     return p.read_text(encoding="utf-8") if p.is_file() else ""
 
-# B is the consolidated real-user audit gate. It intentionally checks the
-# existing production architecture rather than introducing preview/fake data.
 critical_files = [
     "app/src/main/java/com/fynx/app/ui/FynxApp.kt",
     "app/src/main/java/com/fynx/app/ui/MainActivity.kt",
@@ -58,10 +56,10 @@ notification_devices = read("backend/notificationDevices.js")
 notification_push = read("backend/notificationPush.js")
 notification_bootstrap = read("backend/notificationBootstrap.js")
 
-check("production app is not in preview mode", "FYNX_PREVIEW = false" in app or "FYNX_PREVIEW=false" in app)
+check("production app is not in preview mode", "FYNX_PREVIEW_MODE = false" in app)
 check("signed-in gate protects the production surface", "AuthState.SIGNED_IN" in app)
 check("backend client owns authenticated API access", "hasAccessToken" in client and "Authorization" in client)
-check("logout clears local session state", "fun clear(context: Context)" in auth and "secureTokenStore" in auth.lower())
+check("logout clears the secure local token and session state", "fun clear(context: Context)" in auth and "FynxSecureTokenStore.save(context, null)" in auth)
 check("profile uses real backend identity and counts", "FynxProfileRemoteClient" in profile and "followerCount" in profile and "followingCount" in profile)
 check("other-user profile does not expose private follower/following lists", "ProfileStat(\"Followers\"" not in other_profile and "ProfileStat(\"Following\"" not in other_profile)
 check("profile privacy is enforced server-side", "connectionsVisible:self" in profile_api and "privacy" in profile_api.lower())
@@ -78,10 +76,7 @@ check("notification device storage is user-scoped", "user_id" in notification_de
 check("notification sender keeps credentials server-side", "FIREBASE_SERVICE_ACCOUNT_JSON" in notification_push and "FIREBASE_PRIVATE_KEY" in notification_push and "firebase" in notification_push.lower())
 check("notification bootstrap is idempotent integration glue", "notificationPush" in notification_bootstrap and "idempotent" in notification_bootstrap.lower())
 
-# Reject obvious fake-data shortcuts in production client sources.
-client_sources = []
-for path in (ROOT / "app/src/main/java/com/fynx/app/ui").glob("*.kt"):
-    client_sources.append(path.read_text(encoding="utf-8"))
+client_sources = [p.read_text(encoding="utf-8") for p in (ROOT / "app/src/main/java/com/fynx/app/ui").glob("*.kt")]
 all_client = "\n".join(client_sources)
 check("no hard-coded API secret pattern in client source", not re.search(r"sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}", all_client))
 check("no obvious fake production identity shortcut", not re.search(r"fakeUser|FakeUser|demoUser|DemoUser|mockUser|MockUser", all_client))
