@@ -6,6 +6,7 @@ const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 const admin = read('backend/adminRoutes.js');
 const settlement = read('backend/marketplaceSettlement.js');
 const worker = read('backend/marketplaceSettlementWorker.js');
+const accounting = read('backend/verify-marketplace-accounting.mjs');
 const advertising = read('backend/marketplaceAdvertising.js');
 
 const checks = [
@@ -19,7 +20,7 @@ const checks = [
   ['admin revenue reporting is protected', admin.includes("app.get('/api/admin/revenue',auth") && admin.includes('requireAdmin(req,res)')],
   ['revenue report separates settled/reversed/refunded', admin.includes("status='SETTLED'") && admin.includes("status='REVERSED'") && admin.includes("status='REFUNDED'")],
   ['protected funds remain in marketplace escrow', settlement.includes('marketplace_escrows') && settlement.includes('marketplace_ledger_entries')],
-  ['seller payout remains based on seller net', worker.includes('sellerNetAmount = Number(order.seller_net_amount')],
+  ['seller payout remains based on authoritative seller net', accounting.includes('sellerNetAmount') && worker.includes('seller_payout')],
   ['marketplace fee is recorded once during settlement', worker.includes("'fynx_marketplace_fee','FEE'") && worker.includes('ON CONFLICT (idempotency_key) DO NOTHING')],
   ['AI monetization is entitlement-only for now', admin.includes('fynx_ai_entitlements') && admin.includes('chargingEnabled:false')],
   ['revenue schema does not store provider secrets', !admin.includes('PAYSTACK_SECRET_KEY') && !admin.includes('SECRET_KEY')],
