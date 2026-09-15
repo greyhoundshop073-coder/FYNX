@@ -44,13 +44,37 @@ fun FynxMarketplaceOrderLifecycle(
             busy = busy,
             error = error,
             onSubmit = { method, name, phone, address, city, state, country, note ->
-                busy = true
-                error = null
-                scope.launch {
-                    FynxRemoteSocialClient.setMarketplaceFulfillment(context, order.id, method, name, phone, address, city, state, country, note)
-                        .onSuccess { showFulfillment = false; onChanged() }
-                        .onFailure { error = it.message ?: "Fulfillment could not be saved." }
-                    busy = false
+                val normalizedMethod = method.trim().uppercase()
+                val missingDelivery = normalizedMethod == "DELIVERY" &&
+                    listOf(name, phone, address, city, state, country).any { it.trim().isBlank() }
+                when {
+                    normalizedMethod !in setOf("DELIVERY", "PICKUP") -> {
+                        error = "Choose delivery or pickup before continuing."
+                    }
+                    normalizedMethod == "DELIVERY" && missingDelivery -> {
+                        error = "Complete all delivery address and contact fields."
+                    }
+                    else -> {
+                        busy = true
+                        error = null
+                        scope.launch {
+                            FynxRemoteSocialClient.setMarketplaceFulfillment(
+                                context,
+                                order.id,
+                                normalizedMethod,
+                                name.trim(),
+                                phone.trim(),
+                                address.trim(),
+                                city.trim(),
+                                state.trim(),
+                                country.trim(),
+                                note.trim().take(500)
+                            )
+                                .onSuccess { showFulfillment = false; onChanged() }
+                                .onFailure { error = it.message ?: "Fulfillment could not be saved." }
+                            busy = false
+                        }
+                    }
                 }
             },
             onClose = onClose
@@ -65,14 +89,14 @@ fun FynxMarketplaceOrderLifecycle(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(order.productTitle.ifBlank { "FYNX order" })
                 Text("${order.currency} ${"%.2f".format(order.totalAmount)}")
-                Text("Fulfillment: ${order.fulfillmentMethod}")
-                order.trackingReference?.let { Text("Tracking: $it") }
+                Text("Fulfillment: ${order.fulfillmentMethod.ifBlank { "Not selected" }}")
+                order.trackingReference?.takeIf { it.isNotBlank() }?.let { Text("Tracking: $it") }
                 FynxMarketplaceOrderTimeline(context = context, orderId = order.id)
                 when (order.status) {
-                    "PAID" -> Text("Choose how you want to receive the order.")
-                    "SHIPPED" -> Text("The seller marked this order as shipped. Confirm when it reaches you.")
-                    "INSPECTION" -> Text("You have a 48-hour inspection window. Complete the order when everything is correct.")
-                    "COMPLETED" -> Text("Order completed. Payment is eligible for seller payout release.")
+                    "PAID" -> Text("Choose delivery or pickup so the seller can fulfill the order.")
+                    "SHIPPED" -> Text("The seller marked this order as shipped. Confirm only after the order reaches you.")
+                    "INSPECTION" -> Text("You have a 48-hour inspection window. Complete the order only when the product is correct and in acceptable condition.")
+                    "COMPLETED" -> Text("Order completed. Payment is eligible for seller payout release when the protected settlement rules are satisfied.")
                     else -> Text("This order is protected by FYNX marketplace status controls.")
                 }
                 error?.let { Text(it) }
@@ -82,7 +106,8 @@ fun FynxMarketplaceOrderLifecycle(
             when (order.status) {
                 "PAID" -> Button(onClick = { error = null; showFulfillment = true }) { Text("Choose fulfillment") }
                 "SHIPPED" -> Button(enabled = !busy, onClick = {
-                    busy = true; error = null
+                    busy = true
+                    error = null
                     scope.launch {
                         FynxRemoteSocialClient.confirmMarketplaceDelivery(context, order.id)
                             .onSuccess { onChanged() }
@@ -91,7 +116,8 @@ fun FynxMarketplaceOrderLifecycle(
                     }
                 }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Confirm received") }
                 "INSPECTION" -> Button(enabled = !busy, onClick = {
-                    busy = true; error = null
+                    busy = true
+                    error = null
                     scope.launch {
                         FynxRemoteSocialClient.completeMarketplaceOrder(context, order.id)
                             .onSuccess { onChanged() }
@@ -122,29 +148,29 @@ private fun MarketplaceFulfillmentDialog(
     var city by remember { mutableStateOf(order.shippingAddress?.optString("city").orEmpty()) }
     var state by remember { mutableStateOf(order.shippingAddress?.optString("state").orEmpty()) }
     var country by remember { mutableStateOf(order.shippingAddress?.optString("country").orEmpty()) }
-    var note by remember { mutableStateOf(order.buyerNote) }
+    var note by remember { mutableStateOf(order.buyerNote.take(500)) }
 
     AlertDialog(
         onDismissRequest = { if (!busy) onClose() },
         title = { Text("Receive your order") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                Text("Choose an available fulfillment method.")
+                Text("Choose an available fulfillment method. Your protected order remains governed by the existing FYNX order lifecycle.")
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (order.deliveryAvailable) FilterChip(method == "DELIVERY", { method = "DELIVERY" }, label = { Text("Delivery") })
                     if (order.pickupAvailable) FilterChip(method == "PICKUP", { method = "PICKUP" }, label = { Text("Pickup") })
                 }
                 if (method == "DELIVERY") {
-                    OutlinedTextField(name, { name = it }, label = { Text("Full name") }, singleLine = true, enabled = !busy)
-                    OutlinedTextField(phone, { phone = it }, label = { Text("Phone") }, singleLine = true, enabled = !busy)
-                    OutlinedTextField(address, { address = it }, label = { Text("Delivery address") }, minLines = 2, enabled = !busy)
+                    OutlinedTextField(name, { name = it.take(120) }, label = { Text("Full name") }, singleLine = true, enabled = !busy)
+                    OutlinedTextField(phone, { phone = it.take(40) }, label = { Text("Phone") }, singleLine = true, enabled = !busy)
+                    OutlinedTextField(address, { address = it.take(300) }, label = { Text("Delivery address") }, minLines = 2, enabled = !busy)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(city, { city = it }, label = { Text("City") }, singleLine = true, enabled = !busy, modifier = Modifier.weight(1f))
-                        OutlinedTextField(state, { state = it }, label = { Text("State") }, singleLine = true, enabled = !busy, modifier = Modifier.weight(1f))
+                        OutlinedTextField(city, { city = it.take(100) }, label = { Text("City") }, singleLine = true, enabled = !busy, modifier = Modifier.weight(1f))
+                        OutlinedTextField(state, { state = it.take(100) }, label = { Text("State") }, singleLine = true, enabled = !busy, modifier = Modifier.weight(1f))
                     }
-                    OutlinedTextField(country, { country = it }, label = { Text("Country") }, singleLine = true, enabled = !busy)
+                    OutlinedTextField(country, { country = it.take(100) }, label = { Text("Country") }, singleLine = true, enabled = !busy)
                 }
-                OutlinedTextField(note, { note = it }, label = { Text("Note to seller (optional)") }, minLines = 2, enabled = !busy)
+                OutlinedTextField(note, { note = it.take(500) }, label = { Text("Note to seller (optional)") }, minLines = 2, enabled = !busy)
                 error?.let { Text(it) }
                 Spacer(Modifier.height(2.dp))
             }
@@ -154,7 +180,6 @@ private fun MarketplaceFulfillmentDialog(
                 if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Save fulfillment")
             }
         },
-        dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text("Cancel") }
-        }
+        dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text("Cancel") } }
     )
 }
