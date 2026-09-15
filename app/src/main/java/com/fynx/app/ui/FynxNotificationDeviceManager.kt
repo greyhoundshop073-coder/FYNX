@@ -2,18 +2,34 @@ package com.fynx.app.ui
 
 import android.content.Context
 import com.google.firebase.messaging.FirebaseMessaging
-import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONObject
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 object FynxNotificationDeviceManager {
     private const val PREFS = "fynx_fcm_device"
     private const val KEY_TOKEN = "token"
     private const val PROVIDER = "fcm"
 
+    private suspend fun currentToken(): String = suspendCancellableCoroutine { continuation ->
+        val task = FirebaseMessaging.getInstance().token
+        task.addOnCompleteListener { completed ->
+            if (!completed.isSuccessful) {
+                continuation.resumeWithException(completed.exception ?: IllegalStateException("FCM token request failed"))
+            } else {
+                continuation.resume(completed.result?.trim().orEmpty())
+            }
+        }
+    }
+
     suspend fun registerCurrentToken(context: Context): Result<Unit> {
         if (!FynxBackendClient.hasAccessToken(context) || FynxAuthStore.load(context).state != AuthState.SIGNED_IN) return Result.success(Unit)
         return runCatching {
-            val token = FirebaseMessaging.getInstance().token.await().trim()
+            val token = currentToken()
             require(token.isNotBlank()) { "FCM registration token is empty" }
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val previous = prefs.getString(KEY_TOKEN, null)?.trim()
@@ -40,7 +56,7 @@ object FynxNotificationDeviceManager {
         if (token.isBlank()) return
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_TOKEN, token).apply()
         if (!FynxBackendClient.hasAccessToken(context) || FynxAuthStore.load(context).state != AuthState.SIGNED_IN) return
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.IO).launch {
             runCatching {
                 FynxBackendClient.postJson(
                     context,
