@@ -85,6 +85,13 @@
                 <data android:scheme="https" android:host="fynx.app" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".ui.FynxFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
         <activity android:name=".ui.FynxContactsActivity" android:exported="false" />
         <provider
             android:name="androidx.core.content.FileProvider"
