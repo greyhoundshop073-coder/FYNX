@@ -19,7 +19,7 @@ export function registerAdminRoutes({ app }) {
         source TEXT NOT NULL CHECK(source IN ('MARKETPLACE_FEE','SELLER_PROMOTION','AI_PLAN')),
         source_key TEXT NOT NULL UNIQUE,
         order_id UUID REFERENCES marketplace_orders(id) ON DELETE SET NULL,
-        listing_id UUID REFERENCES marketplace_listings(id) ON DELETE SET NULL,
+        listing_id BIGINT REFERENCES marketplace_listings(id) ON DELETE SET NULL,
         user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
         amount NUMERIC(14,2) NOT NULL CHECK(amount > 0),
         currency TEXT NOT NULL,
@@ -30,38 +30,29 @@ export function registerAdminRoutes({ app }) {
       );
       CREATE INDEX IF NOT EXISTS fynx_revenue_transactions_created_idx ON fynx_revenue_transactions(created_at DESC);
       CREATE INDEX IF NOT EXISTS fynx_revenue_transactions_source_idx ON fynx_revenue_transactions(source,status,created_at DESC);
-      CREATE TABLE IF NOT EXISTS fynx_seller_promotions (
-        id UUID PRIMARY KEY,
-        seller_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        listing_id UUID NOT NULL REFERENCES marketplace_listings(id) ON DELETE CASCADE,
-        status TEXT NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','ACTIVE','PAUSED','ENDED')),
-        budget_amount NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK(budget_amount >= 0),
-        currency TEXT NOT NULL DEFAULT 'NGN',
-        starts_at TIMESTAMPTZ,
-        ends_at TIMESTAMPTZ,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        UNIQUE(seller_id,listing_id)
-      );
-      CREATE INDEX IF NOT EXISTS fynx_seller_promotions_active_idx ON fynx_seller_promotions(listing_id,status,starts_at,ends_at);
       CREATE TABLE IF NOT EXISTS fynx_ai_entitlements (
         user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
         plan TEXT NOT NULL DEFAULT 'FREE' CHECK(plan IN ('FREE','PLUS','PRO')),
         active BOOLEAN NOT NULL DEFAULT TRUE,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
-      CREATE OR REPLACE FUNCTION fynx_record_marketplace_revenue() RETURNS trigger AS $$
+      DO $$
       BEGIN
-        IF NEW.account='fynx_marketplace_fee' AND NEW.entry_type='FEE' THEN
-          INSERT INTO fynx_revenue_transactions(id,source,source_key,order_id,amount,currency,status,metadata)
-          VALUES(gen_random_uuid(),'MARKETPLACE_FEE',NEW.idempotency_key,NEW.order_id,NEW.amount,NEW.currency,'SETTLED',jsonb_build_object('ledgerId',NEW.id,'account',NEW.account,'entryType',NEW.entry_type))
-          ON CONFLICT(source_key) DO NOTHING;
+        IF to_regclass('public.marketplace_ledger_entries') IS NOT NULL THEN
+          CREATE OR REPLACE FUNCTION fynx_record_marketplace_revenue() RETURNS trigger AS $fn$
+          BEGIN
+            IF NEW.account='fynx_marketplace_fee' AND NEW.entry_type='FEE' THEN
+              INSERT INTO fynx_revenue_transactions(id,source,source_key,order_id,amount,currency,status,metadata)
+              VALUES(gen_random_uuid(),'MARKETPLACE_FEE',NEW.idempotency_key,NEW.order_id,NEW.amount,NEW.currency,'SETTLED',jsonb_build_object('ledgerId',NEW.id,'account',NEW.account,'entryType',NEW.entry_type))
+              ON CONFLICT(source_key) DO NOTHING;
+            END IF;
+            RETURN NEW;
+          END;
+          $fn$ LANGUAGE plpgsql;
+          DROP TRIGGER IF EXISTS marketplace_revenue_ledger_sync ON marketplace_ledger_entries;
+          CREATE TRIGGER marketplace_revenue_ledger_sync AFTER INSERT ON marketplace_ledger_entries FOR EACH ROW EXECUTE FUNCTION fynx_record_marketplace_revenue();
         END IF;
-        RETURN NEW;
-      END;
-      $$ LANGUAGE plpgsql;
-      DROP TRIGGER IF EXISTS marketplace_revenue_ledger_sync ON marketplace_ledger_entries;
-      CREATE TRIGGER marketplace_revenue_ledger_sync AFTER INSERT ON marketplace_ledger_entries FOR EACH ROW EXECUTE FUNCTION fynx_record_marketplace_revenue();
+      END $$;
     `).catch(error => { schemaPromise = undefined; throw error; });
     return schemaPromise;
   };
@@ -86,13 +77,9 @@ export function registerAdminRoutes({ app }) {
 
   app.get('/api/admin/revenue',auth,async(req,res)=>{try{await ensureSchema();if(!(await requireAdmin(req,res)))return;const result=await pool.query(`SELECT source,status,currency,COUNT(*)::int AS transactions,COALESCE(SUM(amount),0)::numeric(14,2) AS amount FROM fynx_revenue_transactions GROUP BY source,status,currency ORDER BY source,status,currency`);const totals=await pool.query(`SELECT currency,COALESCE(SUM(amount) FILTER (WHERE status='SETTLED'),0)::numeric(14,2) AS settled,COALESCE(SUM(amount) FILTER (WHERE status='REVERSED'),0)::numeric(14,2) AS reversed,COALESCE(SUM(amount) FILTER (WHERE status='REFUNDED'),0)::numeric(14,2) AS refunded FROM fynx_revenue_transactions GROUP BY currency ORDER BY currency`);return res.json({role:req.fynxAdminRole,breakdown:result.rows,totals:totals.rows,reconciliation:{source:'fynx_revenue_transactions derived from marketplace fee ledger',duplicateProtection:'unique source_key',protectedFundsExcluded:true}});}catch(error){console.error('admin revenue',error);return res.status(500).json({error:'revenue report unavailable'});}});
 
-  app.get('/api/admin/admins',auth,async(req,res)=>{try{await ensureSchema();if((await requireAdmin(req,res))===null)return;const result=await pool.query(`SELECT u.id,u.username,u.display_name,r.created_at FROM fynx_admin_roles r JOIN users u ON u.id=r.user_id ORDER BY r.created_at ASC LIMIT 100`);return res.json({admins:result.rows.map(a=>({id:String(a.id),username:a.username,displayName:a.display_name||'',grantedAt:a.created_at}))});}catch(error){console.error('admin list',error);return res.status(500).json({error:'admin list unavailable'});}});
-
-  app.get('/api/marketplace/promotions',auth,async(req,res)=>{try{await ensureSchema();const result=await pool.query(`SELECT p.id,p.listing_id,p.status,p.budget_amount,p.currency,p.starts_at,p.ends_at FROM fynx_seller_promotions p WHERE p.status='ACTIVE' AND (p.starts_at IS NULL OR p.starts_at<=NOW()) AND (p.ends_at IS NULL OR p.ends_at>NOW()) ORDER BY p.updated_at DESC LIMIT 50`);return res.json({promotions:result.rows.map(p=>({...p,id:String(p.id),listingId:String(p.listing_id),budgetAmount:Number(p.budget_amount)}))});}catch(error){console.error('marketplace promotions',error);return res.status(500).json({error:'promotions unavailable'});}});
-
-  app.post('/api/marketplace/promotions',auth,async(req,res)=>{try{await ensureSchema();const listingId=typeof req.body?.listingId==='string'?req.body.listingId.trim():'';const status=typeof req.body?.status==='string'?req.body.status.trim().toUpperCase():'DRAFT';const budget=Number(req.body?.budgetAmount||0);const currency=typeof req.body?.currency==='string'?req.body.currency.trim().toUpperCase():'NGN';if(!/^[0-9a-f-]{36}$/i.test(listingId)||!['DRAFT','ACTIVE','PAUSED','ENDED'].includes(status)||!Number.isFinite(budget)||budget<0||!['NGN','USD'].includes(currency))return res.status(400).json({error:'valid listing, status, budget and currency are required'});const owned=(await pool.query('SELECT id FROM marketplace_listings WHERE id=$1 AND seller_id=$2 AND active=TRUE',[listingId,req.user.sub])).rows[0];if(!owned)return res.status(403).json({error:'listing unavailable'});if(budget>0)return res.status(409).json({error:'paid promotion charging is not enabled yet',code:'PROMOTION_BILLING_NOT_ENABLED'});const result=await pool.query(`INSERT INTO fynx_seller_promotions(id,seller_id,listing_id,status,budget_amount,currency) VALUES(gen_random_uuid(),$1,$2,$3,$4,$5) ON CONFLICT(seller_id,listing_id) DO UPDATE SET status=EXCLUDED.status,budget_amount=EXCLUDED.budget_amount,currency=EXCLUDED.currency,updated_at=NOW() RETURNING *`,[req.user.sub,listingId,status,budget,currency]);return res.status(201).json({promotion:{...result.rows[0],id:String(result.rows[0].id),listingId:String(result.rows[0].listing_id),budgetAmount:Number(result.rows[0].budget_amount)}});}catch(error){console.error('marketplace promotion create',error);return res.status(500).json({error:'promotion setup failed'});}});
-
   app.get('/api/admin/ai-entitlements',auth,async(req,res)=>{try{await ensureSchema();if(!(await requireAdmin(req,res)))return;const result=await pool.query(`SELECT plan,active,COUNT(*)::int AS users FROM fynx_ai_entitlements GROUP BY plan,active ORDER BY plan,active`);return res.json({entitlements:result.rows,chargingEnabled:false,source:'entitlement foundation only'});}catch(error){console.error('ai entitlements',error);return res.status(500).json({error:'AI entitlement report unavailable'});}});
+
+  app.get('/api/admin/admins',auth,async(req,res)=>{try{await ensureSchema();if((await requireAdmin(req,res))===null)return;const result=await pool.query(`SELECT u.id,u.username,u.display_name,r.created_at FROM fynx_admin_roles r JOIN users u ON u.id=r.user_id ORDER BY r.created_at ASC LIMIT 100`);return res.json({admins:result.rows.map(a=>({id:String(a.id),username:a.username,displayName:a.display_name||'',grantedAt:a.created_at}))});}catch(error){console.error('admin list',error);return res.status(500).json({error:'admin list unavailable'});}});
 
   app.post('/api/admin/announcements',auth,async(req,res)=>{try{await ensureSchema();if(!(await requireAdmin(req,res)))return;const title=typeof req.body?.title==='string'?req.body.title.trim().slice(0,120):'';const body=typeof req.body?.body==='string'?req.body.body.trim().slice(0,4000):'';const priority=typeof req.body?.priority==='string'?req.body.priority.trim().toUpperCase():'NORMAL';const published=req.body?.published===undefined?true:Boolean(req.body.published);if(title.length<2||body.length<2)return res.status(400).json({error:'title and body are required'});if(!['NORMAL','IMPORTANT','URGENT'].includes(priority))return res.status(400).json({error:'invalid announcement priority'});const result=await pool.query(`INSERT INTO fynx_announcements(title,body,priority,published,author_id) VALUES($1,$2,$3,$4,$5) RETURNING id,title,body,priority,published,created_at,updated_at`,[title,body,priority,published,req.user.sub]);return res.status(201).json({announcement:{...result.rows[0],id:String(result.rows[0].id)}});}catch(error){console.error('announcement create',error);return res.status(500).json({error:'announcement creation failed'});}});
 
