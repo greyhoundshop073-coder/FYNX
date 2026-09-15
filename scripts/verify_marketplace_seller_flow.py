@@ -9,6 +9,7 @@ checks = [
     ("seller support keeps a bounded real media limit", "const val MAX_PRODUCT_MEDIA = 12" in support),
     ("seller support accepts image and video media", 'mime.startsWith("image/") || mime.startsWith("video/")' in support),
     ("seller support removes duplicate media", ".distinct()" in support),
+    ("seller support appends media through the shared guardrail", "fun addMedia(context: Context, existing: List<Uri>, uri: Uri)" in support and "normalizedMedia(context, existing + uri)" in support),
     ("seller support validates positive price and quantity", "price > 0.0" in support and "quantity > 0" in support),
     ("active marketplace remains backend listing driven", "FynxRemoteSocialClient.listings" in marketplace),
     ("active marketplace retains protected checkout", "FynxMarketplaceCheckoutDialog" in marketplace),
