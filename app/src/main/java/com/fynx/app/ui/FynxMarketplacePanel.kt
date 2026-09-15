@@ -1,7 +1,9 @@
 package com.fynx.app.ui
 
 import android.net.Uri
+import android.widget.ImageView
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -29,6 +31,9 @@ import androidx.compose.ui.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -379,19 +384,55 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
     var location by remember { mutableStateOf("") }
     var delivery by remember { mutableStateOf(false) }
     var pickup by remember { mutableStateOf(true) }
-    var media by remember { mutableStateOf<Uri?>(null) }
+    var media by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var showCamera by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { media = it }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA)) { uris ->
+        if (uris.isNotEmpty()) media = FynxMarketplaceSellerFlowSupport.normalizedMedia(context, media + uris)
+    }
     AlertDialog(
         onDismissRequest = { if (!busy) onCancel() },
         title = { Text("Sell on FYNX") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Add product media, then enter the key details.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Button(onClick = { picker.launch(arrayOf("image/*", "video/*")) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.AddAPhoto, null); Spacer(Modifier.width(5.dp)); Text(if (media == null) "Add product photo/video" else "Media selected")
+                Text("Product media (${media.size}/${FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA})", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
+                        enabled = !busy && media.size < FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Collections, null); Spacer(Modifier.width(5.dp)); Text("Choose media")
+                    }
+                    OutlinedButton(onClick = { showCamera = true }, enabled = !busy && media.size < FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Default.PhotoCamera, null); Spacer(Modifier.width(5.dp)); Text("Camera")
+                    }
+                }
+                if (media.isNotEmpty()) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp), contentPadding = PaddingValues(vertical = 2.dp)) {
+                        items(media, key = { it.toString() }) { uri ->
+                            Box(Modifier.width(78.dp).height(78.dp)) {
+                                val isVideo = contextIsVideo(LocalContext.current, uri)
+                                if (isVideo) {
+                                    Box(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) {
+                                        Icon(Icons.Default.Videocam, "Video")
+                                    }
+                                } else {
+                                    AndroidView(
+                                        factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP } },
+                                        update = { imageView -> imageView.setImageURI(uri) },
+                                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
+                                    )
+                                }
+                                IconButton(onClick = { media = media.filterNot { it == uri } }, modifier = Modifier.align(Alignment.TopEnd).size(28.dp)) {
+                                    Icon(Icons.Default.Close, "Remove", tint = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        }
+                    }
                 }
                 OutlinedTextField(title, { title = it }, label = { Text("Product name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(price, { price = it }, label = { Text("Price (NGN)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -407,10 +448,10 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
             }
         },
         confirmButton = {
-            Button(enabled = !busy && title.isNotBlank() && desc.isNotBlank() && price.toDoubleOrNull() != null && media != null, onClick = {
+            Button(enabled = !busy && FynxMarketplaceSellerFlowSupport.validListing(title, desc, price.toDoubleOrNull(), quantity.toIntOrNull(), media), onClick = {
                 busy = true; error = null
                 scope.launch {
-                    FynxRemoteSocialClient.createMarketplaceListing(context, title, desc, "", price.toDouble(), "NGN", category, "NEW", quantity.toIntOrNull() ?: 1, location, delivery, pickup, null, listOfNotNull(media))
+                    FynxRemoteSocialClient.createMarketplaceListing(context, title, desc, "", price.toDouble(), FynxMarketplaceSellerFlowSupport.DEFAULT_CURRENCY, category, "NEW", quantity.toIntOrNull() ?: 1, location, delivery, pickup, null, media)
                         .onSuccess { onPublished() }
                         .onFailure { error = it.message ?: "Listing could not be published."; busy = false }
                 }
@@ -418,6 +459,22 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         },
         dismissButton = { TextButton(onClick = onCancel, enabled = !busy) { Text("Cancel") } }
     )
+    if (showCamera) Dialog(onDismissRequest = { showCamera = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize()) {
+            FynxCameraCapturePanel(
+                onCaptured = { uri, _ ->
+                    media = FynxMarketplaceSellerFlowSupport.addMedia(context, media, uri)
+                    showCamera = false
+                },
+                onDismiss = { showCamera = false }
+            )
+        }
+    }
+}
+
+private fun contextIsVideo(context: android.content.Context, uri: Uri): Boolean {
+    val mime = context.contentResolver.getType(uri).orEmpty().lowercase()
+    return mime.startsWith("video/") || uri.toString().lowercase().let { it.endsWith(".mp4") || it.endsWith(".webm") || it.endsWith(".3gp") || it.endsWith(".mkv") }
 }
 
 @Composable
