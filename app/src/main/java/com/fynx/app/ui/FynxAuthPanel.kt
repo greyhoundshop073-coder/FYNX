@@ -39,6 +39,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
         result.onSuccess { account ->
             FynxBackendClient.saveAccessToken(context, account.token)
             FynxAuthStore.saveAccount(context, account.displayName.ifBlank { displayName.trim() }, account.username, account.phone.ifBlank { phone.trim() })
+            scope.launch { FynxNotificationDeviceManager.registerCurrentToken(context) }
             busy = false
             error = null
             onAuthenticated(account.username)
