@@ -45,10 +45,20 @@ object FynxNotificationDeviceManager {
         }
     }
 
-    suspend fun unregisterCurrentAccount(context: Context): Result<Unit> {
-        return runCatching {
-            FynxBackendClient.delete(context, "/api/notification-devices").getOrThrow()
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY_TOKEN).apply()
+    /**
+     * Best-effort, non-blocking logout cleanup. It intentionally starts before
+     * the auth store is cleared so the authenticated DELETE can still use the
+     * current session token. The local FCM token is removed immediately so a
+     * subsequent account cannot inherit it from local storage.
+     */
+    fun unregisterCurrentAccount(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY_TOKEN).apply()
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching {
+                if (FynxBackendClient.hasAccessToken(context)) {
+                    FynxBackendClient.delete(context, "/api/notification-devices").getOrThrow()
+                }
+            }
         }
     }
 
