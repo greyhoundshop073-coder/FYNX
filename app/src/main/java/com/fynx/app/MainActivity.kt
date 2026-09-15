@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.fynx.app.ui.AuthState
 import com.fynx.app.ui.FynxApp
 import com.fynx.app.ui.FynxAuthStore
 import com.fynx.app.ui.FynxDeepLinkDestination
@@ -28,23 +29,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-    private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
     private val deepLinkDestinationState = mutableStateOf<FynxDeepLinkDestination?>(null)
+    private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) registerNotificationTokenIfSignedIn()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         deepLinkDestinationState.value = FynxDeepLinkParser.parse(intent?.data)
         FynxNotificationFoundation.createChannels(this)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
+        registerNotificationTokenIfSignedIn()
+
         setContent {
-            val scope = rememberCoroutineScope()
-            LaunchedEffect(Unit) {
-                if (FynxAuthStore.load(this@MainActivity).state == com.fynx.app.ui.AuthState.SIGNED_IN) {
-                    scope.launch { FynxNotificationDeviceManager.registerCurrentToken(this@MainActivity) }
-                }
-            }
             var showLaunch by remember { mutableStateOf(true) }
             LaunchedEffect(Unit) {
                 delay(1100)
@@ -62,7 +58,23 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         deepLinkDestinationState.value = FynxDeepLinkParser.parse(intent.data)
+    }
+
+    private fun registerNotificationTokenIfSignedIn() {
+        if (FynxAuthStore.load(this).state != AuthState.SIGNED_IN) return
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return
+        }
+
+        lifecycleScope.launch {
+            FynxNotificationDeviceManager.registerCurrentToken(this@MainActivity)
+        }
     }
 }
 
