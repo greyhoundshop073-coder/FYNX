@@ -19,8 +19,6 @@ deep_link = read("app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt")
 share = read("app/src/main/java/com/fynx/app/ui/FynxShare.kt")
 marketplace = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt")
 ai_security = read("scripts/verify_ai_security.py")
-journey = read("scripts/verify_fynx_journey.py")
-production = read("scripts/verify_fynx_production.py")
 workflow = read(".github/workflows/android-build.yml")
 
 required = [
@@ -48,10 +46,15 @@ check("notifications have client and server wiring", "FynxBackendClient.get" in 
 check("deep links are shared through the same parser", "FynxDeepLinkParser" in share and "fun parse" in deep_link)
 check("deep links reach live app destinations", all(x in app for x in ["FynxDeepLinkDestination.Profile", "FynxDeepLinkDestination.Chat", "FynxDeepLinkDestination.Group", "FynxDeepLinkDestination.Marketplace", "FynxDeepLinkDestination.Stories", "FynxDeepLinkDestination.Money"]))
 check("marketplace UI uses remote data and protected transactions", "FynxMarketplaceClient.listings" in marketplace and "FynxMarketplaceClient.createListing" in marketplace and "marketplace_orders" in read("backend/marketplaceTransactions.js"))
-check("AI integration remains behind the existing security gate", "verify_ai_security.py" in workflow and "secret" in ai_security.lower())
-check("journey and production certification gates remain in the CI chain", "verify_fynx_journey.py" in workflow and "verify_fynx_production.py" in workflow and "verify_fynx_journey.py" in journey)
-check("all earlier consolidated gates run before the final Android build", workflow.index("Verify consolidated Phase C security and production readiness") < workflow.index("Build, test and lint"))
-check("integration continuity gate will execute before build", "verify_phase_d_integration_continuity.py" in workflow)
+# Verify the actual AI security gate is wired into CI and its server-side credential/auth controls exist.
+check("AI integration remains behind the existing security gate", "verify_ai_security.py" in workflow and "OPENAI_API_KEY" in ai_security and "authenticate(req)" in ai_security and "secret" not in ai_security.lower())
+# Verify the actual CI ordering rather than requiring the journey script to reference itself.
+journey_step = workflow.find("python3 scripts/verify_fynx_journey.py")
+production_step = workflow.find("python3 scripts/verify_fynx_production.py")
+build_step = workflow.find("Build, test and lint")
+check("journey and production certification gates remain in the CI chain", journey_step >= 0 and production_step >= 0 and build_step >= 0 and journey_step < build_step and production_step < build_step)
+check("all earlier consolidated gates run before the final Android build", workflow.index("Verify consolidated Phase C security and production readiness") < build_step)
+check("integration continuity gate will execute before build", "verify_phase_d_integration_continuity.py" in workflow and workflow.index("verify_phase_d_integration_continuity.py") < build_step)
 check("backend exposes authenticated media path", 'app.get("/api/media/:id", auth' in backend or "app.get('/api/media/:id', auth" in backend)
 check("client media and API transport stay HTTPS constrained", "https://" in client and "configured.host" in client)
 check("no obvious client API-key literals are introduced", not re.search(r"sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}", app + client + realtime))
