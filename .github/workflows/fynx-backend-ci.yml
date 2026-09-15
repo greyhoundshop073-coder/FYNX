@@ -56,6 +56,9 @@ jobs:
           node --check marketplaceProtection.js
           node --check marketplaceProtectionResolution.js
           node --check marketplaceAdvertising.js
+          node --check notificationPush.js
+          node --check notificationBootstrap.js
+          node --check notificationDevices.js
           node --check verify-marketplace-ad-creative-identity.mjs
           node --check verify-marketplace-fulfillment-integrity.mjs
           node --check verify-marketplace-batch2.mjs
