@@ -1,4 +1,3 @@
-import jwt from "jsonwebtoken";
 import { createSign } from "node:crypto";
 
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "fynx-f0868";
@@ -23,7 +22,7 @@ function credentials() {
 }
 
 export function fynxPushConfigured() {
-  return Boolean(FIREBASE_PROJECT_ID && credentials());
+  try { return Boolean(FIREBASE_PROJECT_ID && credentials()); } catch { return false; }
 }
 
 function base64Url(value) {
@@ -58,6 +57,35 @@ async function accessToken() {
 async function ensureSchema(pool) {
   if (!pool) throw new Error("database not configured");
   if (!schemaPromise) schemaPromise = pool.query(`
+    CREATE TABLE IF NOT EXISTS notification_preferences (
+      user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      push_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      reactions_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      comments_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      friend_requests_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      messages_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      stories_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      reminders_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      group_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      marketplace_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      wallet_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      quiet_mode BOOLEAN NOT NULL DEFAULT FALSE,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS fynx_notifications (
+      id TEXT NOT NULL,
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      target_id TEXT,
+      source_username TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      read_at TIMESTAMPTZ,
+      PRIMARY KEY(id,user_id)
+    );
+    CREATE INDEX IF NOT EXISTS fynx_notifications_user_idx ON fynx_notifications(user_id,created_at DESC);
     CREATE TABLE IF NOT EXISTS fynx_notification_delivery (
       notification_id TEXT NOT NULL,
       user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -112,22 +140,26 @@ export async function queueFynxNotification(pool, {
   route = "fynx://home",
   notificationId = null
 }) {
-  if (!pool || !userId) return { stored: false, delivered: false, reason: "database unavailable" };
-  await ensureSchema(pool);
-  const id = String(notificationId || `push-${type}-${userId}-${targetId || "home"}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`).slice(0, 180);
-  const safeTitle = safeText(title, "FYNX");
-  const safeMessage = safeText(message, "You have a new FYNX notification.");
-  await pool.query(`INSERT INTO fynx_notifications(id,user_id,type,title,message,target_id,source_username,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,NOW()) ON CONFLICT(id,user_id) DO UPDATE SET title=EXCLUDED.title,message=EXCLUDED.message,target_id=EXCLUDED.target_id,source_username=EXCLUDED.source_username`, [id, userId, type, safeTitle, safeMessage, targetId == null ? null : String(targetId).slice(0, 200), sourceUsername == null ? null : String(sourceUsername).slice(0, 80)]);
-  if (!(await pushAllowed(pool, userId, type))) return { stored: true, delivered: false, reason: "notification preference disabled", id };
-  if (!fynxPushConfigured()) return { stored: true, delivered: false, reason: "firebase server credentials not configured", id };
-
-  const devices = (await pool.query(`SELECT provider,token FROM notification_devices WHERE user_id=$1 AND enabled=TRUE AND provider='fcm'`, [userId])).rows;
-  let delivered = 0;
-  for (const device of devices) {
-    const result = await sendFcm(pool, { userId, device, notificationId: id, type, title: safeTitle, message: safeMessage, route });
-    if (result) delivered += 1;
+  try {
+    if (!pool || !userId) return { stored: false, delivered: false, reason: "database unavailable" };
+    await ensureSchema(pool);
+    const id = String(notificationId || `push-${type}-${userId}-${targetId || "home"}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`).slice(0, 180);
+    const safeTitle = safeText(title, "FYNX");
+    const safeMessage = safeText(message, "You have a new FYNX notification.");
+    await pool.query(`INSERT INTO fynx_notifications(id,user_id,type,title,message,target_id,source_username,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,NOW()) ON CONFLICT(id,user_id) DO UPDATE SET title=EXCLUDED.title,message=EXCLUDED.message,target_id=EXCLUDED.target_id,source_username=EXCLUDED.source_username`, [id, userId, type, safeTitle, safeMessage, targetId == null ? null : String(targetId).slice(0, 200), sourceUsername == null ? null : String(sourceUsername).slice(0, 80)]);
+    if (!(await pushAllowed(pool, userId, type))) return { stored: true, delivered: false, reason: "notification preference disabled", id };
+    if (!fynxPushConfigured()) return { stored: true, delivered: false, reason: "firebase server credentials not configured", id };
+    const devices = (await pool.query(`SELECT provider,token FROM notification_devices WHERE user_id=$1 AND enabled=TRUE AND provider='fcm'`, [userId])).rows;
+    let delivered = 0;
+    for (const device of devices) {
+      const result = await sendFcm(pool, { userId, device, notificationId: id, type, title: safeTitle, message: safeMessage, route });
+      if (result) delivered += 1;
+    }
+    return { stored: true, delivered: delivered > 0, deliveredCount: delivered, id };
+  } catch (error) {
+    console.error("FYNX notification delivery", error);
+    return { stored: false, delivered: false, reason: "notification delivery failed" };
   }
-  return { stored: true, delivered: delivered > 0, deliveredCount: delivered, id };
 }
 
 async function sendFcm(pool, { userId, device, notificationId, type, title, message, route }) {
@@ -143,9 +175,7 @@ async function sendFcm(pool, { userId, device, notificationId, type, title, mess
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json; UTF-8" },
         body: JSON.stringify({ message: {
           token: device.token,
-          data: {
-            notificationId: String(notificationId), type: String(type), title: String(title), body: String(message), route: String(route),
-          },
+          data: { notificationId: String(notificationId), type: String(type), title: String(title), body: String(message), route: String(route) },
           android: { priority: "high", ttl: "2419200s" },
         }})
       });
@@ -190,8 +220,4 @@ export function registerFynxPushRoutes({ app, pool, auth }) {
       return res.status(500).json({ error: "notification delivery status unavailable" });
     }
   });
-}
-
-export function notificationPatchImports() {
-  return 'import { queueFynxNotification } from "./notificationPush.js";';
 }
