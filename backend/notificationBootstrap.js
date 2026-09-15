@@ -61,4 +61,3 @@ await patchOnce("socialRoutes.js", [
 ]);
 
 console.log("FYNX notification bootstrap: route wiring ready");
-await import("./realtimeIsolationBootstrap.js");
