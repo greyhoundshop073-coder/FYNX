@@ -56,7 +56,8 @@ object FynxDeepLinkParser {
         if(!isFynxScheme&&!isFynxWeb)return null
         val normalizedPath=uri.path.orEmpty().trim('/').split('/').filter{it.isNotBlank()}
         val first=normalizedPath.firstOrNull()?.lowercase().orEmpty()
-        val value=cleanIdentifier(normalizedPath.getOrNull(1))
+        val valueIndex = if (isFynxScheme) 0 else 1
+        val value=cleanIdentifier(normalizedPath.getOrNull(valueIndex))
         val host=uri.host.orEmpty().lowercase()
         val queryCode=uri.getQueryParameter("code")?.trim()?.takeIf{it.isNotBlank()}
         val queryGroupId=uri.getQueryParameter("groupId")?.trim()?.takeIf{it.isNotBlank()}
