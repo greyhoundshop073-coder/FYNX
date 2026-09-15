@@ -31,6 +31,13 @@ async function ensureSchema() {
         last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (user_id, provider, token)
       );
+      DELETE FROM notification_devices older
+      USING notification_devices newer
+      WHERE older.provider = newer.provider
+        AND older.token = newer.token
+        AND older.ctid < newer.ctid;
+      CREATE UNIQUE INDEX IF NOT EXISTS notification_devices_provider_token_uidx
+        ON notification_devices (provider, token);
       CREATE INDEX IF NOT EXISTS notification_devices_token_idx
         ON notification_devices (provider, token) WHERE enabled = TRUE;
     `).catch(error => {
@@ -68,8 +75,8 @@ export function registerNotificationDeviceRoutes({ app }) {
       await pool.query(`
         INSERT INTO notification_devices(user_id, provider, token, enabled, updated_at, last_seen_at)
         VALUES($1,$2,$3,TRUE,NOW(),NOW())
-        ON CONFLICT(user_id, provider, token)
-        DO UPDATE SET enabled=TRUE, updated_at=NOW(), last_seen_at=NOW()
+        ON CONFLICT(provider, token)
+        DO UPDATE SET user_id=EXCLUDED.user_id, enabled=TRUE, updated_at=NOW(), last_seen_at=NOW()
       `, [req.user.sub, provider, token]);
       return res.status(204).end();
     } catch (error) {
