@@ -31,9 +31,9 @@ check("realtime authentication verifies JWT", "jwt.verify(token, secret)" in rea
 check("realtime account isolation is enforced", "userId" in realtime_client and "currentAccountKey()" in realtime_client and "belongsToCurrentAccount" in realtime_client)
 check("client API traffic requires HTTPS", 'require(normalized.isBlank() || normalized.startsWith("https://"))' in client and 'require(root.startsWith("https://"))' in client)
 check("client only trusts backend media host", 'require(target.host.equals(configured.host, true))' in client)
-# The real client bounds streamed responses by byte count and aborts when the limit is crossed.
-check("API responses have bounded size", "MAX_RESPONSE_BYTES" in client and "total > MAX_RESPONSE_BYTES" in client and "Fynx backend response is too large" in client)
-check("media downloads have bounded size", "maxBytes" in client and "total > maxBytes" in client and "FYNX media is too large" in client)
+# Verify the real streamed-response guard structurally: bytes are accumulated and the stream is aborted after the configured cap.
+check("API responses have bounded size", "MAX_RESPONSE_BYTES" in client and "total += count" in client and "total > MAX_RESPONSE_BYTES" in client and "throw IOException" in client)
+check("media downloads have bounded size", "maxBytes" in client and "total += count" in client and "total > maxBytes" in client and "FYNX media is too large" in client)
 check("authenticated media endpoint exists", 'app.get("/api/media/:id", auth' in server)
 check("media ownership and visibility are server checked", "owner_id" in server and "sender_id" in server and "recipient_id" in server and "blocks" in media_privacy)
 check("production transport security headers are enabled", "X-Content-Type-Options" in server and "Referrer-Policy" in server and "X-Frame-Options" in server and "Strict-Transport-Security" in server)
