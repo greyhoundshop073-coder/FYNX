@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.PhoneDisabled
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,15 +21,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 /**
- * FYNX Home voice entry point.
+ * FYNX Home AI entry point.
  *
  * The compact inline control is the single source of truth for Home so the
- * microphone, connection state and voice interaction do not appear twice or
- * drift into two different implementations.
+ * microphone, text interaction, connection state and voice interaction do not
+ * appear twice or drift into separate implementations.
  */
 @Composable
 fun HomeAiVoiceInlineControl(modifier: Modifier = Modifier) {
@@ -40,6 +43,9 @@ fun HomeAiVoiceInlineControl(modifier: Modifier = Modifier) {
     var muted by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Talk to FYNX AI") }
     var transcript by remember { mutableStateOf<String?>(null) }
+    var textInput by remember { mutableStateOf("") }
+    var textLoading by remember { mutableStateOf(false) }
+    var textReply by remember { mutableStateOf<String?>(null) }
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startHomeVoice(engine, scope, { connecting = it }, { connected = it }, { status = it }, { transcript = it })
@@ -48,61 +54,104 @@ fun HomeAiVoiceInlineControl(modifier: Modifier = Modifier) {
 
     DisposableEffect(Unit) { onDispose { engine.close() } }
 
-    Row(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .size(62.dp)
-                .background(
-                    if (connected) MaterialTheme.colorScheme.primary else FynxDesign.SurfaceRaised,
-                    CircleShape
-                )
-                .border(
-                    width = if (connecting || connected) 3.dp else 1.dp,
-                    color = if (connecting || connected) MaterialTheme.colorScheme.primary else FynxDesign.Outline.copy(alpha = .65f),
-                    shape = CircleShape
-                ),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            IconButton(
-                enabled = !connecting,
-                onClick = {
-                    if (connected) {
-                        muted = !muted
-                        engine.setMicrophoneEnabled(!muted)
-                    } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                        startHomeVoice(engine, scope, { connecting = it }, { connected = it }, { status = it }, { transcript = it })
-                    } else permission.launch(Manifest.permission.RECORD_AUDIO)
-                }
+            Box(
+                modifier = Modifier
+                    .size(62.dp)
+                    .background(
+                        if (connected) MaterialTheme.colorScheme.primary else FynxDesign.SurfaceRaised,
+                        CircleShape
+                    )
+                    .border(
+                        width = if (connecting || connected) 3.dp else 1.dp,
+                        color = if (connecting || connected) MaterialTheme.colorScheme.primary else FynxDesign.Outline.copy(alpha = .65f),
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = if (connected && muted) Icons.Default.MicOff else Icons.Default.Mic,
-                    contentDescription = if (connected && muted) "Unmute FYNX AI" else "Start FYNX AI voice",
-                    tint = if (connected) Color.White else FynxDesign.TextPrimary,
-                    modifier = Modifier.size(28.dp)
+                IconButton(
+                    enabled = !connecting,
+                    onClick = {
+                        if (connected) {
+                            muted = !muted
+                            engine.setMicrophoneEnabled(!muted)
+                        } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                            startHomeVoice(engine, scope, { connecting = it }, { connected = it }, { status = it }, { transcript = it })
+                        } else permission.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                ) {
+                    Icon(
+                        imageVector = if (connected && muted) Icons.Default.MicOff else Icons.Default.Mic,
+                        contentDescription = if (connected && muted) "Unmute FYNX AI" else "Start FYNX AI voice",
+                        tint = if (connected) Color.White else FynxDesign.TextPrimary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            }
+
+            Column(Modifier.weight(1f)) {
+                Text("FYNX AI", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    if (connecting) "Connecting…" else if (connected) "Listening • voice replies enabled" else status,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = FynxDesign.TextSecondary,
+                    maxLines = 1
                 )
+                transcript?.takeIf { it.isNotBlank() }?.let {
+                    Text(it, style = MaterialTheme.typography.labelSmall, maxLines = 1, color = FynxDesign.TextSecondary)
+                }
+            }
+
+            if (connected) {
+                IconButton(onClick = { engine.close(); connected = false; muted = false; status = "Voice session ended" }) {
+                    Icon(Icons.Default.PhoneDisabled, "End FYNX AI voice")
+                }
             }
         }
 
-        Column(Modifier.weight(1f)) {
-            Text("FYNX AI", style = MaterialTheme.typography.titleSmall)
-            Text(
-                if (connecting) "Connecting…" else if (connected) "Listening • voice replies enabled" else status,
-                style = MaterialTheme.typography.bodySmall,
-                color = FynxDesign.TextSecondary,
-                maxLines = 1
-            )
-            transcript?.takeIf { it.isNotBlank() }?.let {
-                Text(it, style = MaterialTheme.typography.labelSmall, maxLines = 1, color = FynxDesign.TextSecondary)
-            }
-        }
+        OutlinedTextField(
+            value = textInput,
+            onValueChange = { textInput = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH) },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !textLoading,
+            singleLine = true,
+            placeholder = { Text("Type to ask FYNX AI…") },
+            trailingIcon = {
+                IconButton(
+                    enabled = !textLoading && textInput.trim().isNotEmpty(),
+                    onClick = {
+                        val prompt = textInput.trim()
+                        if (prompt.isEmpty()) return@IconButton
+                        textInput = ""
+                        textLoading = true
+                        textReply = null
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) { AiAssistantClient.sendMessage(context, prompt) }
+                            result.onSuccess { reply -> textReply = reply }
+                                .onFailure { textReply = "FYNX AI is temporarily unavailable. Please try again." }
+                            textLoading = false
+                        }
+                    }
+                ) { Icon(Icons.Default.Send, contentDescription = "Send text to FYNX AI") }
+            },
+            shape = FynxDesign.ControlShape
+        )
 
-        if (connected) {
-            IconButton(onClick = { engine.close(); connected = false; muted = false; status = "Voice session ended" }) {
-                Icon(Icons.Default.PhoneDisabled, "End FYNX AI voice")
+        when {
+            textLoading -> LinearProgressIndicator(Modifier.fillMaxWidth())
+            !textReply.isNullOrBlank() -> Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Text(textReply.orEmpty(), modifier = Modifier.padding(10.dp), style = MaterialTheme.typography.bodySmall)
             }
         }
     }
