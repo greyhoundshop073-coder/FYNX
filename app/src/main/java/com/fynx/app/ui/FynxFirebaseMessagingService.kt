@@ -3,8 +3,6 @@ package com.fynx.app.ui
 import android.app.PendingIntent
 import android.content.Intent
 import android.net.Uri
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import com.fynx.app.MainActivity
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -34,7 +32,7 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
         val stableHash = notificationId.hashCode()
         val intent = Intent(this, MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
-            data = Uri.parse(route)
+            this.data = Uri.parse(route)
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         val pendingIntent = PendingIntent.getActivity(
