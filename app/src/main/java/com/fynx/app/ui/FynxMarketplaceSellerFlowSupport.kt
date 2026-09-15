@@ -11,6 +11,9 @@ import android.net.Uri
  */
 internal object FynxMarketplaceSellerFlowSupport {
     const val MAX_PRODUCT_MEDIA = 12
+    const val MAX_TITLE_LENGTH = 120
+    const val MAX_DESCRIPTION_LENGTH = 5000
+    const val MAX_QUANTITY = 1_000_000
     const val DEFAULT_CURRENCY = "NGN"
 
     fun normalizedMedia(context: Context, uris: List<Uri>): List<Uri> =
@@ -27,9 +30,11 @@ internal object FynxMarketplaceSellerFlowSupport {
         normalizedMedia(context, existing + uri)
 
     fun validListing(title: String, description: String, price: Double?, quantity: Int?, media: List<Uri>): Boolean =
-        title.isNotBlank() &&
-            description.isNotBlank() &&
-            price != null && price > 0.0 &&
-            quantity != null && quantity > 0 &&
-            media.isNotEmpty()
+        title.trim().isNotBlank() &&
+            title.length <= MAX_TITLE_LENGTH &&
+            description.trim().isNotBlank() &&
+            description.length <= MAX_DESCRIPTION_LENGTH &&
+            price != null && price.isFinite() && price > 0.0 &&
+            quantity != null && quantity in 1..MAX_QUANTITY &&
+            media.isNotEmpty() && media.size <= MAX_PRODUCT_MEDIA
 }
