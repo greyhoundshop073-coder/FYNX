@@ -25,10 +25,15 @@ import com.fynx.app.ui.FynxDeepLinkParser
 import com.fynx.app.ui.FynxNotificationDeviceManager
 import com.fynx.app.ui.FynxNotificationFoundation
 import com.fynx.app.ui.FynxTheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val deepLinkDestinationState = mutableStateOf<FynxDeepLinkDestination?>(null)
     private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) registerNotificationTokenIfSignedIn()
@@ -62,6 +67,11 @@ class MainActivity : ComponentActivity() {
         deepLinkDestinationState.value = FynxDeepLinkParser.parse(intent.data)
     }
 
+    override fun onDestroy() {
+        activityScope.cancel()
+        super.onDestroy()
+    }
+
     private fun registerNotificationTokenIfSignedIn() {
         if (FynxAuthStore.load(this).state != AuthState.SIGNED_IN) return
 
@@ -72,7 +82,7 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        lifecycleScope.launch {
+        activityScope.launch {
             FynxNotificationDeviceManager.registerCurrentToken(this@MainActivity)
         }
     }
