@@ -2,6 +2,7 @@ package com.fynx.app.ui
 
 import android.content.Context
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 object FynxAuthStore {
     private const val PREFS = "fynx_auth"
@@ -10,6 +11,7 @@ object FynxAuthStore {
     private const val KEY_DISPLAY_NAME = "display_name"
     private const val KEY_PHONE = "phone"
     private const val KEY_ACCOUNT_CREATED = "account_created"
+    private val clearingSession = AtomicBoolean(false)
 
     fun load(context: Context): AuthSession {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -59,65 +61,75 @@ object FynxAuthStore {
      * Account-created state is intentionally preserved for the login path.
      */
     fun clear(context: Context) {
-        // Revoke this account's FCM device registration before destroying the
-        // authenticated session. The remote DELETE is best-effort so logout
-        // remains reliable when the device is offline; server-side token
-        // ownership is still enforced when another account registers it.
-        runCatching { FynxNotificationDeviceManager.unregisterCurrentAccount(context) }
+        // A failed/expired token can cause the backend client to clear the
+        // session while the best-effort FCM unregister is itself receiving a
+        // 401. Guard the session boundary so that this nested path cannot
+        // recursively call clear() forever. The outer clear continues and
+        // performs the complete local cleanup.
+        if (!clearingSession.compareAndSet(false, true)) return
+        try {
+            // Revoke this account's FCM device registration before destroying
+            // the authenticated session. The remote DELETE is best-effort so logout
+            // remains reliable when the device is offline; server-side token
+            // ownership is still enforced when another account registers it.
+            runCatching { FynxNotificationDeviceManager.unregisterCurrentAccount(context) }
 
-        // Clear the token directly here. FynxBackendClient.saveAccessToken(null)
-        // is itself a session-boundary operation, so calling it from this method
-        // would recurse when a legacy networking path expires the token.
-        runCatching { FynxSecureTokenStore.save(context, null) }
-        runCatching { FynxPreferencesStore.clearAccountSessionData(context) }
-        runCatching { context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE).edit().clear().apply() }
-        runCatching { context.getSharedPreferences("fynx_notification_store", Context.MODE_PRIVATE).edit().clear().apply() }
-        runCatching { File(context.cacheDir, "fynx_media_cache_v2").deleteRecursively() }
-        // Remove the older unscoped media cache as well. It predates account
-        // namespaces and must never survive a logout/account switch.
-        runCatching { File(context.cacheDir, "fynx_media").deleteRecursively() }
+            // Clear the token directly here. FynxBackendClient.saveAccessToken(null)
+            // is itself a session-boundary operation, so calling it from this method
+            // would recurse when a legacy networking path expires the token.
+            runCatching { FynxSecureTokenStore.save(context, null) }
+            runCatching { FynxPreferencesStore.clearAccountSessionData(context) }
+            runCatching { context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE).edit().clear().apply() }
+            runCatching { context.getSharedPreferences("fynx_notification_store", Context.MODE_PRIVATE).edit().clear().apply() }
+            runCatching { File(context.cacheDir, "fynx_media_cache_v2").deleteRecursively() }
+            // Remove the older unscoped media cache as well. It predates account
+            // namespaces and must never survive a logout/account switch.
+            runCatching { File(context.cacheDir, "fynx_media").deleteRecursively() }
 
-        // Remove account-scoped remote-media caches on logout/account switch.
-        runCatching {
-            context.cacheDir.listFiles()
-                ?.filter { it.isDirectory && it.name.startsWith("fynx_media_remote_") }
-                ?.forEach { it.deleteRecursively() }
+            // Remove account-scoped remote-media caches on logout/account switch.
+            runCatching {
+                context.cacheDir.listFiles()
+                    ?.filter { it.isDirectory && it.name.startsWith("fynx_media_remote_") }
+                    ?.forEach { it.deleteRecursively() }
+            }
+
+            // Remove account-scoped production-messaging media caches on logout/account switch.
+            runCatching {
+                context.cacheDir.listFiles()
+                    ?.filter {
+                        it.isDirectory &&
+                            it.name.startsWith("fynx_media_") &&
+                            !it.name.startsWith("fynx_media_remote_") &&
+                            it.name != "fynx_media_cache_v2"
+                    }
+                    ?.forEach { it.deleteRecursively() }
+            }
+
+            // Legacy social/status media was stored directly under filesDir without
+            // an account namespace. Delete those protected local copies at the
+            // session boundary so another account cannot inherit stale media bytes.
+            runCatching {
+                context.filesDir.listFiles()
+                    ?.filter {
+                        it.name.startsWith("fynx_post_") ||
+                            (it.name.startsWith("fynx_status_") && it.isFile)
+                    }
+                    ?.forEach { it.delete() }
+            }
+            runCatching {
+                context.filesDir.listFiles()
+                    ?.filter { it.isDirectory && it.name.startsWith("fynx_status_") }
+                    ?.forEach { it.deleteRecursively() }
+            }
+
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putBoolean(KEY_SIGNED_IN, false)
+                .remove(KEY_USERNAME)
+                .remove(KEY_DISPLAY_NAME)
+                .remove(KEY_PHONE)
+                .apply()
+        } finally {
+            clearingSession.set(false)
         }
-
-        // Remove account-scoped production-messaging media caches on logout/account switch.
-        runCatching {
-            context.cacheDir.listFiles()
-                ?.filter {
-                    it.isDirectory &&
-                        it.name.startsWith("fynx_media_") &&
-                        !it.name.startsWith("fynx_media_remote_") &&
-                        it.name != "fynx_media_cache_v2"
-                }
-                ?.forEach { it.deleteRecursively() }
-        }
-
-        // Legacy social/status media was stored directly under filesDir without
-        // an account namespace. Delete those protected local copies at the
-        // session boundary so another account cannot inherit stale media bytes.
-        runCatching {
-            context.filesDir.listFiles()
-                ?.filter {
-                    it.name.startsWith("fynx_post_") ||
-                        (it.name.startsWith("fynx_status_") && it.isFile)
-                }
-                ?.forEach { it.delete() }
-        }
-        runCatching {
-            context.filesDir.listFiles()
-                ?.filter { it.isDirectory && it.name.startsWith("fynx_status_") }
-                ?.forEach { it.deleteRecursively() }
-        }
-
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putBoolean(KEY_SIGNED_IN, false)
-            .remove(KEY_USERNAME)
-            .remove(KEY_DISPLAY_NAME)
-            .remove(KEY_PHONE)
-            .apply()
     }
 }
