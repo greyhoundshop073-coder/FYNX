@@ -23,6 +23,9 @@ internal object FynxMarketplaceSellerFlowSupport {
             .take(MAX_PRODUCT_MEDIA)
             .toList()
 
+    fun addMedia(context: Context, existing: List<Uri>, uri: Uri): List<Uri> =
+        normalizedMedia(context, existing + uri)
+
     fun validListing(title: String, description: String, price: Double?, quantity: Int?, media: List<Uri>): Boolean =
         title.isNotBlank() &&
             description.isNotBlank() &&
