@@ -18,11 +18,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import com.fynx.app.ui.FynxApp
+import com.fynx.app.ui.FynxAuthStore
 import com.fynx.app.ui.FynxDeepLinkDestination
 import com.fynx.app.ui.FynxDeepLinkParser
+import com.fynx.app.ui.FynxNotificationDeviceManager
 import com.fynx.app.ui.FynxNotificationFoundation
 import com.fynx.app.ui.FynxTheme
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -36,6 +38,12 @@ class MainActivity : ComponentActivity() {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         setContent {
+            val scope = rememberCoroutineScope()
+            LaunchedEffect(Unit) {
+                if (FynxAuthStore.load(this@MainActivity).state == com.fynx.app.ui.AuthState.SIGNED_IN) {
+                    scope.launch { FynxNotificationDeviceManager.registerCurrentToken(this@MainActivity) }
+                }
+            }
             var showLaunch by remember { mutableStateOf(true) }
             LaunchedEffect(Unit) {
                 delay(1100)
