@@ -17,6 +17,12 @@ checks = [
     ("active seller flow supports media removal", 'media = media.filterNot { it == uri }' in marketplace),
     ("active seller flow publishes the selected media list", "createMarketplaceListing" in marketplace and ", media)" in marketplace),
     ("active marketplace remains backend listing driven", "FynxRemoteSocialClient.listings" in marketplace),
+    ("product details show the real media carousel", "items(l.mediaIds.take(12))" in marketplace),
+    ("product details show seller and fulfillment information", 'Text("Seller:' in marketplace and 'Text("Location:' in marketplace and "deliveryAvailable" in marketplace and "pickupAvailable" in marketplace),
+    ("active marketplace exposes Contact seller", "Contact seller" in marketplace and "FynxDeepLinkParser.chatAppLink" in marketplace and "Intent.ACTION_VIEW" in marketplace),
+    ("active marketplace exposes Add to cart", "Add to cart" in marketplace and "cart = cart + listing" in marketplace),
+    ("active marketplace Buy now enters the real checkout", "onBuyNow = { selected = null; checkoutListing = listing }" in marketplace and "FynxMarketplaceCheckoutDialog" in marketplace),
+    ("active marketplace details are scrollable for phone screens", "verticalScroll(rememberScrollState())" in marketplace),
     ("active marketplace retains protected checkout", "FynxMarketplaceCheckoutDialog" in marketplace),
     ("active marketplace retains payment verification", "verifyMarketplacePayment" in marketplace),
     ("active marketplace retains order protection", "MarketplaceProtectedOrderDialog" in marketplace),
@@ -27,6 +33,6 @@ for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
 
 if failed:
-    raise SystemExit("Marketplace seller-flow verification failed: " + ", ".join(failed))
+    raise SystemExit("Marketplace seller/product-flow verification failed: " + ", ".join(failed))
 
-print(f"Marketplace seller-flow verification GREEN ({len(checks)} checks)")
+print(f"Marketplace seller/product-flow verification GREEN ({len(checks)} checks)")
