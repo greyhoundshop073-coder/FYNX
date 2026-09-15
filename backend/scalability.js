@@ -19,6 +19,7 @@ import { registerGroupInviteRoutes } from "./groupInviteRoutes.js";
 import { registerGroupContentRoutes } from "./groupContentRoutes.js";
 import { registerStatusManagementRoutes } from "./statusManagementRoutes.js";
 import { registerNotificationPreferenceRoutes } from "./notificationPreferences.js";
+import { registerNotificationDeviceRoutes } from "./notificationDevices.js";
 import { registerAdminRoutes } from "./adminRoutes.js";
 import { registerMonetizationRoutes } from "./monetizationRoutes.js";
 import { installPresencePrivacyGuard } from "./presencePrivacy.js";
@@ -57,6 +58,7 @@ http.createServer = function fynxCreateServer(...args) {
       registerGroupContentRoutes({ app });
       registerStatusManagementRoutes({ app });
       registerNotificationPreferenceRoutes({ app });
+      registerNotificationDeviceRoutes({ app });
       registerAdminRoutes({ app });
       registerMonetizationRoutes({ app });
       installMediaPrivacyGuard(app);
