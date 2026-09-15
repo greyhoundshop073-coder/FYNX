@@ -7,7 +7,7 @@ import org.json.JSONObject
 import java.net.URLEncoder
 
 object FynxProfileRemoteClient {
-    data class Profile(val id:String,val username:String,val displayName:String,val bio:String,val country:String,val verified:Boolean,val profilePhotoMediaId:String?,val activityVisible:Boolean,val relationship:String,val viewerSentRequest:Boolean,val viewerReceivedRequest:Boolean,val followedByCurrentUser:Boolean,val mutualFriends:Int,val postCount:Int,val followerCount:Int?=null,val followingCount:Int?=null,val connectionsVisible:Boolean=false)
+    data class Profile(val id:String,val username:String,val displayName:String,val bio:String,val country:String,val verified:Boolean,val profilePhotoMediaId:String?,val activityVisible:Boolean,val relationship:String,val pendingRequestId:String?=null,val viewerSentRequest:Boolean,val viewerReceivedRequest:Boolean,val followedByCurrentUser:Boolean,val mutualFriends:Int,val postCount:Int,val followerCount:Int?=null,val followingCount:Int?=null,val connectionsVisible:Boolean=false)
     data class ProfilePost(val id:String,val text:String,val visibility:String,val mediaId:String?,val mediaType:String?,val mediaUrl:String?,val timestamp:Long,val likeCount:Int,val commentCount:Int)
     data class ConnectionUser(val id:String,val username:String,val displayName:String)
     data class Report(val id:String,val status:String)
@@ -16,7 +16,7 @@ object FynxProfileRemoteClient {
         val encoded=URLEncoder.encode(username.trim().removePrefix("@"),"UTF-8")
         return FynxBackendClient.get(context,"/api/social/profile/$encoded").mapCatching{
             val p=JSONObject(it).getJSONObject("profile")
-            Profile(p.optString("id"),p.optString("username"),p.optString("displayName"),p.optString("bio"),p.optString("country"),p.optBoolean("verified"),p.optString("profilePhotoMediaId").takeIf{v->v.isNotBlank()&&v!="null"},p.optBoolean("activityVisible"),p.optString("relationship"),p.optBoolean("viewerSentRequest"),p.optBoolean("viewerReceivedRequest"),p.optBoolean("followedByCurrentUser"),p.optInt("mutualFriends"),p.optInt("postCount"),if(p.has("followerCount")&&!p.isNull("followerCount"))p.optInt("followerCount") else null,if(p.has("followingCount")&&!p.isNull("followingCount"))p.optInt("followingCount") else null,p.optBoolean("connectionsVisible"))
+            Profile(p.optString("id"),p.optString("username"),p.optString("displayName"),p.optString("bio"),p.optString("country"),p.optBoolean("verified"),p.optString("profilePhotoMediaId").takeIf{v->v.isNotBlank()&&v!="null"},p.optBoolean("activityVisible"),p.optString("relationship"),p.optString("pendingRequestId").takeIf{v->v.isNotBlank()&&v!="null"},p.optBoolean("viewerSentRequest"),p.optBoolean("viewerReceivedRequest"),p.optBoolean("followedByCurrentUser"),p.optInt("mutualFriends"),p.optInt("postCount"),if(p.has("followerCount")&&!p.isNull("followerCount"))p.optInt("followerCount") else null,if(p.has("followingCount")&&!p.isNull("followingCount"))p.optInt("followingCount") else null,p.optBoolean("connectionsVisible"))
         }
     }
 
@@ -36,7 +36,7 @@ object FynxProfileRemoteClient {
             else if(profilePhotoMediaId!=null) put("profilePhotoMediaId",profilePhotoMediaId.toLongOrNull()?:JSONObject.NULL)
         }.toString()).mapCatching{
             val p=JSONObject(it).getJSONObject("profile")
-            Profile(p.optString("id"),p.optString("username").ifBlank{p.optString("username")},p.optString("display_name").ifBlank{p.optString("displayName")},p.optString("bio"),p.optString("country"),p.optBoolean("verified"),p.optString("profile_photo_media_id").takeIf{v->v.isNotBlank()&&v!="null"},true,"self",false,false,false,0,p.optInt("post_count"),if(p.has("follower_count")&&!p.isNull("follower_count"))p.optInt("follower_count") else null,if(p.has("following_count")&&!p.isNull("following_count"))p.optInt("following_count") else null,true)
+            Profile(p.optString("id"),p.optString("username").ifBlank{p.optString("username")},p.optString("display_name").ifBlank{p.optString("displayName")},p.optString("bio"),p.optString("country"),p.optBoolean("verified"),p.optString("profile_photo_media_id").takeIf{v->v.isNotBlank()&&v!="null"},true,"self",null,false,false,false,0,p.optInt("post_count"),if(p.has("follower_count")&&!p.isNull("follower_count"))p.optInt("follower_count") else null,if(p.has("following_count")&&!p.isNull("following_count"))p.optInt("following_count") else null,true)
         }
     }
 
