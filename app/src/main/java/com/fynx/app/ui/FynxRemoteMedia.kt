@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import android.graphics.BitmapFactory
+import android.media.AudioAttributes
 import android.media.MediaPlayer
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -148,29 +149,69 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier) {
     var localFile by remember(resolvedUrl) { mutableStateOf<File?>(null) }
     var playing by remember(resolvedUrl) { mutableStateOf(false) }
     var loading by remember(resolvedUrl) { mutableStateOf(false) }
-    DisposableEffect(resolvedUrl) { onDispose { player?.release(); player = null; localFile = null } }
+    var error by remember(resolvedUrl) { mutableStateOf<String?>(null) }
+
+    DisposableEffect(resolvedUrl) {
+        onDispose { player?.release(); player = null; localFile = null }
+    }
+
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         IconButton(enabled = !loading, onClick = {
             if (playing) { player?.pause(); playing = false; return@IconButton }
-            if (player != null) { player?.start(); playing = true; return@IconButton }
+            if (player != null) { player?.start(); playing = true; error = null; return@IconButton }
             loading = true
+            error = null
             scope.launch {
                 try {
                     val cached = remoteMediaCacheFile(context, resolvedUrl, ".audio")
                     val target = cached ?: File.createTempFile("fynx_audio_", ".audio", context.cacheDir)
-                    val result = if (cached?.exists() == true && cached.length() > 0L) Result.success(FynxBackendClient.DownloadedMedia(null, cached.length())) else downloadRemoteMedia(context, resolvedUrl, target)
+                    val result = if (cached?.exists() == true && cached.length() > 0L) {
+                        Result.success(FynxBackendClient.DownloadedMedia(null, cached.length()))
+                    } else downloadRemoteMedia(context, resolvedUrl, target)
                     result.getOrThrow()
+                    if (!target.exists() || target.length() == 0L) error("Downloaded voice media is empty")
                     val finalFile = target
-                    val p = MediaPlayer()
-                    p.setDataSource(finalFile.absolutePath)
-                    p.setOnPreparedListener { loading = false; playing = true; it.start() }
-                    p.setOnCompletionListener { playing = false }
-                    p.setOnErrorListener { _, _, _ -> loading = false; playing = false; true }
-                    p.prepareAsync(); player = p; localFile = finalFile
-                } catch (_: Throwable) { loading = false; playing = false }
+                    val p = MediaPlayer().apply {
+                        setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                        setDataSource(finalFile.absolutePath)
+                        setOnPreparedListener {
+                            loading = false
+                            playing = true
+                            it.start()
+                        }
+                        setOnCompletionListener {
+                            playing = false
+                            release()
+                            player = null
+                        }
+                        setOnErrorListener { mp, _, _ ->
+                            loading = false
+                            playing = false
+                            error = "Voice media could not be decoded or played."
+                            runCatching { mp.reset() }
+                            runCatching { mp.release() }
+                            player = null
+                            true
+                        }
+                    }
+                    player = p
+                    localFile = finalFile
+                    p.prepareAsync()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Throwable) {
+                    loading = false
+                    playing = false
+                    error = failure.message ?: "Voice Status could not be loaded."
+                    player?.release()
+                    player = null
+                }
             }
         }) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause voice" else "Play voice") }
         Icon(Icons.Default.GraphicEq, "Voice Status")
-        Text(if (loading) "Loading voice…" else if (playing) "Playing voice" else "Voice Status", style = MaterialTheme.typography.bodyMedium)
+        Column(Modifier.weight(1f)) {
+            Text(if (loading) "Loading voice…" else if (playing) "Playing voice" else "Voice Status", style = MaterialTheme.typography.bodyMedium)
+            error?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, maxLines = 2) }
+        }
     }
 }
