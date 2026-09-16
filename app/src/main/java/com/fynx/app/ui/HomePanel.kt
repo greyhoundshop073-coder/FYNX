@@ -33,9 +33,15 @@ fun HomePanel(
 ) {
     val displayUsername = currentUsername.trim().removePrefix("@").trim()
     var showCreateMenu by remember { mutableStateOf(false) }
+    var showMatureStatusComposer by remember { mutableStateOf(false) }
 
     fun dismissCreateMenu() {
         showCreateMenu = false
+    }
+
+    if (showMatureStatusComposer) {
+        FynxMatureStatusComposerPanel(onClose = { showMatureStatusComposer = false })
+        return
     }
 
     Column(
@@ -71,7 +77,7 @@ fun HomePanel(
             },
             onStatus = {
                 dismissCreateMenu()
-                onOpenStories()
+                showMatureStatusComposer = true
             },
             onMarketplace = {
                 dismissCreateMenu()
