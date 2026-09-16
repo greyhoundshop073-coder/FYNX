@@ -75,6 +75,8 @@ jobs:
           gcloud config get-value project
       - name: Verify consolidated FCM notification phase
         run: python3 scripts/verify_fcm_notifications.py
+      - name: Verify notifications and settings integration
+        run: python3 scripts/verify_notifications_settings_integration.py
       - name: Verify consolidated Phase B real-user audit
         run: python3 scripts/verify_phase_b_real_user_audit.py
       - name: Verify consolidated Phase C security and production readiness
