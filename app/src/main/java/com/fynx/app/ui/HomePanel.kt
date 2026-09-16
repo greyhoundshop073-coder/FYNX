@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Production Home shell. Status/AI content scrolls away with the Home feed; the feed remains the only scrolling surface. */
+/** Production Home shell. Status/AI content is supplied to the feed's single scroll surface. */
 @Composable
 fun HomePanel(
     currentUsername: String = "",
@@ -44,32 +44,23 @@ fun HomePanel(
         return
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(bottom = 24.dp)
-    ) {
-        item(key = "home_status_ai") {
-            FynxVisibleUpdatesPanel(
+    FynxHomeLifecycleRefresh { refreshKey ->
+        key(refreshKey) {
+            FynxRemoteHomeSocialPanel(
+                modifier = Modifier.fillMaxSize(),
                 currentUsername = displayUsername,
-                onOpenStories = onOpenStories,
-                onOpenAi = onOpenAi
-            )
-        }
-
-        item(key = "home_social_feed") {
-            FynxHomeLifecycleRefresh { refreshKey ->
-                key(refreshKey) {
-                    FynxRemoteHomeSocialPanel(
-                        modifier = Modifier.fillMaxWidth(),
+                onOpenFindPeople = onOpenFindPeople,
+                onOpenMarketplace = onOpenMarketplace,
+                onCreatePost = { showCreateMenu = true },
+                onOpenAuthorProfile = onOpenAuthorProfile,
+                header = {
+                    FynxVisibleUpdatesPanel(
                         currentUsername = displayUsername,
-                        onOpenFindPeople = onOpenFindPeople,
-                        onOpenMarketplace = onOpenMarketplace,
-                        onCreatePost = { showCreateMenu = true },
-                        onOpenAuthorProfile = onOpenAuthorProfile
+                        onOpenStories = onOpenStories,
+                        onOpenAi = onOpenAi
                     )
                 }
-            }
+            )
         }
     }
 
