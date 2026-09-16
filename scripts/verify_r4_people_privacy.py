@@ -43,7 +43,18 @@ check("friend requests reject self, blocks and duplicates", "cannot add yourself
 check("accepted friend actions are authenticated", "UPDATE friendships SET status = 'accepted' WHERE id = $1 AND friend_id = $2" in social and "DELETE FROM friendships WHERE id = $1 AND friend_id = $2" in social)
 check("blocking removes active friendship", "INSERT INTO blocks (blocker_id, blocked_id)" in social and "DELETE FROM friendships WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)" in social)
 check("reverse friend requests are additionally hardened before route", "reversePending" in social_hardening and "friend request already pending" in social_hardening)
-check("other-user profile never exposes connection stats/lists", 'ProfileStat(\"Followers\"' not in other_profile and 'ProfileStat(\"Following\"' not in other_profile and "followerCount" not in other_profile and "followingCount" not in other_profile)
+# Other-user profiles may show real follower/following COUNTS. The private connection MEMBER LISTS remain self-only.
+check(
+    "other-user profile exposes counts but not connection member lists",
+    'ProfileStat("Followers"' in other_profile
+    and 'ProfileStat("Following"' in other_profile
+    and "followerCount" in other_profile
+    and "followingCount" in other_profile
+    and not any(token in other_profile.lower() for token in [
+        "followers list", "following list", "follower members", "following members",
+        "follower users", "following users", "follower names", "following names"
+    ])
+)
 check("self profile renders real server counts and connection dialogs", 'ProfileStat("Followers"' in profile_panel and 'ProfileStat("Following"' in profile_panel and "FynxProfileRemoteClient.followers" in profile_panel and "FynxProfileRemoteClient.following" in profile_panel)
 check("profile client reads server relationship/count fields", "followerCount" in profile_client and "followingCount" in profile_client and "followedByCurrentUser" in profile_client)
 
