@@ -22,5 +22,12 @@ object FynxCallTransportHardening {
     fun isValidCallSignal(value: String): Boolean = value.length <= MAX_SIGNAL_LENGTH && value in validSignals
     fun isTerminalSignal(value: String): Boolean = value in terminalSignals
     fun isUnavailableSignal(value: String): Boolean = value == "unavailable"
+    fun terminalStatus(value: String): String? = when (value) {
+        "reject" -> "Declined"
+        "end" -> "Ended"
+        "unavailable" -> "Unavailable"
+        "busy" -> "Busy"
+        else -> null
+    }
     fun isValidCallType(value: String): Boolean = value == "voice" || value == "video"
 }
