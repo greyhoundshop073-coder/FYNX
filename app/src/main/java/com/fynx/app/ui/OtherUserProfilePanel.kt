@@ -9,12 +9,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Message
+import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 @Composable
 fun OtherUserProfilePanel(
@@ -38,6 +41,7 @@ fun OtherUserProfilePanel(
     val scope = rememberCoroutineScope()
     var profile by remember(username) { mutableStateOf<FynxProfileRemoteClient.Profile?>(null) }
     var posts by remember(username) { mutableStateOf<List<FynxProfileRemoteClient.ProfilePost>>(emptyList()) }
+    var marketplace by remember(username) { mutableStateOf<List<FynxMarketplaceClient.Listing>>(emptyList()) }
     var loading by remember(username) { mutableStateOf(true) }
     var error by remember(username) { mutableStateOf<String?>(null) }
     var following by remember(username) { mutableStateOf(false) }
@@ -47,6 +51,8 @@ fun OtherUserProfilePanel(
     var reportDetails by remember(username) { mutableStateOf("") }
     var reportMessage by remember(username) { mutableStateOf<String?>(null) }
     var selectedPostIndex by remember(username) { mutableStateOf<Int?>(null) }
+    var selectedTab by remember(username) { mutableStateOf("Posts") }
+    var selectedListing by remember(username) { mutableStateOf<FynxMarketplaceClient.Listing?>(null) }
 
     fun loadProfile() {
         scope.launch {
@@ -61,6 +67,15 @@ fun OtherUserProfilePanel(
                             .onSuccess { loadedPosts -> posts = loadedPosts }
                             .onFailure { posts = emptyList() }
                     } else posts = emptyList()
+                    // Marketplace is a distinct content type. The existing real Marketplace
+                    // discovery endpoint already returns seller identity, so filter by the
+                    // exact profile owner and never manufacture profile listings.
+                    FynxMarketplaceClient.listings(context, loaded.username, "")
+                        .onSuccess { listings ->
+                            marketplace = listings.filter { it.sellerUsername.equals(loaded.username, ignoreCase = true) }
+                            if (selectedTab == "Marketplace" && marketplace.isEmpty()) selectedTab = "Posts"
+                        }
+                        .onFailure { marketplace = emptyList() }
                 }
                 .onFailure { error = it.message ?: "Unable to load this profile." }
             loading = false
@@ -141,20 +156,35 @@ fun OtherUserProfilePanel(
                         if (person.viewerSentRequest) Text("Friend request is pending.", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
                         else if (person.viewerReceivedRequest) Text("This person sent you a friend request.", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
                         TextButton(enabled = !busy, onClick = { reportMessage = null; reportOpen = true }) { Text("Report") }
+
+                        if (marketplace.isNotEmpty()) {
+                            Spacer(Modifier.height(10.dp))
+                            TabRow(selectedTabIndex = if (selectedTab == "Marketplace") 1 else 0, modifier = Modifier.fillMaxWidth()) {
+                                Tab(selected = selectedTab == "Posts", onClick = { selectedTab = "Posts" }, text = { Text("Posts") })
+                                Tab(selected = selectedTab == "Marketplace", onClick = { selectedTab = "Marketplace" }, text = { Text("Marketplace") })
+                            }
+                        } else {
+                            Spacer(Modifier.height(10.dp))
+                            Text("Posts", style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 8.dp))
+                        }
                     }
-                    if (posts.isEmpty()) {
+                    if (selectedTab == "Marketplace" && marketplace.isNotEmpty()) {
+                        item { ProfileMarketplaceGrid(listings = marketplace, onOpen = { selectedListing = it }) }
+                    } else if (posts.isEmpty()) {
                         item { Text("No posts to show", Modifier.padding(top = 20.dp), color = FynxDesign.TextSecondary) }
                     } else {
                         item {
-                            Text("Posts", style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 8.dp))
-                        }
-                        item {
+                            if (marketplace.isNotEmpty()) Text("Posts", style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 8.dp))
                             ProfilePostGrid(posts = posts, onOpenPost = { selectedPostIndex = it })
                         }
                     }
                 }
             }
         }
+    }
+
+    selectedListing?.let { listing ->
+        ProfileMarketplaceDetails(listing = listing, onClose = { selectedListing = null })
     }
 
     if (reportOpen && profile != null) {
@@ -230,6 +260,81 @@ private fun ProfilePostTile(post: FynxProfileRemoteClient.ProfilePost, onClick: 
             }
         }
     }
+}
+
+@Composable
+private fun ProfileMarketplaceGrid(
+    listings: List<FynxMarketplaceClient.Listing>,
+    onOpen: (FynxMarketplaceClient.Listing) -> Unit
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 620.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        items(listings, key = { it.id }) { listing ->
+            Card(Modifier.fillMaxWidth().clickable { onOpen(listing) }) {
+                Column {
+                    if (listing.mediaIds.isNotEmpty()) {
+                        FynxRemoteMedia(
+                            mediaUrl = FynxMarketplaceClient.mediaUrl(LocalContext.current, listing.mediaIds.first()),
+                            type = "auto",
+                            modifier = Modifier.fillMaxWidth().aspectRatio(1f)
+                        )
+                    } else {
+                        Box(Modifier.fillMaxWidth().aspectRatio(1f).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.ShoppingBag, contentDescription = "Marketplace product", modifier = Modifier.size(42.dp), tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(listing.title, maxLines = 2, style = MaterialTheme.typography.titleSmall)
+                        Text("${listing.currency} ${String.format(Locale.US, "%,.2f", listing.price)}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                        if (listing.storeName.isNotBlank()) Text(listing.storeName, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileMarketplaceDetails(
+    listing: FynxMarketplaceClient.Listing,
+    onClose: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(listing.title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                if (listing.mediaIds.isNotEmpty()) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(1),
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp)
+                    ) {
+                        item {
+                            FynxRemoteMedia(
+                                mediaUrl = FynxMarketplaceClient.mediaUrl(LocalContext.current, listing.mediaIds.first()),
+                                type = "auto",
+                                modifier = Modifier.fillMaxWidth().height(220.dp)
+                            )
+                        }
+                    }
+                }
+                Text("${listing.currency} ${String.format(Locale.US, "%,.2f", listing.price)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                if (listing.description.isNotBlank()) Text(listing.description)
+                Text("Seller: ${listing.sellerDisplayName.ifBlank { listing.sellerUsername }}")
+                if (listing.storeName.isNotBlank()) Text("Store: ${listing.storeName}")
+                Text("${listing.quantity} available • ${listing.condition}")
+                if (listing.location.isNotBlank()) Text("Location: ${listing.location}")
+                if (listing.deliveryAvailable) Text("Delivery available${listing.deliveryFee?.let { " • ${listing.currency} ${String.format(Locale.US, "%,.2f", it)} fee" } ?: ""}")
+                if (listing.pickupAvailable) Text("Pickup available")
+                Text("🛡 FYNX protected payment", style = MaterialTheme.typography.labelLarge)
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Close") } }
+    )
 }
 
 @Composable
