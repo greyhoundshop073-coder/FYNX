@@ -314,8 +314,14 @@ fun NotificationPanel(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(notification.title, style = MaterialTheme.typography.titleMedium)
+                                        Text(
+                                            notification.title,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            modifier = Modifier.weight(1f),
+                                            maxLines = 2
+                                        )
                                         if (!notification.read) {
+                                            Spacer(Modifier.width(8.dp))
                                             Text("NEW", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                                         }
                                     }
