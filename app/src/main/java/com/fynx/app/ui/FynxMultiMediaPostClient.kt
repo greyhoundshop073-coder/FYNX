@@ -7,7 +7,7 @@ import org.json.JSONObject
 
 /** Uploads every selected asset through the existing authenticated media path, then creates one real post. */
 object FynxMultiMediaPostClient {
-    private const val MAX_MEDIA = 12
+    private const val MAX_MEDIA = 4
     private const val MAX_SINGLE_MEDIA_BYTES = 200L * 1024L * 1024L
     private const val MAX_TOTAL_MEDIA_BYTES = 500L * 1024L * 1024L
 
@@ -21,8 +21,9 @@ object FynxMultiMediaPostClient {
         val mediaIds = JSONArray()
         val mediaTypes = JSONArray()
         var totalBytes = 0L
+        var hasAudio = false
 
-        for (uri in selected) {
+        for ((index, uri) in selected.withIndex()) {
             val mime = context.contentResolver.getType(uri)?.lowercase()
                 ?: throw IllegalArgumentException("FYNX could not determine the selected media type.")
             val type = when {
@@ -30,6 +31,10 @@ object FynxMultiMediaPostClient {
                 mime.startsWith("video/") -> "video"
                 mime.startsWith("audio/") -> "audio"
                 else -> throw IllegalArgumentException("FYNX supports images, videos and audio files only.")
+            }
+            if (type == "audio") hasAudio = true
+            if (hasAudio && (selected.size != 1 || index != 0)) {
+                throw IllegalArgumentException("Voice posts use one audio recording. Use photos/videos for a multi-media post.")
             }
 
             val size = runCatching {
