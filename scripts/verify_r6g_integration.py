@@ -31,6 +31,9 @@ checks = [
     ("Marketplace share payload preserves canonical listing id", "marketplaceListingId = listingId" in share),
     ("Marketplace share exposes FYNX Home action", "Post to FYNX Home" in share and "postMarketplaceToHome" in share),
     ("Marketplace Home action calls canonical integration client", "FynxR6GIntegrationClient.shareListingToHome(context, listingId)" in share),
+    ("Marketplace share exposes FYNX Group action", "Share to FYNX Group" in share and "chooseGroupForMarketplaceShare" in share),
+    ("Marketplace Group action loads real groups", "FynxGroupsStore.load(context)" in share),
+    ("Marketplace Group action calls canonical integration client", "FynxR6GIntegrationClient.shareListingToGroup(context, group.id, listingId" in share),
     ("legacy group marketplace field remains for compatibility", "marketplace_product_id" in group),
 ]
 
