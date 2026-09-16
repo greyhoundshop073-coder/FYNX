@@ -19,6 +19,21 @@ for (const [name, relative, required] of checks) {
   for (const marker of required) if (!content.includes(marker)) failures.push(`${name}: missing ${marker}`);
 }
 
+const backendClient = read('app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt');
+const realtimeClient = read('app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt');
+if (!backendClient.includes('NET_CAPABILITY_INTERNET') || !backendClient.includes('OkHttp')) {
+  failures.push('Android production transport is missing the INTERNET-based network gate');
+}
+if (backendClient.includes('capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)')) {
+  failures.push('Android HTTP transport still hard-requires NET_CAPABILITY_VALIDATED before attempting production requests');
+}
+if (!realtimeClient.includes('FynxBackendClient.isNetworkAvailable(context)')) {
+  failures.push('Realtime transport is not using the shared production network gate');
+}
+if (realtimeClient.includes('capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)')) {
+  failures.push('Realtime transport still hard-requires NET_CAPABILITY_VALIDATED');
+}
+
 const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
 const startScript = packageJson.scripts?.start || '';
 const usesScalabilityGuard = startScript === 'node --import ./scalability.js server.js' || startScript === 'node serverBootstrap.js' || startScript === 'node realtimeIsolationBootstrap.js';
@@ -43,4 +58,4 @@ if (failures.length) {
 }
 
 console.log('FYNX Stage 14 verification PASSED');
-console.log(`Verified ${checks.length} integrated areas plus backend startup configuration.`);
+console.log(`Verified ${checks.length} integrated areas plus backend startup and Android network recovery configuration.`);
