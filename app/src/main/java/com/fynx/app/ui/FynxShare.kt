@@ -50,6 +50,12 @@ object FynxShareActions {
         link = FynxDeepLinkParser.marketplaceWebLink(listingId)
     )
 
+    fun statusPayload(status: FynxStatus): FynxSharePayload = FynxSharePayload(
+        title = "FYNX Status",
+        message = "${status.ownerDisplayName.ifBlank { status.ownerUsername }} shared a ${status.type.name.lowercase()} Status on FYNX. Open FYNX Stories to view active Status updates.",
+        link = FynxDeepLinkParser.storiesWebLink()
+    )
+
     fun groupPayload(groupId: String): FynxSharePayload = FynxSharePayload(
         title = "FYNX group",
         message = "Join this FYNX group.",
