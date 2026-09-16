@@ -42,7 +42,7 @@ private const val MARKETPLACE_AD_MARKER = "[FYNX_MARKETPLACE_AD]"
 private const val FEED_REFRESH_DEBOUNCE_MS = 1000L
 
 @Composable
-fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}) {
+fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}, header: (@Composable () -> Unit)? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var posts by remember { mutableStateOf<List<FynxRemoteSocialClient.RemotePost>>(emptyList()) }
@@ -240,6 +240,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     LaunchedEffect(Unit) { reload() }
 
     LazyColumn(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+        header?.let { content -> item(key = "home_ai_status") { content() } }
         item(key = "feed_header") { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column { Text("Your feed", style = MaterialTheme.typography.titleMedium); Text("Real posts from your FYNX network", style = MaterialTheme.typography.bodySmall) }
             Row { IconButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Icon(Icons.Default.Refresh, "Refresh feed") }; IconButton(onClick = onCreatePost) { Icon(Icons.Default.CameraAlt, "Create post") } }
