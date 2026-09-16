@@ -18,7 +18,7 @@ checks = [
     ("backend exposes authorized post media", "app.get('/api/social/posts/:id/media'" in backend and "visibleSocialPost(postId, req.user.sub)" in backend),
     ("production prestart installs multi-media backend", "socialMultiMediaBootstrap.js" in startup and "installSocialMultiMedia" in startup),
     ("composer already routes publishing through the multi-media client", "FynxMultiMediaPostClient.createPost" in composer),
-    ("composer keeps real caption support", "Share something with your FYNX circle" in composer and "text.take(4000)" in client),
+    ("composer keeps real caption support", "Share something with your FYNX circle" in composer and 'put("text", text.trim().take(4000))' in client),
 ]
 
 failed = [name for name, ok in checks if not ok]
