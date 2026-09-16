@@ -34,8 +34,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: fynx-android-${{ github.ref }}
-  cancel-in-progress: true
+  group: fynx-android-${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: false
 
 env:
   GOOGLE_CLOUD_PROJECT: fynx-f0868
