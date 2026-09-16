@@ -3,6 +3,7 @@ import fs from 'node:fs';
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 const completion = read('./marketplaceCompletion.js');
 const protection = read('./marketplaceProtection.js');
+const settlement = read('./marketplaceSettlement.js');
 const client = read('../app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt');
 const lifecycle = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt');
 const seller = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerOrders.kt');
@@ -35,11 +36,12 @@ const checks = [
   ['checkout UI does not expose provider secret material', panel.includes('password or payment secret is never requested here')],
   ['payment completion remains backend-verified', panel.includes('verifyMarketplacePayment(context, payment?.reference.orEmpty())')],
   ['protected-order UI keeps funds gated until completion', panel.includes('funds remain protected until the order reaches the appropriate completion state')],
-  ['failed delivery does not bypass protection', completion.includes("FAILED_DELIVERY") && completion.includes('protection')],
-  ['returned orders do not bypass protection', completion.includes("RETURNED") && completion.includes('protection')],
-  ['seller payout is gated by completed order state', completion.includes("order.status !== 'COMPLETED'") && seller.includes('/api/marketplace/settlement/release/${order.id}')],
+  ['failed delivery does not bypass protection', completion.includes("FAILED_DELIVERY") && seller.includes('failed delivery — protected')],
+  ['returned orders do not bypass protection', completion.includes("RETURNED") && seller.includes('Returned — protected')],
+  ['seller payout route exists and is completion-gated', settlement.includes('/api/marketplace/settlement/release/:id') && settlement.includes("order.status !== 'COMPLETED'")],
   ['seller payout is provider-verified before paid state', seller.includes('verify') && seller.includes('marking it paid')],
   ['settlement details remain read-only in seller UI', seller.includes('/api/marketplace/settlement/order/${order.id}') && !/UPDATE\s+marketplace_orders|UPDATE\s+marketplace_listings/i.test(seller)],
+  ['settlement explicitly keeps payout blocked until completion', settlement.includes('payoutBlockedUntilCompletion: true') && settlement.includes('disputeBlocksPayout: true')],
   ['buyer and seller lifecycle use backend APIs rather than local order mutation', lifecycle.includes('FynxRemoteSocialClient') && seller.includes('FynxBackendClient') && !/marketplace_orders.*UPDATE|UPDATE.*marketplace_orders/i.test(lifecycle + seller)]
 ];
 
