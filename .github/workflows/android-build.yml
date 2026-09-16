@@ -121,6 +121,8 @@ jobs:
         run: node scripts/verify_monetization_production.mjs
       - name: Verify Home interaction integrity
         run: python3 scripts/verify_home_interactions.py
+      - name: Verify Home post reaction integrity
+        run: python3 scripts/verify_home_post_reactions.py
       - name: Verify Home 4F media and lifecycle audit
         run: python3 scripts/verify_home_4f_media_lifecycle.py
       - name: Verify production social feed wiring
