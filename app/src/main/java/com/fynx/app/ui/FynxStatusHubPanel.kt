@@ -19,7 +19,15 @@ fun FynxStatusHubPanel() {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize()) {
             if (composing) FynxStatusComposerPanel(onClose = { composing = false }) else FynxStatusTimelinePanel()
-            if (!composing) FloatingActionButton(onClick = { composing = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(18.dp)) { Icon(Icons.Default.Add, contentDescription = "Create Status") }
+            if (!composing) {
+                FloatingActionButton(
+                    onClick = { composing = true },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .navigationBarsPadding()
+                        .padding(18.dp)
+                ) { Icon(Icons.Default.Add, contentDescription = "Create Status") }
+            }
         }
     }
 }
