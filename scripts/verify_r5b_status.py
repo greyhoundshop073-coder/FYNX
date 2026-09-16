@@ -10,6 +10,9 @@ def contains_call(source, function, argument):
     pattern = rf'{re.escape(function)}\s*\(\s*it\s*,\s*"{re.escape(argument)}"'
     return re.search(pattern, source) is not None
 
+def contains_remote_audio_call(source):
+    return re.search(r'FynxRemoteAudio\s*\(\s*it\s*(?:,|\))', source) is not None
+
 checks=[]
 def require(label, condition): checks.append((label, bool(condition)))
 server=read('backend/server.js'); management=read('backend/statusManagementRoutes.js'); scale=read('backend/scalability.js'); interactions=read('backend/statusInteractionRoutes.js')
@@ -86,7 +89,7 @@ require('timeline profile avatar lookup','FynxProfileRemoteClient.get(context, s
 require('timeline status viewer','FynxStatusStoryViewer(' in timeline and 'DialogProperties(usePlatformDefaultWidth = false' in timeline)
 require('status viewer image',contains_call(timeline, 'FynxRemoteMedia', 'image'))
 require('status viewer video',contains_call(timeline, 'FynxRemoteMedia', 'video'))
-require('status viewer voice','FynxRemoteAudio(it)' in timeline)
+require('status viewer voice',contains_remote_audio_call(timeline))
 require('status viewer left-right navigation','clickable(enabled = index > 0)' in timeline and 'clickable(enabled = index < statuses.lastIndex)' in timeline)
 require('status viewer progress','LinearProgressIndicator' in timeline and '(index + 1).toFloat() / statuses.size.toFloat()' in timeline)
 require('status interaction controls','viewCount' in timeline and 'likeCount' in timeline and 'Reply to this Status' in timeline)
