@@ -3,9 +3,11 @@ package com.fynx.app.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -18,7 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -199,7 +201,7 @@ private fun FynxStatusStoryViewer(
                         FynxStatusType.TEXT -> StatusViewerText(status)
                         FynxStatusType.PHOTO -> status.contentUri?.let { FynxRemoteMedia(it, "image", Modifier.fillMaxSize()) }
                         FynxStatusType.VIDEO -> status.contentUri?.let { FynxRemoteMedia(it, "video", Modifier.fillMaxSize(), loopVideo = false, onVideoCompleted = { if (index < statuses.lastIndex) index++ else onDismiss() }) }
-                        FynxStatusType.VOICE -> status.contentUri?.let { FynxRemoteAudio(it) }
+                        FynxStatusType.VOICE -> status.contentUri?.let { FynxRemoteAudio(it, Modifier.fillMaxWidth().padding(horizontal = 20.dp)) }
                     }
                     Row(Modifier.fillMaxSize()) {
                         Box(Modifier.weight(0.25f).fillMaxHeight().clickable(enabled = index > 0) { if (index > 0) index-- })
@@ -208,44 +210,52 @@ private fun FynxStatusStoryViewer(
                     }
                 }
 
-                Column(Modifier.fillMaxWidth().background(Color.Black).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("👁 ${interactions.viewCount}", color = Color.White, style = MaterialTheme.typography.labelMedium)
-                        TextButton(onClick = {
-                            scope.launch { FynxStatusClient.toggleLike(context, status.id).onSuccess { refreshInteractions() }.onFailure { interactionError = it.message } }
-                        }) { Text(if (interactions.likedByMe) "♥ ${interactions.likeCount}" else "♡ ${interactions.likeCount}", color = Color.White) }
-                        Text("💬 ${interactions.replyCount}", color = Color.White, style = MaterialTheme.typography.labelMedium)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("❤️", "😂", "😮", "😢", "👍").forEach { emoji ->
-                            AssistChip(onClick = {
-                                scope.launch { FynxStatusClient.react(context, status.id, emoji).onSuccess { refreshInteractions() }.onFailure { interactionError = it.message } }
-                            }, label = { Text(emoji) })
+                Surface(
+                    color = Color.Black,
+                    modifier = Modifier.fillMaxWidth().imePadding()
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("👁 ${interactions.viewCount}", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                            TextButton(onClick = {
+                                scope.launch { FynxStatusClient.toggleLike(context, status.id).onSuccess { refreshInteractions() }.onFailure { interactionError = it.message } }
+                            }) { Text(if (interactions.likedByMe) "♥ ${interactions.likeCount}" else "♡ ${interactions.likeCount}", color = Color.White) }
+                            Text("💬 ${interactions.replyCount}", color = Color.White, style = MaterialTheme.typography.labelMedium)
                         }
-                    }
-                    OutlinedTextField(
-                        value = replyText,
-                        onValueChange = { replyText = it.take(1000) },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !replying,
-                        singleLine = true,
-                        placeholder = { Text("Reply to this Status…") },
-                        trailingIcon = {
-                            TextButton(enabled = !replying && replyText.trim().isNotEmpty(), onClick = {
-                                val body = replyText.trim()
-                                if (body.isEmpty()) return@TextButton
-                                replying = true
-                                scope.launch {
-                                    FynxStatusClient.reply(context, status.id, body)
-                                        .onSuccess { replyText = ""; refreshInteractions() }
-                                        .onFailure { interactionError = it.message }
-                                    replying = false
-                                }
-                            }) { Text("Send") }
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf("❤️", "😂", "😮", "😢", "👍").forEach { emoji ->
+                                AssistChip(onClick = {
+                                    scope.launch { FynxStatusClient.react(context, status.id, emoji).onSuccess { refreshInteractions() }.onFailure { interactionError = it.message } }
+                                }, label = { Text(emoji) })
+                            }
                         }
-                    )
-                    interactionError?.let { Text(it, color = Color(0xFFFF8A80), style = MaterialTheme.typography.labelSmall) }
-                    deleteError?.let { Text(it, color = Color(0xFFFF8A80), style = MaterialTheme.typography.labelSmall) }
+                        OutlinedTextField(
+                            value = replyText,
+                            onValueChange = { replyText = it.take(1000) },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !replying,
+                            singleLine = true,
+                            placeholder = { Text("Reply to this Status…") },
+                            trailingIcon = {
+                                TextButton(enabled = !replying && replyText.trim().isNotEmpty(), onClick = {
+                                    val body = replyText.trim()
+                                    if (body.isEmpty()) return@TextButton
+                                    replying = true
+                                    scope.launch {
+                                        FynxStatusClient.reply(context, status.id, body)
+                                            .onSuccess { replyText = ""; refreshInteractions() }
+                                            .onFailure { interactionError = it.message }
+                                        replying = false
+                                    }
+                                }) { Text("Send") }
+                            }
+                        )
+                        interactionError?.let { Text(it, color = Color(0xFFFF8A80), style = MaterialTheme.typography.labelSmall) }
+                        deleteError?.let { Text(it, color = Color(0xFFFF8A80), style = MaterialTheme.typography.labelSmall) }
+                    }
                 }
 
                 if (statuses.size > 1) {
