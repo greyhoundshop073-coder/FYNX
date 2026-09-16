@@ -56,7 +56,8 @@ require('remote media uses authenticated download','FynxBackendClient.downloadTo
 require('remote media has size cap','MAX_REMOTE_MEDIA_BYTES = 12L * 1024L * 1024L' in remote_media)
 require('remote image renderer','BitmapFactory.decodeFile(target.absolutePath)' in remote_media and 'ContentScale.Crop' in remote_media)
 require('remote video renderer','VideoView(ctx)' in remote_media and 'setVideoPath(file.absolutePath)' in remote_media)
-require('remote audio renderer','FynxBackendClient.downloadToFile(context, resolvedUrl, target, MAX_REMOTE_MEDIA_BYTES)' in remote_media and 'MediaPlayer()' in remote_media)
+# Audio uses the shared authenticated download helper; the helper delegates to the central backend downloader.
+require('remote audio renderer','downloadRemoteMedia(context, resolvedUrl, target)' in remote_media and 'MediaPlayer()' in remote_media and 'p.setDataSource(finalFile.absolutePath)' in remote_media)
 require('media privacy guard installed','app.use("/api/media", mediaGuard)' in media_privacy)
 require('media privacy blocks message media','blocked_message_media' in media_privacy and 'return res.status(403).json({ error: "media unavailable" })' in media_privacy)
 
