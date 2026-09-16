@@ -21,6 +21,7 @@ on:
       - "backend/**"
       - "gradle/**"
       - "*.gradle.kts"
+      - "gradle.properties"
       - "gradlew"
       - "gradlew.bat"
       - "scripts/**"
