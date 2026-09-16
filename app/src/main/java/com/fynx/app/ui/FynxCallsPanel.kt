@@ -115,6 +115,12 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                             calls = FynxCallsStore.load(context)
                             mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; session = null; activeCall = null; pendingIncomingAccept = false
                         }
+                        "unavailable" -> if (session?.id == event.callId) {
+                            errorMessage = "@${targetUsername ?: "This user"} is unavailable right now."
+                            FynxCallsStore.updateStatus(context, event.callId, "Unavailable", missed = false)
+                            calls = FynxCallsStore.load(context)
+                            mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; session = null; activeCall = null; pendingIncomingAccept = false
+                        }
                     }
                 }
             }
