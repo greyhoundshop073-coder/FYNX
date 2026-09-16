@@ -77,7 +77,7 @@ fun FynxStatusHubPanel() {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize()) {
             if (composing) {
-                FynxStatusComposerPanel(onClose = { composing = false })
+                FynxMatureStatusComposerPanel(onClose = { composing = false })
             } else {
                 key(timelineRefreshKey) { FynxStatusTimelinePanel() }
             }
