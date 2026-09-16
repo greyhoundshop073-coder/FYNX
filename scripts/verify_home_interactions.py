@@ -20,6 +20,10 @@ def require_normalized(text: str, needle: str, label: str) -> None:
 
 discovery = read("backend/discoveryRoutes.js")
 home = read("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt")
+home_shell = read("app/src/main/java/com/fynx/app/ui/HomePanel.kt")
+visible_updates = read("app/src/main/java/com/fynx/app/ui/FynxVisibleUpdatesPanel.kt")
+ai_panel = read("app/src/main/java/com/fynx/app/ui/FynxAiAssistantPanel.kt")
+ai_client = read("app/src/main/java/com/fynx/app/ui/AiAssistantClient.kt")
 comments_panel = read("app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt")
 client = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
 privacy_bootstrap = read("backend/homeCommentsPrivacyBootstrap.js")
@@ -75,4 +79,29 @@ for needle in ('visiblePost(postId, req.user.sub)','b.blocker_id=$2 AND b.blocke
     require(realtime_bootstrap, needle, f"Home 4D privacy boundary {needle}")
 for needle in ('val previous = posts.firstOrNull { it.id == id }','optimisticLiked','onFailure {','posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = previous.likedByCurrentUser','runInteraction(id, saved','runInteraction(id, reposted'):
     require(home, needle, f"Home 4E interaction rollback/reconciliation {needle}")
-print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, and clean-startup privacy boundaries are present without duplicate surfaces.")
+
+# Home AI integration guard: the AI/Status header must live inside the feed's one vertical scroll surface.
+require(home_shell, 'FynxRemoteHomeSocialPanel(', "Home feed host")
+require(home_shell, 'header = { FynxVisibleUpdatesPanel(', "Home AI/Status header wiring")
+require(home, 'LazyColumn(', "Home single vertical scroll surface")
+require(home, 'header?.let { content -> item(key = "home_ai_status") { content() } }', "AI/Status feed header item")
+if home.count('LazyColumn(') != 1:
+    raise SystemExit("HOME INTERACTIONS RED: Home must keep exactly one vertical LazyColumn")
+require(home, 'items(items = posts, key = { it.id })', "feed posts in the shared scroll surface")
+require(visible_updates, 'OutlinedTextField(', "Home AI typing input")
+require(visible_updates, 'value = aiInput', "Home AI input state")
+require(visible_updates, 'AiAssistantClient.sendMessage(context, prompt)', "Home AI real backend client path")
+require(visible_updates, 'FynxFutureIntelligencePolicy.authorize(', "Home AI authorization boundary")
+require(visible_updates, 'Icons.Default.Send', "Home AI send control")
+require(visible_updates, 'Icons.Default.Mic', "Home AI voice entry")
+if 'TextToSpeech' in visible_updates or 'android.speech.tts' in visible_updates:
+    raise SystemExit("HOME INTERACTIONS RED: Google Android TTS must not be reintroduced into Home AI")
+if 'OPENAI_API_KEY' in visible_updates or 'OPENAI_API_KEY' in ai_client:
+    raise SystemExit("HOME INTERACTIONS RED: OpenAI API key must never be present in Android client code")
+require(ai_panel, 'OutlinedTextField(', "full FYNX AI typing surface")
+require(ai_panel, 'AiAssistantClient.sendMessage(context, prompt)', "full FYNX AI backend path")
+require(ai_panel, 'FynxFutureIntelligencePolicy.authorize(', "full FYNX AI authorization boundary")
+if 'TextToSpeech' in ai_panel or 'android.speech.tts' in ai_panel:
+    raise SystemExit("HOME INTERACTIONS RED: Google Android TTS must not be reintroduced into FYNX AI")
+
+print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, clean-startup privacy boundaries, and FYNX AI single-scroll/typing/security integration are present without duplicate vertical surfaces or client API secrets.")
