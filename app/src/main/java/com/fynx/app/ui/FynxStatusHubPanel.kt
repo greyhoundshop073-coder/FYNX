@@ -79,8 +79,12 @@ fun FynxStatusHubPanel() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     SmallFloatingActionButton(
-                        onClick = { cameraError = null; cameraOpen = true },
-                        enabled = !publishingCameraStatus
+                        onClick = {
+                            if (!publishingCameraStatus) {
+                                cameraError = null
+                                cameraOpen = true
+                            }
+                        }
                     ) { Icon(Icons.Default.PhotoCamera, contentDescription = "Open Status camera") }
                     FloatingActionButton(onClick = { composing = true }) {
                         Icon(Icons.Default.Add, contentDescription = "Create Status")
