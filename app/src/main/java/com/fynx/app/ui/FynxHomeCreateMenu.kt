@@ -7,13 +7,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.Article
 import androidx.compose.material.icons.filled.ShoppingBag
-import androidx.compose.material.icons.filled.Story
-import androidx.compose.material.icons.filled.PostAdd
+import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,21 +35,9 @@ fun FynxHomeCreateMenu(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                CreateMenuAction(
-                    icon = Icons.Default.PostAdd,
-                    title = "Post",
-                    onClick = onPost
-                )
-                CreateMenuAction(
-                    icon = Icons.Default.Story,
-                    title = "Status",
-                    onClick = onStatus
-                )
-                CreateMenuAction(
-                    icon = Icons.Default.ShoppingBag,
-                    title = "Marketplace",
-                    onClick = onMarketplace
-                )
+                CreateMenuAction(Icons.Default.Article, "Post", onPost)
+                CreateMenuAction(Icons.Default.AutoStories, "Status", onStatus)
+                CreateMenuAction(Icons.Default.ShoppingBag, "Marketplace", onMarketplace)
             }
         },
         confirmButton = {
@@ -66,12 +52,7 @@ private fun CreateMenuAction(
     title: String,
     onClick: () -> Unit
 ) {
-    TextButton(
-        onClick = {
-            onClick()
-        },
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
