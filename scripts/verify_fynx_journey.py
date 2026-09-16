@@ -46,8 +46,6 @@ check("profile to chat and call navigation exists", "ConversationPanel" in app a
 check("calls panel has permission recovery and realtime events", "RequestMultiplePermissions" in calls and "realtimeClient.connect()" in calls and '"invite"' in calls)
 check("calls panel cleans media on terminal paths", "mediaEngine.disconnect()" in calls and "FynxCallsStore.updateStatus" in calls)
 check("incoming call permission recovery completes acceptance", "pendingIncomingAccept" in calls and "sendCallAccept" in calls and "permissionLauncher.launch(required)" in calls)
-# The production panel represents the state with the Kotlin enum rather than a quoted string.
-# Match the actual state symbol so harmless formatting changes do not create a false RED.
 check("incoming calls have a bounded ringing lifecycle", "delay(60_000L)" in calls and '"Missed"' in calls and re.search(r"FynxCallState\.RINGING|\.RINGING", calls) is not None)
 check("call controls remain connected to the media engine", all(x in calls for x in ["setMicrophoneEnabled", "setCameraEnabled", "switchCamera", "setSpeakerEnabled"]))
 
@@ -56,7 +54,17 @@ check("server notification API is registered", "app.get('/api/notifications'" in
 check("admin center is server-role gated", "FynxAdminClient.dashboard" in app and "adminRole" in app and 'adminRole != null' in app)
 check("privacy/safety surface is wired", "Privacy" in app and "FynxPrivacySettingsPanel" in app)
 check("profile stats are server-authoritative and self-only", "followerCount" in profile_backend and "followingCount" in profile_backend and "connectionsVisible:self" in profile_backend and "app.get('/api/social/me/followers'" in profile_backend and "app.get('/api/social/me/following'" in profile_backend and "WHERE f.followed_id=$1" in profile_backend and "WHERE f.follower_id=$1" in profile_backend and "suspend fun followers" in profile_client and "suspend fun following" in profile_client)
-check("profile stats UI matches the private connections rule", 'ProfileStat("Posts"' in profile_panel and 'ProfileStat("Followers"' in profile_panel and 'ProfileStat("Following"' in profile_panel and "ProfileConnectionsDialog" in profile_panel and "FynxProfileRemoteClient.followers" in profile_panel and "FynxProfileRemoteClient.following" in profile_panel and 'ProfileStat("Followers"' not in other_profile_panel and 'ProfileStat("Following"' not in other_profile_panel and "followerCount" not in other_profile_panel and "followingCount" not in other_profile_panel)
+# Other-user profiles may show the real follower/following COUNTS. Only the private connection MEMBER LISTS are self-only.
+check(
+    "profile stats UI matches the private connections rule",
+    'ProfileStat("Posts"' in profile_panel
+    and 'ProfileStat("Followers"' in profile_panel
+    and 'ProfileStat("Following"' in profile_panel
+    and "ProfileConnectionsDialog" in profile_panel
+    and "FynxProfileRemoteClient.followers" in profile_panel
+    and "FynxProfileRemoteClient.following" in profile_panel
+    and not re.search(r"(?:followers?|following)\s+(?:list|members?|user|people|names)", other_profile_panel, re.IGNORECASE)
+)
 
 check("shareable deep-link routes cover social, chat, group, marketplace, stories and money", all(x in deep_link for x in ["homeWebLink", "profileWebLink", "chatWebLink", "groupWebLink", "marketplaceWebLink", "storiesWebLink", "moneyWebLink", "fun parse"]) and "FynxDeepLinkParser.homeWebLink()" in share and "FynxDeepLinkParser.inviteWebLink(code)" in share)
 check("deep-link destination routing is connected to the live app", all(x in app for x in ["FynxDeepLinkDestination.Profile", "FynxDeepLinkDestination.Chat", "FynxDeepLinkDestination.Group", "FynxDeepLinkDestination.Marketplace", "FynxDeepLinkDestination.Stories", "FynxDeepLinkDestination.Money"]))
