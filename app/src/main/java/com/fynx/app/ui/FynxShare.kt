@@ -1,11 +1,15 @@
 package com.fynx.app.ui
 
+import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 private const val FYNX_SHARE_TEXT =
     "Join me on FYNX — one place for your social life, tools and everyday organization."
@@ -13,7 +17,8 @@ private const val FYNX_SHARE_TEXT =
 data class FynxSharePayload(
     val title: String,
     val message: String,
-    val link: String = FynxDeepLinkParser.homeWebLink()
+    val link: String = FynxDeepLinkParser.homeWebLink(),
+    val marketplaceListingId: String? = null
 ) {
     val text: String
         get() = listOf(message, link).filter { it.isNotBlank() }.joinToString("\n\n")
@@ -47,7 +52,8 @@ object FynxShareActions {
     fun marketplacePayload(listingId: String? = null, title: String = "FYNX Marketplace"): FynxSharePayload = FynxSharePayload(
         title = title,
         message = "See this on FYNX Marketplace.",
-        link = FynxDeepLinkParser.marketplaceWebLink(listingId)
+        link = FynxDeepLinkParser.marketplaceWebLink(listingId),
+        marketplaceListingId = listingId
     )
 
     fun statusPayload(status: FynxStatus): FynxSharePayload = FynxSharePayload(
@@ -63,6 +69,34 @@ object FynxShareActions {
     )
 
     fun share(context: Context, payload: FynxSharePayload = defaultPayload()): Boolean {
+        val listingId = payload.marketplaceListingId?.trim().orEmpty()
+        if (listingId.isNotBlank()) {
+            AlertDialog.Builder(context)
+                .setTitle(payload.title)
+                .setItems(arrayOf("Post to FYNX Home", "Share outside FYNX", "Copy link")) { _, which ->
+                    when (which) {
+                        0 -> postMarketplaceToHome(context, listingId)
+                        1 -> shareExternally(context, payload)
+                        2 -> copy(context, payload)
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+            return true
+        }
+        return shareExternally(context, payload)
+    }
+
+    private fun postMarketplaceToHome(context: Context, listingId: String) {
+        Toast.makeText(context, "Posting product to FYNX Home…", Toast.LENGTH_SHORT).show()
+        CoroutineScope(Dispatchers.Main.immediate).launch {
+            FynxR6GIntegrationClient.shareListingToHome(context, listingId)
+                .onSuccess { Toast.makeText(context, "Product posted to FYNX Home", Toast.LENGTH_SHORT).show() }
+                .onFailure { Toast.makeText(context, it.message ?: "Could not post product to Home", Toast.LENGTH_LONG).show() }
+        }
+    }
+
+    private fun shareExternally(context: Context, payload: FynxSharePayload): Boolean {
         val sendIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TITLE, payload.title)
