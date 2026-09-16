@@ -32,6 +32,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +52,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -60,20 +63,41 @@ fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, 
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     var statuses by remember { mutableStateOf<List<FynxStatus>>(emptyList()) }
+    var ownerPhotoIds by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var aiInput by remember { mutableStateOf("") }
     var aiReply by remember { mutableStateOf<String?>(null) }
     var aiLoading by remember { mutableStateOf(false) }
 
+    fun resolveOwnerPhotos(items: List<FynxStatus>) {
+        val names = items.map { it.ownerUsername.removePrefix("@").trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+        val missing = names.filterNot { ownerPhotoIds.containsKey(it.lowercase()) }
+        if (missing.isEmpty()) return
+        scope.launch {
+            val resolved = missing.map { username ->
+                async(Dispatchers.IO) {
+                    username.lowercase() to FynxProfileRemoteClient.get(context, username)
+                        .getOrNull()?.profilePhotoMediaId
+                }
+            }.awaitAll().toMap()
+            ownerPhotoIds = ownerPhotoIds + resolved
+        }
+    }
+
     fun refreshStatuses() {
         scope.launch(Dispatchers.IO) {
             val latest = FynxStatusClient.list(context).getOrDefault(emptyList())
-            withContext(Dispatchers.Main) { statuses = latest }
+            withContext(Dispatchers.Main) {
+                statuses = latest
+                resolveOwnerPhotos(latest)
+            }
         }
     }
 
     LaunchedEffect(currentUsername) { refreshStatuses() }
 
-    androidx.compose.runtime.DisposableEffect(lifecycleOwner, currentUsername) {
+    DisposableEffect(lifecycleOwner, currentUsername) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) refreshStatuses()
         }
@@ -101,7 +125,15 @@ fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, 
             LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 item {
                     val own = grouped.firstOrNull { it.first.ownerUsername.equals(currentUsername, true) }
-                    FynxStatusPreviewCircle(own?.first, currentUsername.ifBlank { "You" }, "Your status", true, onOpenStories, own?.second ?: 0)
+                    FynxStatusPreviewCircle(
+                        own?.first,
+                        currentUsername.ifBlank { "You" },
+                        "Your status",
+                        true,
+                        onOpenStories,
+                        own?.second ?: 0,
+                        ownerPhotoIds[currentUsername.removePrefix("@").trim().lowercase()]
+                    )
                 }
                 item {
                     Column(Modifier.width(82.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -115,7 +147,15 @@ fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, 
                     }
                 }
                 items(grouped.filterNot { it.first.ownerUsername.equals(currentUsername, true) }) { (status, count) ->
-                    FynxStatusPreviewCircle(status, status.ownerUsername, status.ownerDisplayName.ifBlank { status.ownerUsername }, true, onOpenStories, count)
+                    FynxStatusPreviewCircle(
+                        status,
+                        status.ownerUsername,
+                        status.ownerDisplayName.ifBlank { status.ownerUsername },
+                        true,
+                        onOpenStories,
+                        count,
+                        ownerPhotoIds[status.ownerUsername.removePrefix("@").trim().lowercase()]
+                    )
                 }
             }
         }
@@ -197,8 +237,16 @@ fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, 
 }
 
 @Composable
-private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: String, active: Boolean, onClick: () -> Unit, statusCount: Int = 0) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+private fun FynxStatusPreviewCircle(
+    status: FynxStatus?,
+    name: String,
+    label: String,
+    active: Boolean,
+    onClick: () -> Unit,
+    statusCount: Int = 0,
+    profilePhotoMediaId: String? = null
+) {
+    val context = LocalContext.current
     var bitmap by remember(status?.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
 
     LaunchedEffect(status?.id, status?.contentUri, status?.type) {
@@ -236,6 +284,7 @@ private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: St
                     status?.type == FynxStatusType.TEXT -> Text(status.text.orEmpty().take(20), color = Color(status.textStyle.foregroundColor), style = MaterialTheme.typography.labelSmall, maxLines = 3)
                     status?.type == FynxStatusType.VIDEO -> Icon(Icons.Default.PlayArrow, "Video status", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
                     status?.type == FynxStatusType.VOICE -> Icon(Icons.Default.Mic, "Voice status", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+                    profilePhotoMediaId != null -> FynxRemoteProfileAvatar(profilePhotoMediaId, name, Modifier.size(60.dp).clip(CircleShape))
                     else -> FynxAvatar(name, Modifier.size(60.dp).clip(CircleShape))
                 }
             }
