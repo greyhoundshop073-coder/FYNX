@@ -33,6 +33,7 @@ import { installApiAbuseGuard } from "./apiAbuseGuard.js";
 import { registerMarketplaceBatch2FinalHardening } from "./marketplaceBatch2FinalHardening.js";
 import { registerFynxAiRoutes } from "./fynxAiToolRegistry.js";
 import { installPeopleResponseHardening } from "./peopleResponseHardening.js";
+import { registerR6GIntegrationRoutes } from "./r6gIntegrationRoutes.js";
 
 installPresencePrivacyGuard();
 const originalCreateServer = http.createServer;
@@ -57,6 +58,7 @@ http.createServer = function fynxCreateServer(...args) {
       registerGroupMembershipRoutes({ app });
       registerGroupInviteRoutes({ app });
       registerGroupContentRoutes({ app });
+      registerR6GIntegrationRoutes({ app });
       registerStatusManagementRoutes({ app });
       registerStatusInteractionRoutes({ app });
       registerNotificationPreferenceRoutes({ app });
