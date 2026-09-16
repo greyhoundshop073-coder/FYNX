@@ -42,7 +42,8 @@ for needle in ('FEED_CACHE_TTL_MS','readCachedFeed(context)','readStaleCachedFee
     require(client, needle, f"offline feed recovery {needle}")
 for needle in ('onCommentCountChanged','expandedReplies','parentCommentId','nextCursor'):
     require(comments_panel, needle, f"comment/reply lifecycle {needle}")
-for needle in ('post.mediaUrl?.let','RemoteSocialMedia','MediaController','VideoView'):
+# The current implementation preserves legacy media with an explicit nullable fallback branch.
+for needle in ('post.mediaUrl != null -> RemoteSocialMedia','RemoteSocialMedia','MediaController','VideoView'):
     require(home, needle, f"post media behavior {needle}")
 for needle in ('onOpenAuthorProfile','FynxRemoteSocialClient.follow','FynxDiscoveryClient.recordEngagement','Intent.ACTION_SEND'):
     require(home, needle, f"identity/share behavior {needle}")
@@ -54,12 +55,11 @@ if 'Text("Save")' in home or 'Text("Repost")' in home:
     raise SystemExit("HOME INTERACTIONS RED: fake Save/Repost feed controls detected")
 for needle in ('MaterialTheme.colorScheme','FynxDesign.LargeCardShape','key = "feed_header"','key = "feed_loading"','key = "feed_error"','key = "feed_empty"','key = "feed_load_more"','"Refresh feed"','"Create post"','"Like"','"Comment"','"Post options"','onDismissRequest =','enabled = !feedRequestInFlight','enabled = !loadingMore && !feedRequestInFlight'):
     require(home, needle, f"Home 4F polish/integration surface {needle}")
-# The upgraded feed uses visible state labels (Saved/Reposted) while preserving Save/Repost semantics.
 require(home, 'label = if (interactionState.saved) "Saved" else "Save"', "Home 4F save state label")
 require(home, 'label = if (interactionState.reposted) "Reposted" else "Repost"', "Home 4F repost state label")
 if 'contentDescription = null' not in home and 'Icon(Icons.Default.ShoppingBag, null)' not in home:
     raise SystemExit("HOME INTERACTIONS RED: missing Home 4F decorative-icon accessibility handling")
-for needle in ('FynxRemoteProfileAvatar(','profilePhotoMediaId','post.authorDisplayName.ifBlank { post.authorUsername }','post.mediaUrl?.let'):
+for needle in ('FynxRemoteProfileAvatar(','profilePhotoMediaId','post.authorDisplayName.ifBlank { post.authorUsername }','post.mediaUrl != null -> RemoteSocialMedia'):
     require(home, needle, f"real Home identity/media surface {needle}")
 require(backend_package, '"start": "node realtimeIsolationBootstrap.js"', "production realtime entrypoint")
 require(realtime_bootstrap, 'import { installHomeCommentPrivacy } from "./homeCommentsPrivacyBootstrap.js";', "Home comment privacy integration")
