@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { installSocialFeed } from "./socialFeedBootstrap.js";
 import { installHomeCommentPrivacy } from "./homeCommentsPrivacyBootstrap.js";
+import { installSocialPostReactions } from "./socialPostReactionBootstrap.js";
 
 // R3 connection isolation layer. server.js is intentionally kept intact; this
 // wrapper makes the existing WebSocket connection handler reject stale/replaced
@@ -218,10 +219,8 @@ async function installHomeCommentBackend() {
   await writeFile(socialPath, source);
 }
 
-// Install the base comments routes first, then apply the privacy hardening to
-// that same route source. This preserves the real production entrypoint and
-// also works correctly on a clean deployment where Batch 4B has not yet run.
 await installSocialFeed();
 await installHomeCommentBackend();
 await installHomeCommentPrivacy();
+await installSocialPostReactions();
 await import("./serverBootstrap.js");
