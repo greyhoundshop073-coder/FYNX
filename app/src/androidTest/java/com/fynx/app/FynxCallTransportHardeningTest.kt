@@ -25,9 +25,37 @@ class FynxCallTransportHardeningTest {
     }
 
     @Test
+    fun rejects_malformed_or_oversized_call_ids() {
+        assertFalse(FynxCallTransportHardening.isValidCallId("123"))
+        assertFalse(FynxCallTransportHardening.isValidCallId("call/123"))
+        assertFalse(FynxCallTransportHardening.isValidCallId("call-" + "x".repeat(71)))
+    }
+
+    @Test
+    fun accepts_only_supported_call_types() {
+        assertTrue(FynxCallTransportHardening.isValidCallType("voice"))
+        assertTrue(FynxCallTransportHardening.isValidCallType("video"))
+        assertFalse(FynxCallTransportHardening.isValidCallType("screen"))
+        assertFalse(FynxCallTransportHardening.isValidCallType("VOICE"))
+    }
+
+    @Test
+    fun recognizes_authentication_failures() {
+        assertTrue(FynxCallTransportHardening.isAuthFailure(401))
+        assertTrue(FynxCallTransportHardening.isAuthFailure(403))
+        assertFalse(FynxCallTransportHardening.isAuthFailure(400))
+        assertFalse(FynxCallTransportHardening.isAuthFailure(500))
+        assertFalse(FynxCallTransportHardening.isAuthFailure(null))
+    }
+
+    @Test
     fun retries_only_connection_level_failures() {
         assertTrue(FynxCallTransportHardening.shouldRetrySocket(1006))
         assertTrue(FynxCallTransportHardening.shouldRetrySocket(1011))
+        assertTrue(FynxCallTransportHardening.shouldRetrySocket(1012))
+        assertTrue(FynxCallTransportHardening.shouldRetrySocket(1013))
+        assertFalse(FynxCallTransportHardening.shouldRetrySocket(1000))
+        assertFalse(FynxCallTransportHardening.shouldRetrySocket(1002))
         assertFalse(FynxCallTransportHardening.shouldRetrySocket(1008))
         assertFalse(FynxCallTransportHardening.shouldRetrySocket(1009))
     }
