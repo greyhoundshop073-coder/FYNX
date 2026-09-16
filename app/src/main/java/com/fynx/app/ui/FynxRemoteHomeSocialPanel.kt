@@ -262,7 +262,7 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
 }
 
 @Composable
-private fun FeedActionButton(onClick: () -> Unit, enabled: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, count: Int? = null, active: Boolean = false) {
+private fun RowScope.FeedActionButton(onClick: () -> Unit, enabled: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, count: Int? = null, active: Boolean = false) {
     TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.heightIn(min = 52.dp).weight(1f)) {
         Icon(icon, contentDescription = label, modifier = Modifier.size(25.dp), tint = if (active) MaterialTheme.colorScheme.primary else FynxDesign.TextPrimary)
         Spacer(Modifier.width(5.dp))
