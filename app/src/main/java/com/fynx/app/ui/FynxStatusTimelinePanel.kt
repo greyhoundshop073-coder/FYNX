@@ -83,7 +83,7 @@ fun FynxStatusTimelinePanel() {
         }
         HorizontalDivider()
         Text("Recent Status", style = MaterialTheme.typography.titleMedium)
-        Text("Tap a circle to open Status. Use the left and right sides to move between updates.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Tap a circle to open Status. Views, likes, reactions and replies are saved to FYNX.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (statuses.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(statuses.take(12), key = { it.id }) { status ->
@@ -122,11 +122,7 @@ private fun StatusBubble(status: FynxStatus, isMe: Boolean, onClick: () -> Unit)
     Column(Modifier.width(74.dp).clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(66.dp).border(3.dp, MaterialTheme.colorScheme.primary, CircleShape).padding(4.dp)) {
             if (profileLoaded && !profilePhotoMediaId.isNullOrBlank()) {
-                FynxRemoteProfileAvatar(
-                    profilePhotoMediaId,
-                    status.ownerDisplayName.ifBlank { status.ownerUsername },
-                    Modifier.fillMaxSize().clip(CircleShape)
-                )
+                FynxRemoteProfileAvatar(profilePhotoMediaId, status.ownerDisplayName.ifBlank { status.ownerUsername }, Modifier.fillMaxSize().clip(CircleShape))
             } else {
                 Box(Modifier.fillMaxSize().clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
                     Text(status.ownerDisplayName.ifBlank { status.ownerUsername }.take(1).uppercase(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -153,7 +149,25 @@ private fun FynxStatusStoryViewer(
     var index by remember(statuses, startIndex) { mutableIntStateOf(startIndex) }
     var deleting by remember { mutableStateOf(false) }
     var deleteError by remember { mutableStateOf<String?>(null) }
+    var interactions by remember(statuses, startIndex) { mutableStateOf(FynxStatusInteractions()) }
+    var interactionError by remember(statuses, startIndex) { mutableStateOf<String?>(null) }
+    var replyText by remember(statuses, startIndex) { mutableStateOf("") }
+    var replying by remember { mutableStateOf(false) }
     val status = statuses.getOrNull(index) ?: return
+
+    fun refreshInteractions() {
+        scope.launch {
+            FynxStatusClient.interactions(context, status.id)
+                .onSuccess { interactions = it; interactionError = null }
+                .onFailure { interactionError = it.message }
+        }
+    }
+
+    LaunchedEffect(status.id) {
+        replyText = ""
+        FynxStatusClient.markViewed(context, status.id)
+        refreshInteractions()
+    }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(Modifier.fillMaxSize(), color = Color.Black) {
@@ -182,15 +196,7 @@ private fun FynxStatusStoryViewer(
                     when (status.type) {
                         FynxStatusType.TEXT -> StatusViewerText(status)
                         FynxStatusType.PHOTO -> status.contentUri?.let { FynxRemoteMedia(it, "image", Modifier.fillMaxSize()) }
-                        FynxStatusType.VIDEO -> status.contentUri?.let {
-                            FynxRemoteMedia(
-                                it,
-                                "video",
-                                Modifier.fillMaxSize(),
-                                loopVideo = false,
-                                onVideoCompleted = { if (index < statuses.lastIndex) index++ else onDismiss() }
-                            )
-                        }
+                        FynxStatusType.VIDEO -> status.contentUri?.let { FynxRemoteMedia(it, "video", Modifier.fillMaxSize(), loopVideo = false, onVideoCompleted = { if (index < statuses.lastIndex) index++ else onDismiss() }) }
                         FynxStatusType.VOICE -> status.contentUri?.let { FynxRemoteAudio(it) }
                     }
                     Row(Modifier.fillMaxSize()) {
@@ -200,9 +206,48 @@ private fun FynxStatusStoryViewer(
                     }
                 }
 
-                deleteError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 12.dp)) }
+                Column(Modifier.fillMaxWidth().background(Color.Black).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("👁 ${interactions.viewCount}", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                        TextButton(onClick = {
+                            scope.launch { FynxStatusClient.toggleLike(context, status.id).onSuccess { refreshInteractions() }.onFailure { interactionError = it.message } }
+                        }) { Text(if (interactions.likedByMe) "♥ ${interactions.likeCount}" else "♡ ${interactions.likeCount}", color = Color.White) }
+                        Text("💬 ${interactions.replyCount}", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("❤️", "😂", "😮", "😢", "👍").forEach { emoji ->
+                            AssistChip(onClick = {
+                                scope.launch { FynxStatusClient.react(context, status.id, emoji).onSuccess { refreshInteractions() }.onFailure { interactionError = it.message } }
+                            }, label = { Text(emoji) })
+                        }
+                    }
+                    OutlinedTextField(
+                        value = replyText,
+                        onValueChange = { replyText = it.take(1000) },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !replying,
+                        singleLine = true,
+                        placeholder = { Text("Reply to this Status…") },
+                        trailingIcon = {
+                            TextButton(enabled = !replying && replyText.trim().isNotEmpty(), onClick = {
+                                val body = replyText.trim()
+                                if (body.isEmpty()) return@TextButton
+                                replying = true
+                                scope.launch {
+                                    FynxStatusClient.reply(context, status.id, body)
+                                        .onSuccess { replyText = ""; refreshInteractions() }
+                                        .onFailure { interactionError = it.message }
+                                    replying = false
+                                }
+                            }) { Text("Send") }
+                        }
+                    )
+                    interactionError?.let { Text(it, color = Color(0xFFFF8A80), style = MaterialTheme.typography.labelSmall) }
+                    deleteError?.let { Text(it, color = Color(0xFFFF8A80), style = MaterialTheme.typography.labelSmall) }
+                }
+
                 if (statuses.size > 1) {
-                    Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         IconButton(enabled = index > 0, onClick = { index-- }) { Icon(Icons.Default.ArrowBack, "Previous Status", tint = Color.White) }
                         Text("${index + 1} / ${statuses.size}", color = Color.White)
                         IconButton(enabled = index < statuses.lastIndex, onClick = { index++ }) { Icon(Icons.Default.ArrowForward, "Next Status", tint = Color.White) }
@@ -227,15 +272,7 @@ private fun StatusViewerText(status: FynxStatus) {
         else -> TextAlign.Center
     }
     Box(Modifier.fillMaxSize().background(Color(status.textStyle.backgroundColor)), contentAlignment = Alignment.Center) {
-        Text(
-            status.text.orEmpty(),
-            color = Color(status.textStyle.foregroundColor),
-            fontFamily = family,
-            fontWeight = weight,
-            textAlign = textAlign,
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.fillMaxWidth().padding(30.dp)
-        )
+        Text(status.text.orEmpty(), color = Color(status.textStyle.foregroundColor), fontFamily = family, fontWeight = weight, textAlign = textAlign, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.fillMaxWidth().padding(30.dp))
     }
 }
 

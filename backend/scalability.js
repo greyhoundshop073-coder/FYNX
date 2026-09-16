@@ -18,6 +18,7 @@ import { registerGroupMembershipRoutes } from "./groupMembershipRoutes.js";
 import { registerGroupInviteRoutes } from "./groupInviteRoutes.js";
 import { registerGroupContentRoutes } from "./groupContentRoutes.js";
 import { registerStatusManagementRoutes } from "./statusManagementRoutes.js";
+import { registerStatusInteractionRoutes } from "./statusInteractionRoutes.js";
 import { registerNotificationPreferenceRoutes } from "./notificationPreferences.js";
 import { registerNotificationDeviceRoutes } from "./notificationDevices.js";
 import { registerAdminRoutes } from "./adminRoutes.js";
@@ -49,10 +50,6 @@ http.createServer = function fynxCreateServer(...args) {
       registerMarketplacePayoutRetryRoutes({ app });
       registerMarketplaceProtectionRoutes({ app });
       registerMarketplaceProtectionResolutionRoutes({ app });
-      // Profile routes must exist before privacy registers its ordered guard.
-      // Otherwise the privacy module cannot place the guard in front of the
-      // profile route and a default "My friends" profile becomes unreachable
-      // before a friend request can be sent.
       registerProfileRoutes({ app });
       registerPrivacyRoutes({ app });
       registerFollowRoutes({ app });
@@ -61,6 +58,7 @@ http.createServer = function fynxCreateServer(...args) {
       registerGroupInviteRoutes({ app });
       registerGroupContentRoutes({ app });
       registerStatusManagementRoutes({ app });
+      registerStatusInteractionRoutes({ app });
       registerNotificationPreferenceRoutes({ app });
       registerNotificationDeviceRoutes({ app });
       registerAdminRoutes({ app });

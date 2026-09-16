@@ -6,6 +6,15 @@ import android.util.Base64
 import org.json.JSONObject
 import java.io.File
 
+data class FynxStatusInteractions(
+    val viewCount: Int = 0,
+    val likeCount: Int = 0,
+    val replyCount: Int = 0,
+    val reactionCounts: Map<String, Int> = emptyMap(),
+    val likedByMe: Boolean = false,
+    val myReaction: String? = null
+)
+
 /** Authenticated Status API. The local store is only a cache/fallback and never the source of shared truth. */
 object FynxStatusClient {
     suspend fun uploadMedia(context: Context, uri: Uri, mimeType: String): Result<String> = runCatching {
@@ -62,6 +71,38 @@ object FynxStatusClient {
                 ))
             }
         }
+    }
+
+    suspend fun interactions(context: Context, statusId: String): Result<FynxStatusInteractions> = runCatching {
+        val raw = FynxBackendClient.get(context, "/api/statuses/${statusId.trim()}/interactions").getOrThrow()
+        val o = JSONObject(raw)
+        val counts = mutableMapOf<String, Int>()
+        val reactionObject = o.optJSONObject("reactionCounts")
+        if (reactionObject != null) reactionObject.keys().forEach { key -> counts[key] = reactionObject.optInt(key, 0) }
+        FynxStatusInteractions(
+            viewCount=o.optInt("viewCount"), likeCount=o.optInt("likeCount"), replyCount=o.optInt("replyCount"),
+            reactionCounts=counts, likedByMe=o.optBoolean("likedByMe"), myReaction=o.optString("myReaction").ifBlank { null }
+        )
+    }
+
+    suspend fun markViewed(context: Context, statusId: String): Result<Unit> = runCatching {
+        FynxBackendClient.postJson(context, "/api/statuses/${statusId.trim()}/view", "{}").getOrThrow()
+    }
+
+    suspend fun toggleLike(context: Context, statusId: String): Result<Boolean> = runCatching {
+        val raw = FynxBackendClient.postJson(context, "/api/statuses/${statusId.trim()}/like", "{}").getOrThrow()
+        JSONObject(raw).optBoolean("liked")
+    }
+
+    suspend fun react(context: Context, statusId: String, reaction: String): Result<String?> = runCatching {
+        val body = JSONObject().put("reaction", reaction).toString()
+        val raw = FynxBackendClient.postJson(context, "/api/statuses/${statusId.trim()}/reaction", body).getOrThrow()
+        JSONObject(raw).optString("reaction").ifBlank { null }
+    }
+
+    suspend fun reply(context: Context, statusId: String, body: String): Result<Unit> = runCatching {
+        val raw = FynxBackendClient.postJson(context, "/api/statuses/${statusId.trim()}/reply", JSONObject().put("body", body.trim()).toString()).getOrThrow()
+        JSONObject(raw)
     }
 
     suspend fun delete(context: Context, statusId: String): Result<Unit> = runCatching {
