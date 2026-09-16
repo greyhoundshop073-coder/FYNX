@@ -33,6 +33,8 @@ fun FynxMarketplaceOrderLifecycle(
     onClose: () -> Unit
 ) {
     var showFulfillment by remember { mutableStateOf(order.status == "PAID") }
+    var showDispute by remember { mutableStateOf(false) }
+    var disputeDetails by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -84,51 +86,100 @@ fun FynxMarketplaceOrderLifecycle(
 
     AlertDialog(
         onDismissRequest = { if (!busy) onClose() },
-        title = { Text("Order ${order.status}") },
+        title = { Text(if (showDispute) "Report a problem" else "Order ${order.status}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(order.productTitle.ifBlank { "FYNX order" })
-                Text("${order.currency} ${"%.2f".format(order.totalAmount)}")
-                Text("Fulfillment: ${order.fulfillmentMethod.ifBlank { "Not selected" }}")
-                order.trackingReference?.takeIf { it.isNotBlank() }?.let { Text("Tracking: $it") }
-                FynxMarketplaceOrderTimeline(context = context, orderId = order.id)
-                when (order.status) {
-                    "PAID" -> Text("Choose delivery or pickup so the seller can fulfill the order.")
-                    "SHIPPED" -> Text("The seller marked this order as shipped. Confirm only after the order reaches you.")
-                    "INSPECTION" -> Text("You have a 48-hour inspection window. Complete the order only when the product is correct and in acceptable condition.")
-                    "COMPLETED" -> Text("Order completed. Payment is eligible for seller payout release when the protected settlement rules are satisfied.")
-                    else -> Text("This order is protected by FYNX marketplace status controls.")
+                if (showDispute) {
+                    Text("Tell FYNX what went wrong. The protected order remains under the server-side dispute and settlement rules.")
+                    OutlinedTextField(
+                        value = disputeDetails,
+                        onValueChange = { disputeDetails = it.take(4000) },
+                        label = { Text("What happened?") },
+                        minLines = 4,
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    Text(order.productTitle.ifBlank { "FYNX order" })
+                    Text("${order.currency} ${"%.2f".format(order.totalAmount)}")
+                    Text("Fulfillment: ${order.fulfillmentMethod.ifBlank { "Not selected" }}")
+                    order.trackingReference?.takeIf { it.isNotBlank() }?.let { Text("Tracking: $it") }
+                    FynxMarketplaceOrderTimeline(context = context, orderId = order.id)
+                    when (order.status) {
+                        "PAID" -> Text("Choose delivery or pickup so the seller can fulfill the order.")
+                        "SHIPPED" -> Text("The seller marked this order as shipped. Confirm only after the order reaches you.")
+                        "INSPECTION" -> Text("You have a 48-hour inspection window. Complete the order only when the product is correct and in acceptable condition.")
+                        "COMPLETED" -> Text("Order completed. Payment is eligible for seller payout release when the protected settlement rules are satisfied.")
+                        else -> Text("This order is protected by FYNX marketplace status controls.")
+                    }
+                    error?.let { Text(it) }
                 }
-                error?.let { Text(it) }
             }
         },
         confirmButton = {
-            when (order.status) {
-                "PAID" -> Button(onClick = { error = null; showFulfillment = true }) { Text("Choose fulfillment") }
-                "SHIPPED" -> Button(enabled = !busy, onClick = {
-                    busy = true
-                    error = null
-                    scope.launch {
-                        FynxRemoteSocialClient.confirmMarketplaceDelivery(context, order.id)
-                            .onSuccess { onChanged() }
-                            .onFailure { error = it.message ?: "Delivery confirmation failed." }
-                        busy = false
+            if (showDispute) {
+                Button(
+                    enabled = !busy && disputeDetails.trim().isNotBlank(),
+                    onClick = {
+                        busy = true
+                        error = null
+                        scope.launch {
+                            FynxRemoteSocialClient.disputeMarketplaceOrder(
+                                context,
+                                order.id,
+                                "OTHER",
+                                disputeDetails.trim()
+                            )
+                                .onSuccess { onChanged() }
+                                .onFailure { error = it.message ?: "The dispute could not be opened." }
+                            busy = false
+                        }
                     }
-                }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Confirm received") }
-                "INSPECTION" -> Button(enabled = !busy, onClick = {
-                    busy = true
-                    error = null
-                    scope.launch {
-                        FynxRemoteSocialClient.completeMarketplaceOrder(context, order.id)
-                            .onSuccess { onChanged() }
-                            .onFailure { error = it.message ?: "Order could not be completed." }
-                        busy = false
-                    }
-                }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Complete order") }
-                else -> Spacer(Modifier.size(1.dp))
+                ) {
+                    if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Open dispute")
+                }
+            } else {
+                when (order.status) {
+                    "PAID" -> Button(onClick = { error = null; showFulfillment = true }) { Text("Choose fulfillment") }
+                    "SHIPPED" -> Button(enabled = !busy, onClick = {
+                        busy = true
+                        error = null
+                        scope.launch {
+                            FynxRemoteSocialClient.confirmMarketplaceDelivery(context, order.id)
+                                .onSuccess { onChanged() }
+                                .onFailure { error = it.message ?: "Delivery confirmation failed." }
+                            busy = false
+                        }
+                    }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Confirm received") }
+                    "INSPECTION" -> Button(enabled = !busy, onClick = {
+                        busy = true
+                        error = null
+                        scope.launch {
+                            FynxRemoteSocialClient.completeMarketplaceOrder(context, order.id)
+                                .onSuccess { onChanged() }
+                                .onFailure { error = it.message ?: "Order could not be completed." }
+                            busy = false
+                        }
+                    }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Complete order") }
+                    else -> Spacer(Modifier.size(1.dp))
+                }
             }
         },
-        dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text("Close") } }
+        dismissButton = {
+            TextButton(
+                onClick = {
+                    if (showDispute) {
+                        showDispute = false
+                        disputeDetails = ""
+                        error = null
+                    } else {
+                        showDispute = true
+                        error = null
+                    }
+                },
+                enabled = !busy
+            ) { Text(if (showDispute) "Back" else "Report problem") }
+        }
     )
 }
 
