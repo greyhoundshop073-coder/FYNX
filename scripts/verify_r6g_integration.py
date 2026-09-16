@@ -5,6 +5,7 @@ backend = (ROOT / "backend/r6gIntegrationRoutes.js").read_text()
 scalability = (ROOT / "backend/scalability.js").read_text()
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxR6GIntegrationClient.kt").read_text()
 business_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBusinessAccount.kt").read_text()
+share = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxShare.kt").read_text()
 group = (ROOT / "backend/groupContentRoutes.js").read_text()
 
 checks = [
@@ -27,6 +28,9 @@ checks = [
     ("Android client exposes Home share", "shareListingToHome" in client),
     ("Android client exposes message context", "attachListingToMessage" in client),
     ("Android client exposes group share", "shareListingToGroup" in client),
+    ("Marketplace share payload preserves canonical listing id", "marketplaceListingId = listingId" in share),
+    ("Marketplace share exposes FYNX Home action", "Post to FYNX Home" in share and "postMarketplaceToHome" in share),
+    ("Marketplace Home action calls canonical integration client", "FynxR6GIntegrationClient.shareListingToHome(context, listingId)" in share),
     ("legacy group marketplace field remains for compatibility", "marketplace_product_id" in group),
 ]
 
