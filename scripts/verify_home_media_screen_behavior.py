@@ -15,7 +15,7 @@ checks = [
     ("Mixed media uses the same item renderer", "RemoteSocialMedia(item.mediaUrl, item.mediaType)" in home),
     ("Video playback remains available", "VideoView" in home and "MediaController" in home),
     ("Audio playback remains available", "MediaPlayer" in home and 'type == "audio"' in home),
-    ("Media renderer preserves crop behavior", "ContentScale.Crop" in home),
+    ("Media renderer preserves existing aspect-ratio scaling", "ContentScale.Fit" in home and ".aspectRatio((it.width.toFloat() / it.height.toFloat()).coerceIn(0.62f, 1.9f))" in home),
     ("Existing Like action remains wired", "onLike = { id -> runLike(id) }" in home),
     ("Existing Comment action remains wired", "onComment = { commentsPost = post }" in home),
     ("Existing Share action remains wired", "onShare = { runShare(post) }" in home),
