@@ -16,6 +16,7 @@ server=read('backend/server.js'); management=read('backend/statusManagementRoute
 client=read('app/src/main/java/com/fynx/app/ui/FynxStatusClient.kt'); foundation=read('app/src/main/java/com/fynx/app/ui/FynxStatusFoundation.kt')
 composer=read('app/src/main/java/com/fynx/app/ui/FynxStatusComposerPanel.kt'); mature=read('app/src/main/java/com/fynx/app/ui/FynxMatureStatusComposerPanel.kt')
 timeline=read('app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt'); hub=read('app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt'); stories=read('app/src/main/java/com/fynx/app/ui/StoriesPanel.kt')
+share=read('app/src/main/java/com/fynx/app/ui/FynxShare.kt'); deeplink=read('app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt')
 
 require('backend Status schema + expiry','CREATE TABLE IF NOT EXISTS statuses' in server and 'expires_at TIMESTAMPTZ NOT NULL' in server)
 require('backend media ownership','message_media' in server and 'owner_id=$2' in server)
@@ -26,7 +27,7 @@ require('management route production wiring','registerStatusManagementRoutes({ a
 require('status interactions route wiring','registerStatusInteractionRoutes({ app });' in scale and './statusInteractionRoutes.js' in scale)
 require('status interaction tables','status_views' in interactions and 'status_likes' in interactions and 'status_reactions' in interactions and 'status_replies' in interactions)
 require('status interaction visibility guard','expires_at > NOW()' in interactions and 'friendships' in interactions and 'blocks' in interactions)
-require('authenticated status view','POST' in interactions and '/view' in interactions and 'jwt.verify(token, JWT_SECRET)' in interactions)
+require('authenticated status view','app.post(\'/api/statuses/:statusId/view\'' in interactions and 'jwt.verify(token, JWT_SECRET)' in interactions)
 require('authenticated status like','/like' in interactions and 'status_likes' in interactions)
 require('authenticated status reactions','/reaction' in interactions and 'status_reactions' in interactions)
 require('authenticated status replies','/reply' in interactions and 'status_replies' in interactions)
@@ -71,10 +72,17 @@ require('status emoji reaction controls','listOf("❤️", "😂", "😮", "😢
 require('owner delete UI','FynxStatusClient.delete(context, status.id)' in timeline and 'status.ownerUsername.equals(viewerUsername, true)' in timeline)
 require('24 hour viewer expiry','FYNX_STATUS_EXPIRY_MS' in timeline)
 
+# The external Marketplace link/share layer already exists; this gate keeps it running with the Status batch.
+require('Marketplace share payload exists','fun marketplacePayload(' in share and 'FynxDeepLinkParser.marketplaceWebLink(listingId)' in share)
+require('Marketplace share preserves real listing id','marketplaceWebLink(listingId)' in share and 'fun marketplaceWebLink(listingId:String?=null)' in deeplink)
+require('Marketplace web link uses FYNX host','private const val FYNX_HOST = "fynx.app"' in deeplink and 'MARKETPLACE_PATH = "/marketplace"' in deeplink)
+require('external sharing uses Android share chooser','Intent.ACTION_SEND' in share and 'Intent.createChooser(sendIntent' in share)
+require('Marketplace link parses back to Marketplace','"marketplace"->if(normalizedPath.size<=2)FynxDeepLinkDestination.Marketplace(value)' in deeplink)
+
 failed=[label for label,ok in checks if not ok]
 for label,ok in checks: print(('GREEN' if ok else 'RED')+' - '+label)
 if failed:
-    print('\nR5B Status/Stories interaction verification failed:')
+    print('\nR5B Status/Stories + Marketplace sharing verification failed:')
     for item in failed: print(' - '+item)
     sys.exit(1)
-print(f'\nR5B Status/Stories security + end-to-end interaction gate GREEN ({len(checks)} checks)')
+print(f'\nR5B Status/Stories + Marketplace sharing end-to-end gate GREEN ({len(checks)} checks)')
