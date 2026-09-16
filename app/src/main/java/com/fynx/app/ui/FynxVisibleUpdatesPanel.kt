@@ -46,19 +46,40 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
 fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, onOpenAi: () -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     var statuses by remember { mutableStateOf<List<FynxStatus>>(emptyList()) }
     var aiInput by remember { mutableStateOf("") }
     var aiReply by remember { mutableStateOf<String?>(null) }
     var aiLoading by remember { mutableStateOf(false) }
-    LaunchedEffect(currentUsername) { statuses = FynxStatusClient.list(context).getOrDefault(emptyList()) }
+
+    fun refreshStatuses() {
+        scope.launch(Dispatchers.IO) {
+            val latest = FynxStatusClient.list(context).getOrDefault(emptyList())
+            withContext(Dispatchers.Main) { statuses = latest }
+        }
+    }
+
+    LaunchedEffect(currentUsername) { refreshStatuses() }
+
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner, currentUsername) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshStatuses()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val activeStatuses = statuses.filter { it.expiresAtMillis <= 0L || it.expiresAtMillis > System.currentTimeMillis() }
     val grouped = activeStatuses.groupBy { it.ownerUsername }

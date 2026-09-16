@@ -21,6 +21,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.launch
 
 @Composable
@@ -32,9 +35,11 @@ fun NotificationPanel(
     onNotificationOpen: (FynxNotification) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     var localNotifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
     var remoteNotifications by remember { mutableStateOf<List<FynxNotification>>(emptyList()) }
+    var remoteError by remember { mutableStateOf<String?>(null) }
     var notificationPreferences by remember { mutableStateOf(FynxNotificationPreferencesClient.cached(context)) }
     val current = remember(localNotifications, remoteNotifications, notifications) {
         (remoteNotifications + localNotifications + notifications)
@@ -48,9 +53,22 @@ fun NotificationPanel(
         FynxNotificationActivityCenter.filterByType(current, selectedType), unreadOnly
     )
 
-    LaunchedEffect(Unit) {
-        FynxNotificationPreferencesClient.load(context).onSuccess { notificationPreferences = it }
-        FynxNotificationRemoteClient.load(context).onSuccess { remoteNotifications = it }
+    fun loadRemoteNotifications() {
+        scope.launch {
+            FynxNotificationPreferencesClient.load(context).onSuccess { notificationPreferences = it }
+            FynxNotificationRemoteClient.load(context)
+                .onSuccess { remoteNotifications = it; remoteError = null }
+                .onFailure { remoteError = it.message ?: "Unable to refresh notifications." }
+        }
+    }
+
+    LaunchedEffect(Unit) { loadRemoteNotifications() }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) loadRemoteNotifications()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     fun savePreferences(next: FynxNotificationPreferences) {
@@ -84,6 +102,15 @@ fun NotificationPanel(
                     onMarkAllRead()
                 }, enabled = current.any { !it.read }
             ) { Text("Read all") }
+        }
+
+        remoteError?.let { message ->
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
+                    TextButton(onClick = { loadRemoteNotifications() }) { Text("Retry") }
+                }
+            }
         }
 
         Card(
