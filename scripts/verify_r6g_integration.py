@@ -1,0 +1,33 @@
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+backend = (ROOT / "backend/r6gIntegrationRoutes.js").read_text()
+scalability = (ROOT / "backend/scalability.js").read_text()
+client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxR6GIntegrationClient.kt").read_text()
+group = (ROOT / "backend/groupContentRoutes.js").read_text()
+
+checks = [
+    ("R6-G route module exists", "export function registerR6GIntegrationRoutes" in backend),
+    ("R6-G routes are production-wired", "registerR6GIntegrationRoutes({ app });" in scalability),
+    ("canonical listing gets business ownership", "marketplace_listings ADD COLUMN IF NOT EXISTS business_id" in backend),
+    ("Home posts can reference canonical listing", "social_posts ADD COLUMN IF NOT EXISTS listing_id" in backend),
+    ("Home posts can reference business identity", "social_posts ADD COLUMN IF NOT EXISTS business_id" in backend),
+    ("messages can carry listing context", "messages ADD COLUMN IF NOT EXISTS listing_id" in backend),
+    ("groups can carry canonical listing context", "fynx_group_posts ADD COLUMN IF NOT EXISTS listing_id" in backend),
+    ("business link enforces owner", "business_profiles WHERE id=$1 AND owner_id=$2" in backend),
+    ("Home product share uses listing_id", "INSERT INTO social_posts(author_id,text,visibility,listing_id,business_id)" in backend),
+    ("group product share uses listing_id", "INSERT INTO fynx_group_posts(id,group_id,author_id,text,listing_id,business_id)" in backend),
+    ("message context checks participant", "message access denied" in backend),
+    ("Android client exposes listing context", "suspend fun listingContext" in client),
+    ("Android client exposes Home share", "shareListingToHome" in client),
+    ("Android client exposes message context", "attachListingToMessage" in client),
+    ("Android client exposes group share", "shareListingToGroup" in client),
+    ("legacy group marketplace field remains for compatibility", "marketplace_product_id" in group),
+]
+
+failed = [name for name, ok in checks if not ok]
+for name, ok in checks:
+    print(("PASS" if ok else "FAIL") + " - " + name)
+if failed:
+    raise SystemExit("R6-G integration gate failed: " + ", ".join(failed))
+print(f"R6-G integration gate GREEN ({len(checks)} checks)")
