@@ -29,8 +29,10 @@ object FynxR6GIntegrationClient {
         val category: String
     )
 
-    suspend fun listingContext(context: Context, listingId: String): Result<ListingContext> =
-        FynxBackendClient.get(context, "/api/r6g/listings/${listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))}/context")
+    suspend fun listingContext(context: Context, listingId: String): Result<ListingContext> {
+        val id = listingId.toLongOrNull()
+            ?: return Result.failure(IllegalArgumentException("invalid listing id"))
+        return FynxBackendClient.get(context, "/api/r6g/listings/$id/context")
             .mapCatching { raw ->
                 val o = JSONObject(raw).getJSONObject("context")
                 ListingContext(
@@ -42,6 +44,7 @@ object FynxR6GIntegrationClient {
                     o.optString("description"), o.optDouble("price"), o.optString("currency", "NGN"), o.optString("category")
                 )
             }
+    }
 
     suspend fun linkListingToBusiness(context: Context, listingId: String, businessId: String?): Result<Unit> {
         val id = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
