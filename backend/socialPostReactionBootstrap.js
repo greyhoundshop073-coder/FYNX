@@ -49,7 +49,7 @@ export async function installSocialPostReactions() {
     }
   });
 
-  app.put('/api/social/posts/:id/reaction', auth, async (req, res) => {
+  app.post('/api/social/posts/:id/reaction', auth, async (req, res) => {
     try {
       await ensureSocialSchema();
       await ensureHomePostReactionSchema();
