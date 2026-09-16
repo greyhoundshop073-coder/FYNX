@@ -49,8 +49,12 @@ http.createServer = function fynxCreateServer(...args) {
       registerMarketplacePayoutRetryRoutes({ app });
       registerMarketplaceProtectionRoutes({ app });
       registerMarketplaceProtectionResolutionRoutes({ app });
-      registerPrivacyRoutes({ app });
+      // Profile routes must exist before privacy registers its ordered guard.
+      // Otherwise the privacy module cannot place the guard in front of the
+      // profile route and a default "My friends" profile becomes unreachable
+      // before a friend request can be sent.
       registerProfileRoutes({ app });
+      registerPrivacyRoutes({ app });
       registerFollowRoutes({ app });
       registerGroupRoutes({ app });
       registerGroupMembershipRoutes({ app });

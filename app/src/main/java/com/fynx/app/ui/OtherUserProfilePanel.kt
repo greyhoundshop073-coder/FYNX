@@ -105,7 +105,7 @@ fun OtherUserProfilePanel(
                                     else -> "Add friend"
                                 })
                             }
-                            if (person.relationship == "friends") {
+                            if (person.canMessage) {
                                 OutlinedButton(enabled = !busy, onClick = { onMessage(person.username) }) {
                                     Icon(Icons.Default.Message, contentDescription = null)
                                     Spacer(Modifier.width(8.dp))
