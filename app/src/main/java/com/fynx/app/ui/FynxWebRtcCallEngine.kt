@@ -25,7 +25,9 @@ class FynxWebRtcCallEngine(
     context: Context,
     private val iceServers: List<PeerConnection.IceServer> = listOf(
         PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
-        PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer()
+        PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
+        PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer(),
+        PeerConnection.IceServer.builder("stun:stun.cloudflare.com:3478").createIceServer()
     ),
     private val callbacks: CallCallbacks = CallCallbacks()
 ) : FynxCallMediaEngine {
@@ -73,7 +75,9 @@ class FynxWebRtcCallEngine(
                     else -> Unit
                 }
             }
-            override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
+            override fun onIceConnectionReceivingChange(receiving: Boolean) {
+                if (!receiving && peerConnection?.iceConnectionState() == PeerConnection.IceConnectionState.DISCONNECTED) scheduleIceRecovery()
+            }
             override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) = Unit
             override fun onIceCandidate(candidate: IceCandidate) { callbacks.onIceCandidate(candidate) }
             override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) = Unit
