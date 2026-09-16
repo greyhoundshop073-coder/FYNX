@@ -16,7 +16,7 @@ checks = [
     ("Composer previews selected image media", "ImageView" in composer and "setImageURI(selectedVisual.second)" in composer),
     ("Publishing is blocked while offline", "networkLevel != FynxNetworkQuality.Level.OFFLINE" in composer and "Reconnect before publishing this post" in composer),
     ("Publishing is blocked while another publish is active", "!posting" in composer and "posting = true" in composer),
-    ("Caption input remains capped at 4000 characters", "text.take(4000)" in composer and "text.trim().take(4000)" in client),
+    ("Caption input remains capped at 4000 characters", "text = it.take(4000)" in composer and "text.trim().take(4000)" in client),
     ("Empty posts are rejected unless media is attached", "text.isNotBlank() || capturedUris.isNotEmpty()" in composer and "Add a caption or at least one media item." in client),
     ("Client rejects more than four selected assets", "selected.size <= MAX_MEDIA" in client and "MAX_MEDIA = 4" in client),
     ("Audio cannot be combined with other media", "Voice posts use one audio recording" in client and "selected.size != 1" in client),
