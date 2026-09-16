@@ -57,7 +57,6 @@ check("server notification API is registered", "app.get('/api/notifications'" in
 check("admin center is server-role gated", "FynxAdminClient.dashboard" in app and "adminRole" in app and 'adminRole != null' in app)
 check("privacy/safety surface is wired", "Privacy" in app and "FynxPrivacySettingsPanel" in app)
 check("profile stats are server-authoritative and self-only", "followerCount" in profile_backend and "followingCount" in profile_backend and "connectionsVisible:self" in profile_backend and "app.get('/api/social/me/followers'" in profile_backend and "app.get('/api/social/me/following'" in profile_backend and "WHERE f.followed_id=$1" in profile_backend and "WHERE f.follower_id=$1" in profile_backend and "suspend fun followers" in profile_client and "suspend fun following" in profile_client)
-# Other-user profiles may show the real follower/following COUNTS. Only the private connection MEMBER LISTS are self-only.
 check(
     "profile stats UI matches the private connections rule",
     'ProfileStat("Posts"' in profile_panel
@@ -69,8 +68,6 @@ check(
     and not re.search(r"(?:followers?|following)\s+(?:list|members?|user|people|names)", other_profile_panel, re.IGNORECASE)
 )
 
-# Public profile interaction integrity: real profile identity, four-column post grid,
-# dedicated post viewer, and Marketplace only when the real seller has listings.
 check(
     "other-user profile uses real identity and server profile loading",
     "FynxProfileRemoteClient.get(context, username)" in other_profile_panel
@@ -110,9 +107,11 @@ check(
 
 # Home Create is an entry menu, not a direct camera shortcut. Keep the exact three
 # FYNX creation surfaces and verify each action routes to its existing destination.
+# Count only call sites so the private composable declaration itself is not counted.
+create_menu_actions = re.findall(r"(?m)^\s*CreateMenuAction\(", create_menu)
 check(
     "Home Create menu contains exactly Post, Status and Marketplace",
-    create_menu.count('CreateMenuAction(') == 3
+    len(create_menu_actions) == 3
     and '"Post"' in create_menu
     and '"Status"' in create_menu
     and '"Marketplace"' in create_menu
