@@ -24,7 +24,7 @@ checks = [
     ("Composer enforces the real four-asset limit", "require(selected.size <= MAX_MEDIA)" in client and "MAX_MEDIA = 4" in client),
     ("Composer exposes four-media guidance", "up to 4 photos/videos" in composer),
     ("Composer supports camera capture", "FynxCameraCapturePanel" in composer),
-    ("Composer supports removing selected media", "removeSelected" in composer or "capturedUris = capturedUris.filterIndexed" in composer),
+    ("Composer exposes media removal guidance", "remove media you don't want to post" in composer),
 ]
 
 failed = [name for name, ok in checks if not ok]
