@@ -41,6 +41,8 @@ object FynxStatusClient {
     }
 
     suspend fun create(context: Context, status: FynxStatus, mediaId: String?): Result<Unit> = runCatching {
+        if (status.type != FynxStatusType.TEXT && mediaId.isNullOrBlank()) error("Status media is missing.")
+        if (status.type == FynxStatusType.VOICE && mediaId.isNullOrBlank()) error("Voice Status media is missing.")
         val body = JSONObject().apply {
             put("id", status.id); put("type", status.type.name); put("text", status.text ?: "")
             if (mediaId != null) put("mediaId", mediaId)
@@ -62,9 +64,11 @@ object FynxStatusClient {
                 val type = runCatching { FynxStatusType.valueOf(o.getString("type")) }.getOrNull() ?: continue
                 val font = runCatching { FynxStatusTextFont.valueOf(o.optString("font", "CLASSIC")) }.getOrDefault(FynxStatusTextFont.CLASSIC)
                 val audience = runCatching { FynxStatusAudience.valueOf(o.optString("audience", if (o.optBoolean("privateStatus")) "FRIENDS" else "EVERYONE")) }.getOrDefault(FynxStatusAudience.EVERYONE)
+                val mediaId = o.optString("mediaId").ifBlank { o.optString("media_id") }.ifBlank { null }
+                val mediaUrl = o.optString("mediaUrl").ifBlank { o.optString("media_url") }.ifBlank { mediaId?.let { "/api/media/$it" } }
                 add(FynxStatus(
                     id=o.getString("id"), ownerUsername=o.getString("ownerUsername"), ownerDisplayName=o.optString("ownerDisplayName"),
-                    type=type, contentUri=o.optString("mediaUrl").ifBlank { null }, text=o.optString("text").ifBlank { null },
+                    type=type, contentUri=mediaUrl, text=o.optString("text").ifBlank { null },
                     createdAtMillis=o.optLong("createdAtMillis"), expiresAtMillis=o.optLong("expiresAtMillis"),
                     textStyle=FynxStatusTextStyle(o.optLong("backgroundColor",0xFF111111),o.optLong("foregroundColor",0xFFFFFFFF),font,o.optInt("alignment",1)),
                     privateStatus=o.optBoolean("privateStatus"), voiceDurationMs=o.optLong("voiceDurationMs",0L), audience=audience
