@@ -16,7 +16,7 @@ server=read('backend/server.js'); management=read('backend/statusManagementRoute
 client=read('app/src/main/java/com/fynx/app/ui/FynxStatusClient.kt'); foundation=read('app/src/main/java/com/fynx/app/ui/FynxStatusFoundation.kt')
 composer=read('app/src/main/java/com/fynx/app/ui/FynxStatusComposerPanel.kt'); mature=read('app/src/main/java/com/fynx/app/ui/FynxMatureStatusComposerPanel.kt')
 timeline=read('app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt'); hub=read('app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt'); stories=read('app/src/main/java/com/fynx/app/ui/StoriesPanel.kt')
-share=read('app/src/main/java/com/fynx/app/ui/FynxShare.kt'); deeplink=read('app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt')
+share=read('app/src/main/java/com/fynx/app/ui/FynxShare.kt'); deeplink=read('app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt'); marketplace=read('app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt')
 
 require('backend Status schema + expiry','CREATE TABLE IF NOT EXISTS statuses' in server and 'expires_at TIMESTAMPTZ NOT NULL' in server)
 require('backend media ownership','message_media' in server and 'owner_id=$2' in server)
@@ -69,6 +69,8 @@ require('status viewer left-right navigation','clickable(enabled = index > 0)' i
 require('status viewer progress','LinearProgressIndicator' in timeline and '(index + 1).toFloat() / statuses.size.toFloat()' in timeline)
 require('status interaction controls','viewCount' in timeline and 'likeCount' in timeline and 'Reply to this Status' in timeline)
 require('status emoji reaction controls','listOf("❤️", "😂", "😮", "😢", "👍")' in timeline)
+require('status external share action','FynxShareActions.share(context, FynxShareActions.statusPayload(status))' in timeline and 'fun statusPayload(status: FynxStatus)' in share)
+require('status share uses Stories destination','FynxDeepLinkParser.storiesWebLink()' in share and 'Stories' in deeplink)
 require('owner delete UI','FynxStatusClient.delete(context, status.id)' in timeline and 'status.ownerUsername.equals(viewerUsername, true)' in timeline)
 require('24 hour viewer expiry','FYNX_STATUS_EXPIRY_MS' in timeline)
 
@@ -78,6 +80,7 @@ require('Marketplace share preserves real listing id','marketplaceWebLink(listin
 require('Marketplace web link uses FYNX host','private const val FYNX_HOST = "fynx.app"' in deeplink and 'MARKETPLACE_PATH = "/marketplace"' in deeplink)
 require('external sharing uses Android share chooser','Intent.ACTION_SEND' in share and 'Intent.createChooser(sendIntent' in share)
 require('Marketplace link parses back to Marketplace','"marketplace"->if(normalizedPath.size<=2)FynxDeepLinkDestination.Marketplace(value)' in deeplink)
+require('Marketplace UI share action','FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title))' in marketplace and 'Share Marketplace listing' in marketplace)
 
 failed=[label for label,ok in checks if not ok]
 for label,ok in checks: print(('GREEN' if ok else 'RED')+' - '+label)
