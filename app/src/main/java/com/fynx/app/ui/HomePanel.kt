@@ -32,6 +32,11 @@ fun HomePanel(
     onOpenAuthorProfile: (String) -> Unit = {}
 ) {
     val displayUsername = currentUsername.trim().removePrefix("@").trim()
+    var showCreateMenu by remember { mutableStateOf(false) }
+
+    fun dismissCreateMenu() {
+        showCreateMenu = false
+    }
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -50,11 +55,29 @@ fun HomePanel(
                     currentUsername = displayUsername,
                     onOpenFindPeople = onOpenFindPeople,
                     onOpenMarketplace = onOpenMarketplace,
-                    onCreatePost = onCreatePost,
+                    onCreatePost = { showCreateMenu = true },
                     onOpenAuthorProfile = onOpenAuthorProfile
                 )
             }
         }
+    }
+
+    if (showCreateMenu) {
+        FynxHomeCreateMenu(
+            onDismiss = ::dismissCreateMenu,
+            onPost = {
+                dismissCreateMenu()
+                onCreatePost()
+            },
+            onStatus = {
+                dismissCreateMenu()
+                onOpenStories()
+            },
+            onMarketplace = {
+                dismissCreateMenu()
+                onOpenMarketplace()
+            }
+        )
     }
 }
 
