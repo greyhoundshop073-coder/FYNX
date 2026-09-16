@@ -58,7 +58,6 @@ if 'Text("Save")' in home or 'Text("Repost")' in home:
     raise SystemExit("HOME INTERACTIONS RED: fake Save/Repost feed controls detected")
 for needle in ('MaterialTheme.colorScheme','FynxDesign.LargeCardShape','key = "feed_header"','key = "feed_loading"','key = "feed_error"','key = "feed_empty"','key = "feed_load_more"','"Refresh feed"','"Create post"','"Like"','"Comment"','"Post options"','onDismissRequest =','enabled = !feedRequestInFlight','enabled = !loadingMore && !feedRequestInFlight'):
     require(home, needle, f"Home 4F polish/integration surface {needle}")
-# The upgraded feed uses visible state labels (Saved/Reposted) while preserving Save/Repost semantics.
 require(home, 'label = if (interactionState.saved) "Saved" else "Save"', "Home 4F save state label")
 require(home, 'label = if (interactionState.reposted) "Reposted" else "Repost"', "Home 4F repost state label")
 if 'contentDescription = null' not in home and 'Icon(Icons.Default.ShoppingBag, null)' not in home:
@@ -82,12 +81,12 @@ for needle in ('val previous = posts.firstOrNull { it.id == id }','optimisticLik
 
 # Home AI integration guard: the AI/Status header must live inside the feed's one vertical scroll surface.
 require(home_shell, 'FynxRemoteHomeSocialPanel(', "Home feed host")
-require(home_shell, 'header = { FynxVisibleUpdatesPanel(', "Home AI/Status header wiring")
+require_normalized(home_shell, 'header = { FynxVisibleUpdatesPanel(', "Home AI/Status header wiring")
 require(home, 'LazyColumn(', "Home single vertical scroll surface")
-require(home, 'header?.let { content -> item(key = "home_ai_status") { content() } }', "AI/Status feed header item")
+require_normalized(home, 'header?.let { content -> item(key = "home_ai_status") { content() } }', "AI/Status feed header item")
 if home.count('LazyColumn(') != 1:
     raise SystemExit("HOME INTERACTIONS RED: Home must keep exactly one vertical LazyColumn")
-require(home, 'items(items = posts, key = { it.id })', "feed posts in the shared scroll surface")
+require_normalized(home, 'items(items = posts, key = { it.id })', "feed posts in the shared scroll surface")
 require(visible_updates, 'OutlinedTextField(', "Home AI typing input")
 require(visible_updates, 'value = aiInput', "Home AI input state")
 require(visible_updates, 'AiAssistantClient.sendMessage(context, prompt)', "Home AI real backend client path")
