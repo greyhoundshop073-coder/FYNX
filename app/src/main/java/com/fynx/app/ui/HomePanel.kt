@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Production Home shell. The status strip stays above one authoritative, virtualized social feed. */
+/** Production Home shell. Status/AI content scrolls away with the Home feed; the feed remains the only scrolling surface. */
 @Composable
 fun HomePanel(
     currentUsername: String = "",
@@ -44,26 +44,31 @@ fun HomePanel(
         return
     }
 
-    Column(
+    LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = 24.dp)
     ) {
-        FynxVisibleUpdatesPanel(
-            currentUsername = displayUsername,
-            onOpenStories = onOpenStories,
-            onOpenAi = onOpenAi
-        )
+        item(key = "home_status_ai") {
+            FynxVisibleUpdatesPanel(
+                currentUsername = displayUsername,
+                onOpenStories = onOpenStories,
+                onOpenAi = onOpenAi
+            )
+        }
 
-        FynxHomeLifecycleRefresh { refreshKey ->
-            key(refreshKey) {
-                FynxRemoteHomeSocialPanel(
-                    modifier = Modifier.weight(1f),
-                    currentUsername = displayUsername,
-                    onOpenFindPeople = onOpenFindPeople,
-                    onOpenMarketplace = onOpenMarketplace,
-                    onCreatePost = { showCreateMenu = true },
-                    onOpenAuthorProfile = onOpenAuthorProfile
-                )
+        item(key = "home_social_feed") {
+            FynxHomeLifecycleRefresh { refreshKey ->
+                key(refreshKey) {
+                    FynxRemoteHomeSocialPanel(
+                        modifier = Modifier.fillMaxWidth(),
+                        currentUsername = displayUsername,
+                        onOpenFindPeople = onOpenFindPeople,
+                        onOpenMarketplace = onOpenMarketplace,
+                        onCreatePost = { showCreateMenu = true },
+                        onOpenAuthorProfile = onOpenAuthorProfile
+                    )
+                }
             }
         }
     }
