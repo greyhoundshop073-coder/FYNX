@@ -7,6 +7,9 @@ client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxR6GIntegrationClient.kt"
 business_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBusinessAccount.kt").read_text()
 share = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxShare.kt").read_text()
 group = (ROOT / "backend/groupContentRoutes.js").read_text()
+marketplace_remote = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt").read_text()
+conversation = (ROOT / "app/src/main/java/com/fynx/app/ui/ConversationPanel.kt").read_text()
+messaging = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt").read_text()
 
 checks = [
     ("R6-G route module exists", "export function registerR6GIntegrationRoutes" in backend),
@@ -20,6 +23,8 @@ checks = [
     ("Home product share uses listing_id", "INSERT INTO social_posts(author_id,text,visibility,listing_id,business_id)" in backend),
     ("group product share uses listing_id", "INSERT INTO fynx_group_posts(id,group_id,author_id,text,listing_id,business_id)" in backend),
     ("message context checks participant", "message access denied" in backend),
+    ("message context validates listing identity", "message is not connected to this seller" in backend),
+    ("message context never owns marketplace authority", "UPDATE messages SET listing_id=$1,business_id=$2" in backend and "UPDATE marketplace_listings" not in backend.split("app.post('/api/r6g/messages/:id/context'", 1)[1].split("app.post('/api/r6g/groups/:groupId/marketplace-posts'", 1)[0]),
     ("Android listing context uses a block body", "suspend fun listingContext(context: Context, listingId: String): Result<ListingContext> {" in client),
     ("Android listing context has no illegal expression-body return", "Result.failure(IllegalArgumentException(\"invalid listing id\"))" in client and "suspend fun listingContext(context: Context, listingId: String): Result<ListingContext> =" not in client),
     ("Android client exposes business linking", "suspend fun linkListingToBusiness" in client),
@@ -35,6 +40,10 @@ checks = [
     ("Marketplace Group action loads real groups", "FynxGroupsStore.load(context)" in share),
     ("Marketplace Group action calls canonical integration client", "FynxR6GIntegrationClient.shareListingToGroup(context, group.id, listingId" in share),
     ("legacy group marketplace field remains for compatibility", "marketplace_product_id" in group),
+    ("Marketplace contact opens normal FYNX Chat", "onContact = { onOpenChat(listing.sellerUsername) }" in marketplace_remote),
+    ("Marketplace detail contact opens normal FYNX Chat", "onOpenChat(listing.sellerUsername); selected = null" in marketplace_remote),
+    ("ConversationPanel remains a general chat surface", "fun ConversationPanel(chat: ChatPreview" in conversation and "FynxProductionMessaging.history" in conversation and "FynxProductionMessaging.sendText" in conversation),
+    ("Chat send API remains marketplace-independent", "suspend fun sendText(context: Context, recipientUsername: String, text: String" in messaging and "listingId" not in messaging.split("suspend fun sendText", 1)[1].split("suspend fun", 1)[0]),
 ]
 
 failed = [name for name, ok in checks if not ok]
