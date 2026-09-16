@@ -13,7 +13,10 @@ def check(name, condition):
     checks.append((name, bool(condition)))
 
 check("backend transport requires HTTPS", 'startsWith("https://")' in client)
-check("backend transport waits for validated network", "awaitValidatedNetwork(context)" in client and "NET_CAPABILITY_VALIDATED" in client)
+# Production HTTP must not block on Android's VALIDATED bit; INTERNET is the transport gate,
+# while the request itself proves reachability. Currency conversion intentionally keeps its
+# stricter validation because it is an external utility path.
+check("backend transport uses INTERNET-based network gate", "hasNetwork(context)" in client and "NET_CAPABILITY_INTERNET" in client and "allNetworks" in client and "NET_CAPABILITY_VALIDATED" not in client.split("private fun hasNetwork", 1)[-1].split("private fun isRetryableFailure", 1)[0])
 check("idempotent backend requests have bounded retries", "MAX_IDEMPOTENT_RETRIES = 2" in client and "attempt >= MAX_IDEMPOTENT_RETRIES" in client)
 check("non-idempotent POST/PATCH are not automatically retried", 'val retryable = method == "GET" || method == "DELETE"' in client)
 check("backend responses have a size limit", "MAX_RESPONSE_BYTES" in client and "total > MAX_RESPONSE_BYTES" in client)
