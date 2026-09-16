@@ -285,7 +285,7 @@ private fun matureStatusFont(font: FynxStatusTextFont): FontFamily = when (font)
 private fun beginMatureVoiceRecording(context: Context, onStarted: (MediaRecorder, File) -> Unit) {
     val file = File(context.cacheDir, "fynx-status-${System.currentTimeMillis()}.m4a")
     runCatching {
-        MediaRecorder(context).apply {
+        MediaRecorder().apply {
             setAudioSource(MediaRecorder.AudioSource.MIC)
             setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
