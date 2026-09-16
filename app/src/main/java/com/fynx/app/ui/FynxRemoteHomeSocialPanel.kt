@@ -205,7 +205,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     LazyColumn(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
         item(key = "feed_header") { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column { Text("Your feed", style = MaterialTheme.typography.titleMedium); Text("Real posts from your FYNX network", style = MaterialTheme.typography.bodySmall) }
-            Row { IconButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Icon(Icons.Default.Refresh, "Refresh feed") }; IconButton(onClick = onCreatePost) { Icon(Icons.Default.Add, "Create post") } }
+            Row { IconButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Icon(Icons.Default.Refresh, "Refresh feed") }; IconButton(onClick = onCreatePost) { Icon(Icons.Default.CameraAlt, "Create post") } }
         } }
         if (loading) item(key = "feed_loading") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         error?.let { message -> item(key = "feed_error") { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Text("Retry") } } } } }
@@ -306,7 +306,7 @@ private fun RemoteSocialMedia(path: String, type: String?) {
     else {
         var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
         LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }
-        bitmap?.let { Image(it.asImageBitmap(), "Post media", Modifier.fillMaxWidth().aspectRatio((it.width.toFloat() / it.height.toFloat()).coerceIn(0.62f, 1.9f)), contentScale = ContentScale.Crop) }
+        bitmap?.let { Image(it.asImageBitmap(), "Post media", Modifier.fillMaxWidth().aspectRatio((it.width.toFloat() / it.height.toFloat()).coerceIn(0.62f, 1.9f)), contentScale = ContentScale.Fit) }
     }
 }
 
