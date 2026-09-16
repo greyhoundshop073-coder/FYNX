@@ -4,7 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.ImageView
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.compose.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -145,6 +146,7 @@ private fun RemoteMarketMedia(context: android.content.Context, mediaId: String,
 
 @Composable
 private fun MarketplaceDetails(l: FynxRemoteSocialClient.MarketplaceListing, onProfile: () -> Unit, onContact: () -> Unit, onBuyNow: () -> Unit, onAddToCart: () -> Unit, onClose: () -> Unit) {
+    val context = LocalContext.current
     AlertDialog(onDismissRequest = onClose, title = { Text(l.title) }, text = { Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(9.dp)) {
         if (l.mediaIds.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(l.mediaIds.take(12)) { mediaId -> RemoteMarketMedia(LocalContext.current, mediaId, Modifier.width(280.dp).height(210.dp).clip(RoundedCornerShape(12.dp))) } }
         Text("${l.currency} ${String.format(Locale.US, "%,.2f", l.price)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
@@ -157,6 +159,7 @@ private fun MarketplaceDetails(l: FynxRemoteSocialClient.MarketplaceListing, onP
         Text("🛡 FYNX protected payment", fontWeight = FontWeight.SemiBold)
         Text("Payment stays protected through the existing FYNX order lifecycle until the appropriate completion state.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     } }, confirmButton = { Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title)) }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Share, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Share Marketplace listing") }
         OutlinedButton(onClick = onContact, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.ChatBubbleOutline, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Contact seller") }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onAddToCart, enabled = l.quantity > 0, modifier = Modifier.weight(1f)) { Icon(Icons.Default.ShoppingCart, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text("Add to cart") }
@@ -192,44 +195,31 @@ private fun MarketplacePaymentDialog(context: android.content.Context, order: Fy
         },
         confirmButton = {
             if (payment == null) {
-                Button(
-                    enabled = !busy,
-                    onClick = {
-                        busy = true
-                        message = null
-                        scope.launch {
-                            initializeMarketplacePayment(context, order.id, email)
-                                .onSuccess { checkout ->
-                                    payment = checkout
-                                    openMarketplaceCheckout(context, checkout.authorizationUrl)
-                                        .onFailure {
-                                            payment = null
-                                            message = it.message ?: "Could not open payment checkout."
-                                        }
+                Button(enabled = !busy, onClick = {
+                    busy = true
+                    message = null
+                    scope.launch {
+                        initializeMarketplacePayment(context, order.id, email)
+                            .onSuccess { checkout ->
+                                payment = checkout
+                                openMarketplaceCheckout(context, checkout.authorizationUrl).onFailure {
+                                    payment = null
+                                    message = it.message ?: "Could not open payment checkout."
                                 }
-                                .onFailure { message = it.message ?: "Could not start payment." }
-                            busy = false
-                        }
+                            }
+                            .onFailure { message = it.message ?: "Could not start payment." }
+                        busy = false
                     }
-                ) {
-                    if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Continue to payment")
-                }
+                }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Continue to payment") }
             } else {
-                Button(
-                    enabled = !verifying,
-                    onClick = {
-                        verifying = true
-                        message = null
-                        scope.launch {
-                            verifyMarketplacePayment(context, payment?.reference.orEmpty())
-                                .onSuccess { onPaid() }
-                                .onFailure { message = it.message ?: "Payment is not verified yet." }
-                            verifying = false
-                        }
+                Button(enabled = !verifying, onClick = {
+                    verifying = true
+                    message = null
+                    scope.launch {
+                        verifyMarketplacePayment(context, payment?.reference.orEmpty()).onSuccess { onPaid() }.onFailure { message = it.message ?: "Payment is not verified yet." }
+                        verifying = false
                     }
-                ) {
-                    if (verifying) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Verify payment")
-                }
+                }) { if (verifying) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Verify payment") }
             }
         },
         dismissButton = { TextButton(onClick = onClose, enabled = !busy && !verifying) { Text("Close") } }
@@ -284,25 +274,14 @@ private fun OrderActions(context: android.content.Context, order: FynxRemoteSoci
                 Text("Protected order. Complete payment through an approved payment provider before shipment.", style = MaterialTheme.typography.bodySmall)
                 if (order.status == "PAID" || order.status == "SHIPPED" || order.status == "INSPECTION") {
                     Text("Next step", style = MaterialTheme.typography.labelLarge)
-                    Text(
-                        when (order.status) {
-                            "PAID" -> "Choose delivery or pickup so the seller can fulfill the order."
-                            "SHIPPED" -> "Confirm the order when you receive it."
-                            else -> "Inspect the order and complete it when everything is correct."
-                        },
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Text(when (order.status) { "PAID" -> "Choose delivery or pickup so the seller can fulfill the order."; "SHIPPED" -> "Confirm the order when you receive it."; else -> "Inspect the order and complete it when everything is correct." }, style = MaterialTheme.typography.bodySmall)
                 }
                 when {
                     dispute -> OutlinedTextField(value = details, onValueChange = { details = it }, label = { Text("What happened?") }, minLines = 3, modifier = Modifier.fillMaxWidth())
                     order.status == "PAYMENT_PENDING" -> Text("You can cancel this unpaid order.")
                     order.status == "COMPLETED" -> {
                         Text("Rate seller")
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            (1..5).forEach { star ->
-                                TextButton(onClick = { rating = star }) { Text(if (star <= rating) "★" else "☆") }
-                            }
-                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) { (1..5).forEach { star -> TextButton(onClick = { rating = star }) { Text(if (star <= rating) "★" else "☆") } } }
                         OutlinedTextField(value = comment, onValueChange = { comment = it }, label = { Text("Review") }, minLines = 2, modifier = Modifier.fillMaxWidth())
                     }
                 }
@@ -310,48 +289,15 @@ private fun OrderActions(context: android.content.Context, order: FynxRemoteSoci
         },
         confirmButton = {
             when {
-                dispute -> Button(onClick = {
-                    scope.launch {
-                        FynxRemoteSocialClient.disputeMarketplaceOrder(context, order.id, "OTHER", details).onSuccess { onChanged() }
-                    }
-                }) { Text("Open dispute") }
-                order.status == "PAYMENT_PENDING" -> Button(onClick = {
-                    scope.launch {
-                        FynxRemoteSocialClient.cancelMarketplaceOrder(context, order.id).onSuccess { onChanged() }
-                    }
-                }) { Text("Cancel order") }
-                order.status == "PAID" || order.status == "SHIPPED" || order.status == "INSPECTION" -> Button(onClick = { showLifecycle = true }) {
-                    Text(
-                        when (order.status) {
-                            "PAID" -> "Choose fulfillment"
-                            "SHIPPED" -> "Confirm received"
-                            else -> "Complete order"
-                        }
-                    )
-                }
-                order.status == "COMPLETED" -> Button(onClick = {
-                    scope.launch {
-                        FynxRemoteSocialClient.reviewMarketplaceOrder(context, order.id, rating, comment).onSuccess { onChanged() }
-                    }
-                }) { Text("Submit review") }
+                dispute -> Button(onClick = { scope.launch { FynxRemoteSocialClient.disputeMarketplaceOrder(context, order.id, "OTHER", details).onSuccess { onChanged() } } }) { Text("Open dispute") }
+                order.status == "PAYMENT_PENDING" -> Button(onClick = { scope.launch { FynxRemoteSocialClient.cancelMarketplaceOrder(context, order.id).onSuccess { onChanged() } } }) { Text("Cancel order") }
+                order.status == "PAID" || order.status == "SHIPPED" || order.status == "INSPECTION" -> Button(onClick = { showLifecycle = true }) { Text(when (order.status) { "PAID" -> "Choose fulfillment"; "SHIPPED" -> "Confirm received"; else -> "Complete order" }) }
+                order.status == "COMPLETED" -> Button(onClick = { scope.launch { FynxRemoteSocialClient.reviewMarketplaceOrder(context, order.id, rating, comment).onSuccess { onChanged() } } }) { Text("Submit review") }
                 else -> Spacer(Modifier.size(1.dp))
             }
         },
-        dismissButton = {
-            TextButton(onClick = {
-                if (!dispute && order.status != "COMPLETED") dispute = true else onClose()
-            }) {
-                Text(if (!dispute && order.status != "COMPLETED") "Report problem" else "Close")
-            }
-        }
+        dismissButton = { TextButton(onClick = { if (!dispute && order.status != "COMPLETED") dispute = true else onClose() }) { Text(if (!dispute && order.status != "COMPLETED") "Report problem" else "Close") } }
     )
 
-    if (showLifecycle) {
-        FynxMarketplaceOrderLifecycle(
-            context,
-            order,
-            onChanged = { showLifecycle = false; onChanged() },
-            onClose = { showLifecycle = false }
-        )
-    }
+    if (showLifecycle) FynxMarketplaceOrderLifecycle(context, order, onChanged = { showLifecycle = false; onChanged() }, onClose = { showLifecycle = false })
 }
