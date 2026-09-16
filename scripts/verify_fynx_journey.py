@@ -25,6 +25,9 @@ gifts = read("app/src/main/java/com/fynx/app/ui/GiftsPanel.kt")
 conversation = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
 marketplace = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt")
 transactions = read("backend/marketplaceTransactions.js")
+create_menu = read("app/src/main/java/com/fynx/app/ui/FynxHomeCreateMenu.kt")
+home_panel = read("app/src/main/java/com/fynx/app/ui/HomePanel.kt")
+home_hub = read("app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt")
 
 required_files = [
     "app/src/main/java/com/fynx/app/ui/FynxApp.kt",
@@ -103,6 +106,37 @@ check(
     "onOpenPost = { selectedPostIndex = it }" in other_profile_panel
     and "onOpen = { selectedListing = it }" in other_profile_panel
     and "FynxMarketplaceClient.mediaUrl" in other_profile_panel
+)
+
+# Home Create is an entry menu, not a direct camera shortcut. Keep the exact three
+# FYNX creation surfaces and verify each action routes to its existing destination.
+check(
+    "Home Create menu contains exactly Post, Status and Marketplace",
+    create_menu.count('CreateMenuAction(') == 3
+    and '"Post"' in create_menu
+    and '"Status"' in create_menu
+    and '"Marketplace"' in create_menu
+    and "Groups" not in create_menu
+    and "Camera" not in create_menu
+    and "Money Tools" not in create_menu
+)
+check(
+    "Home Create menu routes Post to the existing post composer",
+    "onPost = {" in home_panel
+    and "onCreatePost()" in home_panel
+    and "onCreatePost = { showComposer = true" in home_hub
+)
+check(
+    "Home Create menu routes Status to the mature Status composer",
+    "onStatus = {" in home_panel
+    and "showMatureStatusComposer = true" in home_panel
+    and "FynxMatureStatusComposerPanel" in home_panel
+)
+check(
+    "Home Create menu routes Marketplace to the real Marketplace surface",
+    "onMarketplace = {" in home_panel
+    and "onOpenMarketplace()" in home_panel
+    and "onOpenMarketplace" in home_hub
 )
 
 check("shareable deep-link routes cover social, chat, group, marketplace, stories and money", all(x in deep_link for x in ["homeWebLink", "profileWebLink", "chatWebLink", "groupWebLink", "marketplaceWebLink", "storiesWebLink", "moneyWebLink", "fun parse"]) and "FynxDeepLinkParser.homeWebLink()" in share and "FynxDeepLinkParser.inviteWebLink(code)" in share)
