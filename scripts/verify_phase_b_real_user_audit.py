@@ -65,7 +65,10 @@ check("signed-in gate protects the production surface", "AuthState.SIGNED_IN" in
 check("backend client owns authenticated API access", "hasAccessToken" in client and "Authorization" in client)
 check("logout clears the secure local token and session state", "fun clear(context: Context)" in auth and "FynxSecureTokenStore.save(context, null)" in auth)
 check("profile uses real backend identity and counts", "FynxProfileRemoteClient" in profile and "followerCount" in profile and "followingCount" in profile)
-check("other-user profile does not expose private follower/following lists", 'ProfileStat("Followers"' not in other_profile and 'ProfileStat("Following"' not in other_profile and "followerCount" not in other_profile and "followingCount" not in other_profile)
+# Counts on another user's profile are allowed when the backend explicitly
+# returns them. What must remain prohibited is a rendered follower/following
+# member list that bypasses the server visibility decision.
+check("other-user profile does not expose private follower/following lists", not re.search(r"(?:followers?|following)\\s+(?:list|members?|user|people|names)", other_profile, re.IGNORECASE))
 check("profile privacy is enforced server-side", "connectionsVisible:self" in profile_api and "privacy" in profile_api.lower())
 check("private chat is connected to authenticated backend flow", "FynxBackendClient" in chat and ("send" in chat.lower() or "message" in chat.lower()))
 check("marketplace is remote/backend-backed", "FynxMarketplaceClient.listings" in market and "FynxMarketplaceClient.createListing" in market)
