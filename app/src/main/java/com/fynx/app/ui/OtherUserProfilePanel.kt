@@ -2,10 +2,18 @@ package com.fynx.app.ui
 
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Message
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +46,7 @@ fun OtherUserProfilePanel(
     var reportReason by remember(username) { mutableStateOf("Safety or spam") }
     var reportDetails by remember(username) { mutableStateOf("") }
     var reportMessage by remember(username) { mutableStateOf<String?>(null) }
+    var selectedPostIndex by remember(username) { mutableStateOf<Int?>(null) }
 
     fun loadProfile() {
         scope.launch {
@@ -58,6 +68,15 @@ fun OtherUserProfilePanel(
     }
 
     LaunchedEffect(username) { loadProfile() }
+
+    if (selectedPostIndex != null && posts.isNotEmpty()) {
+        ProfilePostSwipeViewer(
+            posts = posts,
+            initialIndex = selectedPostIndex!!.coerceIn(0, posts.lastIndex),
+            onClose = { selectedPostIndex = null }
+        )
+        return
+    }
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -83,6 +102,12 @@ fun OtherUserProfilePanel(
                         Text("@${person.username.removePrefix("@").trim()}", color = FynxDesign.TextSecondary)
                         if (person.bio.isNotBlank()) { Spacer(Modifier.height(10.dp)); Text(person.bio, color = FynxDesign.TextSecondary) }
                         if (person.country.isNotBlank()) Text(person.country, color = FynxDesign.TextSecondary)
+                        Spacer(Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(22.dp), verticalAlignment = Alignment.CenterVertically) {
+                            ProfileCount(label = "Posts", value = person.postCount)
+                            person.followerCount?.let { ProfileCount(label = "Followers", value = it) }
+                            person.followingCount?.let { ProfileCount(label = "Following", value = it) }
+                        }
                         Spacer(Modifier.height(14.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(enabled = !busy, onClick = {
@@ -116,8 +141,16 @@ fun OtherUserProfilePanel(
                         if (person.viewerSentRequest) Text("Friend request is pending.", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
                         else if (person.viewerReceivedRequest) Text("This person sent you a friend request.", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
                         TextButton(enabled = !busy, onClick = { reportMessage = null; reportOpen = true }) { Text("Report") }
-                        if (posts.isEmpty()) Text("No posts to show", Modifier.padding(top = 20.dp), color = FynxDesign.TextSecondary)
-                        else posts.forEach { post -> ProfilePostCard(post) }
+                    }
+                    if (posts.isEmpty()) {
+                        item { Text("No posts to show", Modifier.padding(top = 20.dp), color = FynxDesign.TextSecondary) }
+                    } else {
+                        item {
+                            Text("Posts", style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 8.dp))
+                        }
+                        item {
+                            ProfilePostGrid(posts = posts, onOpenPost = { selectedPostIndex = it })
+                        }
                     }
                 }
             }
@@ -150,6 +183,122 @@ fun OtherUserProfilePanel(
 }
 
 @Composable
+private fun ProfileCount(label: String, value: Int) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value.toString(), style = MaterialTheme.typography.titleMedium)
+        Text(label, color = FynxDesign.TextSecondary, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun ProfilePostGrid(
+    posts: List<FynxProfileRemoteClient.ProfilePost>,
+    onOpenPost: (Int) -> Unit
+) {
+    val gridState = rememberLazyGridState()
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(4),
+        state = gridState,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 560.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        itemsIndexed(posts, key = { _, post -> post.id }) { index, post ->
+            ProfilePostTile(post = post, onClick = { onOpenPost(index) })
+        }
+    }
+}
+
+@Composable
+private fun ProfilePostTile(post: FynxProfileRemoteClient.ProfilePost, onClick: () -> Unit) {
+    val mediaUrl = post.mediaUrl ?: post.mediaId?.let { "/api/social/media/$it" }
+    Card(Modifier.fillMaxWidth().aspectRatio(1f).clickable(onClick = onClick)) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            if (!mediaUrl.isNullOrBlank()) {
+                FynxRemoteMedia(
+                    mediaUrl = mediaUrl,
+                    type = post.mediaType ?: "auto",
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Text(
+                    post.text.ifBlank { "Post" }.take(80),
+                    modifier = Modifier.padding(7.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 6
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfilePostSwipeViewer(
+    posts: List<FynxProfileRemoteClient.ProfilePost>,
+    initialIndex: Int,
+    onClose: () -> Unit
+) {
+    var index by remember(posts, initialIndex) { mutableIntStateOf(initialIndex) }
+    var dragDistance by remember { mutableFloatStateOf(0f) }
+    val post = posts[index]
+    val mediaUrl = post.mediaUrl ?: post.mediaId?.let { "/api/social/media/$it" }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .pointerInput(posts, index) {
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { _, amount -> dragDistance += amount },
+                    onDragEnd = {
+                        when {
+                            dragDistance < -80f && index < posts.lastIndex -> index += 1
+                            dragDistance > 80f && index > 0 -> index -= 1
+                        }
+                        dragDistance = 0f
+                    },
+                    onDragCancel = { dragDistance = 0f }
+                )
+            }
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().padding(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close post") }
+                Column(Modifier.weight(1f)) {
+                    Text("Post ${index + 1} of ${posts.size}", style = MaterialTheme.typography.titleMedium)
+                    Text("Swipe left or right to browse", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Column(
+                Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
+                if (!mediaUrl.isNullOrBlank()) {
+                    FynxRemoteMedia(
+                        mediaUrl = mediaUrl,
+                        type = post.mediaType ?: "auto",
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 220.dp, max = 520.dp)
+                    )
+                }
+                if (post.text.isNotBlank()) {
+                    Spacer(Modifier.height(14.dp))
+                    Text(post.text, style = MaterialTheme.typography.bodyLarge)
+                }
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "${post.likeCount} likes • ${post.commentCount} comments",
+                    color = FynxDesign.TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun RemoteProfilePhoto(mediaId: String?, name: String, modifier: Modifier) {
     val context = LocalContext.current
     var bitmap by remember(mediaId) { mutableStateOf<android.graphics.Bitmap?>(null) }
@@ -162,19 +311,4 @@ private fun RemoteProfilePhoto(mediaId: String?, name: String, modifier: Modifie
     val image = bitmap
     if (image != null) Image(image.asImageBitmap(), contentDescription = "Profile photo", modifier = modifier, contentScale = ContentScale.Crop)
     else FynxAvatar(name, modifier)
-}
-
-@Composable
-private fun ProfilePostCard(post: FynxProfileRemoteClient.ProfilePost) {
-    Card(Modifier.fillMaxWidth().padding(top = 10.dp)) {
-        Column(Modifier.padding(14.dp)) {
-            if (post.text.isNotBlank()) Text(post.text)
-            val mediaUrl = post.mediaUrl ?: post.mediaId?.let { "/api/social/media/$it" }
-            if (!mediaUrl.isNullOrBlank()) {
-                Spacer(Modifier.height(10.dp))
-                FynxRemoteMedia(mediaUrl = mediaUrl, type = post.mediaType ?: "auto", modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 420.dp))
-            }
-            Text("${post.likeCount} likes • ${post.commentCount} comments", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
-        }
-    }
 }
