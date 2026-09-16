@@ -17,7 +17,8 @@ object FynxMultiMediaPostClient {
         visibility: FynxPostVisibility,
         uris: List<Uri>
     ): Result<Unit> = runCatching {
-        val selected = uris.distinct().take(MAX_MEDIA)
+        val selected = uris.distinct()
+        require(selected.size <= MAX_MEDIA) { "FYNX Home posts support up to 4 photos or videos." }
         val mediaIds = JSONArray()
         val mediaTypes = JSONArray()
         var totalBytes = 0L
