@@ -73,11 +73,12 @@ object FynxShareActions {
         if (listingId.isNotBlank()) {
             AlertDialog.Builder(context)
                 .setTitle(payload.title)
-                .setItems(arrayOf("Post to FYNX Home", "Share outside FYNX", "Copy link")) { _, which ->
+                .setItems(arrayOf("Post to FYNX Home", "Share to FYNX Group", "Share outside FYNX", "Copy link")) { _, which ->
                     when (which) {
                         0 -> postMarketplaceToHome(context, listingId)
-                        1 -> shareExternally(context, payload)
-                        2 -> copy(context, payload)
+                        1 -> chooseGroupForMarketplaceShare(context, listingId, payload.title)
+                        2 -> shareExternally(context, payload)
+                        3 -> copy(context, payload)
                     }
                 }
                 .setNegativeButton("Cancel", null)
@@ -94,6 +95,28 @@ object FynxShareActions {
                 .onSuccess { Toast.makeText(context, "Product posted to FYNX Home", Toast.LENGTH_SHORT).show() }
                 .onFailure { Toast.makeText(context, it.message ?: "Could not post product to Home", Toast.LENGTH_LONG).show() }
         }
+    }
+
+    private fun chooseGroupForMarketplaceShare(context: Context, listingId: String, title: String) {
+        val groups = FynxGroupsStore.load(context)
+        if (groups.isEmpty()) {
+            Toast.makeText(context, "Create or join a FYNX Group first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = groups.map { it.name.ifBlank { "FYNX Group" } }.toTypedArray()
+        AlertDialog.Builder(context)
+            .setTitle("Share product to a FYNX Group")
+            .setItems(labels) { _, which ->
+                val group = groups.getOrNull(which) ?: return@setItems
+                Toast.makeText(context, "Sharing product to ${group.name}…", Toast.LENGTH_SHORT).show()
+                CoroutineScope(Dispatchers.Main.immediate).launch {
+                    FynxR6GIntegrationClient.shareListingToGroup(context, group.id, listingId, "See this product on FYNX Marketplace: $title")
+                        .onSuccess { Toast.makeText(context, "Product shared to ${group.name}", Toast.LENGTH_SHORT).show() }
+                        .onFailure { Toast.makeText(context, it.message ?: "Could not share product to group", Toast.LENGTH_LONG).show() }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun shareExternally(context: Context, payload: FynxSharePayload): Boolean {
