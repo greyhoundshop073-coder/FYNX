@@ -107,10 +107,30 @@ fun FynxStatusTimelinePanel() {
 
 @Composable
 private fun StatusBubble(status: FynxStatus, isMe: Boolean, onClick: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var profilePhotoMediaId by remember(status.ownerUsername) { mutableStateOf<String?>(null) }
+    var profileLoaded by remember(status.ownerUsername) { mutableStateOf(false) }
+
+    LaunchedEffect(status.ownerUsername) {
+        profileLoaded = false
+        FynxProfileRemoteClient.get(context, status.ownerUsername)
+            .onSuccess { profilePhotoMediaId = it.profilePhotoMediaId }
+            .onFailure { profilePhotoMediaId = null }
+        profileLoaded = true
+    }
+
     Column(Modifier.width(74.dp).clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(66.dp).border(3.dp, MaterialTheme.colorScheme.primary, CircleShape).padding(4.dp)) {
-            Box(Modifier.fillMaxSize().clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-                Text(status.ownerDisplayName.ifBlank { status.ownerUsername }.take(1).uppercase(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            if (profileLoaded && !profilePhotoMediaId.isNullOrBlank()) {
+                FynxRemoteProfileAvatar(
+                    profilePhotoMediaId,
+                    status.ownerDisplayName.ifBlank { status.ownerUsername },
+                    Modifier.fillMaxSize().clip(CircleShape)
+                )
+            } else {
+                Box(Modifier.fillMaxSize().clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+                    Text(status.ownerDisplayName.ifBlank { status.ownerUsername }.take(1).uppercase(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                }
             }
         }
         Spacer(Modifier.height(5.dp))
