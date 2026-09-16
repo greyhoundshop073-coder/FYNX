@@ -193,9 +193,8 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         if (post.id in interactionBusy) return
         interactionBusy = interactionBusy + post.id
         scope.launch {
-            sharePost(context, post).onSuccess {
-                runCatching { FynxDiscoveryClient.recordEngagement(context, "SHARE", post.id) }
-            }.onFailure { error = it.message ?: "No app is available to share this post." }
+            sharePost(context, post).onSuccess { runCatching { FynxDiscoveryClient.recordEngagement(context, "SHARE", post.id) } }
+                .onFailure { error = it.message ?: "No app is available to share this post." }
             interactionBusy = interactionBusy - post.id
         }
     }
@@ -227,15 +226,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         if (!loading && hasMore) item(key = "feed_load_more") { OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore && !feedRequestInFlight, modifier = Modifier.fillMaxWidth()) { Text(if (loadingMore) "Loading more posts…" else "Load more posts") } }
     }
     commentsPost?.let { post -> FynxHomeCommentsPanel(post = post, onClose = { commentsPost = null }, onCommentCountChanged = { newCount -> posts = posts.map { if (it.id == post.id) it.copy(commentCount = newCount) else it } }) }
-    deletePost?.let { post ->
-        AlertDialog(
-            onDismissRequest = { if (post.id !in interactionBusy) deletePost = null },
-            title = { Text("Delete post?") },
-            text = { Text("This will permanently remove your post from FYNX. This action cannot be undone.") },
-            confirmButton = { TextButton(onClick = { runDelete(post.id) }, enabled = post.id !in interactionBusy) { Text("Delete") } },
-            dismissButton = { TextButton(onClick = { deletePost = null }, enabled = post.id !in interactionBusy) { Text("Cancel") } }
-        )
-    }
+    deletePost?.let { post -> AlertDialog(onDismissRequest = { if (post.id !in interactionBusy) deletePost = null }, title = { Text("Delete post?") }, text = { Text("This will permanently remove your post from FYNX. This action cannot be undone.") }, confirmButton = { TextButton(onClick = { runDelete(post.id) }, enabled = post.id !in interactionBusy) { Text("Delete") } }, dismissButton = { TextButton(onClick = { deletePost = null }, enabled = post.id !in interactionBusy) { Text("Cancel") } }) }
 }
 
 @Composable
@@ -253,14 +244,39 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
         if (displayText.isNotBlank()) Text(displayText, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), style = MaterialTheme.typography.bodyLarge)
         post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType) }
         if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = onOpenMarketplace) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { onLike(post.id) }, enabled = !interactionBusy, modifier = Modifier.size(50.dp)) { Icon(if (post.likedByCurrentUser) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Like", tint = if (post.likedByCurrentUser) MaterialTheme.colorScheme.error else FynxDesign.TextPrimary, modifier = Modifier.size(30.dp)) }; Text("${post.likeCount}", style = MaterialTheme.typography.labelLarge)
-            IconButton(onClick = onComment, enabled = !interactionBusy, modifier = Modifier.size(50.dp)) { Icon(Icons.Default.ChatBubbleOutline, "Comment", modifier = Modifier.size(30.dp)) }; Text("${post.commentCount}", style = MaterialTheme.typography.labelLarge)
-            IconButton(onClick = { onSave(post.id, !interactionState.saved) }, enabled = !interactionBusy, modifier = Modifier.size(50.dp)) { Icon(if (interactionState.saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, "${if (interactionState.saved) "Unsave" else "Save"} post", tint = if (interactionState.saved) MaterialTheme.colorScheme.primary else FynxDesign.TextPrimary, modifier = Modifier.size(30.dp)) }; Text("${interactionState.savedCount}", style = MaterialTheme.typography.labelLarge)
-            IconButton(onClick = { onRepost(post.id, !interactionState.reposted) }, enabled = !interactionBusy, modifier = Modifier.size(50.dp)) { Icon(Icons.Default.Repeat, "${if (interactionState.reposted) "Undo repost" else "Repost"}", tint = if (interactionState.reposted) MaterialTheme.colorScheme.primary else FynxDesign.TextPrimary, modifier = Modifier.size(30.dp)) }; Text("${interactionState.repostCount}", style = MaterialTheme.typography.labelLarge)
-            IconButton(onClick = onShare, enabled = !interactionBusy, modifier = Modifier.size(50.dp)) { Icon(Icons.Default.Share, "Share", modifier = Modifier.size(30.dp)) }; Spacer(Modifier.weight(1f))
+
+        // Primary feed actions are now separated and given a comfortable thumb-sized target.
+        // Compose recommends a minimum 48dp interactive target; these controls intentionally use 52dp.
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            FeedActionButton(onClick = { onLike(post.id) }, enabled = !interactionBusy, icon = if (post.likedByCurrentUser) Icons.Default.Favorite else Icons.Default.FavoriteBorder, label = "Like", count = post.likeCount, active = post.likedByCurrentUser)
+            FeedActionButton(onClick = onComment, enabled = !interactionBusy, icon = Icons.Default.ChatBubbleOutline, label = "Comment", count = post.commentCount)
+            FeedActionButton(onClick = onShare, enabled = !interactionBusy, icon = Icons.Default.Share, label = "Share")
         }
-        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            FeedSecondaryAction(onClick = { onSave(post.id, !interactionState.saved) }, enabled = !interactionBusy, icon = if (interactionState.saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, label = if (interactionState.saved) "Saved" else "Save", count = interactionState.savedCount, active = interactionState.saved)
+            FeedSecondaryAction(onClick = { onRepost(post.id, !interactionState.reposted) }, enabled = !interactionBusy, icon = Icons.Default.Repeat, label = if (interactionState.reposted) "Reposted" else "Repost", count = interactionState.repostCount, active = interactionState.reposted)
+            Spacer(Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun FeedActionButton(onClick: () -> Unit, enabled: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, count: Int? = null, active: Boolean = false) {
+    TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.heightIn(min = 52.dp).weight(1f)) {
+        Icon(icon, contentDescription = label, modifier = Modifier.size(25.dp), tint = if (active) MaterialTheme.colorScheme.primary else FynxDesign.TextPrimary)
+        Spacer(Modifier.width(5.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge)
+        if (count != null) { Spacer(Modifier.width(4.dp)); Text("$count", style = MaterialTheme.typography.labelLarge, color = FynxDesign.TextSecondary) }
+    }
+}
+
+@Composable
+private fun FeedSecondaryAction(onClick: () -> Unit, enabled: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, count: Int, active: Boolean = false) {
+    TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp)) {
+        Icon(icon, contentDescription = label, modifier = Modifier.size(22.dp), tint = if (active) MaterialTheme.colorScheme.primary else FynxDesign.TextPrimary)
+        Spacer(Modifier.width(4.dp)); Text(label, style = MaterialTheme.typography.labelMedium)
+        if (count > 0) { Spacer(Modifier.width(3.dp)); Text("$count", style = MaterialTheme.typography.labelMedium, color = FynxDesign.TextSecondary) }
     }
 }
 
@@ -294,15 +310,13 @@ private fun RemoteSocialMedia(path: String, type: String?) {
     DisposableEffect(videoView) { onDispose { videoView?.stopPlayback() } }
     if (file == null) Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     else if (type == "audio") AudioPostPlayer(file!!)
-    else if (type == "video") AndroidView(factory = { ctx ->
-        VideoView(ctx).apply {
-            videoView = this
-            layoutParams = ViewGroup.LayoutParams(-1, -1)
-            setMediaController(MediaController(ctx))
-            setVideoURI(Uri.fromFile(file))
-            setOnPreparedListener { it.isLooping = true; start() }
-        }
-    }, modifier = Modifier.fillMaxWidth().aspectRatio(videoAspectRatio))
+    else if (type == "video") AndroidView(factory = { ctx -> VideoView(ctx).apply {
+        videoView = this
+        layoutParams = ViewGroup.LayoutParams(-1, -1)
+        setMediaController(MediaController(ctx))
+        setVideoURI(Uri.fromFile(file))
+        setOnPreparedListener { it.isLooping = true; start() }
+    } }, modifier = Modifier.fillMaxWidth().aspectRatio(videoAspectRatio))
     else {
         var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
         LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }
