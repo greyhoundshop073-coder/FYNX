@@ -24,7 +24,7 @@ required_home = {
     "FynxRemoteProfileAvatar": "real author identity media",
     "MaterialTheme.colorScheme": "theme-aware Home presentation",
     'Icon(Icons.Default.Refresh, "Refresh feed")': "refresh accessibility action",
-    'Icon(Icons.Default.Share, "Share"': "share accessibility action",
+    'label = "Share"': "share accessibility action",
 }
 
 missing = [label for token, label in required_home.items() if token not in home]
@@ -41,9 +41,6 @@ missing_lifecycle = [token for token in required_lifecycle if token not in lifec
 if missing_lifecycle:
     raise SystemExit("HOME 4F MEDIA RED: lifecycle observer incomplete " + ", ".join(missing_lifecycle))
 
-# The durable saved-post endpoint already exists; audit its real authorization, visibility,
-# blocking, and pagination boundaries so a future Saved surface cannot accidentally expose
-# content the current account is no longer allowed to see.
 required_saved = [
     'app.get("/api/social/saved", auth',
     "const limit = Math.min(Math.max(Number(req.query?.limit) || 30, 1), 100);",
