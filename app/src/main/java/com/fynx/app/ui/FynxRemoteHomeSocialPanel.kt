@@ -312,7 +312,7 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             FeedSecondaryAction(onClick = { onSave(post.id, !interactionState.saved) }, enabled = !interactionBusy, icon = if (interactionState.saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, label = if (interactionState.saved) "Saved" else "Save", count = interactionState.savedCount, active = interactionState.saved)
-            FeedSecondaryAction(onClick = { onRepost(post.id, !interactionState.reposted) }, enabled = !interactionBusy, icon = Icons.Default.Repeat, label = if (interactionState.reposted) "Reposted" else "Repost", count = interactionState.repostCount, active = interactionState.reposted)
+            FeedSecondaryAction(onClick = { onRepost(post.id, !interactionState.reposted) }, enabled = !interactionBusy, icon = if (interactionState.reposted) Icons.Default.Repeat else Icons.Default.Repeat, label = if (interactionState.reposted) "Reposted" else "Repost", count = interactionState.repostCount, active = interactionState.reposted)
             Spacer(Modifier.weight(1f))
         }
         Spacer(Modifier.height(8.dp))
@@ -341,7 +341,7 @@ private fun RemotePostMedia(post: FynxRemoteSocialClient.RemotePost) {
                 Box(Modifier.weight(1f).fillMaxWidth()) { RemoteSocialMedia(media[2].mediaUrl, media[2].mediaType) }
             }
         }
-        else -> Column(Modifier.fillMaxWidth().height(310.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        media.size == 4 -> Column(Modifier.fillMaxWidth().height(310.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 Box(Modifier.weight(1f).fillMaxHeight()) { RemoteSocialMedia(media[0].mediaUrl, media[0].mediaType) }
                 Box(Modifier.weight(1f).fillMaxHeight()) { RemoteSocialMedia(media[1].mediaUrl, media[1].mediaType) }
@@ -351,6 +351,7 @@ private fun RemotePostMedia(post: FynxRemoteSocialClient.RemotePost) {
                 Box(Modifier.weight(1f).fillMaxHeight()) { RemoteSocialMedia(media[3].mediaUrl, media[3].mediaType) }
             }
         }
+        else -> Unit
     }
 }
 
