@@ -25,6 +25,7 @@ fun FynxStatusHubPanel() {
     var cameraOpen by remember { mutableStateOf(false) }
     var publishingCameraStatus by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
+    var timelineRefreshKey by remember { mutableIntStateOf(0) }
 
     fun publishCapturedStatus(uri: Uri, type: String) {
         if (publishingCameraStatus) return
@@ -60,15 +61,26 @@ fun FynxStatusHubPanel() {
                 }
                 FynxStatusStore.save(context, status.copy(contentUri = "/api/media/$mediaId"))
                 cameraOpen = false
+                timelineRefreshKey++
             } finally {
                 publishingCameraStatus = false
             }
         }
     }
 
+    LaunchedEffect(composing, cameraOpen) {
+        if (!composing && !cameraOpen) {
+            timelineRefreshKey++
+        }
+    }
+
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize()) {
-            if (composing) FynxStatusComposerPanel(onClose = { composing = false }) else FynxStatusTimelinePanel()
+            if (composing) {
+                FynxStatusComposerPanel(onClose = { composing = false })
+            } else {
+                key(timelineRefreshKey) { FynxStatusTimelinePanel() }
+            }
             if (!composing) {
                 Row(
                     modifier = Modifier
