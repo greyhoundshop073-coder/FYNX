@@ -23,7 +23,7 @@ media_privacy = read('backend/mediaPrivacy.js')
 # They must not be allowed to turn this-chat's gate red.
 check('remote media uses the authenticated central downloader', 'FynxBackendClient.downloadToFile' in remote_media and 'MAX_REMOTE_MEDIA_BYTES' in remote_media)
 check('remote media is account scoped', 'FynxAuthStore.accountStorageKey(context)' in remote_media and 'FynxBackendClient.hasAccessToken(context)' in remote_media)
-check('Status timeline uses the shared remote audio renderer', 'FynxRemoteAudio(it)' in timeline)
+check('Status timeline uses the shared remote audio renderer', 'FynxRemoteAudio(it,' in timeline)
 check('R5B audio verifier recognizes the shared download helper', 'downloadRemoteMedia(context, resolvedUrl, target)' in r5b_verifier and 'p.setDataSource(finalFile.absolutePath)' in r5b_verifier)
 check('media privacy guard remains installed', 'app.use("/api/media", mediaGuard)' in media_privacy)
 check('FCM notification gate remains present', 'notification deep-link routing' in fcm_verifier and 'FCM verification GREEN' in fcm_verifier)
