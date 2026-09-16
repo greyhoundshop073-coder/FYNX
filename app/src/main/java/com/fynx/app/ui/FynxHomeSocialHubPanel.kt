@@ -72,9 +72,9 @@ fun FynxHomeSocialHubPanel(
 
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) {
-            uris.take(12).forEach { uri -> runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
-            val selected = uris.distinct().take(12)
-            capturedUris = (capturedUris.filterNot { it in selected } + selected).take(12)
+            uris.take(4).forEach { uri -> runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
+            val selected = uris.distinct().take(4)
+            capturedUris = (capturedUris.filterNot { it in selected } + selected).take(4)
             capturedTypes = capturedUris.map { uri -> if (context.contentResolver.getType(uri)?.startsWith("video/") == true) "video" else "image" }
             selectedVisualIndex = 0
             showComposer = true
@@ -84,7 +84,7 @@ fun FynxHomeSocialHubPanel(
     val soundPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-            capturedUris = (capturedUris.filterNot { it == uri } + uri).take(12)
+            capturedUris = (capturedUris.filterNot { it == uri } + uri).take(4)
             capturedTypes = capturedUris.map { item -> when { context.contentResolver.getType(item)?.startsWith("video/") == true -> "video"; context.contentResolver.getType(item)?.startsWith("audio/") == true -> "audio"; else -> "image" } }
             showComposer = true
         }
@@ -177,7 +177,7 @@ fun FynxHomeSocialHubPanel(
                         )
                         if (aiCaptionLoading) Text("FYNX AI is improving your caption…", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
 
-                        Text("Add to your post", style = MaterialTheme.typography.titleMedium)
+                        Text("Add to your post • up to 4 photos/videos", style = MaterialTheme.typography.titleMedium)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             ComposerAction("Photo", Icons.Default.Image, { gallery.launch(arrayOf("image/*")) }, !posting && !aiCaptionLoading && postingAllowed, Modifier.weight(1f))
                             ComposerAction("Video", Icons.Default.VideoLibrary, { gallery.launch(arrayOf("video/*")) }, !posting && !aiCaptionLoading && postingAllowed, Modifier.weight(1f))
@@ -244,7 +244,7 @@ fun FynxHomeSocialHubPanel(
     if (showVoiceRecorder) {
         FynxVoicePostRecorder(
             onRecorded = { uri ->
-                capturedUris = (capturedUris.filterNot { it == uri } + uri).take(12)
+                capturedUris = (capturedUris.filterNot { it == uri } + uri).take(4)
                 recomputeTypes()
                 showVoiceRecorder = false
                 showComposer = true
@@ -254,7 +254,7 @@ fun FynxHomeSocialHubPanel(
     }
 
     if (showPhotoEditor) Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { FynxAiPhotoEditorPanel(initialUri = capturedUris.firstOrNull(), onDone = { editedUri -> if (editedUri != null) { capturedUris = listOf(editedUri); capturedTypes = listOf("image") }; selectedVisualIndex = 0; showPhotoEditor = false; showComposer = true }) }
-    if (showCamera) Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { FynxCameraCapturePanel(onCaptured = { uri, type -> capturedUris = (capturedUris + uri).take(12); recomputeTypes(); selectedVisualIndex = 0; showCamera = false; showComposer = true }, onDismiss = { showCamera = false; showComposer = true }) }
+    if (showCamera) Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { FynxCameraCapturePanel(onCaptured = { uri, type -> capturedUris = (capturedUris + uri).take(4); recomputeTypes(); selectedVisualIndex = 0; showCamera = false; showComposer = true }, onDismiss = { showCamera = false; showComposer = true }) }
 }
 
 @Composable
