@@ -44,6 +44,7 @@ class FynxWebRtcCallEngine(
     private val recoveryScope = CoroutineScope(Dispatchers.Main.immediate)
     private var recoveryJob: Job? = null
     private var iceRestartInFlight = false
+    private var iceRecoveryAttempts = 0
     private val factory: PeerConnectionFactory
     private var peerConnection: PeerConnection? = null
     private var audioSource: AudioSource? = null
@@ -57,7 +58,7 @@ class FynxWebRtcCallEngine(
     private var remoteDescriptionSet = false
     init { PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(appContext).createInitializationOptions()); factory = PeerConnectionFactory.builder().createPeerConnectionFactory() }
     override fun connect(session: FynxCallSession) {
-        disconnect(); remoteDescriptionSet = false; pendingRemoteCandidates.clear(); iceRestartInFlight = false; audioRouter.start(session.type == FynxCallType.VIDEO)
+        disconnect(); remoteDescriptionSet = false; pendingRemoteCandidates.clear(); iceRestartInFlight = false; iceRecoveryAttempts = 0; audioRouter.start(session.type == FynxCallType.VIDEO)
         peerConnection = factory.createPeerConnection(PeerConnection.RTCConfiguration(iceServers), object : PeerConnection.Observer {
             override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
@@ -65,6 +66,7 @@ class FynxWebRtcCallEngine(
                 when (state) {
                     PeerConnection.IceConnectionState.CONNECTED, PeerConnection.IceConnectionState.COMPLETED -> {
                         iceRestartInFlight = false
+                        iceRecoveryAttempts = 0
                         recoveryJob?.cancel()
                     }
                     PeerConnection.IceConnectionState.DISCONNECTED, PeerConnection.IceConnectionState.FAILED -> scheduleIceRecovery()
@@ -84,13 +86,19 @@ class FynxWebRtcCallEngine(
         createLocalAudio(); if (session.type == FynxCallType.VIDEO) createLocalVideo()
     }
     private fun scheduleIceRecovery() {
-        if (iceRestartInFlight || recoveryJob?.isActive == true) return
+        if (iceRestartInFlight || recoveryJob?.isActive == true || iceRecoveryAttempts >= 3) return
         recoveryJob = recoveryScope.launch {
-            delay(1500L)
+            delay(if (iceRecoveryAttempts == 0) 1500L else 5000L)
             val pc = peerConnection ?: return@launch
             if (pc.iceConnectionState() == PeerConnection.IceConnectionState.CONNECTED || pc.iceConnectionState() == PeerConnection.IceConnectionState.COMPLETED) return@launch
+            iceRecoveryAttempts += 1
             iceRestartInFlight = true
             createOfferInternal(pc, iceRestart = true)
+            delay(8000L)
+            if (peerConnection === pc && pc.iceConnectionState() != PeerConnection.IceConnectionState.CONNECTED && pc.iceConnectionState() != PeerConnection.IceConnectionState.COMPLETED) {
+                iceRestartInFlight = false
+                scheduleIceRecovery()
+            }
         }
     }
     fun createOffer() { val pc = peerConnection ?: return callbacks.onError("call media is not connected"); createOfferInternal(pc, iceRestart = false) }
@@ -113,6 +121,6 @@ class FynxWebRtcCallEngine(
     override fun setCameraEnabled(enabled: Boolean) { videoTrack?.setEnabled(enabled) }
     override fun switchCamera() { cameraCapturer?.switchCamera(null) }
     override fun setSpeakerEnabled(enabled: Boolean) { audioRouter.setSpeakerEnabled(enabled) }
-    override fun disconnect() { recoveryJob?.cancel(); recoveryJob = null; iceRestartInFlight = false; runCatching { cameraCapturer?.stopCapture() }; cameraCapturer?.dispose(); cameraCapturer = null; surfaceTextureHelper?.dispose(); surfaceTextureHelper = null; eglBase?.release(); eglBase = null; peerConnection?.close(); peerConnection?.dispose(); peerConnection = null; pendingRemoteCandidates.clear(); remoteDescriptionSet = false; audioTrack?.dispose(); audioSource?.dispose(); videoTrack?.dispose(); videoSource?.dispose(); audioTrack = null; audioSource = null; videoTrack = null; videoSource = null; audioRouter.stop() }
+    override fun disconnect() { recoveryJob?.cancel(); recoveryJob = null; iceRestartInFlight = false; iceRecoveryAttempts = 0; runCatching { cameraCapturer?.stopCapture() }; cameraCapturer?.dispose(); cameraCapturer = null; surfaceTextureHelper?.dispose(); surfaceTextureHelper = null; eglBase?.release(); eglBase = null; peerConnection?.close(); peerConnection?.dispose(); peerConnection = null; pendingRemoteCandidates.clear(); remoteDescriptionSet = false; audioTrack?.dispose(); audioSource?.dispose(); videoTrack?.dispose(); videoSource?.dispose(); audioTrack = null; audioSource = null; videoTrack = null; videoSource = null; audioRouter.stop() }
     private open class SdpObserverAdapter : SdpObserver { override fun onCreateSuccess(description: SessionDescription) = Unit; override fun onSetSuccess() = Unit; override fun onCreateFailure(error: String) = Unit; override fun onSetFailure(error: String) = Unit }
 }
