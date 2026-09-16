@@ -138,7 +138,18 @@ object FynxBackendClient {
             return response
         } finally { cancellationHandle.dispose(); connection.disconnect() }
     }
-    private fun hasNetwork(context: Context): Boolean { val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true; return manager.allNetworks.any { network -> val capabilities = manager.getNetworkCapabilities(network) ?: return@any false; capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) } }
+
+    /** INTERNET means a usable transport may exist while Android is still validating it. Let the request itself prove reachability. */
+    private fun hasNetwork(context: Context): Boolean {
+        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
+        val networks = manager.allNetworks
+        if (networks.isEmpty()) return false
+        return networks.any { network ->
+            val capabilities = manager.getNetworkCapabilities(network) ?: return@any false
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        }
+    }
+
     private fun isRetryableFailure(error: Throwable): Boolean { var current: Throwable? = error; while (current != null) { if (current is SocketTimeoutException || current is ConnectException || current is UnknownHostException || current is IOException) return true; if (current is FynxHttpException && current.status in setOf(408, 425, 429, 500, 502, 503, 504)) return true; current = current.cause }; return false }
     private fun migrateLegacyAccessToken(context: Context): String? { val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE); val legacy = prefs.getString(LEGACY_ACCESS_TOKEN, null)?.takeIf { it.isNotBlank() } ?: return null; return runCatching { FynxSecureTokenStore.save(context, legacy); prefs.edit().remove(LEGACY_ACCESS_TOKEN).apply(); legacy }.getOrNull() }
     private class FynxNetworkUnavailableException : IOException("FYNX network connection is unavailable")
