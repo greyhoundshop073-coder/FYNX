@@ -66,6 +66,45 @@ check(
     and not re.search(r"(?:followers?|following)\s+(?:list|members?|user|people|names)", other_profile_panel, re.IGNORECASE)
 )
 
+# Public profile interaction integrity: real profile identity, four-column post grid,
+# dedicated post viewer, and Marketplace only when the real seller has listings.
+check(
+    "other-user profile uses real identity and server profile loading",
+    "FynxProfileRemoteClient.get(context, username)" in other_profile_panel
+    and "person.profilePhotoMediaId" in other_profile_panel
+    and "person.displayName" in other_profile_panel
+    and '"@${person.username' in other_profile_panel
+)
+check(
+    "other-user profile preserves the four-column real-post grid and viewer",
+    "GridCells.Fixed(4)" in other_profile_panel
+    and "ProfilePostGrid" in other_profile_panel
+    and "ProfilePostSwipeViewer" in other_profile_panel
+    and "post.id" in other_profile_panel
+    and "post.mediaId" in other_profile_panel
+)
+check(
+    "profile Marketplace tab is backed by real seller-owned listings",
+    "FynxMarketplaceClient.listings(context, loaded.username, \"\")" in other_profile_panel
+    and "sellerUsername.equals(loaded.username, ignoreCase = true)" in other_profile_panel
+    and "if (marketplace.isNotEmpty())" in other_profile_panel
+    and "selectedTab == \"Marketplace\"" in other_profile_panel
+    and "ProfileMarketplaceGrid" in other_profile_panel
+    and "ProfileMarketplaceDetails" in other_profile_panel
+)
+check(
+    "profile has no fabricated Business content or repost/likes tabs",
+    "Business" not in other_profile_panel
+    and "Reposts" not in other_profile_panel
+    and "Likes" not in other_profile_panel
+)
+check(
+    "profile post and marketplace taps stay on real content paths",
+    "onOpenPost = { selectedPostIndex = it }" in other_profile_panel
+    and "onOpen = { selectedListing = it }" in other_profile_panel
+    and "FynxMarketplaceClient.mediaUrl" in other_profile_panel
+)
+
 check("shareable deep-link routes cover social, chat, group, marketplace, stories and money", all(x in deep_link for x in ["homeWebLink", "profileWebLink", "chatWebLink", "groupWebLink", "marketplaceWebLink", "storiesWebLink", "moneyWebLink", "fun parse"]) and "FynxDeepLinkParser.homeWebLink()" in share and "FynxDeepLinkParser.inviteWebLink(code)" in share)
 check("deep-link destination routing is connected to the live app", all(x in app for x in ["FynxDeepLinkDestination.Profile", "FynxDeepLinkDestination.Chat", "FynxDeepLinkDestination.Group", "FynxDeepLinkDestination.Marketplace", "FynxDeepLinkDestination.Stories", "FynxDeepLinkDestination.Money"]))
 
