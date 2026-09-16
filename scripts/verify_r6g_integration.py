@@ -4,6 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 backend = (ROOT / "backend/r6gIntegrationRoutes.js").read_text()
 scalability = (ROOT / "backend/scalability.js").read_text()
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxR6GIntegrationClient.kt").read_text()
+business_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBusinessAccount.kt").read_text()
 group = (ROOT / "backend/groupContentRoutes.js").read_text()
 
 checks = [
@@ -20,6 +21,9 @@ checks = [
     ("message context checks participant", "message access denied" in backend),
     ("Android listing context uses a block body", "suspend fun listingContext(context: Context, listingId: String): Result<ListingContext> {" in client),
     ("Android listing context has no illegal expression-body return", "Result.failure(IllegalArgumentException(\"invalid listing id\"))" in client and "suspend fun listingContext(context: Context, listingId: String): Result<ListingContext> =" not in client),
+    ("Android client exposes business linking", "suspend fun linkListingToBusiness" in client),
+    ("Business Account loads canonical listing context", "FynxR6GIntegrationClient.listingContext(context, product.id)" in business_panel),
+    ("Business Account exposes link/unlink action", "FynxR6GIntegrationClient.linkListingToBusiness" in business_panel and "else \"Link\"" in business_panel),
     ("Android client exposes Home share", "shareListingToHome" in client),
     ("Android client exposes message context", "attachListingToMessage" in client),
     ("Android client exposes group share", "shareListingToGroup" in client),
