@@ -88,7 +88,7 @@ class FynxWebRtcCallEngine(
         recoveryJob = recoveryScope.launch {
             delay(1500L)
             val pc = peerConnection ?: return@launch
-            if (pc.iceConnectionState == PeerConnection.IceConnectionState.CONNECTED || pc.iceConnectionState == PeerConnection.IceConnectionState.COMPLETED) return@launch
+            if (pc.iceConnectionState() == PeerConnection.IceConnectionState.CONNECTED || pc.iceConnectionState() == PeerConnection.IceConnectionState.COMPLETED) return@launch
             iceRestartInFlight = true
             createOfferInternal(pc, iceRestart = true)
         }
