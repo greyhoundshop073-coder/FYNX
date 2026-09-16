@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -177,6 +178,7 @@ private fun FynxStatusStoryViewer(
                         Text(status.ownerDisplayName.ifBlank { status.ownerUsername }, color = Color.White, fontWeight = FontWeight.SemiBold)
                         Text("${statusTypeLabel(status.type)} • ${statusTimeLeft(status.createdAtMillis)}", color = Color.LightGray, style = MaterialTheme.typography.labelSmall)
                     }
+                    IconButton(onClick = { FynxShareActions.share(context, FynxShareActions.statusPayload(status)) }) { Icon(Icons.Default.Share, "Share Status", tint = Color.White) }
                     if (status.ownerUsername.equals(viewerUsername, true)) {
                         IconButton(enabled = !deleting, onClick = {
                             deleting = true
