@@ -285,7 +285,7 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
         }
         if (marketplaceAd) Text("MARKETPLACE", Modifier.padding(horizontal = 12.dp, vertical = 3.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
         if (displayText.isNotBlank()) Text(displayText, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), style = MaterialTheme.typography.bodyLarge)
-        post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType) }
+        RemotePostMedia(post)
         if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = onOpenMarketplace) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
 
         if (reactionPickerOpen) {
@@ -316,6 +316,41 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
             Spacer(Modifier.weight(1f))
         }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun RemotePostMedia(post: FynxRemoteSocialClient.RemotePost) {
+    val context = LocalContext.current
+    var manifest by remember(post.id) { mutableStateOf<List<FynxHomePostMediaClient.PostMediaItem>?>(null) }
+    LaunchedEffect(post.id) {
+        manifest = FynxHomePostMediaClient.list(context, post.id).getOrNull()
+    }
+    val media = manifest?.takeIf { it.isNotEmpty() }
+    when {
+        media == null && post.mediaUrl != null -> RemoteSocialMedia(post.mediaUrl, post.mediaType)
+        media == null -> Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        media.size == 1 -> RemoteSocialMedia(media.first().mediaUrl, media.first().mediaType)
+        media.size == 2 -> Row(Modifier.fillMaxWidth().height(230.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            media.forEach { item -> Box(Modifier.weight(1f).fillMaxHeight()) { RemoteSocialMedia(item.mediaUrl, item.mediaType) } }
+        }
+        media.size == 3 -> Row(Modifier.fillMaxWidth().height(310.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            Box(Modifier.weight(2f).fillMaxHeight()) { RemoteSocialMedia(media[0].mediaUrl, media[0].mediaType) }
+            Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Box(Modifier.weight(1f).fillMaxWidth()) { RemoteSocialMedia(media[1].mediaUrl, media[1].mediaType) }
+                Box(Modifier.weight(1f).fillMaxWidth()) { RemoteSocialMedia(media[2].mediaUrl, media[2].mediaType) }
+            }
+        }
+        else -> Column(Modifier.fillMaxWidth().height(310.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Box(Modifier.weight(1f).fillMaxHeight()) { RemoteSocialMedia(media[0].mediaUrl, media[0].mediaType) }
+                Box(Modifier.weight(1f).fillMaxHeight()) { RemoteSocialMedia(media[1].mediaUrl, media[1].mediaType) }
+            }
+            Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Box(Modifier.weight(1f).fillMaxHeight()) { RemoteSocialMedia(media[2].mediaUrl, media[2].mediaType) }
+                Box(Modifier.weight(1f).fillMaxHeight()) { RemoteSocialMedia(media[3].mediaUrl, media[3].mediaType) }
+            }
+        }
     }
 }
 
