@@ -57,7 +57,8 @@ fun HomePanel(
                     FynxVisibleUpdatesPanel(
                         currentUsername = displayUsername,
                         onOpenStories = onOpenStories,
-                        onOpenAi = onOpenAi
+                        onOpenAi = onOpenAi,
+                        onCreateStatus = { showMatureStatusComposer = true }
                     )
                 }
             )
