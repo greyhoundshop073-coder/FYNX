@@ -56,7 +56,7 @@ if "CommentsDialog" in home:
     raise SystemExit("HOME INTERACTIONS RED: legacy competing CommentsDialog detected")
 if 'Text("Save")' in home or 'Text("Repost")' in home:
     raise SystemExit("HOME INTERACTIONS RED: fake Save/Repost feed controls detected")
-for needle in ('MaterialTheme.colorScheme','FynxDesign.LargeCardShape','key = "feed_header"','key = "feed_loading"','key = "feed_error"','key = "feed_empty"','key = "feed_load_more"','"Refresh feed"','"Create post"','"Like"','"Comment"','"Post options"','onDismissRequest =','enabled = !feedRequestInFlight','enabled = !loadingMore && !feedRequestInFlight'):
+for needle in ('MaterialTheme.colorScheme','FynxDesign.LargeCardShape','key = "feed_header"','key = "feed_loading"','key = "feed_error"','key = "feed_empty"','key = "feed_load_more"','"Refresh feed"','"Create Post"','"Like"','"Comment"','"Post options"','onDismissRequest =','enabled = !feedRequestInFlight','enabled = !loadingMore && !feedRequestInFlight'):
     require(home, needle, f"Home 4F polish/integration surface {needle}")
 require(home, 'label = if (interactionState.saved) "Saved" else "Save"', "Home 4F save state label")
 require(home, 'label = if (interactionState.reposted) "Reposted" else "Repost"', "Home 4F repost state label")
