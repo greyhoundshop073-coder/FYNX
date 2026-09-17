@@ -44,13 +44,7 @@ fun FynxChatPersonalizationDialog(onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         title = { Text("Chat & personalization") },
         text = {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 560.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Column(Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 TabRow(selectedTabIndex = if (section == "Appearance") 0 else 1) {
                     Tab(selected = section == "Appearance", onClick = { section = "Appearance" }, text = { Text("Appearance") })
                     Tab(selected = section == "Chat", onClick = { section = "Chat" }, text = { Text("Chat") })
@@ -94,15 +88,40 @@ fun FynxChatPersonalizationDialog(onDismiss: () -> Unit) {
                     HorizontalDivider()
                     Text("Language", style = MaterialTheme.typography.titleMedium)
                     Text("English", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "Additional languages will appear here when full FYNX translations are available.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text("Additional languages will appear here when full FYNX translations are available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") }
-        }
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
     )
+}
+
+@Composable
+fun AppearanceDialog(current: String, onSelected: (String) -> Unit, onDismiss: () -> Unit) {
+    val options = listOf("System", "Light", "Dark")
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Appearance") }, text = {
+        Column { options.forEach { option -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(option); RadioButton(selected = current == option, onClick = { onSelected(option) }) } } }
+    }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
+}
+
+@Composable
+fun AccentDialog(current: FynxAccent, onSelected: (FynxAccent) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Colors & accent") }, text = {
+        Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+            FynxAccent.entries.forEach { option ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(option.name); RadioButton(selected = current == option, onClick = { onSelected(option) }) }
+            }
+        }
+    }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
+}
+
+@Composable
+fun ChatPersonalizationDialog(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Chat settings") }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Read receipts"); Switch(checked = settings.readReceipts, onCheckedChange = { onSettingsChange(settings.copy(readReceipts = it)) }) }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Story replies"); Switch(checked = settings.storyReplies, onCheckedChange = { onSettingsChange(settings.copy(storyReplies = it)) }) }
+            Text("More chat appearance and personalization options", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
 }
