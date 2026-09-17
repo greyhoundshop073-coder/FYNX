@@ -1,6 +1,6 @@
 package com.fynx.app.ui
 
-enum class FynxNotificationType { MESSAGE, FRIEND_REQUEST, STORY, REMINDER, SAFETY, GROUP, REACTION, COMMENT, MARKETPLACE_ORDER, WALLET_ACTIVITY }
+enum class FynxNotificationType { MESSAGE, FRIEND_REQUEST, FOLLOW, STORY, REMINDER, SAFETY, GROUP, REACTION, COMMENT, MARKETPLACE_ORDER, WALLET_ACTIVITY }
 
 data class FynxNotification(
     val id: String,

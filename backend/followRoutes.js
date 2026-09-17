@@ -1,5 +1,6 @@
 import pg from "pg";
 import jwt from "jsonwebtoken";
+import { queueFynxNotification } from "./notificationPush.js";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -71,10 +72,24 @@ export function registerFollowRoutes({ app }) {
       const targetId = String(target.id);
       if (viewerId === targetId) return res.status(400).json({ error: "cannot follow yourself" });
       if (await blocked(viewerId, targetId)) return res.status(403).json({ error: "follow unavailable" });
-      await pool.query(
-        "INSERT INTO social_follows(follower_id, followed_id) VALUES($1,$2) ON CONFLICT DO NOTHING",
+      const inserted = await pool.query(
+        "INSERT INTO social_follows(follower_id, followed_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING follower_id, followed_id",
         [viewerId, targetId]
       );
+      if (inserted.rowCount > 0) {
+        const follower = await pool.query("SELECT username FROM users WHERE id=$1 LIMIT 1", [viewerId]);
+        const sourceUsername = follower.rows[0]?.username || null;
+        await queueFynxNotification(pool, {
+          userId: target.id,
+          type: "FOLLOW",
+          title: `@${sourceUsername || "A FYNX user"} followed you`,
+          message: "You have a new follower.",
+          targetId: viewerId,
+          sourceUsername,
+          route: `fynx://profile/${encodeURIComponent(sourceUsername || "")}`,
+          notificationId: `follow-${viewerId}-${targetId}`
+        });
+      }
       res.set("Cache-Control", "no-store");
       return res.status(201).json({ following: true });
     } catch (error) {
