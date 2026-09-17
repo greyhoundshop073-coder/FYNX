@@ -4,8 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.ImageView
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.PickVisualMediaRequest
+import androidx.activity.compose.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -44,7 +44,7 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 @Composable
-fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}) {
+fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, initialListingId: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var listings by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
@@ -83,6 +83,15 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     }
 
     LaunchedEffect(query, category) { reload() }
+
+    LaunchedEffect(initialListingId) {
+        val listingId = initialListingId?.trim().orEmpty()
+        if (listingId.isNotBlank()) {
+            loadExactMarketplaceListing(context, listingId)
+                .onSuccess { listing -> selected = listing }
+                .onFailure { error = it.message ?: "Marketplace listing could not be opened." }
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize()) {
@@ -281,7 +290,7 @@ private fun OrderActions(context: android.content.Context, order: FynxRemoteSoci
                     order.status == "PAYMENT_PENDING" -> Text("You can cancel this unpaid order.")
                     order.status == "COMPLETED" -> {
                         Text("Rate seller")
-                        Row(verticalAlignment = Alignment.CenterVertically) { (1..5).forEach { star -> TextButton(onClick = { rating = star }) { Text(if (star <= rating) "★" else "☆") } } }
+                        Row(verticalAlignment = Alignment.CenterVertically) { (1..5).forEach { star -> TextButton(onClick = { rating = star }) { Text(if (star <= rating) "★" else "☆") } }
                         OutlinedTextField(value = comment, onValueChange = { comment = it }, label = { Text("Review") }, minLines = 2, modifier = Modifier.fillMaxWidth())
                     }
                 }
@@ -296,7 +305,7 @@ private fun OrderActions(context: android.content.Context, order: FynxRemoteSoci
                 else -> Spacer(Modifier.size(1.dp))
             }
         },
-        dismissButton = { TextButton(onClick = { if (!dispute && order.status != "COMPLETED") dispute = true else onClose() }) { Text(if (!dispute && order.status != "COMPLETED") "Report problem" else "Close") } }
+        dismissButton = { TextButton(onClick = { if (!dispute && order.status != "COMPLETED") dispute = true else onClose() }) { Text(if (!dispute && order.status != "COMPLETED") "Report problem" else "Close") }
     )
 
     if (showLifecycle) FynxMarketplaceOrderLifecycle(context, order, onChanged = { showLifecycle = false; onChanged() }, onClose = { showLifecycle = false })
