@@ -20,7 +20,8 @@ object FynxProductionMessaging {
     private const val IMAGE_RECOMPRESS_THRESHOLD = 2 * 1024 * 1024
     private const val IMAGE_QUALITY = 85
     private const val MAX_MESSAGE_LENGTH = 4000
-    private const val MAX_VOICE_DURATION_MS = 60 * 60 * 1000L
+    // Keep the Android contract aligned with the backend's authoritative 120-second voice limit.
+    private const val MAX_VOICE_DURATION_MS = 120_000L
 
     data class RemoteMedia(val id: String, val mimeType: String, val byteSize: Int)
     data class RemoteMessage(
