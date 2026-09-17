@@ -71,6 +71,7 @@ jobs:
           node --check reliability.js
           node --check backgroundJobs.js
           node --check securityHardening.js
+          node --check chatRealtimeCompatibility.js
           node --check verify-marketplace-reconciliation.mjs
           node --check verify-marketplace-protection-admin.mjs
           node --check verify-marketplace-order-lifecycle.mjs
@@ -90,6 +91,10 @@ jobs:
           node --check verify-stage15h-admin.mjs
           node --check verify-stage15d-advanced.mjs
           node --check verify-stage15d-jobs.mjs
+
+      - name: Run Chat end-to-end integration gate
+        working-directory: .
+        run: python3 scripts/verify_chat_end_to_end.py
 
       - name: Run consolidated Stage 14 verification
         run: node verify-stage14.mjs
