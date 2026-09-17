@@ -57,7 +57,7 @@ export async function installSocialFeed() {
         visibility: row.visibility,
         mediaId: row.media_id == null ? null : String(row.media_id),
         mediaType: row.media_type || null,
-        mediaUrl: row.media_id == null ? null : \/api/social/media/${row.media_id}\`,
+        mediaUrl: row.media_id == null ? null : \`/api/social/media/\${row.media_id}\`,
         timestamp: Number(row.timestamp),
         likeCount: Number(row.like_count),
         commentCount: Number(row.comment_count),
