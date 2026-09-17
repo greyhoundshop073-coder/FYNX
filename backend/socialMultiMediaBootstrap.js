@@ -168,7 +168,7 @@ export async function installSocialMultiMedia() {
           id: String(row.media_id),
           mediaType: row.media_type,
           position: Number(row.position),
-          mediaUrl: \`/api/social/media/${row.media_id}\`
+          mediaUrl: \`/api/social/media/\${row.media_id}\`
         }))
       });
     } catch (error) {
