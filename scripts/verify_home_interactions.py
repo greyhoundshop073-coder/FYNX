@@ -7,7 +7,7 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 def require(text: str, needle: str, label: str) -> None:
-    if needle not in text:
+    if needle not in text and needle.replace('`', '\\`') not in text:
         raise SystemExit(f"HOME INTERACTIONS RED: missing {label}: {needle}")
 
 def normalize_source(text: str) -> str:
