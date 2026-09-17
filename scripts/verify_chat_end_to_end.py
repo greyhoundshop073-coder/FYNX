@@ -79,7 +79,9 @@ require(messaging, r"cacheRemoteMedia\(", "Production messaging client must pres
 require(conversation, r"val sendResult = if \(selectedAttachment != null\)", "Attachment send must produce a shared send result")
 require(conversation, r"uploadMedia\(context, selectedAttachment\)", "Attachment send must upload through production media")
 require(conversation, r"sendResult\s*\.onSuccess", "Attachment send must update UI from the shared success path")
-require(conversation, r"sendResult\s*\.onFailure", "Attachment send must surface failures from the shared failure path")
+# Kotlin Result handlers are chained: sendResult.onSuccess { ... }.onFailure { ... }.
+# Match the bounded chain rather than requiring the two handlers to be adjacent to sendResult.
+require(conversation, r"sendResult\s*\.onSuccess[\s\S]{0,3000}\.onFailure", "Attachment send must surface failures from the shared failure path")
 require(conversation, r"attachment = null; attachmentType = null", "Successful attachment send must clear the pending attachment")
 
 # 5. Voice contract must remain aligned with the backend's authoritative 120-second limit.
