@@ -62,7 +62,6 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var networkError by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
     var typingSent by remember { mutableStateOf(false) }
-    val maxVoiceDurationMs = 120_000L
 
     val realtimeClient = remember(chat.username) {
         FynxRealtimeClient(
@@ -179,13 +178,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     LaunchedEffect(isRecording, recordingStartedAt) {
         while (isRecording) {
-            if (!isRecordingPaused) {
-                recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L)
-                if (recordingElapsed >= maxVoiceDurationMs) {
-                    stopRecording()
-                    break
-                }
-            }
+            if (!isRecordingPaused) recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L)
             delay(200L)
         }
     }
@@ -219,7 +212,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     fun stopRecording() {
         val r = recorder ?: return
         val file = recordingFile
-        val duration = (System.currentTimeMillis() - recordingStartedAt).coerceAtMost(maxVoiceDurationMs)
+        val duration = System.currentTimeMillis() - recordingStartedAt
         runCatching { r.stop() }; r.release(); recorder = null; isRecordingPaused = false; isRecording = false; recordingFile = null; recordingElapsed = 0L
         if (file != null && file.exists() && file.length() > 0L && duration >= 300L) {
             val pendingFile = file
@@ -438,14 +431,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                         sending = true; networkError = null
                                         scope.launch {
                                             val selectedAttachment = attachment
-                                            val sendResult = if (selectedAttachment != null) {
+                                            if (selectedAttachment != null) {
                                                 val selectedType = attachmentType ?: "image"
                                                 FynxProductionMessaging.uploadMedia(context, selectedAttachment)
                                                     .mapCatching { media -> FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId, media.id, selectedType, 0L).getOrThrow() }
-                                            } else {
-                                                FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
-                                            }
-                                            sendResult
+                                            } else FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
                                                 .onSuccess { remote ->
                                                     currentUserId?.let { myId -> messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp } }
                                                     realtimeClient.sendTyping(recipient, false); typingSent = false

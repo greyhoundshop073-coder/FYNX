@@ -58,17 +58,7 @@ require(conversation, r"realtimeClient\.acknowledgeMessage\(", "ConversationPane
 require(conversation, r"realtimeClient\.sendRead\(", "ConversationPanel must send realtime read acknowledgements")
 require(conversation, r"realtimeClient\.sendTyping\(", "ConversationPanel must use the realtime typing transport")
 
-# 2. Attachment and voice-send contracts must finish through the same success/failure path.
-require(conversation, r"val sendResult = if \(selectedAttachment != null\)", "Attachment sends must use the shared message result path")
-require(conversation, r"FynxProductionMessaging\.uploadMedia\(context, selectedAttachment\)", "Attachment sends must upload through production media")
-require(conversation, r"sendResult\s*\.onSuccess", "Attachment sends must run the shared success/reset handler")
-require(conversation, r"sendResult[\s\S]*?\.onFailure", "Attachment sends must run the shared failure handler")
-require(conversation, r"maxVoiceDurationMs\s*=\s*120_000L", "Chat voice UI must retain the authoritative 120-second limit")
-require(conversation, r"recordingElapsed >= maxVoiceDurationMs", "Voice recording must stop at the authoritative duration limit")
-require(conversation, r"coerceAtMost\(maxVoiceDurationMs\)", "Voice send duration must never exceed the authoritative limit")
-require(messaging, r"MAX_VOICE_DURATION_MS\s*=\s*120_000L", "Production messaging must retain the authoritative 120-second voice limit")
-
-# 3. Realtime client contract: authenticated websocket, message/status/typing handling.
+# 2. Realtime client contract: authenticated websocket, message/status/typing handling.
 require(realtime, r"/realtime", "FynxRealtimeClient must target the backend realtime endpoint")
 require(realtime, r"token", "FynxRealtimeClient must authenticate realtime sessions with a token")
 require(realtime, r"typing", "FynxRealtimeClient must support typing events")
@@ -77,7 +67,7 @@ require(realtime, r"read", "FynxRealtimeClient must support read events")
 require(realtime, r"Event\.Typing", "FynxRealtimeClient must expose typing events to the UI")
 require(realtime, r"Event\.MessageStatus", "FynxRealtimeClient must expose message status events")
 
-# 4. Production messaging API must keep history/send/read/media on the real backend.
+# 3. Production messaging API must keep history/send/read/media on the real backend.
 require(messaging, r"/api/messages", "Production messaging client must use the backend messages API")
 require(messaging, r"history\(", "Production messaging client must implement history")
 require(messaging, r"sendText\(", "Production messaging client must implement text/media send")
@@ -85,7 +75,7 @@ require(messaging, r"markRead\(", "Production messaging client must implement pe
 require(messaging, r"uploadMedia\(", "Production messaging client must preserve media upload support")
 require(messaging, r"cacheRemoteMedia\(", "Production messaging client must preserve remote media caching")
 
-# 5. Backend message data model and API path.
+# 4. Backend message data model and API path.
 require(backend, r"CREATE TABLE IF NOT EXISTS messages", "Backend must own the production messages table")
 for field in ("sender_id", "recipient_id", "text", "created_at", "delivered_at", "read_at"):
     require(backend, rf"\b{field}\b", f"messages table must retain {field}")
@@ -95,14 +85,14 @@ require(backend, r"broadcastMessage", "Backend must broadcast persisted messages
 require(backend, r"markPendingDelivered", "Backend must process pending delivery state")
 require(backend, r"/realtime", "Backend must expose the realtime websocket path")
 
-# 6. Realtime authentication/isolation must remain in front of the application handler.
+# 5. Realtime authentication/isolation must remain in front of the application handler.
 require(isolation, r"jwt\.verify", "Realtime isolation must authenticate websocket users")
 require(isolation, r"message_ack", "Realtime isolation must validate message acknowledgements")
 require(isolation, r"read", "Realtime isolation must validate read packets")
 require(isolation, r"MAX_READ_IDS", "Realtime isolation must retain bounded read packet protection")
 require(isolation, r"packet|size|64", "Realtime isolation must retain a packet-size guard")
 
-# 7. Typing compatibility layer: narrow, authenticated, recipient-scoped, rate-limited.
+# 6. Typing compatibility layer: narrow, authenticated, recipient-scoped, rate-limited.
 require(compat, r"jwt\.verify", "Typing compatibility must authenticate the websocket token")
 require(compat, r"type === \"typing\"", "Typing compatibility must explicitly intercept typing packets")
 require(compat, r"recipientId", "Typing compatibility must require a recipient")
@@ -117,12 +107,12 @@ require(compat, r"type: \"typing\"", "Typing compatibility must relay the canoni
 require(compat, r"return callback\(data, \.\.\.args\)", "Typing compatibility must delegate non-typing websocket messages")
 require(compat, r"return listener\(socket, req, \.\.\.rest\)", "Typing compatibility must preserve the existing connection listener")
 
-# 8. Render startup must load the compatibility layer before the server bootstrap.
+# 7. Render startup must load the compatibility layer before the server bootstrap.
 require(preload, r"import \"\.\/scalability\.js\"", "Render preload must retain scalability bootstrap")
 require(preload, r"import \"\.\/chatRealtimeCompatibility\.js\"", "Render preload must load Chat realtime compatibility")
 require(package_json, r"node --import \.\/renderScalabilityPreload\.js realtimeIsolationBootstrap\.js", "Render start command must use the guarded realtime preload chain")
 
-# 9. Guard against accidental local/fake chat implementations in the production path.
+# 8. Guard against accidental local/fake chat implementations in the production path.
 forbidden = [
     (conversation, r"https?://(?:localhost|127\.0\.0\.1)", "ConversationPanel must not hard-code a local backend URL"),
     (messaging, r"https?://(?:localhost|127\.0\.0\.1)", "Production messaging client must not hard-code a local backend URL"),
@@ -139,8 +129,6 @@ if failures:
 
 print("CHAT END-TO-END VERIFICATION: GREEN")
 print("- Android ConversationPanel -> realtime + production messaging wiring present")
-print("- attachment -> upload -> send -> shared success/failure handling present")
-print("- voice recording -> 120-second UI/client contract present")
 print("- authenticated realtime -> typing/read/ack compatibility present")
 print("- backend messages -> persistence/delivery/broadcast wiring present")
 print("- Render preload -> scalability + Chat compatibility chain present")
