@@ -38,40 +38,67 @@ import { registerR6GIntegrationRoutes } from "./r6gIntegrationRoutes.js";
 installPresencePrivacyGuard();
 const originalCreateServer = http.createServer;
 http.createServer = function fynxCreateServer(...args) {
-  const server = originalCreateServer.apply(this, args);
   const app = args[0];
+  let routeRegistrationReady = Promise.resolve();
   if (app && typeof app.use === "function") {
     registerRealtimeAssistantRoutes({ app });
     registerFynxAiRoutes({ app });
+
+    let resolveRouteRegistration;
+    let rejectRouteRegistration;
+    routeRegistrationReady = new Promise((resolve, reject) => {
+      resolveRouteRegistration = resolve;
+      rejectRouteRegistration = reject;
+    });
+
+    // Keep the existing deferred registration architecture, but gate request
+    // dispatch until every production route and guard has been installed.
+    // This prevents cold-start 404/unguarded-request races after listen().
+    app.use(async (_req, res, next) => {
+      try {
+        await routeRegistrationReady;
+        return next();
+      } catch (error) {
+        console.error("[fynx-startup] route registration failed", error);
+        return res.status(503).json({ error: "server is still starting" });
+      }
+    });
+
     setImmediate(() => {
-      installSecurityHardening({ app });
-      installRequestResourceGuard(app);
-      installApiAbuseGuard(app);
-      registerMarketplaceSettlementRoutes({ app });
-      registerMarketplacePayoutRetryRoutes({ app });
-      registerMarketplaceProtectionRoutes({ app });
-      registerMarketplaceProtectionResolutionRoutes({ app });
-      registerProfileRoutes({ app });
-      registerPrivacyRoutes({ app });
-      registerFollowRoutes({ app });
-      registerGroupRoutes({ app });
-      registerGroupMembershipRoutes({ app });
-      registerGroupInviteRoutes({ app });
-      registerGroupContentRoutes({ app });
-      registerR6GIntegrationRoutes({ app });
-      registerStatusManagementRoutes({ app });
-      registerStatusInteractionRoutes({ app });
-      registerNotificationPreferenceRoutes({ app });
-      registerNotificationDeviceRoutes({ app });
-      registerAdminRoutes({ app });
-      registerMonetizationRoutes({ app });
-      installMediaPrivacyGuard(app);
-      installSocialHardening(app);
-      installPrivateCachePolicy(app);
-      installMarketplaceMediaPrivacyGuard(app);
-      installPeopleResponseHardening(app);
+      try {
+        installSecurityHardening({ app });
+        installRequestResourceGuard(app);
+        installApiAbuseGuard(app);
+        registerMarketplaceSettlementRoutes({ app });
+        registerMarketplacePayoutRetryRoutes({ app });
+        registerMarketplaceProtectionRoutes({ app });
+        registerMarketplaceProtectionResolutionRoutes({ app });
+        registerProfileRoutes({ app });
+        registerPrivacyRoutes({ app });
+        registerFollowRoutes({ app });
+        registerGroupRoutes({ app });
+        registerGroupMembershipRoutes({ app });
+        registerGroupInviteRoutes({ app });
+        registerGroupContentRoutes({ app });
+        registerR6GIntegrationRoutes({ app });
+        registerStatusManagementRoutes({ app });
+        registerStatusInteractionRoutes({ app });
+        registerNotificationPreferenceRoutes({ app });
+        registerNotificationDeviceRoutes({ app });
+        registerAdminRoutes({ app });
+        registerMonetizationRoutes({ app });
+        installMediaPrivacyGuard(app);
+        installSocialHardening(app);
+        installPrivateCachePolicy(app);
+        installMarketplaceMediaPrivacyGuard(app);
+        installPeopleResponseHardening(app);
+        resolveRouteRegistration();
+      } catch (error) {
+        rejectRouteRegistration(error);
+      }
     });
   }
+  const server = originalCreateServer.apply(this, args);
   server.keepAliveTimeout=65_000;
   server.headersTimeout=70_000;
   server.requestTimeout=30_000;
