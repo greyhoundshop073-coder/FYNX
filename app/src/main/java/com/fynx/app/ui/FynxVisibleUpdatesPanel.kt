@@ -41,6 +41,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.background
 import androidx.compose.ui.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -58,7 +59,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, onOpenAi: () -> Unit) {
+fun FynxVisibleUpdatesPanel(
+    currentUsername: String,
+    onOpenStories: () -> Unit,
+    onOpenAi: () -> Unit,
+    onCreateStatus: () -> Unit = onOpenStories
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
@@ -120,7 +126,7 @@ fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, 
                 }
                 item {
                     Column(Modifier.width(82.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        IconButton(onClick = onOpenStories, modifier = Modifier.size(70.dp)) {
+                        IconButton(onClick = onCreateStatus, modifier = Modifier.size(70.dp)) {
                             androidx.compose.foundation.layout.Box(Modifier.size(64.dp).background(FynxDesign.SurfaceRaised, CircleShape).border(3.dp, MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) { Icon(Icons.Default.Add, "Create status", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp)) }
                         }
                         Text("Create status", style = MaterialTheme.typography.labelSmall, maxLines = 1)
