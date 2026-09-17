@@ -6,6 +6,9 @@ import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -44,24 +47,40 @@ fun HomePanel(
         return
     }
 
-    FynxHomeLifecycleRefresh { refreshKey ->
-        key(refreshKey) {
-            FynxRemoteHomeSocialPanel(
-                modifier = Modifier.fillMaxSize(),
-                currentUsername = displayUsername,
-                onOpenFindPeople = onOpenFindPeople,
-                onOpenMarketplace = onOpenMarketplace,
-                onCreatePost = { showCreateMenu = true },
-                onOpenAuthorProfile = onOpenAuthorProfile,
-                header = {
-                    FynxVisibleUpdatesPanel(
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.End
+        ) {
+            IconButton(onClick = onCreatePost) {
+                Icon(Icons.Default.CameraAlt, contentDescription = "Create photo or video post")
+            }
+            IconButton(onClick = onOpenNotifications) {
+                Icon(Icons.Default.NotificationsNone, contentDescription = "Notifications")
+            }
+        }
+
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            FynxHomeLifecycleRefresh { refreshKey ->
+                key(refreshKey) {
+                    FynxRemoteHomeSocialPanel(
+                        modifier = Modifier.fillMaxSize(),
                         currentUsername = displayUsername,
-                        onOpenStories = onOpenStories,
-                        onOpenAi = onOpenAi,
-                        onCreateStatus = { showMatureStatusComposer = true }
+                        onOpenFindPeople = onOpenFindPeople,
+                        onOpenMarketplace = onOpenMarketplace,
+                        onCreatePost = { showCreateMenu = true },
+                        onOpenAuthorProfile = onOpenAuthorProfile,
+                        header = {
+                            FynxVisibleUpdatesPanel(
+                                currentUsername = displayUsername,
+                                onOpenStories = onOpenStories,
+                                onOpenAi = onOpenAi,
+                                onCreateStatus = { showMatureStatusComposer = true }
+                            )
+                        }
                     )
                 }
-            )
+            }
         }
     }
 
