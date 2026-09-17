@@ -37,9 +37,10 @@ check("friend accepted push hook", 'friend-accepted-' in bootstrap and 'Friend r
 check("private message push hook", 'message-${message.id}' in bootstrap and 'type: "MESSAGE"' in bootstrap)
 check("Home comment push hook", "type:'COMMENT'" in bootstrap and 'comment-${result.rows[0].id}' in bootstrap)
 check("Home comment is account scoped", 'postOwner.rows[0] && String(postOwner.rows[0].author_id) !== String(req.user.sub)' in bootstrap)
-check("Home reply push hook", "type:'COMMENT'" in realtime and 'reply-${row.id}-${recipientId}' in realtime)
-check("reply recipients exclude actor", 'String(parentAuthorId) !== String(req.user.sub)' in realtime and 'String(postOwnerId) !== String(req.user.sub)' in realtime)
-check("reply can notify parent commenter and post owner", 'replyRecipients.add(String(parentAuthorId))' in realtime and 'replyRecipients.add(String(postOwnerId))' in realtime)
+check("Home reply push hook", "type:'COMMENT'" in bootstrap and 'reply-${row.id}-${recipientId}' in bootstrap and 'realtimeIsolationBootstrap.js' in bootstrap)
+check("reply notification runtime import", 'queueFynxNotification' in bootstrap and 'import { queueFynxNotification } from \"./notificationPush.js\";' in bootstrap)
+check("reply recipients exclude actor", 'String(parentAuthorId) !== String(req.user.sub)' in bootstrap and 'String(postOwnerId) !== String(req.user.sub)' in bootstrap)
+check("reply can notify parent commenter and post owner", 'replyRecipients.add(String(parentAuthorId))' in bootstrap and 'replyRecipients.add(String(postOwnerId))' in bootstrap)
 check("backend starts through notification bootstrap", 'node notificationBootstrap.js' in package)
 check("server-side secrets are not APK dependencies", 'FIREBASE_SERVICE_ACCOUNT_JSON' not in read("app/build.gradle.kts"))
 
