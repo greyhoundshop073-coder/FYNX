@@ -62,6 +62,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var networkError by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
     var typingSent by remember { mutableStateOf(false) }
+    var stopRecordingAction: (() -> Unit)? = null
 
     val realtimeClient = remember(chat.username) {
         FynxRealtimeClient(
@@ -131,6 +132,10 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                     setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                     setOutputFile(file.absolutePath)
+                    setMaxDuration(120_000)
+                    setOnInfoListener { _, what, _ ->
+                        if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED) stopRecordingAction?.invoke()
+                    }
                     prepare(); start()
                     recorder = this
                     recordingFile = file
@@ -212,7 +217,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     fun stopRecording() {
         val r = recorder ?: return
         val file = recordingFile
-        val duration = System.currentTimeMillis() - recordingStartedAt
+        val duration = (System.currentTimeMillis() - recordingStartedAt).coerceAtMost(120_000L)
         runCatching { r.stop() }; r.release(); recorder = null; isRecordingPaused = false; isRecording = false; recordingFile = null; recordingElapsed = 0L
         if (file != null && file.exists() && file.length() > 0L && duration >= 300L) {
             val pendingFile = file
@@ -231,6 +236,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             }
         } else file?.delete()
     }
+    stopRecordingAction = ::stopRecording
+
     fun playVoice(message: ChatMessage) {
         val voiceUrl = message.voiceUri ?: return
         player?.release()
