@@ -40,9 +40,12 @@ check("private message push hook", 'message-${message.id}' in bootstrap and 'typ
 check("Home comment push hook", "type:'COMMENT'" in bootstrap and 'comment-${result.rows[0].id}' in bootstrap)
 check("Home comment is account scoped", 'postOwner.rows[0] && String(postOwner.rows[0].author_id) !== String(req.user.sub)' in bootstrap)
 check("Home reply push hook", "type:'COMMENT'" in bootstrap and 'reply-${row.id}-${recipientId}' in bootstrap and 'realtimeIsolationBootstrap.js' in bootstrap)
-check("reply notification runtime import", 'queueFynxNotification' in bootstrap and 'import { queueFynxNotification } from \"./notificationPush.js\";' in realtime)
-check("reply recipients exclude actor", 'String(parentAuthorId) !== String(req.user.sub)' in bootstrap and 'String(postOwnerId) !== String(req.user.sub)' in realtime)
-check("reply can notify parent commenter and post owner", 'replyRecipients.add(String(parentAuthorId))' in realtime and 'replyRecipients.add(String(postOwnerId))' in realtime)
+# Reply notification code is injected into the runtime file by notificationBootstrap.js.
+# Verify the authoritative bootstrap patch rather than requiring generated runtime text
+# to already exist in the source file before startup.
+check("reply notification runtime import", 'marker: \'import { installSocialPostReactions } from "./socialPostReactionBootstrap.js";\'' in bootstrap and 'import { queueFynxNotification } from "./notificationPush.js";' in bootstrap)
+check("reply recipients exclude actor", 'String(parentAuthorId) !== String(req.user.sub)' in bootstrap and 'String(postOwnerId) !== String(req.user.sub)' in bootstrap)
+check("reply can notify parent commenter and post owner", 'replyRecipients.add(String(parentAuthorId))' in bootstrap and 'replyRecipients.add(String(postOwnerId))' in bootstrap)
 check("follow push hook", 'queueFynxNotification' in follow and 'type: "FOLLOW"' in follow and 'follow-${viewerId}-${targetId}' in follow)
 check("follow notification only on new follow", 'RETURNING follower_id, followed_id' in follow and 'inserted.rowCount > 0' in follow)
 check("follow notification model", 'FOLLOW' in models)
