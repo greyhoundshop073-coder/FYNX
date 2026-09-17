@@ -66,8 +66,6 @@ if 'contentDescription = null' not in home and 'Icon(Icons.Default.ShoppingBag, 
 for needle in ('FynxRemoteProfileAvatar(','profilePhotoMediaId','post.authorDisplayName.ifBlank { post.authorUsername }','post.mediaUrl?.let'):
     require(home, needle, f"real Home identity/media surface {needle}")
 
-# Saved Posts continuity: the existing saved-list route must remain user-scoped, and the existing
-# panel must support persistence, refresh, unsave, and the already-wired author-profile callback.
 require(saved_panel, 'FynxBackendClient.get(context, "/api/social/saved?limit=50&offset=0")', "Saved Posts real backend retrieval")
 require(saved_panel, 'FynxRemoteSocialClient.save(context, entry.post.id, false)', "Saved Posts real unsave path")
 require(saved_panel, 'posts = posts.filterNot { it.post.id == entry.post.id }', "Saved Posts local reconciliation after unsave")
@@ -92,7 +90,6 @@ for needle in ('visiblePost(postId, req.user.sub)','b.blocker_id=$2 AND b.blocke
 for needle in ('val previous = posts.firstOrNull { it.id == id }','optimisticLiked','onFailure {','posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = previous.likedByCurrentUser','runInteraction(id, saved','runInteraction(id, reposted'):
     require(home, needle, f"Home 4E interaction rollback/reconciliation {needle}")
 
-# Home AI/Status integration guard: AI and Status live inside the feed's one vertical scroll surface.
 require(home_shell, 'FynxRemoteHomeSocialPanel(', "Home feed host")
 require_normalized(home_shell, 'header = { FynxVisibleUpdatesPanel(', "Home AI/Status header wiring")
 require_normalized(home_shell, 'onCreateStatus = { showMatureStatusComposer = true }', "Home Create status -> existing composer wiring")
@@ -100,8 +97,11 @@ require(visible_updates, 'onCreateStatus: () -> Unit', "Status create callback")
 require(visible_updates, 'IconButton(onClick = onCreateStatus', "Status create control action")
 require(home, 'LazyColumn(', "Home single vertical scroll surface")
 require_normalized(home, 'header?.let { content -> item(key = "home_ai_status") { content() } }', "AI/Status feed header item")
-if home.count('LazyColumn(') != 1:
-    raise SystemExit("HOME INTERACTIONS RED: Home must keep exactly one vertical LazyColumn")
+# Home itself owns one feed LazyColumn. Video discovery is a separate fullscreen Dialog surface,
+# so its own LazyColumn must not be counted as a second Home feed scroll container.
+home_feed_source = home.split('@Composable\nprivate fun VideoDiscoveryDialog', 1)[0]
+if home_feed_source.count('LazyColumn(') != 1:
+    raise SystemExit("HOME INTERACTIONS RED: Home feed must keep exactly one vertical LazyColumn")
 require_normalized(home, 'items(items = posts, key = { it.id })', "feed posts in the shared scroll surface")
 require(visible_updates, 'OutlinedTextField(', "Home AI typing input")
 require(visible_updates, 'value = aiInput', "Home AI input state")
@@ -119,4 +119,4 @@ require(ai_panel, 'FynxFutureIntelligencePolicy.authorize(', "full FYNX AI autho
 if 'TextToSpeech' in ai_panel or 'android.speech.tts' in ai_panel:
     raise SystemExit("HOME INTERACTIONS RED: Google Android TTS must not be reintroduced into FYNX AI")
 
-print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions including Save/Saved Posts continuity, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, clean-startup privacy boundaries, FYNX AI single-scroll/typing/security integration, and direct Create status -> existing composer wiring are present without duplicate vertical surfaces or client API secrets.")
+print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions including Save/Saved Posts continuity, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, clean-startup privacy boundaries, FYNX AI single-scroll/typing/security integration, and direct Create status -> existing composer wiring are present without duplicate vertical feed surfaces or client API secrets.")
