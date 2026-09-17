@@ -20,7 +20,7 @@ internal object FynxMediaCache {
     suspend fun getOrDownload(context: Context, path: String, type: String?): File? {
         if (path.isBlank()) return null
         val normalizedPath = path.trim()
-        if (!normalizedPath.startsWith("/api/media/")) return null
+        if (!isSupportedMediaPath(normalizedPath)) return null
         val accountKey = FynxAuthStore.accountStorageKey(context) ?: return null
         if (!FynxBackendClient.hasAccessToken(context)) return null
 
@@ -49,6 +49,9 @@ internal object FynxMediaCache {
             }
         }
     }
+
+    private fun isSupportedMediaPath(path: String): Boolean =
+        path.startsWith("/api/media/") || path.startsWith("/api/social/media/")
 
     private suspend fun download(context: Context, path: String, destination: File): File? {
         val rawFile = File(destination.parentFile, ".${destination.name}.raw")
