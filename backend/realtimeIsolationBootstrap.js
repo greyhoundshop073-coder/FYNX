@@ -156,7 +156,7 @@ async function installHomeCommentBackend() {
            FROM social_post_comments c
            JOIN users u ON u.id=c.author_id
           WHERE c.post_id=$1
-            AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$2))${cursorClause}
+            AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$2))\${'${cursorClause}'}
           ORDER BY c.id DESC
           LIMIT $3\`,
         before === null ? [postId, req.user.sub, limit + 1] : [postId, req.user.sub, limit + 1, before]
@@ -204,7 +204,7 @@ async function installHomeCommentBackend() {
       const parentId = Number(req.params.commentId);
       if (!Number.isSafeInteger(postId) || postId < 1 || !Number.isSafeInteger(parentId) || parentId < 1) return res.status(400).json({ error: 'invalid comment reference' });
       if (!(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });
-      const parent = await pool.query(\`SELECT c.id FROM social_post_comments c WHERE c.id=$1 AND c.post_id=$2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$3 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$3)\`, [parentId, postId, req.user.sub]);
+      const parent = await pool.query(\`SELECT c.id FROM social_post_comments c WHERE c.id=$1 AND c.post_id=$2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$3 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$3))\`, [parentId, postId, req.user.sub]);
       if (!parent.rows[0]) return res.status(404).json({ error: 'parent comment not found' });
       const requestedLimit = Number(req.query?.limit);
       const limit = Math.min(Math.max(Number.isInteger(requestedLimit) ? requestedLimit : 50, 1), 100);
