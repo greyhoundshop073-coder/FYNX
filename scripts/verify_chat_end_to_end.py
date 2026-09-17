@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""Static integration gate for the production FYNX one-to-one Chat path.
-
-This verifier deliberately checks the existing architecture rather than replacing it:
-Android conversation UI -> realtime client -> production messaging client -> backend
-message routes/database -> authenticated realtime server -> Render preload layers.
-
-It is a source/integration gate, not a fake runtime test and does not invent users or
-messages. A failure means the inspected production wiring is incomplete or inconsistent.
-"""
+"""Static integration gate for the production FYNX one-to-one Chat path."""
 from pathlib import Path
 import re
 import sys
@@ -79,14 +71,16 @@ require(messaging, r"cacheRemoteMedia\(", "Production messaging client must pres
 require(conversation, r"val sendResult = if \(selectedAttachment != null\)", "Attachment send must produce a shared send result")
 require(conversation, r"uploadMedia\(context, selectedAttachment\)", "Attachment send must upload through production media")
 require(conversation, r"sendResult\s*\.onSuccess", "Attachment send must update UI from the shared success path")
-# Kotlin Result handlers are chained: sendResult.onSuccess { ... }.onFailure { ... }.
-# Match the bounded chain rather than requiring the two handlers to be adjacent to sendResult.
 require(conversation, r"sendResult\s*\.onSuccess[\s\S]{0,3000}\.onFailure", "Attachment send must surface failures from the shared failure path")
 require(conversation, r"attachment = null; attachmentType = null", "Successful attachment send must clear the pending attachment")
 
-# 5. Voice contract must remain aligned with the backend's authoritative 120-second limit.
+# 5. Voice contract: the client must enforce the backend's authoritative 120-second limit
+# both at send time and at the recorder itself, so the UI cannot continue recording past it.
 require(messaging, r"MAX_VOICE_DURATION_MS\s*=\s*120_000L", "Android messaging must retain the backend's 120-second voice limit")
 require(messaging, r"voiceDurationMs !in 0L\.\.MAX_VOICE_DURATION_MS", "Android messaging must reject voice durations beyond the backend limit")
+require(conversation, r"setMaxDuration\(120_000\)", "Voice recorder must enforce the 120-second maximum at capture time")
+require(conversation, r"MEDIA_RECORDER_INFO_MAX_DURATION_REACHED", "Voice recorder must handle the maximum-duration callback")
+require(conversation, r"stopRecordingAction\s*=\s*::stopRecording", "Voice maximum-duration callback must terminate through the production stop/send path")
 require(conversation, r"voiceDurationMs = duration", "ConversationPanel must send the actual recorded voice duration to the production API")
 
 # 6. Backend message data model and API path.
@@ -115,9 +109,6 @@ require(compat, r"recipientId === userId", "Typing compatibility must prevent se
 require(compat, r"TYPING_LIMIT\s*=\s*120", "Typing compatibility must retain a bounded rate limit")
 require(compat, r"socketByUserId", "Typing compatibility must track authenticated recipient sockets")
 require(compat, r"type: \"typing\"", "Typing compatibility must relay the canonical typing event")
-
-# The compatibility layer must delegate non-typing traffic instead of becoming a second
-# message transport. This is the key preservation rule for the existing implementation.
 require(compat, r"return callback\(data, \.\.\.args\)", "Typing compatibility must delegate non-typing websocket messages")
 require(compat, r"return listener\(socket, req, \.\.\.rest\)", "Typing compatibility must preserve the existing connection listener")
 
@@ -146,6 +137,7 @@ print("- Android ConversationPanel -> realtime + production messaging wiring pre
 print("- authenticated realtime -> typing/read/ack compatibility present")
 print("- backend messages -> persistence/delivery/broadcast wiring present")
 print("- attachment send -> shared success/failure completion path present")
+print("- voice capture -> recorder-level 120-second enforcement present")
 print("- voice contract -> Android 120-second limit aligned with backend")
 print("- Render preload -> scalability + Chat compatibility chain present")
 print("- no hard-coded local backend path in the production Chat clients")
