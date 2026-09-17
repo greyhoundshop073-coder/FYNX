@@ -72,9 +72,13 @@ for needle, label in [
 ]:
     require(ISOLATION, needle, label)
 
-# The outer process must be the production entrypoint, preserving the split
-# isolation -> bootstrap startup architecture.
+# The production entrypoint is intentionally guarded/preloaded so Render can
+# repair generated startup source and load scalability before the realtime
+# isolation/bootstrap chain. Keep this aligned with backend/package.json.
 package_json = (ROOT / "backend" / "package.json").read_text(encoding="utf-8")
-require(package_json, '"start": "node realtimeIsolationBootstrap.js"', "production realtime isolation entrypoint")
+start_script = '"start": "node renderStartupSourceGuard.js && node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js"'
+require(package_json, start_script, "guarded production realtime isolation entrypoint")
+preload = (ROOT / "backend" / "renderScalabilityPreload.js").read_text(encoding="utf-8")
+require(preload, 'import "./scalability.js"', "Render scalability preload")
 
 print("R3 final integration and security gate: GREEN")
