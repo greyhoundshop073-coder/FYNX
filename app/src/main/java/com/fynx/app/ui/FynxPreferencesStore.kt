@@ -33,6 +33,7 @@ object FynxPreferencesStore {
     private const val KEY_STICKER_ANIMATION = "sticker_animation"
     private const val KEY_EMOJI_SIZE = "emoji_size"
     private const val KEY_CHAT_LIST_STATE = "chat_list_state"
+    private const val KEY_REMOTE_IDENTITY_CACHE = "remote_identity_cache"
     private const val LEGACY_ASSET_FILE = "fynx_customization.jpg"
     private const val ASSET_FILE_PREFIX = "fynx_customization_"
 
@@ -66,6 +67,22 @@ object FynxPreferencesStore {
     fun saveAccent(context: Context, accent: FynxAccent) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_ACCENT, accent.name).apply() }
     fun loadProfilePhoto(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_PROFILE_PHOTO, null)
     fun saveProfilePhoto(context: Context, uri: String?) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply { if (uri.isNullOrBlank()) remove(KEY_PROFILE_PHOTO) else putString(KEY_PROFILE_PHOTO, uri) }.apply() }
+
+    /** Last authoritative server identity used to render immediately on cold start. */
+    fun loadRemoteProfilePhotoId(context: Context, username: String): String? =
+        context.getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_${accountNamespace(context)}", Context.MODE_PRIVATE)
+            .getString(cacheKey(username), null)?.takeIf { it.isNotBlank() }
+
+    fun saveRemoteProfilePhotoId(context: Context, username: String, mediaId: String?) {
+        val prefs = context.getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_${accountNamespace(context)}", Context.MODE_PRIVATE)
+        prefs.edit().apply {
+            if (mediaId.isNullOrBlank()) remove(cacheKey(username)) else putString(cacheKey(username), mediaId)
+        }.apply()
+    }
+
+    private fun accountNamespace(context: Context): String = storageKey(FynxAuthStore.accountStorageKey(context) ?: "signed_out")
+    private fun cacheKey(username: String): String = storageKey(username.removePrefix("@").trim().lowercase())
+
     fun loadAppearance(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_APPEARANCE, "System") ?: "System"
     fun saveAppearance(context: Context, value: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_APPEARANCE, value).apply() }
     fun loadLanguage(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_LANGUAGE, "Device default") ?: "Device default"
@@ -127,11 +144,9 @@ object FynxPreferencesStore {
 
     /** Clear identity/privacy/media state before another account can enter this process. */
     fun clearAccountSessionData(context: Context) {
-        // Delete the current account's protected customization asset before the
-        // username is removed, so the next account cannot inherit its bytes.
         runCatching { accountAssetFile(context)?.delete() }
-        // Remove the old single-file asset created before account isolation.
         runCatching { File(context.filesDir, LEGACY_ASSET_FILE).delete() }
+        val accountNamespace = accountNamespace(context)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .remove(KEY_DISPLAY_NAME)
             .remove(KEY_USERNAME)
@@ -151,9 +166,7 @@ object FynxPreferencesStore {
             .remove(KEY_STICKER_ANIMATION)
             .remove(KEY_EMOJI_SIZE)
             .apply()
-
-        // Remove the old pre-account-scoped chat-state stores so they cannot
-        // survive an account switch and cannot be mistaken for current state.
+        runCatching { context.getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_$accountNamespace", Context.MODE_PRIVATE).edit().clear().apply() }
         runCatching {
             File(context.applicationInfo.dataDir, "shared_prefs")
                 .listFiles()
