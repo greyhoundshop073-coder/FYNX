@@ -57,11 +57,11 @@ export async function installSocialPostReactions() {
       const reaction = validHomeReaction(req.body?.reaction);
       if (!Number.isSafeInteger(postId) || postId < 1 || !reaction) return res.status(400).json({ error: 'invalid reaction' });
       if (!(await visibleSocialPost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });
-      await pool.query(`
+      await pool.query(\`
         INSERT INTO social_post_reactions(post_id,user_id,reaction_type)
         VALUES($1,$2,$3)
         ON CONFLICT(post_id,user_id) DO UPDATE SET reaction_type=EXCLUDED.reaction_type, updated_at=NOW()
-      `, [postId, req.user.sub, reaction]);
+      \`, [postId, req.user.sub, reaction]);
       const counts = await pool.query('SELECT reaction_type, COUNT(*)::int AS count FROM social_post_reactions WHERE post_id=$1 GROUP BY reaction_type', [postId]);
       const reactionCounts = {};
       for (const row of counts.rows) reactionCounts[row.reaction_type] = Number(row.count || 0);
