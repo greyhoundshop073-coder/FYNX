@@ -3,6 +3,9 @@
 ## Rule
 Build one major stage at a time. Inspect existing code first. Keep each stage consolidated. Build Android after every stage. 🟢 Green = continue. 🔴 Red = fix before continuing. Never duplicate existing functions. Never put API secrets in the APK. Full integration verification is performed as one consolidated pass, not as separate feature-by-feature builds.
 
+## LOCKED FYNX APK / UX INTEGRATION RULE
+Whenever a feature is intended for users, it is not complete merely because code exists or a verifier passes. It must be correctly positioned in the APK, have the expected entry point and controls, provide the complete user interaction and states, connect to the real backend/storage where required, handle navigation/keyboard/insets/errors/retry appropriately, and be verified in the applicable real user journey. Established social/messaging/camera products may be used as UX references for familiar interaction patterns, but FYNX's existing visual language and architecture must be preserved. GREEN means this complete standard is met. Once GREEN, keep it locked and do not reopen it for theoretical concerns; reopen only for an actual regression or failed test. This rule is canonical for future FYNX chats and must be followed before moving to another workstream.
+
 ## ACTIVE PHASE — FYNX REALITY / FUNCTIONALITY FIX PASS
 Continue the existing FYNX Android social + marketplace app. Do not rebuild or replace working systems. The current execution order is runtime/navigation, identity, people/profiles/privacy, chat/realtime/media, groups/social, marketplace/payment protection, camera/media reliability, notifications/preferences, AI flows, trust/safety, then final integration/performance/security/regression.
 
