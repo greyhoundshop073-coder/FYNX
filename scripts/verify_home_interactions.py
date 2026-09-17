@@ -26,6 +26,7 @@ ai_panel = read("app/src/main/java/com/fynx/app/ui/FynxAiAssistantPanel.kt")
 ai_client = read("app/src/main/java/com/fynx/app/ui/AiAssistantClient.kt")
 comments_panel = read("app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt")
 client = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
+saved_panel = read("app/src/main/java/com/fynx/app/ui/FynxSavedPostsPanel.kt")
 privacy_bootstrap = read("backend/homeCommentsPrivacyBootstrap.js")
 realtime_bootstrap = read("backend/realtimeIsolationBootstrap.js")
 backend_package = read("backend/package.json")
@@ -64,6 +65,18 @@ if 'contentDescription = null' not in home and 'Icon(Icons.Default.ShoppingBag, 
     raise SystemExit("HOME INTERACTIONS RED: missing Home 4F decorative-icon accessibility handling")
 for needle in ('FynxRemoteProfileAvatar(','profilePhotoMediaId','post.authorDisplayName.ifBlank { post.authorUsername }','post.mediaUrl?.let'):
     require(home, needle, f"real Home identity/media surface {needle}")
+
+# Saved Posts continuity: the existing saved-list route must remain user-scoped, and the existing
+# panel must support persistence, refresh, unsave, and the already-wired author-profile callback.
+require(saved_panel, 'FynxBackendClient.get(context, "/api/social/saved?limit=50&offset=0")', "Saved Posts real backend retrieval")
+require(saved_panel, 'FynxRemoteSocialClient.save(context, entry.post.id, false)', "Saved Posts real unsave path")
+require(saved_panel, 'posts = posts.filterNot { it.post.id == entry.post.id }', "Saved Posts local reconciliation after unsave")
+require(saved_panel, 'var refreshToken by remember { mutableStateOf(0) }', "Saved Posts refresh state")
+require(saved_panel, 'IconButton(onClick = { refreshToken++ }, enabled = !loading)', "Saved Posts refresh control")
+require(saved_panel, 'onOpenAuthorProfile(entry.post.authorId)', "Saved Posts author profile integration")
+require(saved_panel, '.clickable { onOpenAuthorProfile(entry.post.authorId) }', "Saved Posts clickable author profile control")
+require(saved_panel, 'import androidx.compose.foundation.clickable', "Saved Posts clickable interaction import")
+
 require(backend_package, '"start": "node renderStartupSourceGuard.js && node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js"', "guarded production realtime entrypoint")
 require(realtime_bootstrap, 'import { installHomeCommentPrivacy } from "./homeCommentsPrivacyBootstrap.js";', "Home comment privacy integration")
 require(realtime_bootstrap, "await installHomeCommentBackend();", "base Home comments installation")
@@ -106,4 +119,4 @@ require(ai_panel, 'FynxFutureIntelligencePolicy.authorize(', "full FYNX AI autho
 if 'TextToSpeech' in ai_panel or 'android.speech.tts' in ai_panel:
     raise SystemExit("HOME INTERACTIONS RED: Google Android TTS must not be reintroduced into FYNX AI")
 
-print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, clean-startup privacy boundaries, FYNX AI single-scroll/typing/security integration, and direct Create status -> existing composer wiring are present without duplicate vertical surfaces or client API secrets.")
+print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions including Save/Saved Posts continuity, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, clean-startup privacy boundaries, FYNX AI single-scroll/typing/security integration, and direct Create status -> existing composer wiring are present without duplicate vertical surfaces or client API secrets.")
