@@ -7,12 +7,16 @@ const isolation = fs.readFileSync(new URL("./realtimeIsolationBootstrap.js", imp
 const security = fs.readFileSync(new URL("./securityHardening.js", import.meta.url), "utf8");
 const scalability = fs.readFileSync(new URL("./scalability.js", import.meta.url), "utf8");
 const workflow = fs.readFileSync(new URL("../.github/workflows/android-build.yml", import.meta.url), "utf8");
+const scalabilityPreloadPath = new URL("./renderScalabilityPreload.js", import.meta.url);
+const scalabilityPreload = fs.existsSync(scalabilityPreloadPath) ? fs.readFileSync(scalabilityPreloadPath, "utf8") : "";
 
 const startUsesScalability = packageJson.scripts?.start === "node --import ./scalability.js server.js"
   || (packageJson.scripts?.start === "node serverBootstrap.js" && bootstrap.includes('import("./scalability.js")'))
   || (packageJson.scripts?.start === "node realtimeIsolationBootstrap.js"
     && isolation.includes('import("./serverBootstrap.js")')
-    && bootstrap.includes('import("./scalability.js")'));
+    && bootstrap.includes('import("./scalability.js")'))
+  || (packageJson.scripts?.start === "node renderStartupSourceGuard.js && node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js"
+    && scalabilityPreload.includes('import "./scalability.js"'));
 
 const checks = [
   ["production start command loads scalability before the server", startUsesScalability],
