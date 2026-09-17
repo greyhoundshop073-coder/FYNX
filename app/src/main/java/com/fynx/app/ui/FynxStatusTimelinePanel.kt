@@ -36,6 +36,7 @@ fun FynxStatusTimelinePanel() {
     val auth = remember(context) { FynxAuthStore.load(context) }
     val username = auth.username?.removePrefix("@").orEmpty()
     var statuses by remember { mutableStateOf<List<FynxStatus>>(emptyList()) }
+    var followingUsernames by remember { mutableStateOf<Set<String>>(emptySet()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<FynxStatus?>(null) }
@@ -46,16 +47,23 @@ fun FynxStatusTimelinePanel() {
         scope.launch {
             loading = true
             error = null
-            FynxStatusClient.list(context)
-                .onSuccess { statuses = it.filterNot(FynxStatus::isExpired) }
-                .onFailure { error = it.message ?: "Unable to load Status." }
+            val statusResult = FynxStatusClient.list(context)
+            val followingResult = FynxProfileRemoteClient.following(context)
+            statusResult.onSuccess { statuses = it.filterNot(FynxStatus::isExpired) }
+            followingResult.onSuccess { followingUsernames = it.map { user -> user.username.removePrefix("@").trim().lowercase() }.toSet() }
+            val failure = statusResult.exceptionOrNull() ?: followingResult.exceptionOrNull()
+            if (failure != null) error = failure.message ?: "Unable to load Status."
             loading = false
         }
     }
 
     LaunchedEffect(refreshKey) { refresh() }
 
-    val latestByOwner = statuses.groupBy { it.ownerUsername }
+    val visibleStatuses = statuses.filter { status ->
+        val owner = status.ownerUsername.removePrefix("@").trim().lowercase()
+        owner == username.removePrefix("@").trim().lowercase() || owner in followingUsernames
+    }
+    val latestByOwner = visibleStatuses.groupBy { it.ownerUsername }
         .mapNotNull { (_, values) -> values.maxByOrNull { it.createdAtMillis } }
         .sortedByDescending { it.createdAtMillis }
 
@@ -87,9 +95,9 @@ fun FynxStatusTimelinePanel() {
         HorizontalDivider()
         Text("Recent Status", style = MaterialTheme.typography.titleMedium)
         Text("Tap a circle to open Status. Views, likes, reactions and replies are saved to FYNX.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (statuses.isNotEmpty()) {
+        if (visibleStatuses.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(statuses.take(12), key = { it.id }) { status ->
+                items(visibleStatuses.take(12), key = { it.id }) { status ->
                     AssistChip(onClick = { selected = status }, label = { Text("${status.ownerDisplayName.ifBlank { status.ownerUsername }} • ${statusTypeLabel(status.type)}") })
                 }
             }
@@ -97,7 +105,7 @@ fun FynxStatusTimelinePanel() {
     }
 
     selected?.let { initial ->
-        val ownerStatuses = statuses.filter { it.ownerUsername == initial.ownerUsername }.sortedBy { it.createdAtMillis }
+        val ownerStatuses = visibleStatuses.filter { it.ownerUsername == initial.ownerUsername }.sortedBy { it.createdAtMillis }
         FynxStatusStoryViewer(
             ownerStatuses,
             ownerStatuses.indexOfFirst { it.id == initial.id }.coerceAtLeast(0),
@@ -210,26 +218,16 @@ private fun FynxStatusStoryViewer(
                     }
                 }
 
-                Surface(
-                    color = Color.Black,
-                    modifier = Modifier.fillMaxWidth().imePadding()
-                ) {
+                Surface(color = Color.Black, modifier = Modifier.fillMaxWidth().imePadding()) {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("👁 ${interactions.viewCount}", color = Color.White, style = MaterialTheme.typography.labelMedium)
-                            TextButton(onClick = {
-                                scope.launch { FynxStatusClient.toggleLike(context, status.id).onSuccess { refreshInteractions() }.onFailure { interactionError = it.message } }
-                            }) { Text(if (interactions.likedByMe) "♥ ${interactions.likeCount}" else "♡ ${interactions.likeCount}", color = Color.White) }
+                            TextButton(onClick = { scope.launch { FynxStatusClient.toggleLike(context, status.id).onSuccess { refreshInteractions() }.onFailure { interactionError = it.message } } }) { Text(if (interactions.likedByMe) "♥ ${interactions.likeCount}" else "♡ ${interactions.likeCount}", color = Color.White) }
                             Text("💬 ${interactions.replyCount}", color = Color.White, style = MaterialTheme.typography.labelMedium)
                         }
-                        Row(
-                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             listOf("❤️", "😂", "😮", "😢", "👍").forEach { emoji ->
-                                AssistChip(onClick = {
-                                    scope.launch { FynxStatusClient.react(context, status.id, emoji).onSuccess { refreshInteractions() }.onFailure { interactionError = it.message } }
-                                }, label = { Text(emoji) })
+                                AssistChip(onClick = { scope.launch { FynxStatusClient.react(context, status.id, emoji).onSuccess { refreshInteractions() }.onFailure { interactionError = it.message } } }, label = { Text(emoji) })
                             }
                         }
                         OutlinedTextField(
@@ -245,9 +243,7 @@ private fun FynxStatusStoryViewer(
                                     if (body.isEmpty()) return@TextButton
                                     replying = true
                                     scope.launch {
-                                        FynxStatusClient.reply(context, status.id, body)
-                                            .onSuccess { replyText = ""; refreshInteractions() }
-                                            .onFailure { interactionError = it.message }
+                                        FynxStatusClient.reply(context, status.id, body).onSuccess { replyText = ""; refreshInteractions() }.onFailure { interactionError = it.message }
                                         replying = false
                                     }
                                 }) { Text("Send") }
@@ -278,22 +274,13 @@ private fun StatusViewerText(status: FynxStatus) {
         else -> FontFamily.SansSerif
     }
     val weight = if (status.textStyle.font == FynxStatusTextFont.BOLD) FontWeight.Bold else FontWeight.Normal
-    val textAlign = when (status.textStyle.alignment) {
-        0 -> TextAlign.Start
-        2 -> TextAlign.End
-        else -> TextAlign.Center
-    }
+    val textAlign = when (status.textStyle.alignment) { 0 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
     Box(Modifier.fillMaxSize().background(Color(status.textStyle.backgroundColor)), contentAlignment = Alignment.Center) {
         Text(status.text.orEmpty(), color = Color(status.textStyle.foregroundColor), fontFamily = family, fontWeight = weight, textAlign = textAlign, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.fillMaxWidth().padding(30.dp))
     }
 }
 
-private fun statusTypeLabel(type: FynxStatusType) = when (type) {
-    FynxStatusType.TEXT -> "Text"
-    FynxStatusType.PHOTO -> "Photo"
-    FynxStatusType.VIDEO -> "Video"
-    FynxStatusType.VOICE -> "Voice"
-}
+private fun statusTypeLabel(type: FynxStatusType) = when (type) { FynxStatusType.TEXT -> "Text"; FynxStatusType.PHOTO -> "Photo"; FynxStatusType.VIDEO -> "Video"; FynxStatusType.VOICE -> "Voice" }
 
 private fun statusTimeLeft(createdAt: Long, now: Long = System.currentTimeMillis()): String {
     val remaining = (createdAt + FYNX_STATUS_EXPIRY_MS - now).coerceAtLeast(0L)
