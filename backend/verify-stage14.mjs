@@ -37,7 +37,11 @@ if (realtimeClient.includes('capabilities.hasCapability(NetworkCapabilities.NET_
 
 const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
 const startScript = packageJson.scripts?.start || '';
-const usesScalabilityGuard = startScript === 'node --import ./scalability.js server.js' || startScript === 'node serverBootstrap.js' || startScript === 'node realtimeIsolationBootstrap.js' || startScript === 'node --import ./scalability.js realtimeIsolationBootstrap.js';
+const usesScalabilityGuard = startScript === 'node --import ./scalability.js server.js'
+  || startScript === 'node serverBootstrap.js'
+  || startScript === 'node realtimeIsolationBootstrap.js'
+  || startScript === 'node --import ./scalability.js realtimeIsolationBootstrap.js'
+  || startScript === 'node renderStartupSourceGuard.js && node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js';
 if (!usesScalabilityGuard) failures.push('Backend start script is not using the Stage 14 scalability guard');
 if (startScript === 'node serverBootstrap.js') {
   const bootstrap = read('backend/serverBootstrap.js');
@@ -45,13 +49,17 @@ if (startScript === 'node serverBootstrap.js') {
     failures.push('Backend bootstrap is missing the production scalability/startup compatibility guard');
   }
 }
-if (startScript === 'node realtimeIsolationBootstrap.js' || startScript === 'node --import ./scalability.js realtimeIsolationBootstrap.js') {
+if (startScript === 'node realtimeIsolationBootstrap.js' || startScript === 'node --import ./scalability.js realtimeIsolationBootstrap.js' || startScript === 'node renderStartupSourceGuard.js && node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js') {
   const isolation = read('backend/realtimeIsolationBootstrap.js');
   if (!isolation.includes('serverBootstrap.js') || !isolation.includes('currentSocketByUserId') || !isolation.includes('__fynxStale')) {
     failures.push('Realtime isolation bootstrap is missing the production server/scalability startup chain');
   }
   if (startScript === 'node --import ./scalability.js realtimeIsolationBootstrap.js' && !startScript.includes('--import ./scalability.js')) {
     failures.push('Realtime production start is missing the explicit scalability preload');
+  }
+  if (startScript === 'node renderStartupSourceGuard.js && node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js') {
+    const preload = read('backend/renderScalabilityPreload.js');
+    if (!preload.includes('import "./scalability.js"')) failures.push('Render production start is missing the explicit scalability preload module');
   }
 }
 
