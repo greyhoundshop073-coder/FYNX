@@ -12,6 +12,7 @@ import android.widget.VideoView
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,12 +25,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -110,7 +114,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     }
     fun runDelete(id: String) {
         if (id in interactionBusy) return; interactionBusy = interactionBusy + id
-        scope.launch { FynxRemoteSocialClient.deletePost(context, id).onSuccess { posts = posts.filterNot { it.id == id }; interactionStates = interactionStates - id; reactionStates = reactionStates - id; deletePost = null }.onFailure { error = it.message ?: "Unable to delete this post." }; interactionBusy = interactionBusy - id }
+        scope.launch { FynxRemoteSocialClient.deletePost(context, id).onSuccess { posts = posts.filterNot { it.id == id }; interactionStates = interactionStates - id; reactionStates = reactionStates - id; deletePost = null }.onFailure { error = it.message ?: "Unable to delete your post." }; interactionBusy = interactionBusy - id }
     }
     fun runShare(post: FynxRemoteSocialClient.RemotePost) {
         if (post.id in interactionBusy) return; interactionBusy = interactionBusy + post.id
@@ -145,6 +149,7 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
     val context = LocalContext.current
     val marketplaceListingId = Regex("""(?m)^Listing ID:\s*(\d+)\s*$""").find(post.text)?.groupValues?.getOrNull(1)
     val mine = post.authorUsername.equals(currentUsername.removePrefix("@"), true); val marketplaceAd = post.text.startsWith(MARKETPLACE_AD_MARKER); val displayText = if (marketplaceAd) post.text.removePrefix(MARKETPLACE_AD_MARKER).trim() else post.text
+    val openMarketplaceTarget: (() -> Unit)? = if (marketplaceAd) { { if (marketplaceListingId.isNullOrBlank()) onOpenMarketplace() else context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FynxDeepLinkParser.marketplaceAppLink(marketplaceListingId)))) } } else null
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onOpenProfile, modifier = Modifier.size(50.dp)) { FynxRemoteProfileAvatar(profilePhotoMediaId, post.authorDisplayName.ifBlank { post.authorUsername }, Modifier.size(46.dp).clip(CircleShape)) }
@@ -153,8 +158,8 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
         }
         if (marketplaceAd) Text("MARKETPLACE", Modifier.padding(horizontal = 12.dp, vertical = 3.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
         if (displayText.isNotBlank()) Text(displayText, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), style = MaterialTheme.typography.bodyLarge)
-        post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType) }
-        if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = { if (marketplaceListingId.isNullOrBlank()) onOpenMarketplace() else context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FynxDeepLinkParser.marketplaceAppLink(marketplaceListingId)))) }) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
+        post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType, openMarketplaceTarget) }
+        if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = { openMarketplaceTarget?.invoke() ?: onOpenMarketplace() }) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
         if (reactionPickerOpen) Surface(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), shape = MaterialTheme.shapes.large, tonalElevation = 2.dp) { Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) { ReactionChoice("👍", "LIKE", reactionState.currentReaction == "LIKE", onReact = { onReact(post.id, it) }); ReactionChoice("❤️", "LOVE", reactionState.currentReaction == "LOVE", onReact = { onReact(post.id, it) }); ReactionChoice("😂", "LAUGH", reactionState.currentReaction == "LAUGH", onReact = { onReact(post.id, it) }); ReactionChoice("😮", "WOW", reactionState.currentReaction == "WOW", onReact = { onReact(post.id, it) }); ReactionChoice("😢", "SAD", reactionState.currentReaction == "SAD", onReact = { onReact(post.id, it) }) } }
         Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             FeedActionButton(onClick = { onLike(post.id) }, onLongClick = onOpenReactionPicker, enabled = !interactionBusy, icon = if (post.likedByCurrentUser) Icons.Default.Favorite else Icons.Default.FavoriteBorder, label = "Like", longClickLabel = "Open post reactions", count = post.likeCount, active = post.likedByCurrentUser)
@@ -182,15 +187,41 @@ private fun RowScope.FeedActionButton(onClick: () -> Unit, onLongClick: (() -> U
 private fun sharePost(context: Context, post: FynxRemoteSocialClient.RemotePost): Result<Unit> = runCatching { val text = if (post.text.startsWith(MARKETPLACE_AD_MARKER)) "${post.text.removePrefix(MARKETPLACE_AD_MARKER).trim()}\n\nSee this product on FYNX Marketplace." else "${post.authorDisplayName.ifBlank { post.authorUsername }} on FYNX:\n${post.text}".trim(); val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text); putExtra(Intent.EXTRA_TITLE, "Share from FYNX") }; context.startActivity(Intent.createChooser(intent, "Share with…")) }
 
 @Composable
-private fun RemoteSocialMedia(path: String, type: String?) {
-    val context = LocalContext.current; var file by remember(path) { mutableStateOf<File?>(null) }; var videoAspectRatio by remember(path) { mutableFloatStateOf(16f / 9f) }; var videoView by remember(path) { mutableStateOf<VideoView?>(null) }
+private fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (() -> Unit)? = null) {
+    val context = LocalContext.current; var file by remember(path) { mutableStateOf<File?>(null) }; var videoAspectRatio by remember(path) { mutableFloatStateOf(16f / 9f) }; var videoView by remember(path) { mutableStateOf<VideoView?>(null) }; var fullscreen by remember(path) { mutableStateOf(false) }
     LaunchedEffect(path) { file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, path, type) } }
     LaunchedEffect(file, type) { if (file != null && type == "video") videoAspectRatio = withContext(Dispatchers.IO) { runCatching { MediaMetadataRetriever().run { setDataSource(file!!.absolutePath); val width = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 16f; val height = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 9f; val rotation = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0; release(); if (rotation == 90 || rotation == 270) height / width else width / height }.coerceIn(0.56f, 1.91f) }.getOrDefault(16f / 9f) } }
     DisposableEffect(videoView) { onDispose { videoView?.stopPlayback() } }
     if (file == null) Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     else if (type == "audio") AudioPostPlayer(file!!)
-    else if (type == "video") AndroidView(factory = { ctx -> VideoView(ctx).apply { videoView = this; layoutParams = ViewGroup.LayoutParams(-1, -1); setMediaController(MediaController(ctx)); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxWidth().aspectRatio(videoAspectRatio))
-    else { var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }; LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }; bitmap?.let { Image(it.asImageBitmap(), "Post media", Modifier.fillMaxWidth().aspectRatio((it.width.toFloat() / it.height.toFloat()).coerceIn(0.62f, 1.9f)), contentScale = ContentScale.Fit) } }
+    else if (type == "video") {
+        Box(Modifier.fillMaxWidth().aspectRatio(videoAspectRatio).clickable { if (onOpenMarketplace != null) onOpenMarketplace() else fullscreen = true }) {
+            AndroidView(factory = { ctx -> VideoView(ctx).apply { videoView = this; layoutParams = ViewGroup.LayoutParams(-1, -1); setMediaController(MediaController(ctx)); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxSize())
+            if (onOpenMarketplace == null) Text("Tap to view full screen", Modifier.align(Alignment.BottomEnd).padding(10.dp), style = MaterialTheme.typography.labelSmall, color = Color.White)
+        }
+    } else {
+        var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
+        LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }
+        bitmap?.let { image ->
+            Box(Modifier.fillMaxWidth().aspectRatio((image.width.toFloat() / image.height.toFloat()).coerceIn(0.62f, 1.9f)).clickable { if (onOpenMarketplace != null) onOpenMarketplace() else fullscreen = true }) {
+                Image(image.asImageBitmap(), "Post media", Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+            }
+        }
+    }
+    if (fullscreen && file != null && onOpenMarketplace == null) {
+        Dialog(onDismissRequest = { fullscreen = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+            Box(Modifier.fillMaxSize().background(Color.Black)) {
+                if (type == "video") {
+                    AndroidView(factory = { ctx -> VideoView(ctx).apply { layoutParams = ViewGroup.LayoutParams(-1, -1); setMediaController(MediaController(ctx)); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxSize())
+                } else {
+                    var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
+                    LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }
+                    bitmap?.let { Image(it.asImageBitmap(), "Full screen post media", Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
+                }
+                IconButton(onClick = { fullscreen = false }, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) { Icon(Icons.Default.Close, "Close media viewer", tint = Color.White) }
+            }
+        }
+    }
 }
 
 private fun relative(timestamp: Long): String { val minutes = TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L)); return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" } }
