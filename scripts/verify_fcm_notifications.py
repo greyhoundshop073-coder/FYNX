@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -16,6 +15,7 @@ device = read("app/src/main/java/com/fynx/app/ui/FynxNotificationDeviceManager.k
 backend_devices = read("backend/notificationDevices.js")
 push = read("backend/notificationPush.js")
 bootstrap = read("backend/notificationBootstrap.js")
+realtime = read("backend/realtimeIsolationBootstrap.js")
 package = read("backend/package.json")
 
 check("Firebase messaging dependency", 'com.google.firebase:firebase-messaging' in read("app/build.gradle.kts"))
@@ -33,7 +33,13 @@ check("privacy-safe data payload", 'You have a new message.' in bootstrap and 'b
 check("notification deep-link routing", 'route' in service and 'Uri.parse(route)' in service)
 check("group message push hook", 'queueFynxNotification' in bootstrap and 'group-message-' in bootstrap)
 check("friend request push hook", 'friend-request-' in bootstrap and 'FRIEND_REQUEST' in bootstrap)
+check("friend accepted push hook", 'friend-accepted-' in bootstrap and 'Friend request accepted' in bootstrap)
 check("private message push hook", 'message-${message.id}' in bootstrap and 'type: "MESSAGE"' in bootstrap)
+check("Home comment push hook", "type:'COMMENT'" in bootstrap and 'comment-${result.rows[0].id}' in bootstrap)
+check("Home comment is account scoped", 'postOwner.rows[0] && String(postOwner.rows[0].author_id) !== String(req.user.sub)' in bootstrap)
+check("Home reply push hook", "type:'COMMENT'" in realtime and 'reply-${row.id}-${recipientId}' in realtime)
+check("reply recipients exclude actor", 'String(parentAuthorId) !== String(req.user.sub)' in realtime and 'String(postOwnerId) !== String(req.user.sub)' in realtime)
+check("reply can notify parent commenter and post owner", 'replyRecipients.add(String(parentAuthorId))' in realtime and 'replyRecipients.add(String(postOwnerId))' in realtime)
 check("backend starts through notification bootstrap", 'node notificationBootstrap.js' in package)
 check("server-side secrets are not APK dependencies", 'FIREBASE_SERVICE_ACCOUNT_JSON' not in read("app/build.gradle.kts"))
 
