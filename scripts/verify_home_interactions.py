@@ -79,9 +79,12 @@ for needle in ('visiblePost(postId, req.user.sub)','b.blocker_id=$2 AND b.blocke
 for needle in ('val previous = posts.firstOrNull { it.id == id }','optimisticLiked','onFailure {','posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = previous.likedByCurrentUser','runInteraction(id, saved','runInteraction(id, reposted'):
     require(home, needle, f"Home 4E interaction rollback/reconciliation {needle}")
 
-# Home AI integration guard: the AI/Status header must live inside the feed's one vertical scroll surface.
+# Home AI/Status integration guard: AI and Status live inside the feed's one vertical scroll surface.
 require(home_shell, 'FynxRemoteHomeSocialPanel(', "Home feed host")
 require_normalized(home_shell, 'header = { FynxVisibleUpdatesPanel(', "Home AI/Status header wiring")
+require_normalized(home_shell, 'onCreateStatus = { showMatureStatusComposer = true }', "Home Create status -> existing composer wiring")
+require(visible_updates, 'onCreateStatus: () -> Unit', "Status create callback")
+require(visible_updates, 'IconButton(onClick = onCreateStatus', "Status create control action")
 require(home, 'LazyColumn(', "Home single vertical scroll surface")
 require_normalized(home, 'header?.let { content -> item(key = "home_ai_status") { content() } }', "AI/Status feed header item")
 if home.count('LazyColumn(') != 1:
@@ -103,4 +106,4 @@ require(ai_panel, 'FynxFutureIntelligencePolicy.authorize(', "full FYNX AI autho
 if 'TextToSpeech' in ai_panel or 'android.speech.tts' in ai_panel:
     raise SystemExit("HOME INTERACTIONS RED: Google Android TTS must not be reintroduced into FYNX AI")
 
-print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, clean-startup privacy boundaries, and FYNX AI single-scroll/typing/security integration are present without duplicate vertical surfaces or client API secrets.")
+print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, clean-startup privacy boundaries, FYNX AI single-scroll/typing/security integration, and direct Create status -> existing composer wiring are present without duplicate vertical surfaces or client API secrets.")
