@@ -431,11 +431,14 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                         sending = true; networkError = null
                                         scope.launch {
                                             val selectedAttachment = attachment
-                                            if (selectedAttachment != null) {
+                                            val sendResult = if (selectedAttachment != null) {
                                                 val selectedType = attachmentType ?: "image"
                                                 FynxProductionMessaging.uploadMedia(context, selectedAttachment)
                                                     .mapCatching { media -> FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId, media.id, selectedType, 0L).getOrThrow() }
-                                            } else FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
+                                            } else {
+                                                FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
+                                            }
+                                            sendResult
                                                 .onSuccess { remote ->
                                                     currentUserId?.let { myId -> messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp } }
                                                     realtimeClient.sendTyping(recipient, false); typingSent = false
