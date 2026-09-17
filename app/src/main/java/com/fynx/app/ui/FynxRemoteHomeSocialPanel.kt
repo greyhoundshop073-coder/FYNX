@@ -63,6 +63,8 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var reactionPickerPostId by remember { mutableStateOf<String?>(null) }
     var interactionBusy by remember { mutableStateOf<Set<String>>(emptySet()) }
     var deletePost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
+    var videoDiscoveryOpen by remember { mutableStateOf(false) }
+    var videoDiscoverySourcePostId by remember { mutableStateOf<String?>(null) }
 
     fun resolveAuthorPhotos(items: List<FynxRemoteSocialClient.RemotePost>) {
         val names = items.map { it.authorUsername.removePrefix("@").trim() }.filter { it.isNotBlank() }.distinct()
@@ -120,6 +122,12 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         if (post.id in interactionBusy) return; interactionBusy = interactionBusy + post.id
         scope.launch { sharePost(context, post).onSuccess { runCatching { FynxDiscoveryClient.recordEngagement(context, "SHARE", post.id) } }.onFailure { error = it.message ?: "No app is available to share this post." }; interactionBusy = interactionBusy - post.id }
     }
+    fun openVideoDiscovery(postId: String) {
+        if (postId.isBlank()) return
+        videoDiscoverySourcePostId = postId
+        videoDiscoveryOpen = true
+        scope.launch { runCatching { FynxDiscoveryClient.recordView(context, postId) } }
+    }
     LaunchedEffect(Unit) { reload() }
 
     LazyColumn(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -135,17 +143,83 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         if (!loading && posts.isEmpty() && error == null) item(key = "feed_empty") { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Your feed is ready", style = MaterialTheme.typography.titleMedium); Text("There are no visible posts yet. Create a post or find real people to build your FYNX circle."); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = onCreatePost) { Text("Create Post") }; OutlinedButton(onClick = onOpenFindPeople) { Text("Find People") } } } } }
         items(items = posts, key = { it.id }) { post ->
             val photoId = authorPhotos[post.authorUsername.removePrefix("@").trim().lowercase()]; val state = interactionStates[post.id] ?: FynxRemoteSocialClient.SocialInteractionState(false, false, 0, 0); val reaction = reactionStates[post.id] ?: FynxHomePostReactionsClient.ReactionState(); val busy = post.id in interactionBusy || "follow:${post.authorUsername.removePrefix("@").trim().lowercase()}" in interactionBusy
-            RemotePostCard(post, currentUsername, photoId, state, reaction, busy, onOpenProfile = { onOpenAuthorProfile(post.authorUsername.removePrefix("@").trim()) }, onLike = { runLike(it) }, onComment = { commentsPost = post }, onFollow = { runFollow(post.authorUsername, it) }, onDelete = { deletePost = post }, onSave = { id, saved -> runInteraction(id, saved, { it.saved }, { it.savedCount }, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } }, onRepost = { id, reposted -> runInteraction(id, reposted, { it.reposted }, { it.repostCount }, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } }, onShare = { runShare(post) }, onOpenReactionPicker = { reactionPickerPostId = if (reactionPickerPostId == post.id) null else post.id }, onReact = { id, selected -> runReaction(id, selected) }, reactionPickerOpen = reactionPickerPostId == post.id, onOpenMarketplace = onOpenMarketplace)
+            RemotePostCard(post, currentUsername, photoId, state, reaction, busy, onOpenProfile = { onOpenAuthorProfile(post.authorUsername.removePrefix("@").trim()) }, onLike = { runLike(it) }, onComment = { commentsPost = post }, onFollow = { runFollow(post.authorUsername, it) }, onDelete = { deletePost = post }, onSave = { id, saved -> runInteraction(id, saved, { it.saved }, { it.savedCount }, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } }, onRepost = { id, reposted -> runInteraction(id, reposted, { it.reposted }, { it.repostCount }, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } }, onShare = { runShare(post) }, onOpenReactionPicker = { reactionPickerPostId = if (reactionPickerPostId == post.id) null else post.id }, onReact = { id, selected -> runReaction(id, selected) }, reactionPickerOpen = reactionPickerPostId == post.id, onOpenMarketplace = onOpenMarketplace, onOpenVideoDiscovery = { openVideoDiscovery(post.id) })
         }
         if (!loading && hasMore) item(key = "feed_load_more") { OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore && !feedRequestInFlight, modifier = Modifier.fillMaxWidth()) { Text(if (loadingMore) "Loading more posts…" else "Load more posts") }
         }
     }
     commentsPost?.let { post -> FynxHomeCommentsPanel(post = post, onClose = { commentsPost = null }, onCommentCountChanged = { newCount -> posts = posts.map { if (it.id == post.id) it.copy(commentCount = newCount) else it } }) }
     deletePost?.let { post -> AlertDialog(onDismissRequest = { if (post.id !in interactionBusy) deletePost = null }, title = { Text("Delete post?") }, text = { Text("This will permanently remove your post from FYNX. This action cannot be undone.") }, confirmButton = { TextButton(onClick = { runDelete(post.id) }, enabled = post.id !in interactionBusy) { Text("Delete") } }, dismissButton = { TextButton(onClick = { deletePost = null }, enabled = post.id !in interactionBusy) { Text("Cancel") } }) }
+    if (videoDiscoveryOpen) {
+        VideoDiscoveryDialog(context = context, sourcePostId = videoDiscoverySourcePostId, onDismiss = { videoDiscoveryOpen = false; videoDiscoverySourcePostId = null })
+    }
 }
 
 @Composable
-private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsername: String, profilePhotoMediaId: String?, interactionState: FynxRemoteSocialClient.SocialInteractionState, reactionState: FynxHomePostReactionsClient.ReactionState, interactionBusy: Boolean, onOpenProfile: () -> Unit, onLike: (String) -> Unit, onComment: () -> Unit, onFollow: (Boolean) -> Unit, onDelete: () -> Unit, onSave: (String, Boolean) -> Unit, onRepost: (String, Boolean) -> Unit, onShare: () -> Unit, onOpenReactionPicker: () -> Unit, onReact: (String, String) -> Unit, reactionPickerOpen: Boolean, onOpenMarketplace: () -> Unit) {
+private fun VideoDiscoveryDialog(context: Context, sourcePostId: String?, onDismiss: () -> Unit) {
+    var videos by remember { mutableStateOf<List<FynxDiscoveryClient.TrendingPost>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        FynxDiscoveryClient.trending(context, 50).onSuccess { result ->
+            videos = result.filter { it.mediaId != null && it.mediaType.equals("video", true) }
+            error = null
+        }.onFailure { error = it.message ?: "Unable to load video discovery." }
+        loading = false
+    }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close video discovery") }
+                    Column(Modifier.weight(1f)) {
+                        Text("Discover videos", style = MaterialTheme.typography.titleLarge)
+                        Text("Real FYNX videos ranked by the existing discovery service", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
+                    }
+                }
+                when {
+                    loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    error != null -> Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(error ?: "Video discovery unavailable.", color = MaterialTheme.colorScheme.error); Text("Try again after checking your connection.", style = MaterialTheme.typography.bodySmall) }
+                    videos.isEmpty() -> Box(Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) { Text("No discoverable videos are available yet.") }
+                    else -> LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+                        items(videos, key = { it.id }) { video ->
+                            VideoDiscoveryCard(video = video, isSource = video.id == sourcePostId)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VideoDiscoveryCard(video: FynxDiscoveryClient.TrendingPost, isSource: Boolean) {
+    val context = LocalContext.current
+    val mediaPath = video.mediaId?.let { "/api/social/media/$it" }
+    Card(Modifier.fillMaxWidth().padding(horizontal = 10.dp), shape = FynxDesign.LargeCardShape) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(video.authorDisplayName.ifBlank { video.authorUsername }, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                    Text("${video.authorUsername.removePrefix("@")} • ${relative(video.timestamp)}", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary, maxLines = 1)
+                }
+                if (isSource) Text("From your feed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            }
+            if (video.text.isNotBlank()) Text(video.text, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.bodyMedium, maxLines = 4)
+            mediaPath?.let { path ->
+                RemoteSocialMedia(path, video.mediaType, onOpenMarketplace = null, onOpenMedia = { LaunchedEffect(Unit) { runCatching { FynxDiscoveryClient.recordView(context, video.id) } } })
+            }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("${video.likeCount} likes", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
+                Text("${video.commentCount} comments", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
+                Text("${video.shareCount} shares", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsername: String, profilePhotoMediaId: String?, interactionState: FynxRemoteSocialClient.SocialInteractionState, reactionState: FynxHomePostReactionsClient.ReactionState, interactionBusy: Boolean, onOpenProfile: () -> Unit, onLike: (String) -> Unit, onComment: () -> Unit, onFollow: (Boolean) -> Unit, onDelete: () -> Unit, onSave: (String, Boolean) -> Unit, onRepost: (String, Boolean) -> Unit, onShare: () -> Unit, onOpenReactionPicker: () -> Unit, onReact: (String, String) -> Unit, reactionPickerOpen: Boolean, onOpenMarketplace: () -> Unit, onOpenVideoDiscovery: () -> Unit) {
     val context = LocalContext.current
     val marketplaceListingId = Regex("""(?m)^Listing ID:\s*(\d+)\s*$""").find(post.text)?.groupValues?.getOrNull(1)
     val mine = post.authorUsername.equals(currentUsername.removePrefix("@"), true); val marketplaceAd = post.text.startsWith(MARKETPLACE_AD_MARKER); val displayText = if (marketplaceAd) post.text.removePrefix(MARKETPLACE_AD_MARKER).trim() else post.text
@@ -158,7 +232,7 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
         }
         if (marketplaceAd) Text("MARKETPLACE", Modifier.padding(horizontal = 12.dp, vertical = 3.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
         if (displayText.isNotBlank()) Text(displayText, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), style = MaterialTheme.typography.bodyLarge)
-        post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType, openMarketplaceTarget) }
+        post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType, openMarketplaceTarget, if (openMarketplaceTarget == null && post.mediaType.equals("video", true)) onOpenVideoDiscovery else null) }
         if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = { openMarketplaceTarget?.invoke() ?: onOpenMarketplace() }) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
         if (reactionPickerOpen) Surface(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), shape = MaterialTheme.shapes.large, tonalElevation = 2.dp) { Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) { ReactionChoice("👍", "LIKE", reactionState.currentReaction == "LIKE", onReact = { onReact(post.id, it) }); ReactionChoice("❤️", "LOVE", reactionState.currentReaction == "LOVE", onReact = { onReact(post.id, it) }); ReactionChoice("😂", "LAUGH", reactionState.currentReaction == "LAUGH", onReact = { onReact(post.id, it) }); ReactionChoice("😮", "WOW", reactionState.currentReaction == "WOW", onReact = { onReact(post.id, it) }); ReactionChoice("😢", "SAD", reactionState.currentReaction == "SAD", onReact = { onReact(post.id, it) }) } }
         Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -187,7 +261,7 @@ private fun RowScope.FeedActionButton(onClick: () -> Unit, onLongClick: (() -> U
 private fun sharePost(context: Context, post: FynxRemoteSocialClient.RemotePost): Result<Unit> = runCatching { val text = if (post.text.startsWith(MARKETPLACE_AD_MARKER)) "${post.text.removePrefix(MARKETPLACE_AD_MARKER).trim()}\n\nSee this product on FYNX Marketplace." else "${post.authorDisplayName.ifBlank { post.authorUsername }} on FYNX:\n${post.text}".trim(); val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text); putExtra(Intent.EXTRA_TITLE, "Share from FYNX") }; context.startActivity(Intent.createChooser(intent, "Share with…")) }
 
 @Composable
-private fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (() -> Unit)? = null) {
+private fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (() -> Unit)? = null, onOpenMedia: (() -> Unit)? = null) {
     val context = LocalContext.current; var file by remember(path) { mutableStateOf<File?>(null) }; var videoAspectRatio by remember(path) { mutableFloatStateOf(16f / 9f) }; var videoView by remember(path) { mutableStateOf<VideoView?>(null) }; var fullscreen by remember(path) { mutableStateOf(false) }
     LaunchedEffect(path) { file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, path, type) } }
     LaunchedEffect(file, type) { if (file != null && type == "video") videoAspectRatio = withContext(Dispatchers.IO) { runCatching { MediaMetadataRetriever().run { setDataSource(file!!.absolutePath); val width = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 16f; val height = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 9f; val rotation = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0; release(); if (rotation == 90 || rotation == 270) height / width else width / height }.coerceIn(0.56f, 1.91f) }.getOrDefault(16f / 9f) } }
@@ -195,20 +269,21 @@ private fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: ((
     if (file == null) Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     else if (type == "audio") AudioPostPlayer(file!!)
     else if (type == "video") {
-        Box(Modifier.fillMaxWidth().aspectRatio(videoAspectRatio).clickable { if (onOpenMarketplace != null) onOpenMarketplace() else fullscreen = true }) {
+        Box(Modifier.fillMaxWidth().aspectRatio(videoAspectRatio).clickable { when { onOpenMarketplace != null -> onOpenMarketplace(); onOpenMedia != null -> onOpenMedia(); else -> fullscreen = true } }) {
             AndroidView(factory = { ctx -> VideoView(ctx).apply { videoView = this; layoutParams = ViewGroup.LayoutParams(-1, -1); setMediaController(MediaController(ctx)); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxSize())
-            if (onOpenMarketplace == null) Text("Tap to view full screen", Modifier.align(Alignment.BottomEnd).padding(10.dp), style = MaterialTheme.typography.labelSmall, color = Color.White)
+            if (onOpenMarketplace == null && onOpenMedia == null) Text("Tap to view full screen", Modifier.align(Alignment.BottomEnd).padding(10.dp), style = MaterialTheme.typography.labelSmall, color = Color.White)
+            else if (onOpenMedia != null) Text("Tap to discover videos", Modifier.align(Alignment.BottomEnd).padding(10.dp), style = MaterialTheme.typography.labelSmall, color = Color.White)
         }
     } else {
         var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
         LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }
         bitmap?.let { image ->
-            Box(Modifier.fillMaxWidth().aspectRatio((image.width.toFloat() / image.height.toFloat()).coerceIn(0.62f, 1.9f)).clickable { if (onOpenMarketplace != null) onOpenMarketplace() else fullscreen = true }) {
+            Box(Modifier.fillMaxWidth().aspectRatio((image.width.toFloat() / image.height.toFloat()).coerceIn(0.62f, 1.9f)).clickable { when { onOpenMarketplace != null -> onOpenMarketplace(); onOpenMedia != null -> onOpenMedia(); else -> fullscreen = true } }) {
                 Image(image.asImageBitmap(), "Post media", Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
             }
         }
     }
-    if (fullscreen && file != null && onOpenMarketplace == null) {
+    if (fullscreen && file != null && onOpenMarketplace == null && onOpenMedia == null) {
         Dialog(onDismissRequest = { fullscreen = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
             Box(Modifier.fillMaxSize().background(Color.Black)) {
                 if (type == "video") {
