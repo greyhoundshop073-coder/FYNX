@@ -13,12 +13,18 @@ object FynxProfileRemoteClient {
     data class Report(val id:String,val status:String)
 
     suspend fun get(context:Context,username:String):Result<Profile>{
-        val encoded=URLEncoder.encode(username.trim().removePrefix("@"),"UTF-8")
+        val normalized = username.trim().removePrefix("@").trim()
+        val encoded=URLEncoder.encode(normalized,"UTF-8")
         return FynxBackendClient.get(context,"/api/social/profile/$encoded").mapCatching{
             val p=JSONObject(it).getJSONObject("profile")
-            Profile(p.optString("id"),p.optString("username"),p.optString("displayName"),p.optString("bio"),p.optString("country"),p.optBoolean("verified"),p.optString("profilePhotoMediaId").takeIf{v->v.isNotBlank()&&v!="null"},p.optBoolean("activityVisible"),p.optString("relationship"),p.optString("pendingRequestId").takeIf{v->v.isNotBlank()&&v!="null"},p.optBoolean("viewerSentRequest"),p.optBoolean("viewerReceivedRequest"),p.optBoolean("followedByCurrentUser"),p.optInt("mutualFriends"),p.optInt("postCount"),if(p.has("followerCount")&&!p.isNull("followerCount"))p.optInt("followerCount") else null,if(p.has("followingCount")&&!p.isNull("followingCount"))p.optInt("followingCount") else null,p.optBoolean("connectionsVisible"),p.optBoolean("canMessage"))
+            val profile = Profile(p.optString("id"),p.optString("username"),p.optString("displayName"),p.optString("bio"),p.optString("country"),p.optBoolean("verified"),p.optString("profilePhotoMediaId").takeIf{v->v.isNotBlank()&&v!="null"},p.optBoolean("activityVisible"),p.optString("relationship"),p.optString("pendingRequestId").takeIf{v->v.isNotBlank()&&v!="null"},p.optBoolean("viewerSentRequest"),p.optBoolean("viewerReceivedRequest"),p.optBoolean("followedByCurrentUser"),p.optInt("mutualFriends"),p.optInt("postCount"),if(p.has("followerCount")&&!p.isNull("followerCount"))p.optInt("followerCount") else null,if(p.has("followingCount")&&!p.isNull("followingCount"))p.optInt("followingCount") else null,p.optBoolean("connectionsVisible"),p.optBoolean("canMessage"))
+            FynxPreferencesStore.saveRemoteProfilePhotoId(context, normalized, profile.profilePhotoMediaId)
+            profile
         }
     }
+
+    fun cachedProfilePhotoId(context:Context,username:String):String? =
+        FynxPreferencesStore.loadRemoteProfilePhotoId(context, username)
 
     suspend fun followers(context:Context):Result<List<ConnectionUser>> = FynxBackendClient.get(context,"/api/social/me/followers").mapCatching { parseConnections(it) }
     suspend fun following(context:Context):Result<List<ConnectionUser>> = FynxBackendClient.get(context,"/api/social/me/following").mapCatching { parseConnections(it) }
@@ -36,7 +42,9 @@ object FynxProfileRemoteClient {
             else if(profilePhotoMediaId!=null) put("profilePhotoMediaId",profilePhotoMediaId.toLongOrNull()?:JSONObject.NULL)
         }.toString()).mapCatching{
             val p=JSONObject(it).getJSONObject("profile")
-            Profile(p.optString("id"),p.optString("username").ifBlank{p.optString("username")},p.optString("display_name").ifBlank{p.optString("displayName")},p.optString("bio"),p.optString("country"),p.optBoolean("verified"),p.optString("profile_photo_media_id").takeIf{v->v.isNotBlank()&&v!="null"},true,"self",null,false,false,false,0,p.optInt("post_count"),if(p.has("follower_count")&&!p.isNull("follower_count"))p.optInt("follower_count") else null,if(p.has("following_count")&&!p.isNull("following_count"))p.optInt("following_count") else null,true,false)
+            val profile = Profile(p.optString("id"),p.optString("username").ifBlank{p.optString("username")},p.optString("display_name").ifBlank{p.optString("displayName")},p.optString("bio"),p.optString("country"),p.optBoolean("verified"),p.optString("profile_photo_media_id").takeIf{v->v.isNotBlank()&&v!="null"},true,"self",null,false,false,false,0,p.optInt("post_count"),if(p.has("follower_count")&&!p.isNull("follower_count"))p.optInt("follower_count") else null,if(p.has("following_count")&&!p.isNull("following_count"))p.optInt("following_count") else null,true,false)
+            FynxPreferencesStore.saveRemoteProfilePhotoId(context, profile.username, profile.profilePhotoMediaId)
+            profile
         }
     }
 
