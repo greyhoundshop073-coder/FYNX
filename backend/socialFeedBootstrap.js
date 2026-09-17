@@ -22,7 +22,7 @@ export async function installSocialFeed() {
       const requestedOffset = Number(req.query?.offset);
       const limit = Math.min(Math.max(Number.isInteger(requestedLimit) ? requestedLimit : 50, 1), 100);
       const offset = Math.min(Math.max(Number.isInteger(requestedOffset) ? requestedOffset : 0, 0), 1000000);
-      const result = await pool.query(`
+      const result = await pool.query(\`
         SELECT p.id, p.author_id, u.username AS author_username, u.display_name AS author_display_name,
                p.text, p.visibility, p.media_id, p.media_type,
                EXTRACT(EPOCH FROM p.created_at) * 1000 AS timestamp,
@@ -44,7 +44,7 @@ export async function installSocialFeed() {
                  OR (b.blocker_id = p.author_id AND b.blocked_id = $1)
            )
          ORDER BY p.created_at DESC, p.id DESC
-         LIMIT $2 OFFSET $3`,
+         LIMIT $2 OFFSET $3\`,
         [req.user.sub, limit + 1, offset]
       );
       const hasMore = result.rows.length > limit;
