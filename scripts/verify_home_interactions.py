@@ -64,7 +64,7 @@ if 'contentDescription = null' not in home and 'Icon(Icons.Default.ShoppingBag, 
     raise SystemExit("HOME INTERACTIONS RED: missing Home 4F decorative-icon accessibility handling")
 for needle in ('FynxRemoteProfileAvatar(','profilePhotoMediaId','post.authorDisplayName.ifBlank { post.authorUsername }','post.mediaUrl?.let'):
     require(home, needle, f"real Home identity/media surface {needle}")
-require(backend_package, '"start": "node realtimeIsolationBootstrap.js"', "production realtime entrypoint")
+require(backend_package, '"start": "node renderStartupSourceGuard.js && node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js"', "guarded production realtime entrypoint")
 require(realtime_bootstrap, 'import { installHomeCommentPrivacy } from "./homeCommentsPrivacyBootstrap.js";', "Home comment privacy integration")
 require(realtime_bootstrap, "await installHomeCommentBackend();", "base Home comments installation")
 require(realtime_bootstrap, "await installHomeCommentPrivacy();", "Home comment privacy hardening")
