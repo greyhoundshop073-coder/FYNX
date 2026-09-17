@@ -13,6 +13,13 @@ def contains_call(source, function, argument):
 def contains_remote_audio_call(source):
     return re.search(r'FynxRemoteAudio\s*\(\s*it\s*(?:,|\))', source) is not None
 
+def contains_remote_audio_renderer(source):
+    return (
+        'downloadRemoteMedia(context, resolvedUrl, target)' in source
+        and 'MediaPlayer()' in source
+        and re.search(r'(?<![A-Za-z0-9_])setDataSource\(finalFile\.absolutePath\)', source) is not None
+    )
+
 checks=[]
 def require(label, condition): checks.append((label, bool(condition)))
 server=read('backend/server.js'); management=read('backend/statusManagementRoutes.js'); scale=read('backend/scalability.js'); interactions=read('backend/statusInteractionRoutes.js')
@@ -60,7 +67,7 @@ require('remote media has size cap','MAX_REMOTE_MEDIA_BYTES = 12L * 1024L * 1024
 require('remote image renderer','BitmapFactory.decodeFile(target.absolutePath)' in remote_media and 'ContentScale.Crop' in remote_media)
 require('remote video renderer','VideoView(ctx)' in remote_media and 'setVideoPath(file.absolutePath)' in remote_media)
 # Audio uses the shared authenticated download helper; the helper delegates to the central backend downloader.
-require('remote audio renderer','downloadRemoteMedia(context, resolvedUrl, target)' in remote_media and 'MediaPlayer()' in remote_media and 'p.setDataSource(finalFile.absolutePath)' in remote_media)
+require('remote audio renderer',contains_remote_audio_renderer(remote_media))
 require('media privacy guard installed','app.use("/api/media", mediaGuard)' in media_privacy)
 require('media privacy blocks message media','blocked_message_media' in media_privacy and 'return res.status(403).json({ error: "media unavailable" })' in media_privacy)
 
@@ -99,7 +106,6 @@ require('status share uses Stories destination','FynxDeepLinkParser.storiesWebLi
 require('owner delete UI','FynxStatusClient.delete(context, status.id)' in timeline and 'status.ownerUsername.equals(viewerUsername, true)' in timeline)
 require('24 hour viewer expiry','FYNX_STATUS_EXPIRY_MS' in timeline)
 
-# The external Marketplace link/share layer already exists; this gate keeps it running with the Status batch.
 require('Marketplace share payload exists','fun marketplacePayload(' in share and 'FynxDeepLinkParser.marketplaceWebLink(listingId)' in share)
 require('Marketplace share preserves real listing id','marketplaceWebLink(listingId)' in share and 'fun marketplaceWebLink(listingId:String?=null)' in deeplink)
 require('Marketplace web link uses FYNX host','private const val FYNX_HOST = "fynx.app"' in deeplink and 'MARKETPLACE_PATH = "/marketplace"' in deeplink)
