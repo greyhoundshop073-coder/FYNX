@@ -75,7 +75,19 @@ require(messaging, r"markRead\(", "Production messaging client must implement pe
 require(messaging, r"uploadMedia\(", "Production messaging client must preserve media upload support")
 require(messaging, r"cacheRemoteMedia\(", "Production messaging client must preserve remote media caching")
 
-# 4. Backend message data model and API path.
+# 4. Attachment send must share the same completion/error path as text sends.
+require(conversation, r"val sendResult = if \(selectedAttachment != null\)", "Attachment send must produce a shared send result")
+require(conversation, r"uploadMedia\(context, selectedAttachment\)", "Attachment send must upload through production media")
+require(conversation, r"sendResult\s*\.onSuccess", "Attachment send must update UI from the shared success path")
+require(conversation, r"sendResult\s*\.onFailure", "Attachment send must surface failures from the shared failure path")
+require(conversation, r"attachment = null; attachmentType = null", "Successful attachment send must clear the pending attachment")
+
+# 5. Voice contract must remain aligned with the backend's authoritative 120-second limit.
+require(messaging, r"MAX_VOICE_DURATION_MS\s*=\s*120_000L", "Android messaging must retain the backend's 120-second voice limit")
+require(messaging, r"voiceDurationMs !in 0L\.\.MAX_VOICE_DURATION_MS", "Android messaging must reject voice durations beyond the backend limit")
+require(conversation, r"voiceDurationMs = duration", "ConversationPanel must send the actual recorded voice duration to the production API")
+
+# 6. Backend message data model and API path.
 require(backend, r"CREATE TABLE IF NOT EXISTS messages", "Backend must own the production messages table")
 for field in ("sender_id", "recipient_id", "text", "created_at", "delivered_at", "read_at"):
     require(backend, rf"\b{field}\b", f"messages table must retain {field}")
@@ -85,14 +97,14 @@ require(backend, r"broadcastMessage", "Backend must broadcast persisted messages
 require(backend, r"markPendingDelivered", "Backend must process pending delivery state")
 require(backend, r"/realtime", "Backend must expose the realtime websocket path")
 
-# 5. Realtime authentication/isolation must remain in front of the application handler.
+# 7. Realtime authentication/isolation must remain in front of the application handler.
 require(isolation, r"jwt\.verify", "Realtime isolation must authenticate websocket users")
 require(isolation, r"message_ack", "Realtime isolation must validate message acknowledgements")
 require(isolation, r"read", "Realtime isolation must validate read packets")
 require(isolation, r"MAX_READ_IDS", "Realtime isolation must retain bounded read packet protection")
 require(isolation, r"packet|size|64", "Realtime isolation must retain a packet-size guard")
 
-# 6. Typing compatibility layer: narrow, authenticated, recipient-scoped, rate-limited.
+# 8. Typing compatibility layer: narrow, authenticated, recipient-scoped, rate-limited.
 require(compat, r"jwt\.verify", "Typing compatibility must authenticate the websocket token")
 require(compat, r"type === \"typing\"", "Typing compatibility must explicitly intercept typing packets")
 require(compat, r"recipientId", "Typing compatibility must require a recipient")
@@ -107,12 +119,12 @@ require(compat, r"type: \"typing\"", "Typing compatibility must relay the canoni
 require(compat, r"return callback\(data, \.\.\.args\)", "Typing compatibility must delegate non-typing websocket messages")
 require(compat, r"return listener\(socket, req, \.\.\.rest\)", "Typing compatibility must preserve the existing connection listener")
 
-# 7. Render startup must load the compatibility layer before the server bootstrap.
+# 9. Render startup must load the compatibility layer before the server bootstrap.
 require(preload, r"import \"\.\/scalability\.js\"", "Render preload must retain scalability bootstrap")
 require(preload, r"import \"\.\/chatRealtimeCompatibility\.js\"", "Render preload must load Chat realtime compatibility")
 require(package_json, r"node --import \.\/renderScalabilityPreload\.js realtimeIsolationBootstrap\.js", "Render start command must use the guarded realtime preload chain")
 
-# 8. Guard against accidental local/fake chat implementations in the production path.
+# 10. Guard against accidental local/fake chat implementations in the production path.
 forbidden = [
     (conversation, r"https?://(?:localhost|127\.0\.0\.1)", "ConversationPanel must not hard-code a local backend URL"),
     (messaging, r"https?://(?:localhost|127\.0\.0\.1)", "Production messaging client must not hard-code a local backend URL"),
@@ -131,5 +143,7 @@ print("CHAT END-TO-END VERIFICATION: GREEN")
 print("- Android ConversationPanel -> realtime + production messaging wiring present")
 print("- authenticated realtime -> typing/read/ack compatibility present")
 print("- backend messages -> persistence/delivery/broadcast wiring present")
+print("- attachment send -> shared success/failure completion path present")
+print("- voice contract -> Android 120-second limit aligned with backend")
 print("- Render preload -> scalability + Chat compatibility chain present")
 print("- no hard-coded local backend path in the production Chat clients")
