@@ -195,6 +195,7 @@ private fun VideoDiscoveryDialog(context: Context, sourcePostId: String?, onDism
 @Composable
 private fun VideoDiscoveryCard(video: FynxDiscoveryClient.TrendingPost, isSource: Boolean) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val mediaPath = video.mediaId?.let { "/api/social/media/$it" }
     Card(Modifier.fillMaxWidth().padding(horizontal = 10.dp), shape = FynxDesign.LargeCardShape) {
         Column(Modifier.fillMaxWidth()) {
@@ -207,7 +208,7 @@ private fun VideoDiscoveryCard(video: FynxDiscoveryClient.TrendingPost, isSource
             }
             if (video.text.isNotBlank()) Text(video.text, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.bodyMedium, maxLines = 4)
             mediaPath?.let { path ->
-                RemoteSocialMedia(path, video.mediaType, onOpenMarketplace = null, onOpenMedia = { LaunchedEffect(Unit) { runCatching { FynxDiscoveryClient.recordView(context, video.id) } } })
+                RemoteSocialMedia(path, video.mediaType, onOpenMarketplace = null, onOpenMedia = { scope.launch { runCatching { FynxDiscoveryClient.recordView(context, video.id) } } })
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("${video.likeCount} likes", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
