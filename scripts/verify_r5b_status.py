@@ -66,7 +66,6 @@ require('remote media uses authenticated download','FynxBackendClient.downloadTo
 require('remote media has size cap','MAX_REMOTE_MEDIA_BYTES = 12L * 1024L * 1024L' in remote_media)
 require('remote image renderer','BitmapFactory.decodeFile(target.absolutePath)' in remote_media and 'ContentScale.Crop' in remote_media)
 require('remote video renderer','VideoView(ctx)' in remote_media and 'setVideoPath(file.absolutePath)' in remote_media)
-# Audio uses the shared authenticated download helper; the helper delegates to the central backend downloader.
 require('remote audio renderer',contains_remote_audio_renderer(remote_media))
 require('media privacy guard installed','app.use("/api/media", mediaGuard)' in media_privacy)
 require('media privacy blocks message media','blocked_message_media' in media_privacy and 'return res.status(403).json({ error: "media unavailable" })' in media_privacy)
@@ -91,7 +90,7 @@ require('hub camera route remains real','FynxCameraCapturePanel' in hub and 'pub
 require('legacy Stories wrapper','FynxStatusTimelinePanel()' in stories and 'SharedPreferences' not in stories)
 require('timeline backend list','FynxStatusClient.list(context)' in timeline)
 require('timeline filters expired statuses','filterNot(FynxStatus::isExpired)' in timeline)
-require('timeline latest-per-owner bubbles','statuses.groupBy { it.ownerUsername }' in timeline and 'maxByOrNull { it.createdAtMillis }' in timeline)
+require('timeline latest-per-owner bubbles',('visibleStatuses.groupBy { it.ownerUsername }' in timeline or 'statuses.groupBy { it.ownerUsername }' in timeline) and 'maxByOrNull { it.createdAtMillis }' in timeline)
 require('timeline profile avatar lookup','FynxProfileRemoteClient.get(context, status.ownerUsername)' in timeline)
 require('timeline status viewer','FynxStatusStoryViewer(' in timeline and 'DialogProperties(usePlatformDefaultWidth = false' in timeline)
 require('status viewer image',contains_call(timeline, 'FynxRemoteMedia', 'image'))
