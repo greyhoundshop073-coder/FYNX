@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -144,7 +145,9 @@ fun FynxSavedPostsPanel(
                                 "View @${entry.post.authorUsername.removePrefix("@")} profile",
                                 color = MaterialTheme.colorScheme.primary,
                                 style = MaterialTheme.typography.labelLarge,
-                                modifier = Modifier.padding(vertical = 4.dp)
+                                modifier = Modifier
+                                    .clickable { onOpenAuthorProfile(entry.post.authorId) }
+                                    .padding(vertical = 4.dp)
                             )
                         }
                     }
