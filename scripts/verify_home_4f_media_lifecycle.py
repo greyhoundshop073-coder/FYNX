@@ -6,11 +6,13 @@ ROOT = Path(__file__).resolve().parents[1]
 HOME = ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt"
 PANEL = ROOT / "app/src/main/java/com/fynx/app/ui/HomePanel.kt"
 LIFECYCLE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeLifecycle.kt"
+MEDIA_CACHE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxMediaCache.kt"
 DISCOVERY = ROOT / "backend/discoveryRoutes.js"
 
 home = HOME.read_text(encoding="utf-8")
 panel = PANEL.read_text(encoding="utf-8")
 lifecycle = LIFECYCLE.read_text(encoding="utf-8")
+media_cache = MEDIA_CACHE.read_text(encoding="utf-8")
 discovery = DISCOVERY.read_text(encoding="utf-8")
 
 required_home = {
@@ -30,6 +32,16 @@ required_home = {
 missing = [label for token, label in required_home.items() if token not in home]
 if missing:
     raise SystemExit("HOME 4F MEDIA RED: missing " + ", ".join(missing))
+
+required_media_cache = [
+    'path.startsWith("/api/media/")',
+    'path.startsWith("/api/social/media/")',
+    'FynxBackendClient.downloadToFile',
+    'FynxAuthStore.accountStorageKey',
+]
+missing_media_cache = [token for token in required_media_cache if token not in media_cache]
+if missing_media_cache:
+    raise SystemExit("HOME 4F MEDIA RED: authenticated social media cache contract missing " + ", ".join(missing_media_cache))
 
 required_panel = ["FynxHomeLifecycleRefresh", "key(refreshKey)"]
 missing_panel = [token for token in required_panel if token not in panel]
@@ -57,4 +69,4 @@ missing_saved = [token for token in required_saved if token not in discovery]
 if missing_saved:
     raise SystemExit("HOME 4F SAVED RED: missing " + ", ".join(missing_saved))
 
-print("HOME 4F MEDIA/LIFECYCLE GREEN: existing Home media, accessibility, theme, re-entry cleanup, and durable Saved-post privacy/pagination boundaries are wired")
+print("HOME 4F MEDIA/LIFECYCLE GREEN: existing Home media, authenticated social-media cache paths, accessibility, theme, re-entry cleanup, and durable Saved-post privacy/pagination boundaries are wired")
