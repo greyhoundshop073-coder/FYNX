@@ -14,8 +14,10 @@ export async function installSocialMultiMedia() {
   const mediaAuthMarker = "fynxHomeMultiMediaMediaAuthV2";
   if (source.includes(mediaAuthMarker)) return;
 
-  const mediaRouteNeedle = "  app.get('/api/social/media/:id', auth, async (req, res) => {";
-  if (!source.includes(mediaRouteNeedle)) {
+  // The social core has existed in both formatted and compact forms. Match the
+  // route structurally instead of depending on one exact whitespace layout.
+  const mediaRouteNeedle = /app\.get\(['"]\/api\/social\/media\/:id['"]\s*,\s*auth\s*,\s*async\s*\(req\s*,\s*res\s*\)\s*=>\s*\{/;
+  if (!mediaRouteNeedle.test(source)) {
     throw new Error("FYNX multi-media bootstrap could not locate social media route");
   }
 
@@ -62,7 +64,7 @@ export async function installSocialMultiMedia() {
     }
   });
 `;
-  source = source.replace(mediaRouteNeedle, mediaAuthRoute + mediaRouteNeedle);
+  source = source.replace(mediaRouteNeedle, mediaAuthRoute + source.match(mediaRouteNeedle)[0]);
 
   // If production already ran the previous bootstrap and persisted the injected
   // multi-media routes into the working tree, only the retrieval fix is needed.
