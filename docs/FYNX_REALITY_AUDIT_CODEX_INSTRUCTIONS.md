@@ -22,6 +22,12 @@ The objective is not merely to make CI GREEN. The objective is for the features 
 - Test real user journeys, including real-device testing where hardware/realtime behavior is involved.
 - A verifier marker or successful compilation is not enough to call a feature GREEN.
 - RED means fix before moving forward.
+- **APK-visible integration is mandatory:** whenever a feature is added or changed for users, complete its actual placement, entry point, controls, navigation, states, feedback, and end-to-end interaction. Do not merely add code or place a UI element on a screen and call the feature integrated.
+- **Use established product patterns as UX references:** inspect mature social/messaging/camera products when deciding placement and interaction conventions, then apply the useful patterns in FYNX's existing visual language. Do not copy another product's branding or redesign FYNX.
+- **Complete the whole user interaction for every surfaced feature:** for example, a camera feature includes the live preview, expected controls/settings, capture, review, retake/edit, confirm/send/save behavior, permissions, errors and return/navigation behavior as applicable. The same completeness standard applies to AI, media, voice/video, notifications, marketplace, money tools, Status, groups, search and settings.
+- **No hidden or awkward placement:** a feature must be positioned where a normal user would reasonably find it, with appropriate touch targets, hierarchy, keyboard/inset handling and navigation continuity.
+- **GREEN is locked only after integration:** GREEN means implemented + correctly positioned in the APK + complete user interaction + backend/storage integration where required + verification/build success + applicable real-device journey. Once GREEN, do not reopen it for theoretical concerns; only reopen it for an actual regression or failed test.
+- **Future chats must follow this file:** this document is the canonical continuation rule for FYNX reality/integration work. Do not weaken or reinterpret these rules in a later chat.
 
 ## Reality status
 
@@ -55,6 +61,10 @@ For every system trace:
 
 USER ACTION -> UI -> STATE -> CLIENT -> API/REALTIME -> BACKEND -> DATABASE/STORAGE -> RESPONSE -> UI
 
+Also verify the APK-visible layer:
+
+ENTRY POINT -> POSITION -> CONTROLS -> FEEDBACK -> NAVIGATION -> COMPLETION -> ERROR/RETRY -> RETURN STATE
+
 Record the exact missing or broken link. Do not assume that code existing means the feature works.
 
 ## Phase 2 — Fix highest-priority broken systems
@@ -81,6 +91,8 @@ Investigate black preview deeply:
 - front/back switching
 - device-specific CameraX errors
 - actual preview frames on a physical device
+- expected camera controls/settings and their placement
+- capture -> review -> retake/edit -> confirm/send/save flow
 
 The result must be a real live preview, not a hidden black screen.
 
