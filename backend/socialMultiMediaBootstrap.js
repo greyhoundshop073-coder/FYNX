@@ -11,7 +11,66 @@ export async function installSocialMultiMedia() {
   const backendDir = path.dirname(fileURLToPath(import.meta.url));
   const socialPath = path.join(backendDir, "socialRoutes.js");
   let source = await readFile(socialPath, "utf8");
-  if (source.includes("fynxHomeMultiMediaPosts")) return;
+  const mediaAuthMarker = "fynxHomeMultiMediaMediaAuthV2";
+  if (source.includes(mediaAuthMarker)) return;
+
+  const mediaRouteNeedle = "  app.get('/api/social/media/:id', auth, async (req, res) => {";
+  if (!source.includes(mediaRouteNeedle)) {
+    throw new Error("FYNX multi-media bootstrap could not locate social media route");
+  }
+
+  // The legacy media route only joins social_posts.media_id, which is the first
+  // asset of a multi-media post. Add an earlier route for the normalized media
+  // relation so every persisted asset remains retrievable after app restarts.
+  const mediaAuthRoute = `  // fynxHomeMultiMediaMediaAuthV2: authorize normalized Home post media before legacy media lookup.
+  app.get('/api/social/media/:id', auth, async (req, res, next) => {
+    try {
+      await ensureSocialSchema();
+      const mediaId = Number(req.params.id);
+      if (!Number.isInteger(mediaId) || mediaId < 1) return next();
+      const result = await pool.query(
+        \`SELECT mm.mime_type, mm.data
+           FROM message_media mm
+           JOIN social_post_media spm ON spm.media_id = mm.id
+           JOIN social_posts p ON p.id = spm.post_id
+          WHERE mm.id = $1
+            AND (
+              p.author_id = $2
+              OR p.visibility = 'PUBLIC'
+              OR (p.visibility = 'FRIENDS_ONLY' AND EXISTS (
+                SELECT 1 FROM friendships f
+                 WHERE ((f.user_id = p.author_id AND f.friend_id = $2) OR (f.user_id = $2 AND f.friend_id = p.author_id))
+                   AND f.status = 'accepted'
+              ))
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM blocks b
+               WHERE (b.blocker_id = $2 AND b.blocked_id = p.author_id)
+                  OR (b.blocker_id = p.author_id AND b.blocked_id = $2)
+            )
+          ORDER BY spm.position ASC
+          LIMIT 1\`,
+        [mediaId, req.user.sub]
+      );
+      if (!result.rows[0]) return next();
+      res.set('Cache-Control', 'private, max-age=3600');
+      res.type(result.rows[0].mime_type);
+      return res.send(result.rows[0].data);
+    } catch (error) {
+      console.error('social normalized media', error);
+      return res.status(500).json({ error: 'social media failed' });
+    }
+  });
+`;
+  source = source.replace(mediaRouteNeedle, mediaAuthRoute + mediaRouteNeedle);
+
+  // If production already ran the previous bootstrap and persisted the injected
+  // multi-media routes into the working tree, only the retrieval fix is needed.
+  if (source.includes("fynxHomeMultiMediaPosts")) {
+    await writeFile(socialPath, source, "utf8");
+    return;
+  }
+
   if (!source.includes("const ensureSocialSchema = async")) {
     throw new Error("FYNX multi-media bootstrap could not locate social schema initializer");
   }
@@ -54,7 +113,7 @@ export async function installSocialMultiMedia() {
       if (!text && mediaIds.length === 0) return res.status(400).json({ error: 'add a caption or media' });
 
       const mediaResult = await client.query(
-        `SELECT id, owner_id, mime_type FROM message_media WHERE id = ANY($1::bigint[])`,
+        \`SELECT id, owner_id, mime_type FROM message_media WHERE id = ANY($1::bigint[])\`,
         [mediaIds]
       );
       if (mediaResult.rows.length !== mediaIds.length) return res.status(404).json({ error: 'one or more media items were not found' });
@@ -68,13 +127,13 @@ export async function installSocialMultiMedia() {
 
       await client.query('BEGIN');
       const post = await client.query(
-        `INSERT INTO social_posts(author_id,text,visibility,media_id,media_type) VALUES($1,$2,$3,$4,$5) RETURNING id`,
+        \`INSERT INTO social_posts(author_id,text,visibility,media_id,media_type) VALUES($1,$2,$3,$4,$5) RETURNING id\`,
         [req.user.sub, text, visibility, mediaIds[0], mediaTypes[0]]
       );
       const postId = Number(post.rows[0].id);
       for (let position = 0; position < mediaIds.length; position += 1) {
         await client.query(
-          `INSERT INTO social_post_media(post_id,media_id,media_type,position) VALUES($1,$2,$3,$4)`,
+          \`INSERT INTO social_post_media(post_id,media_id,media_type,position) VALUES($1,$2,$3,$4)\`,
           [postId, mediaIds[position], mediaTypes[position], position]
         );
       }
@@ -96,10 +155,10 @@ export async function installSocialMultiMedia() {
       if (!Number.isSafeInteger(postId) || postId < 1) return res.status(400).json({ error: 'invalid post id' });
       if (!(await visibleSocialPost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });
       const result = await pool.query(
-        `SELECT spm.media_id,spm.media_type,spm.position
+        \`SELECT spm.media_id,spm.media_type,spm.position
            FROM social_post_media spm
           WHERE spm.post_id=$1
-          ORDER BY spm.position ASC`,
+          ORDER BY spm.position ASC\`,
         [postId]
       );
       return res.json({
@@ -107,7 +166,7 @@ export async function installSocialMultiMedia() {
           id: String(row.media_id),
           mediaType: row.media_type,
           position: Number(row.position),
-          mediaUrl: `/api/social/media/${row.media_id}`
+          mediaUrl: \`/api/social/media/${row.media_id}\`
         }))
       });
     } catch (error) {
