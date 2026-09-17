@@ -119,20 +119,18 @@ fun FynxStatusTimelinePanel() {
 @Composable
 private fun StatusBubble(status: FynxStatus, isMe: Boolean, onClick: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var profilePhotoMediaId by remember(status.ownerUsername) { mutableStateOf<String?>(null) }
-    var profileLoaded by remember(status.ownerUsername) { mutableStateOf(false) }
+    val cachedPhotoId = remember(status.ownerUsername) { FynxProfileRemoteClient.cachedProfilePhotoId(context, status.ownerUsername) }
+    var profilePhotoMediaId by remember(status.ownerUsername) { mutableStateOf(cachedPhotoId) }
 
     LaunchedEffect(status.ownerUsername) {
-        profileLoaded = false
         FynxProfileRemoteClient.get(context, status.ownerUsername)
-            .onSuccess { profilePhotoMediaId = it.profilePhotoMediaId }
-            .onFailure { profilePhotoMediaId = null }
-        profileLoaded = true
+            .onSuccess { profilePhotoMediaId = it.profilePhotoMediaId ?: cachedPhotoId }
+            .onFailure { if (profilePhotoMediaId == null) profilePhotoMediaId = cachedPhotoId }
     }
 
     Column(Modifier.width(74.dp).clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(66.dp).border(3.dp, MaterialTheme.colorScheme.primary, CircleShape).padding(4.dp)) {
-            if (profileLoaded && !profilePhotoMediaId.isNullOrBlank()) {
+            if (!profilePhotoMediaId.isNullOrBlank()) {
                 FynxRemoteProfileAvatar(profilePhotoMediaId, status.ownerDisplayName.ifBlank { status.ownerUsername }, Modifier.fillMaxSize().clip(CircleShape))
             } else {
                 Box(Modifier.fillMaxSize().clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
