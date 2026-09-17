@@ -32,6 +32,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var profileUser by remember { mutableStateOf<String?>(null) }
     var callTarget by remember { mutableStateOf<String?>(null) }
     var callVideo by remember { mutableStateOf(false) }
+    var marketplaceListingId by remember { mutableStateOf<String?>(null) }
     var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { val stored = FynxAuthStore.load(context); if (stored.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) stored else AuthSession() }) }
     var adminRole by remember { mutableStateOf<String?>(null) }
     var notifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
@@ -81,11 +82,14 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 }
             }
             is FynxDeepLinkDestination.Group -> openGroup = destination.id
-            is FynxDeepLinkDestination.Marketplace -> selected = "Marketplace"
+            is FynxDeepLinkDestination.Marketplace -> { marketplaceListingId = destination.listingId; selected = "Marketplace" }
             FynxDeepLinkDestination.Stories -> selected = "Stories"
             FynxDeepLinkDestination.Money -> selected = "Money Tools"
             null -> Unit
         }
+    }
+    LaunchedEffect(selected) {
+        if (selected != "Marketplace") marketplaceListingId = null
     }
     LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context); notifications = FynxNotificationStore.load(context) }
     LaunchedEffect(authSession.state, authSession.username) {
@@ -119,7 +123,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it })
             "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" })
             "Friends" -> FriendsPanel(onOpenProfile = { profileUser = it })
-            "Marketplace" -> FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it })
+            "Marketplace" -> FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, initialListingId = marketplaceListingId)
             "Money Tools" -> MoneyCenterPanel()
             "Business Account" -> FynxBusinessAccountPanel(onBack = { selected = "Features" }, onOpenAdvertising = { selected = "Advertising" }, onOpenDashboard = { selected = "Advertising Dashboard" })
             "Features" -> FynxFeaturesPanel(isAdmin = adminRole != null, onSelect = { if (it != "Admin" || adminRole != null) selected = it })
