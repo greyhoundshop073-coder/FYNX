@@ -20,6 +20,7 @@ import androidx.compose.ui.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -179,11 +180,11 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier) {
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (failure: Throwable) { loading = false; playing = false; error = failure.message ?: "Voice Status could not be loaded."; player?.release(); player = null }
             }
-        }) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause voice" else "Play voice") }
-        Icon(Icons.Default.GraphicEq, "Voice Status")
-        Column(Modifier.weight(1f)) {
-            Text(if (loading) "Loading voice…" else if (playing) "Playing voice" else "Voice Status", style = MaterialTheme.typography.bodyMedium)
-            error?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, maxLines = 2) }
+        }) {
+            if (loading) CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+            else Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause voice" else "Play voice")
         }
+        Icon(Icons.Default.GraphicEq, "Voice Status")
+        error?.let { Text(it, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 8.dp)) }
     }
 }
