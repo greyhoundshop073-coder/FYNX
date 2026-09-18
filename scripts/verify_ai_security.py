@@ -32,7 +32,7 @@ check("Android AI uses persistent conversation transport", "FynxAiConversationCl
 check("Android AI tracks conversation summary and current task", 'conversationSummary' in android_panel and 'currentTask' in android_panel and 'buildAiConversationContext' in read("app/src/main/java/com/fynx/app/ui/AiConversationContext.kt"))
 check("AI conversation routes are registered", "registerFynxAiConversationRoutes({ app });" in read("backend/scalability.js"))
 check("AI conversations are authenticated and user-scoped", 'authenticate(req)' in ai_routes and "user_id=$2" in ai_routes and "WHERE user_id=$1" in ai_routes)
-check("Persistent AI conversations reuse the approved multimodal tool agent", "runAssistantAgent" in ai_routes and "runAssistantAgent" in registry and "imageInputs: images" in ai_routes and "input_image" in registry)
+check("Persistent AI conversations reuse the approved multimodal tool agent", "runAssistantAgent" in ai_routes and "runAssistantAgent" in registry and "imageInputs: images" in ai_routes and "message: message || \"Analyze the attached image.\"" in ai_routes and "input_image" in registry)
 check("AI conversation messages persist with attachments", "ai_messages" in ai_routes and "ai_message_media" in ai_routes and "mediaIds" in ai_routes)
 check("AI image attachments reuse authenticated media ownership", "owner_id=$1" in ai_routes and "message_media" in ai_routes and "startsWith(" + "\"data:image/\"" + ")" in registry)
 check("AI agent has a bounded tool loop and rejects empty model output", "for (let turn = 0; turn < 4; turn += 1)" in registry and "AI tool loop detected" in registry and "AI provider returned an empty response" in registry)
