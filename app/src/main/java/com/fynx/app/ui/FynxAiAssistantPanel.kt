@@ -48,7 +48,8 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
     var input by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var failedPrompt by remember { mutableStateOf<String?>(null) }\n    var conversationSummary by remember { mutableStateOf("") }\n    var currentTask by remember { mutableStateOf("") }
+    var failedPrompt by remember { mutableStateOf<String?>(null) }
+    var conversationSummary by remember { mutableStateOf("") }\n    var currentTask by remember { mutableStateOf("") }
     var voiceConnected by remember { mutableStateOf(false) }
     var voiceConnecting by remember { mutableStateOf(false) }
     var voiceMuted by remember { mutableStateOf(false) }
