@@ -32,6 +32,7 @@ import { installRequestResourceGuard } from "./requestResourceGuard.js";
 import { installApiAbuseGuard } from "./apiAbuseGuard.js";
 import { registerMarketplaceBatch2FinalHardening } from "./marketplaceBatch2FinalHardening.js";
 import { registerFynxAiRoutes } from "./fynxAiToolRegistry.js";
+import { registerFynxAiConversationRoutes } from "./aiConversationRoutes.js";
 import { installPeopleResponseHardening } from "./peopleResponseHardening.js";
 import { registerR6GIntegrationRoutes } from "./r6gIntegrationRoutes.js";
 
@@ -43,6 +44,7 @@ http.createServer = function fynxCreateServer(...args) {
   if (app && typeof app.use === "function") {
     registerRealtimeAssistantRoutes({ app });
     registerFynxAiRoutes({ app });
+    registerFynxAiConversationRoutes({ app });
 
     let resolveRouteRegistration;
     let rejectRouteRegistration;
