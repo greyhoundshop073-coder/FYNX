@@ -47,12 +47,14 @@ function aggregateNotifications(rows, userId) {
         : `${actorLabel} ${verb.toLowerCase()} ${count} of ${noun}.`,
       timestamp: latest,
       targetId: uniqueTargets[0] || null,
+      targetIds: uniqueTargets,
       sourceUsername: actors[0] || null,
+      sourceUsernames: actors,
       read
     });
   }
   return [...passthrough.map(row => ({
-    id:row.id,type:row.type,title:row.title,message:row.message,timestamp:Number(row.timestamp),targetId:row.target_id,sourceUsername:row.source_username,read:Boolean(row.read_at)
+    id:row.id,type:row.type,title:row.title,message:row.message,timestamp:Number(row.timestamp),targetId:row.target_id,targetIds:row.target_id?[String(row.target_id)]:[],sourceUsername:row.source_username,sourceUsernames:row.source_username?[String(row.source_username)]:[],read:Boolean(row.read_at)
   })), ...aggregated].sort((a,b)=>b.timestamp-a.timestamp).slice(0,100);
 }
 function clean(row){return Object.fromEntries(Object.entries(columns).map(([key,column])=>[key,row?.[column]==null?DEFAULTS[key]:Boolean(row[column])]));}
