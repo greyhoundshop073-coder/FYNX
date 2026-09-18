@@ -8,7 +8,7 @@ import org.json.JSONObject
 data class FynxAiConversationSummary(val id: String, val title: String, val createdAt: Long, val updatedAt: Long)
 data class FynxAiStoredMessage(val id: String, val role: String, val text: String, val timestamp: Long, val attachmentIds: List<String> = emptyList())
 data class FynxAiConversation(val id: String, val title: String, val createdAt: Long, val updatedAt: Long, val messages: List<FynxAiStoredMessage>)
-data class FynxAiConversationReply(val conversationId: String, val userMessageId: String, val assistantMessage: FynxAiStoredMessage)
+data class FynxAiPendingMessageAction(val actionId: String, val recipientUsername: String, val recipientDisplayName: String, val message: String)\ndata class FynxAiConversationReply(val conversationId: String, val userMessageId: String, val assistantMessage: FynxAiStoredMessage, val pendingAction: FynxAiPendingMessageAction? = null)
 
 object FynxAiConversationClient {
     suspend fun create(context: Context): Result<FynxAiConversation> =
@@ -41,12 +41,16 @@ object FynxAiConversationClient {
             FynxAiConversationReply(
                 conversationId = json.getString("conversationId"),
                 userMessageId = json.getString("userMessageId"),
-                assistantMessage = FynxAiStoredMessage(reply.getString("id"), "assistant", reply.optString("text"), reply.optLong("timestamp", System.currentTimeMillis()))
+                assistantMessage = FynxAiStoredMessage(reply.getString("id"), "assistant", reply.optString("text"), reply.optLong("timestamp", System.currentTimeMillis())),
+                pendingAction = json.optJSONObject("pendingAction")?.let { action ->
+                    val recipient = action.optJSONObject("recipient")
+                    FynxAiPendingMessageAction(action.getString("actionId"), recipient?.optString("username","") ?: "", recipient?.optString("displayName","") ?: "", action.optString("message"))
+                }
             )
         }
     }
 
-    suspend fun uploadImage(context: Context, uri: Uri): Result<String> {
+    suspend fun confirmMessage(context: Context, actionId: String): Result<String> =\n        FynxBackendClient.postJson(context, "/api/assistant/message-confirm", JSONObject().put("actionId", actionId).toString()).mapCatching {\n            JSONObject(it).getJSONObject("message").optString("text")\n        }\n\n    suspend fun uploadImage(context: Context, uri: Uri): Result<String> {
         val mime = context.contentResolver.getType(uri)?.trim()?.lowercase().orEmpty()
         if (!mime.startsWith("image/")) return Result.failure(IllegalArgumentException("Select an image file."))
         return FynxProductionMessaging.uploadMedia(context, uri, mime).map { it.id }
