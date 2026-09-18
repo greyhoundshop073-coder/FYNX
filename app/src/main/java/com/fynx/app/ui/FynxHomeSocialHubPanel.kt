@@ -135,10 +135,10 @@ fun FynxHomeSocialHubPanel(
     if (showComposer) {
         Dialog(
             onDismissRequest = { clearComposer() },
-            properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = !posting, dismissOnClickOutside = !posting)
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false, dismissOnBackPress = !posting, dismissOnClickOutside = !posting)
         ) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                Column(Modifier.fillMaxSize().imePadding()) {
+                Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { clearComposer() }, enabled = !posting && !false) { Icon(Icons.Default.Close, "Close") }
                         Text("Create post", style = MaterialTheme.typography.titleLarge)
@@ -156,9 +156,9 @@ fun FynxHomeSocialHubPanel(
                         OutlinedTextField(
                             value = text,
                             onValueChange = { text = it.take(4000) },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 190.dp),
-                            minLines = 7,
-                            maxLines = 14,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp, max = 240.dp),
+                            minLines = 5,
+                            maxLines = 10,
                             placeholder = { Text("What's on your mind? Write your post here…", style = MaterialTheme.typography.titleMedium) },
                             textStyle = MaterialTheme.typography.bodyLarge,
                             enabled = !posting && postingAllowed,
