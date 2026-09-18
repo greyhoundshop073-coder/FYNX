@@ -44,6 +44,7 @@ class FynxAiWebRtcEngine(
     private var state: State = State.IDLE
     private var onStateChanged: ((State, String?) -> Unit)? = null
     private var onEvent: ((String) -> Unit)? = null
+    private var onToolResult: ((String, String) -> Unit)? = null
     init { PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(appContext).createInitializationOptions()); factory = PeerConnectionFactory.builder().createPeerConnectionFactory() }
     suspend fun connect(onStateChanged: (State, String?) -> Unit = { _, _ -> }, onEvent: (String) -> Unit = {}, onToolResult: (String, String) -> Unit = { _, _ -> }): Result<Unit> = runCatching {
         require(state != State.CONNECTING && state != State.CONNECTED) { "FYNX AI voice is already connected" }
@@ -53,7 +54,7 @@ class FynxAiWebRtcEngine(
         }
         handledToolCalls.clear()
         realtimeToolCallCount.set(0)
-        this.onStateChanged = onStateChanged; this.onEvent = onEvent; setState(State.CONNECTING, null)
+        this.onStateChanged = onStateChanged; this.onEvent = onEvent; this.onToolResult = onToolResult; setState(State.CONNECTING, null)
         val connection = factory.createPeerConnection(PeerConnection.RTCConfiguration(iceServers), observer()) ?: error("Unable to create FYNX AI peer connection")
         peerConnection = connection
         audioSource = factory.createAudioSource(MediaConstraints()); audioTrack = factory.createAudioTrack("fynx-ai-microphone", audioSource); audioTrack?.setEnabled(true); audioTrack?.let { connection.addTrack(it) }
@@ -94,7 +95,7 @@ class FynxAiWebRtcEngine(
         toolScope.launch {
             val result = FynxAiVoiceSession.executeTool(appContext, name, arguments)
             val output = result.getOrElse { error -> JSONObject().put("error", error.message ?: "tool request failed").toString() }
-            onToolResult(name, output)
+            onToolResult?.invoke(name, output)
             val response = JSONObject()
                 .put("type", "conversation.item.create")
                 .put("item", JSONObject().put("type", "function_call_output").put("call_id", callId).put("output", output))
