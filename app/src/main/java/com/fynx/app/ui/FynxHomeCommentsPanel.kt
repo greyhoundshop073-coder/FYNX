@@ -172,7 +172,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
                     HorizontalDivider()
                     if (replyingTo != null) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Text("Replying to ${replyingTo!!.authorDisplayName.ifBlank { replyingTo!!.authorUsername }}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f)); TextButton(onClick = { replyingToId = null }) { Text("Cancel") }
                     }
-                    Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(10.dp), verticalAlignment = Alignment.Bottom) {
+                    Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.Bottom) {
                         Column(Modifier.weight(1f)) {
                             OutlinedTextField(value = text, onValueChange = { text = it.take(MAX_COMMENT_LENGTH) }, modifier = Modifier.fillMaxWidth(), placeholder = { Text(if (replyingTo == null) "Write a comment…" else "Write a reply…") }, maxLines = 4, enabled = !sending && !loading, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, keyboardType = KeyboardType.Text, imeAction = ImeAction.Send), keyboardActions = KeyboardActions(onSend = { send() }))
                             Text("${text.length}/$MAX_COMMENT_LENGTH", Modifier.fillMaxWidth().padding(top = 2.dp, end = 4.dp), textAlign = TextAlign.End, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
