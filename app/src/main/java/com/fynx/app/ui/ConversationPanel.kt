@@ -27,6 +27,10 @@ import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Composable
 fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (String) -> Unit = {}, onVoiceCall: () -> Unit = {}, onVideoCall: () -> Unit = {}) {
@@ -57,6 +61,9 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var showChatSettings by remember { mutableStateOf(false) }
     var currentUserId by remember { mutableStateOf<String?>(null) }
     var recipientUserId by remember { mutableStateOf<String?>(null) }
+    var recipientProfile by remember(chat.username) { mutableStateOf<FynxProfileRemoteClient.Profile?>(null) }
+    var recipientCreatedAt by remember(chat.username) { mutableStateOf<String?>(null) }
+    var isNewConversation by remember(chat.username) { mutableStateOf(false) }
     var isOnline by remember(chat.username) { mutableStateOf(chat.online) }
     var otherIsTyping by remember(chat.username) { mutableStateOf(false) }
     var networkError by remember { mutableStateOf<String?>(null) }
@@ -73,6 +80,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 val converted = FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
                     if (message.fromMe) message else message.copy(senderAvatarUri = chat.avatarUri)
                 }
+                isNewConversation = false
                 messages = (messages.filterNot { it.id == remote.id } + converted).sortedBy { it.timestamp }
                 if (remote.recipientId == myId) {
                     FynxInChatSound.play(context)
@@ -150,10 +158,16 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     LaunchedEffect(chat.username) {
         currentUserId = FynxBackendClient.currentUserId(context).getOrNull()
-        recipientUserId = FynxSocialClient.searchUsers(context, chat.username.removePrefix("@"))
-            .getOrNull()?.firstOrNull { it.username.equals(chat.username.removePrefix("@"), true) }?.id
-        FynxProductionMessaging.history(context, chat.username.removePrefix("@"))
+        val normalizedUsername = chat.username.removePrefix("@").trim()
+        val searchedUser = FynxSocialClient.searchUsers(context, normalizedUsername)
+            .getOrNull()?.firstOrNull { it.username.equals(normalizedUsername, true) }
+        recipientUserId = searchedUser?.id
+        recipientCreatedAt = searchedUser?.createdAt
+        FynxProfileRemoteClient.get(context, normalizedUsername)
+            .onSuccess { profile -> recipientProfile = profile }
+        FynxProductionMessaging.history(context, normalizedUsername)
             .onSuccess { remoteMessages ->
+                isNewConversation = remoteMessages.isEmpty()
                 val myId = currentUserId
                 if (myId != null) messages = remoteMessages.map { remote ->
                     FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
@@ -166,7 +180,10 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     scope.launch { FynxProductionMessaging.markRead(context, unread) }
                 }
             }
-            .onFailure { networkError = it.message ?: "Unable to load messages" }
+            .onFailure {
+                isNewConversation = false
+                networkError = it.message ?: "Unable to load messages"
+            }
         realtimeClient.connect()
     }
 
@@ -228,7 +245,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     .onSuccess { media ->
                         FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), "", mediaId = media.id, mediaType = "audio", voiceDurationMs = duration)
                             .onSuccess { remote ->
-                                currentUserId?.let { myId -> messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp } }
+                                isNewConversation = false
+                                                    $sendOld
                                 pendingFile.delete()
                             }.onFailure { networkError = it.message ?: "Voice message could not be sent" }
                     }.onFailure { networkError = it.message ?: "Voice recording upload failed" }
@@ -318,6 +336,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         networkError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp)) }
 
         LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (isNewConversation && searchQuery.isBlank()) {
+                item(key = "fynx_first_contact_intro") {
+                    FynxFirstContactIntro(recipientProfile, recipientCreatedAt, chat.name, chat.username, chat.avatarUri)
+                }
+            }
             items(visibleMessages, key = { it.id }) { message ->
                 Column(Modifier.fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
@@ -474,6 +497,32 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         AlertDialog(onDismissRequest = { showGifts = false }, title = { Text("Send a gift") }, text = { Column(Modifier.fillMaxWidth().heightIn(max = 420.dp)) { GiftsPanel(recipientName = chat.name, onGiftSelected = { showGifts = false }) } }, confirmButton = { TextButton(onClick = { showGifts = false }) { Text("Close") } })
     }
 }
+
+@Composable
+private fun FynxFirstContactIntro(profile: FynxProfileRemoteClient.Profile?, createdAt: String?, fallbackName: String, fallbackUsername: String, fallbackAvatarUri: String?) {
+    val displayName = profile?.displayName?.takeIf { it.isNotBlank() } ?: fallbackName
+    val username = profile?.username?.takeIf { it.isNotBlank() } ?: fallbackUsername.removePrefix("@")
+    val country = profile?.country?.trim().orEmpty()
+    val joined = createdAt?.let(::formatJoinedMonth)
+    Column(Modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        FynxAvatar(displayName, profile?.profilePhotoMediaId ?: fallbackAvatarUri, Modifier.size(54.dp))
+        Spacer(Modifier.height(7.dp))
+        Text(displayName, style = MaterialTheme.typography.titleSmall)
+        Text("@$username", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (country.isNotBlank() || joined != null) {
+            Spacer(Modifier.height(3.dp))
+            Text(listOfNotNull(country.takeIf { it.isNotBlank() }, joined?.let { "Joined FYNX $it" }).joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.height(12.dp))
+        HorizontalDivider(Modifier.fillMaxWidth(0.72f), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+        Spacer(Modifier.height(9.dp))
+        Text("You’re starting a new conversation", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private fun formatJoinedMonth(createdAt: String): String? = runCatching {
+    Instant.parse(createdAt).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
+}.getOrNull()
 
 private fun formatRecordingTime(milliseconds: Long): String {
     val totalSeconds = milliseconds / 1000L
