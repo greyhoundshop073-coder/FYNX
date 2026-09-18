@@ -114,7 +114,7 @@ if 'TextToSpeech' in visible_updates or 'android.speech.tts' in visible_updates:
 if 'OPENAI_API_KEY' in visible_updates or 'OPENAI_API_KEY' in ai_client:
     raise SystemExit("HOME INTERACTIONS RED: OpenAI API key must never be present in Android client code")
 require(ai_panel, 'OutlinedTextField(', "full FYNX AI typing surface")
-require(ai_panel, 'AiAssistantClient.sendMessage(context, prompt, history)', "full FYNX AI backend path with bounded conversation history")
+require_normalized(ai_panel, 'AiAssistantClient.sendMessage(context, prompt, history, conversationSummary, currentTask)', "full FYNX AI backend path with bounded conversation history and context hints")
 require(ai_panel, 'FynxFutureIntelligencePolicy.authorize(', "full FYNX AI authorization boundary")
 if 'TextToSpeech' in ai_panel or 'android.speech.tts' in ai_panel:
     raise SystemExit("HOME INTERACTIONS RED: Google Android TTS must not be reintroduced into FYNX AI")
