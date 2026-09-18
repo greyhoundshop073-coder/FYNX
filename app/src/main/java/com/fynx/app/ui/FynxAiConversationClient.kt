@@ -51,7 +51,15 @@ object FynxAiConversationClient {
         }
     }
 
-    suspend fun cancelMessage(context: Context, actionId: String): Result<Unit> =\n        FynxBackendClient.postJson(context, "/api/assistant/message-cancel", JSONObject().put("actionId", actionId).toString()).map { Unit }\n\n    suspend fun confirmMessage(context: Context, actionId: String): Result<String> =\n        FynxBackendClient.postJson(context, "/api/assistant/message-confirm", JSONObject().put("actionId", actionId).toString()).mapCatching {\n            JSONObject(it).getJSONObject("message").optString("text")\n        }\n\n    suspend fun uploadImage(context: Context, uri: Uri): Result<String> {
+    suspend fun cancelMessage(context: Context, actionId: String): Result<Unit> =
+        FynxBackendClient.postJson(context, "/api/assistant/message-cancel", JSONObject().put("actionId", actionId).toString()).map { Unit }
+
+    suspend fun confirmMessage(context: Context, actionId: String): Result<String> =
+        FynxBackendClient.postJson(context, "/api/assistant/message-confirm", JSONObject().put("actionId", actionId).toString()).mapCatching {
+            JSONObject(it).getJSONObject("message").optString("text")
+        }
+
+    suspend fun uploadImage(context: Context, uri: Uri): Result<String> {
         val mime = context.contentResolver.getType(uri)?.trim()?.lowercase().orEmpty()
         if (!mime.startsWith("image/")) return Result.failure(IllegalArgumentException("Select an image file."))
         return FynxProductionMessaging.uploadMedia(context, uri, mime).map { it.id }
