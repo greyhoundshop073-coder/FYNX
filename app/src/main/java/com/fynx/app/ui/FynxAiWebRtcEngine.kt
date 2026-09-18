@@ -27,7 +27,8 @@ class FynxAiWebRtcEngine(
     enum class State { IDLE, CONNECTING, CONNECTED, FAILED, CLOSED }
     private val appContext = context.applicationContext
     private val factory: PeerConnectionFactory
-    private val toolScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var toolJob = SupervisorJob()
+    private var toolScope = CoroutineScope(toolJob + Dispatchers.IO)
     private var peerConnection: PeerConnection? = null
     private var audioSource: AudioSource? = null
     private var audioTrack: AudioTrack? = null
@@ -43,6 +44,11 @@ class FynxAiWebRtcEngine(
     init { PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(appContext).createInitializationOptions()); factory = PeerConnectionFactory.builder().createPeerConnectionFactory() }
     suspend fun connect(onStateChanged: (State, String?) -> Unit = { _, _ -> }, onEvent: (String) -> Unit = {}): Result<Unit> = runCatching {
         require(state != State.CONNECTING && state != State.CONNECTED) { "FYNX AI voice is already connected" }
+        if (toolJob.isCancelled) {
+            toolJob = SupervisorJob()
+            toolScope = CoroutineScope(toolJob + Dispatchers.IO)
+        }
+        handledToolCalls.clear()
         this.onStateChanged = onStateChanged; this.onEvent = onEvent; setState(State.CONNECTING, null)
         val connection = factory.createPeerConnection(PeerConnection.RTCConfiguration(iceServers), observer()) ?: error("Unable to create FYNX AI peer connection")
         peerConnection = connection
@@ -57,7 +63,7 @@ class FynxAiWebRtcEngine(
     fun setMicrophoneEnabled(enabled: Boolean) { audioTrack?.setEnabled(enabled) }
     fun sendEvent(json: String): Boolean { val channel = eventsChannel ?: return false; if (channel.state() != DataChannel.State.OPEN) return false; return channel.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(json.toByteArray(StandardCharsets.UTF_8)), false)) }
     fun close() {
-        localDescriptionReady?.cancel(); localDescriptionReady = null; iceGatheringReady?.cancel(); iceGatheringReady = null; eventsChannel?.dispose(); eventsChannel = null; remoteAudioTrack?.setEnabled(false); remoteAudioTrack = null; peerConnection?.close(); peerConnection?.dispose(); peerConnection = null; audioTrack?.dispose(); audioTrack = null; audioSource?.dispose(); audioSource = null; toolScope.cancel(); if (state != State.FAILED) setState(State.CLOSED, null)
+        localDescriptionReady?.cancel(); localDescriptionReady = null; iceGatheringReady?.cancel(); iceGatheringReady = null; eventsChannel?.dispose(); eventsChannel = null; remoteAudioTrack?.setEnabled(false); remoteAudioTrack = null; peerConnection?.close(); peerConnection?.dispose(); peerConnection = null; audioTrack?.dispose(); audioTrack = null; audioSource?.dispose(); audioSource = null; toolJob.cancel(); if (state != State.FAILED) setState(State.CLOSED, null)
     }
     private suspend fun createOffer(connection: PeerConnection): SessionDescription = CompletableDeferred<SessionDescription>().also { deferred -> connection.createOffer(object : SdpObserverAdapter() { override fun onCreateSuccess(description: SessionDescription) { deferred.complete(description) }; override fun onCreateFailure(error: String) { deferred.completeExceptionally(IllegalStateException(error)) } }, MediaConstraints()) }.awaitWithTimeout()
     private suspend fun awaitLocalDescription() { localDescriptionReady?.awaitWithTimeout() ?: error("Local FYNX AI SDP was not prepared") }
