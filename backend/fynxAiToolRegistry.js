@@ -62,12 +62,12 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
     const query = String(args.query || "").trim().slice(0, 80);
     if (query.length < 2) throw new Error("search query must be at least 2 characters");
     const normalized = query.replace(/^@+/, "").toLowerCase().slice(0, 32);
-    const result = await databasePool.query(`SELECT id,username,display_name,created_at FROM users WHERE username ILIKE $1 OR display_name ILIKE $2 ORDER BY CASE WHEN lower(username) = $3 THEN 0 ELSE 1 END, username LIMIT 10`, [`%${normalized}%`, `%${query.toLowerCase()}%`, normalized]);
+    const result = await databasePool.query(`SELECT id,username,display_name,created_at FROM users WHERE (username ILIKE $1 OR display_name ILIKE $2) AND id<>$4 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$4 AND b.blocked_id=users.id) OR (b.blocker_id=users.id AND b.blocked_id=$4)) ORDER BY CASE WHEN lower(username) = $3 THEN 0 ELSE 1 END, username LIMIT 10`, [`%${normalized}%`, `%${query.toLowerCase()}%`, normalized, userId]);
     return { users: result.rows.map(row => ({ id: String(row.id), username: row.username, displayName: row.display_name || "", createdAt: row.created_at })) };
   }
 
   if (name === "get_my_friends") {
-    const result = await databasePool.query(`SELECT u.id,u.username,u.display_name,f.created_at FROM friendships f JOIN users u ON u.id = CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END WHERE (f.user_id=$1 OR f.friend_id=$1) AND f.status='accepted' ORDER BY u.username LIMIT 100`, [userId]);
+    const result = await databasePool.query(`SELECT u.id,u.username,u.display_name,f.created_at FROM friendships f JOIN users u ON u.id = CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END WHERE (f.user_id=$1 OR f.friend_id=$1) AND f.status='accepted' AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=u.id) OR (b.blocker_id=u.id AND b.blocked_id=$1)) ORDER BY u.username LIMIT 100`, [userId]);
     return { friends: result.rows.map(row => ({ id: String(row.id), username: row.username, displayName: row.display_name || "", since: row.created_at })) };
   }
 
