@@ -235,11 +235,11 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
         }
     }
 
-    val sendPrompt: (String, Boolean) -> Unit = sendPrompt@{ rawPrompt, appendUser ->
+    fun sendPrompt(rawPrompt: String, appendUser: Boolean) {
         val prompt = rawPrompt.trim()
         if (pendingMessageAction != null) {
             val normalized = prompt.lowercase().replace(Regex("[^a-z0-9\\s]"), " ").replace(Regex("\\s+"), " ").trim()
-            if (normalized.matches(Regex("^(yes|yeah|yep|yup|sure|send|send it|yes send it|go ahead|do it)( please)?$"))) { confirmPendingMessage(); input = ""; return@sendPrompt }
+            if (normalized.matches(Regex("^(yes|yeah|yep|yup|sure|send|send it|yes send it|go ahead|do it)( please)?$"))) { confirmPendingMessage(); input = ""; return }
             if (normalized.matches(Regex("^(no|nope|cancel|dont|do not|not now|stop)( please)?$"))) { cancelPendingMessage(); input = ""; return@sendPrompt }
         }
         val activeConversation = conversationId
