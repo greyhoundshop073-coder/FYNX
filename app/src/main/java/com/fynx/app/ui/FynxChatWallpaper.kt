@@ -41,19 +41,14 @@ private fun FynxChatDoodlePattern() {
         fun line(a: androidx.compose.ui.geometry.Offset, b: androidx.compose.ui.geometry.Offset) =
             drawLine(ink, a, b, sw)
         fun circle(x: Float, y: Float, r: Float) =
-            drawCircle(ink, r, androidx.compose.ui.geometry.Offset(x, y),
-                androidx.compose.ui.graphics.drawscope.Stroke(sw))
+            drawCircle(color = ink, radius = r, center = androidx.compose.ui.geometry.Offset(x, y), style = androidx.compose.ui.graphics.drawscope.Stroke(width = sw))
         fun bubble(x: Float, y: Float, s: Float) {
-            drawRoundRect(ink, androidx.compose.ui.geometry.Offset(x, y),
-                androidx.compose.ui.geometry.Size(42*s, 28*s), 9*s, 9*s,
-                style = androidx.compose.ui.graphics.drawscope.Stroke(sw))
+            drawRoundRect(color = ink, topLeft = androidx.compose.ui.geometry.Offset(x, y), size = androidx.compose.ui.geometry.Size(42*s, 28*s), cornerRadius = androidx.compose.ui.geometry.CornerRadius(9*s, 9*s), style = androidx.compose.ui.graphics.drawscope.Stroke(width = sw))
             line(androidx.compose.ui.geometry.Offset(x+8*s,y+28*s),
                 androidx.compose.ui.geometry.Offset(x+5*s,y+36*s))
         }
         fun camera(x: Float, y: Float, s: Float) {
-            drawRect(ink, androidx.compose.ui.geometry.Offset(x,y),
-                androidx.compose.ui.geometry.Size(42*s,30*s),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(sw))
+            drawRect(color = ink, topLeft = androidx.compose.ui.geometry.Offset(x,y), size = androidx.compose.ui.geometry.Size(42*s,30*s), style = androidx.compose.ui.graphics.drawscope.Stroke(width = sw))
             circle(x+21*s,y+15*s,7*s)
             line(androidx.compose.ui.geometry.Offset(x+8*s,y),
                 androidx.compose.ui.geometry.Offset(x+14*s,y-6*s))
@@ -87,13 +82,15 @@ private fun FynxChatDoodlePattern() {
                 androidx.compose.ui.geometry.Offset(x+42*s,y+43*s))
         }
         fun fynx(x: Float, y: Float) {
-            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.WHITE
-                alpha = 13
-                textSize = 12.dp.toPx()
-                typeface = android.graphics.Typeface.create("sans-serif-medium", 0)
-            }
-            drawContext.canvas.nativeCanvas.drawText("FYNX", x, y, paint)
+            line(androidx.compose.ui.geometry.Offset(x, y), androidx.compose.ui.geometry.Offset(x, y + 18))
+            line(androidx.compose.ui.geometry.Offset(x, y), androidx.compose.ui.geometry.Offset(x + 11, y))
+            line(androidx.compose.ui.geometry.Offset(x, y + 8), androidx.compose.ui.geometry.Offset(x + 8, y + 8))
+            line(androidx.compose.ui.geometry.Offset(x + 15, y), androidx.compose.ui.geometry.Offset(x + 15, y + 18))
+            line(androidx.compose.ui.geometry.Offset(x + 15, y), androidx.compose.ui.geometry.Offset(x + 25, y))
+            line(androidx.compose.ui.geometry.Offset(x + 15, y + 9), androidx.compose.ui.geometry.Offset(x + 23, y + 9))
+            line(androidx.compose.ui.geometry.Offset(x + 15, y + 18), androidx.compose.ui.geometry.Offset(x + 25, y + 18))
+            line(androidx.compose.ui.geometry.Offset(x + 29, y), androidx.compose.ui.geometry.Offset(x + 41, y + 18))
+            line(androidx.compose.ui.geometry.Offset(x + 41, y), androidx.compose.ui.geometry.Offset(x + 29, y + 18))
         }
         var row = 0
         var y = -30f
