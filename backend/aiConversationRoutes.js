@@ -156,10 +156,13 @@ export function registerFynxAiConversationRoutes({ app }) {
       const userMessage=await db.query("INSERT INTO ai_messages(conversation_id,user_id,role,text) VALUES($1,$2,'user',$3) RETURNING id,created_at",[conversation.id,userId,message]);
       const userMessageId=String(userMessage.rows[0].id);
       for(const image of images) await db.query("INSERT INTO ai_message_media(message_id,media_id,media_type) VALUES($1,$2,$3)",[userMessageId,image.id,image.type]);
-      let reply;
-      if (!images.length) {
-        reply = await runAssistantAgent({ message, userId, history, context: {}, imageInputs: images });
-      }
+      const reply = await runAssistantAgent({
+        message: message || "Analyze the attached image.",
+        userId,
+        history,
+        context: {},
+        imageInputs: images
+      });
       const assistant=await db.query("INSERT INTO ai_messages(conversation_id,user_id,role,text) VALUES($1,$2,'assistant',$3) RETURNING id,created_at",[conversation.id,userId,reply]);
       await db.query("UPDATE ai_conversations SET updated_at=NOW(),title=CASE WHEN title='New conversation' AND $2<>'' THEN LEFT($2,120) ELSE title END WHERE id=$1",[conversation.id,message]);
       return res.json({conversationId:String(conversation.id),userMessageId,assistantMessage:{id:String(assistant.rows[0].id),text:reply,timestamp:new Date(assistant.rows[0].created_at).getTime()}});
