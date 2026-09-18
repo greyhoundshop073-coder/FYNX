@@ -49,6 +49,7 @@ check("Realtime tool execution uses approved registry", 'executeFynxAiTool' in r
 check("Realtime voice keeps provider credential server-side", 'process.env.OPENAI_API_KEY' in voice)
 check("Android voice transport calls the FYNX session endpoint", 'FynxAiVoiceSession.requestSession' in android_voice)
 check("Android realtime tool calls use the authenticated FYNX session", 'FynxAiVoiceSession.executeTool' in android_voice)
+check("Android realtime tool processing is bounded", "maxRealtimeToolCalls = 8" in android_voice and "realtimeToolCallCount.incrementAndGet()" in android_voice)
 check("Android voice waits for the data channel before first response", 'dataChannelReady?.awaitWithTimeout()' in android_voice and 'FYNX AI voice event channel is unavailable' in android_voice)
 check("Android voice ignores duplicate realtime tool calls", 'handledToolCalls.add(callId)' in android_voice)
 check("Assistant agent has an abuse limit", '[/^\\/api\\/assistant\\/agent$/, 30]' in abuse)
