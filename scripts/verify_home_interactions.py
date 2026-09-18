@@ -103,16 +103,30 @@ home_feed_source = home.split('@Composable\nprivate fun VideoDiscoveryDialog', 1
 if home_feed_source.count('LazyColumn(') != 1:
     raise SystemExit("HOME INTERACTIONS RED: Home feed must keep exactly one vertical LazyColumn")
 require_normalized(home, 'items(items = posts, key = { it.id })', "feed posts in the shared scroll surface")
-require(visible_updates, 'OutlinedTextField(', "Home AI typing input")
-require(visible_updates, 'value = aiInput', "Home AI input state")
-require(visible_updates, 'AiAssistantClient.sendMessage(context, prompt)', "Home AI real backend client path")
-require(visible_updates, 'FynxFutureIntelligencePolicy.authorize(', "Home AI authorization boundary")
-require(visible_updates, 'Icons.Default.Send', "Home AI send control")
-require(visible_updates, 'Icons.Default.Mic', "Home AI voice entry")
+require(visible_updates, 'onOpenAi', "Home AI entry callback")
+require(visible_updates, 'Open FYNX AI', "Home AI centralized entry action")
+if 'AiAssistantClient.' in visible_updates or 'aiInput' in visible_updates or 'AiAssistantClient.sendMessage' in visible_updates:
+    raise SystemExit("HOME INTERACTIONS RED: Home must not execute a second AI assistant outside the dedicated FYNX AI screen")
 if 'TextToSpeech' in visible_updates or 'android.speech.tts' in visible_updates:
     raise SystemExit("HOME INTERACTIONS RED: Google Android TTS must not be reintroduced into Home AI")
 if 'OPENAI_API_KEY' in visible_updates or 'OPENAI_API_KEY' in ai_client:
     raise SystemExit("HOME INTERACTIONS RED: OpenAI API key must never be present in Android client code")
+
+app_source = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
+money_center = read("app/src/main/java/com/fynx/app/ui/MoneyCenterPanel.kt")
+budget = read("app/src/main/java/com/fynx/app/ui/BudgetPlannerPanel.kt")
+require(app_source, '"AI Creation" -> { selected = "AI" }', "AI Creation central route")
+require(app_source, '"AI Photo Editor" -> { selected = "AI" }', "AI Photo Editor central route")
+require(app_source, '"Advertising AI" -> { selected = "AI" }', "Advertising AI central route")
+require(app_source, 'add(Triple("AI", "FYNX AI Assistant", Icons.Default.AutoAwesome))', "single FYNX AI feature entry")
+if 'add(Triple("AI Creation"' in app_source or 'add(Triple("AI Photo Editor"' in app_source or 'add(Triple("Advertising AI"' in app_source:
+    raise SystemExit("HOME INTERACTIONS RED: duplicate AI feature destinations remain outside FYNX AI")
+if 'FynxAiCreationPanel(' in app_source or 'FynxAiPhotoEditorPanel(' in app_source or 'FynxAdvertisingAiPanel(' in app_source:
+    raise SystemExit("HOME INTERACTIONS RED: secondary AI panels are still directly rendered by the app shell")
+if 'FynxMoneyAiCoachPanel(' in money_center:
+    raise SystemExit("HOME INTERACTIONS RED: Money Center still renders a separate AI coach")
+if 'AiAssistantClient.' in budget:
+    raise SystemExit("HOME INTERACTIONS RED: Budget Planner still executes AI outside the dedicated FYNX AI screen")
 require(ai_panel, 'OutlinedTextField(', "full FYNX AI typing surface")
 require(ai_panel, 'FynxAiConversationClient.send(context, activeConversation, prompt', "persistent FYNX AI conversation backend path")
 require(ai_panel, 'FynxAiConversationClient.create(context)', "new FYNX AI conversation creation")
