@@ -37,7 +37,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
-    val fallbackMessage = remember(chat.lastMessage) { chat.lastMessage.takeIf { it.isNotBlank() }?.let { ChatMessage(it, false, id = "initial", delivered = true, read = true, senderName = chat.name, senderUsername = chat.username, senderAvatarUri = chat.avatarUri) } }
+    val fallbackMessage = remember(chat.lastMessage) { chat.lastMessage.takeIf { it.isNotBlank() }?.let { ChatMessage(it, false, id = "initial", delivered = true, read = true, senderName = chat.name, senderUsername = chat.username, senderAvatarUri = resolvedAvatarUri) } }
     var text by remember(chat.username) { mutableStateOf("") }
     var messages by remember(chat.username) { mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage)) }
     var replyToId by remember { mutableStateOf<String?>(null) }
@@ -62,6 +62,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var currentUserId by remember { mutableStateOf<String?>(null) }
     var recipientUserId by remember { mutableStateOf<String?>(null) }
     var recipientProfile by remember(chat.username) { mutableStateOf<FynxProfileRemoteClient.Profile?>(null) }
+    val resolvedAvatarUri = recipientProfile?.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" } ?: chat.avatarUri
     var recipientCreatedAt by remember(chat.username) { mutableStateOf<String?>(null) }
     var isNewConversation by remember(chat.username) { mutableStateOf(false) }
     var isOnline by remember(chat.username) { mutableStateOf(chat.online) }
@@ -313,7 +314,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = onBack) { Text("‹", style = MaterialTheme.typography.headlineSmall) }
-                    IconButton(onClick = { onOpenProfile(chat.username) }) { FynxAvatar(chat.name, chat.avatarUri, Modifier.size(46.dp)) }
+                    IconButton(onClick = { onOpenProfile(chat.username) }) { FynxAvatar(chat.name, resolvedAvatarUri, Modifier.size(46.dp)) }
                     Column(Modifier.weight(1f).padding(start = 10.dp)) {
                         TextButton(onClick = { onOpenProfile(chat.username) }, contentPadding = PaddingValues(0.dp)) { Text(chat.name, style = MaterialTheme.typography.titleMedium) }
                         Text(when { otherIsTyping -> "typing…"; isOnline -> "● Online"; else -> chat.username }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -345,7 +346,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 Column(Modifier.fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
                         if (!message.fromMe) {
-                            FynxAvatar(message.senderName ?: chat.name, message.senderAvatarUri ?: chat.avatarUri, Modifier.size(30.dp))
+                            FynxAvatar(message.senderName ?: chat.name, message.senderAvatarUri ?: resolvedAvatarUri, Modifier.size(30.dp))
                             Spacer(Modifier.width(6.dp))
                         }
                         Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant, contentColor = if (message.fromMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, shape = RoundedCornerShape(18.dp), tonalElevation = 1.dp, modifier = Modifier.widthIn(max = 320.dp)) {
