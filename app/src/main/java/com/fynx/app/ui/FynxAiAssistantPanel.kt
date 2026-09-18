@@ -249,7 +249,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
         input = ""; pendingMediaId = null; loading = true; errorMessage = null
         scope.launch {
             val result = withContext(Dispatchers.IO) { FynxAiConversationClient.send(context, activeConversation, prompt, listOfNotNull(attachment)) }
-            result.onSuccess { reply -> messages = messages + AiMessage(reply.assistantMessage.text, false); failedPrompt = null }
+            result.onSuccess { reply ->\n                    messages = messages + AiMessage(reply.assistantMessage.text, false)\n                    pendingMessageAction = reply.pendingAction\n                    failedPrompt = null\n                }
                 .onFailure {
                     failedPrompt = prompt; input = prompt; if (attachment != null) pendingMediaId = attachment
                     errorMessage = "FYNX AI is temporarily unavailable. You can retry or edit your message."
