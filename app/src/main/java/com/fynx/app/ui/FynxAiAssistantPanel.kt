@@ -416,7 +416,6 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                         IconButton(
                             enabled = !loading && input.trim().isNotEmpty(),
                             onClick = { sendPrompt(input, true) }
-                            }
                         ) {
                             Icon(Icons.Default.Send, contentDescription = "Send")
                         }
