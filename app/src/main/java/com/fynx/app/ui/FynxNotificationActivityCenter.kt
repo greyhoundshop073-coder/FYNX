@@ -17,5 +17,11 @@ object FynxNotificationActivityCenter {
     fun clearRead(notifications: List<FynxNotification>): List<FynxNotification> =
         notifications.filterNot { it.read }
 
-    fun targetId(notification: FynxNotification): String? = notification.targetId
+    fun targetId(notification: FynxNotification): String? = notification.targetIds.firstOrNull() ?: notification.targetId
+
+    fun targetIds(notification: FynxNotification): List<String> =
+        notification.targetIds.ifEmpty { listOfNotNull(notification.targetId) }
+
+    fun sourceUsernames(notification: FynxNotification): List<String> =
+        notification.sourceUsernames.ifEmpty { listOfNotNull(notification.sourceUsername) }
 }
