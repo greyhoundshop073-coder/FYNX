@@ -149,7 +149,7 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
   throw new Error(`unsupported FYNX AI tool: ${name}`);
 }
 
-async function runAssistantAgent({ message, userId, history = [], context = {} }) {
+export async function runAssistantAgent({ message, userId, history = [], context = {} }) {
   if (!OPENAI_API_KEY) throw new Error("AI provider is not configured");
   const safeHistory = Array.isArray(history) ? history.slice(-12).map(item => ({
     role: item?.role === "assistant" ? "assistant" : "user",
