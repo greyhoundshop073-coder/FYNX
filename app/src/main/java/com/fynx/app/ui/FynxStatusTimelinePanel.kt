@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
@@ -274,7 +275,7 @@ private fun StatusViewerText(status: FynxStatus) {
     val weight = if (status.textStyle.font == FynxStatusTextFont.BOLD) FontWeight.Bold else FontWeight.Normal
     val textAlign = when (status.textStyle.alignment) { 0 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
     Box(Modifier.fillMaxSize().background(Color(status.textStyle.backgroundColor)), contentAlignment = Alignment.Center) {
-        Text(status.text.orEmpty(), color = Color(status.textStyle.foregroundColor), fontFamily = family, fontWeight = weight, textAlign = textAlign, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.fillMaxWidth().padding(30.dp))
+        Text(status.text.orEmpty(), color = Color(status.textStyle.foregroundColor), fontFamily = family, fontWeight = weight, textAlign = textAlign, style = MaterialTheme.typography.headlineLarge.copy(fontSize = 32.sp, lineHeight = 38.sp), modifier = Modifier.fillMaxWidth().padding(horizontal = 30.dp, vertical = 20.dp))
     }
 }
 
