@@ -49,7 +49,7 @@ check("Message confirmation is server-authoritative and authenticated", "/api/as
 check("Message cancellation is server-authoritative", "/api/assistant/message-cancel" in read("backend/server.js") and "status='cancelled'" in read("backend/server.js"))
 check("Android AI exposes pending message confirmation", "pendingMessageAction" in android_panel and "confirmMessage" in ai_conversations and "cancelMessage" in ai_conversations)
 check("Realtime voice exposes pending tool results to the confirmation UI", "onToolResult" in android_voice and "prepare_send_message" in android_panel)
-check("Sensitive non-message write actions remain unavailable", "Never perform payments, refunds, purchases, transfers, deletions, settings changes" in registry)
+check("Sensitive non-message write actions remain unavailable", "Never perform payments, refunds, purchases, transfers, deletions, or settings changes" in registry)
 check("Realtime tool endpoint is authenticated", 'app.post("/api/assistant/realtime-tool"' in realtime and 'const userId = authenticate(req, res);' in realtime)
 check("Realtime tool execution uses approved registry", 'executeFynxAiTool' in realtime and 'getFynxAiTools' in realtime)
 check("Realtime voice keeps provider credential server-side", 'process.env.OPENAI_API_KEY' in voice)
