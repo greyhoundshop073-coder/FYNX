@@ -52,6 +52,10 @@ check("follow notification model", 'FOLLOW' in models)
 check("follow notification channel", '"FRIEND_REQUEST", "FOLLOW", "STORY"' in service)
 check("backend starts through notification bootstrap", 'node notificationBootstrap.js' in package)
 check("server-side secrets are not APK dependencies", 'FIREBASE_SERVICE_ACCOUNT_JSON' not in read("app/build.gradle.kts"))
+check("backend aggregates repeated social notifications", "AGGREGATABLE_TYPES = new Set(['REACTION','COMMENT'])" in read("backend/notificationPreferences.js") and "aggregateNotifications" in read("backend/notificationPreferences.js"))
+check("aggregation counts distinct related posts and actors", "new Set(group.rows.map(row => String(row.target_id)))" in read("backend/notificationPreferences.js") and "other" in read("backend/notificationPreferences.js"))
+check("aggregate read state marks underlying events", "id.match(/^aggregate-(REACTION|COMMENT)" in read("backend/notificationPreferences.js") and "created_at>=to_timestamp" in read("backend/notificationPreferences.js"))
+check("FOLLOW respects Friends notification preference", 'case "FOLLOW": return "friend_requests_enabled";' in push)
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
