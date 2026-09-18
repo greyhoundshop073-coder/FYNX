@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
@@ -61,10 +63,57 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
     var voiceConnecting by remember { mutableStateOf(false) }
     var voiceMuted by remember { mutableStateOf(false) }
     var showComposerTools by remember { mutableStateOf(false) }
+    var conversationId by remember { mutableStateOf<String?>(null) }
+    var conversationHistory by remember { mutableStateOf<List<FynxAiConversationSummary>>(emptyList()) }
+    var showConversationHistory by remember { mutableStateOf(false) }
+    var pendingMediaId by remember { mutableStateOf<String?>(null) }
+    var pendingMediaUploading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val listState = rememberLazyListState()
     val voiceEngine = remember { FynxAiWebRtcEngine(context) }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                pendingMediaUploading = true
+                errorMessage = null
+                FynxAiConversationClient.uploadImage(context, uri)
+                    .onSuccess { pendingMediaId = it }
+                    .onFailure { errorMessage = it.message ?: "Image upload failed." }
+                pendingMediaUploading = false
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        FynxAiConversationClient.create(context)
+            .onSuccess { conversationId = it.id }
+            .onFailure { errorMessage = it.message ?: "Unable to start a new FYNX AI conversation." }
+    }
+
+    fun startNewConversation() {
+        scope.launch {
+            loading = false; errorMessage = null; failedPrompt = null; input = ""; pendingMediaId = null
+            conversationSummary = ""; currentTask = ""
+            FynxAiConversationClient.create(context)
+                .onSuccess { conversationId = it.id; messages = listOf(welcome); showConversationHistory = false }
+                .onFailure { errorMessage = it.message ?: "Unable to start a new FYNX AI conversation." }
+        }
+    }
+
+    fun loadConversation(id: String) {
+        scope.launch {
+            loading = true; errorMessage = null
+            FynxAiConversationClient.get(context, id)
+                .onSuccess { conversation ->
+                    conversationId = conversation.id
+                    messages = listOf(welcome) + conversation.messages.map { AiMessage(it.text, it.role == "user") }
+                    input = ""; pendingMediaId = null; showConversationHistory = false
+                }
+                .onFailure { errorMessage = it.message ?: "Unable to load that conversation." }
+            loading = false
+        }
+    }
 
     val appendAssistantMessage: (String) -> Unit = { text ->
         if (text.isNotBlank()) messages = messages + AiMessage(text, false)
@@ -144,51 +193,31 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
 
     val sendPrompt: (String, Boolean) -> Unit = sendPrompt@{ rawPrompt, appendUser ->
         val prompt = rawPrompt.trim()
-        if (prompt.isEmpty() || loading) return@sendPrompt
+        val activeConversation = conversationId
+        if ((prompt.isEmpty() && pendingMediaId == null) || loading || activeConversation == null || pendingMediaUploading) return@sendPrompt
         val decision = FynxFutureIntelligencePolicy.authorize(
-            permissions = listOf(
-                FynxAiPermission(
-                    capability = FynxAiCapability.ASSISTANT,
-                    allowedScopes = setOf(FynxAiDataScope.NONE),
-                    enabled = true
-                )
-            ),
-            request = FynxAiRequest(
-                capability = FynxAiCapability.ASSISTANT,
-                prompt = prompt,
-                requestedScopes = setOf(FynxAiDataScope.NONE)
-            )
+            permissions = listOf(FynxAiPermission(capability = FynxAiCapability.ASSISTANT, allowedScopes = setOf(FynxAiDataScope.NONE), enabled = true)),
+            request = FynxAiRequest(capability = FynxAiCapability.ASSISTANT, prompt = prompt.ifBlank { "Analyze the attached image." }, requestedScopes = setOf(FynxAiDataScope.NONE))
         )
-        if (!decision.allowed) {
-            errorMessage = "I couldn't process that request safely."
-            return@sendPrompt
-        }
-        val baseMessages = if (
-            !appendUser &&
-            messages.lastOrNull()?.fromUser == true &&
-            messages.last().text == prompt
-        ) messages.dropLast(1) else messages
-        val history = baseMessages
-            .drop(1)
-            .filter { it.text.isNotBlank() }
-            .takeLast(12)
-        if (appendUser) messages = messages + AiMessage(prompt, true)
-        input = ""
-        loading = true
-        errorMessage = null
+        if (!decision.allowed) { errorMessage = "I couldn't process that request safely."; return@sendPrompt }
+        val attachment = pendingMediaId
+        if (appendUser) messages = messages + AiMessage(prompt.ifBlank { "Analyze this image." }, true)
+        input = ""; pendingMediaId = null; loading = true; errorMessage = null
         scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                AiAssistantClient.sendMessage(context, prompt, history, conversationSummary, currentTask)
-            }
-            result.onSuccess { reply ->
-                messages = messages + AiMessage(reply, false)
-                failedPrompt = null
-            }.onFailure {
-                failedPrompt = prompt
-                input = prompt
-                errorMessage = "FYNX AI is temporarily unavailable. You can retry or edit your message."
-            }
+            val result = withContext(Dispatchers.IO) { FynxAiConversationClient.send(context, activeConversation, prompt, listOfNotNull(attachment)) }
+            result.onSuccess { reply -> messages = messages + AiMessage(reply.assistantMessage.text, false); failedPrompt = null }
+                .onFailure {
+                    failedPrompt = prompt; input = prompt; if (attachment != null) pendingMediaId = attachment
+                    errorMessage = "FYNX AI is temporarily unavailable. You can retry or edit your message."
+                }
             loading = false
+        }
+    }
+
+    LaunchedEffect(showConversationHistory) {
+        if (showConversationHistory) {
+            FynxAiConversationClient.list(context).onSuccess { conversationHistory = it }
+                .onFailure { errorMessage = it.message ?: "Unable to load AI conversation history." }
         }
     }
 
@@ -248,11 +277,29 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    IconButton(
-                        enabled = !loading && messages.size > 1,
-                        onClick = { messages = listOf(welcome); errorMessage = null; failedPrompt = null; conversationSummary = ""; currentTask = "" }
-                    ) {
-                        Icon(Icons.Default.DeleteSweep, contentDescription = "Clear chat")
+                    IconButton(enabled = !loading, onClick = { showConversationHistory = !showConversationHistory }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "AI conversation history")
+                    }
+                    DropdownMenu(expanded = showConversationHistory, onDismissRequest = { showConversationHistory = false }) {
+                        DropdownMenuItem(text = { Text("New conversation") }, onClick = { startNewConversation() })
+                        conversationHistory.forEach { conversation ->
+                            DropdownMenuItem(
+                                text = { Text(conversation.title.ifBlank { "New conversation" }, maxLines = 1) },
+                                trailingIcon = {
+                                    IconButton(onClick = {
+                                        scope.launch {
+                                            FynxAiConversationClient.delete(context, conversation.id)
+                                                .onSuccess { conversationHistory = conversationHistory.filterNot { it.id == conversation.id }; if (conversationId == conversation.id) startNewConversation() }
+                                                .onFailure { errorMessage = it.message ?: "Unable to delete conversation." }
+                                        }
+                                    }) { Icon(Icons.Default.Close, contentDescription = "Delete conversation") }
+                                },
+                                onClick = { loadConversation(conversation.id) }
+                            )
+                        }
+                    }
+                    IconButton(enabled = !loading, onClick = { startNewConversation() }) {
+                        Icon(Icons.Default.DeleteSweep, contentDescription = "New conversation")
                     }
                 }
             }
@@ -395,6 +442,22 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
 
             Spacer(Modifier.height(8.dp))
 
+            if (pendingMediaId != null) {
+                Spacer(Modifier.height(6.dp))
+                Surface(modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .75f), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .35f))) {
+                    Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        FynxRemoteMedia("/api/media/${pendingMediaId}", "image", Modifier.size(72.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Image attached", style = MaterialTheme.typography.labelLarge)
+                            Text("It will be sent with your next AI message.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        IconButton(onClick = { pendingMediaId = null }) { Icon(Icons.Default.Close, contentDescription = "Remove image") }
+                    }
+                }
+            }
+            if (pendingMediaUploading) { Spacer(Modifier.height(6.dp)); LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            Spacer(Modifier.height(2.dp))
             Box {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -419,24 +482,20 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                         placeholder = { Text(if (voiceConnected) "Listening to you…" else "Message FYNX AI…") },
                         leadingIcon = {
                             Box {
-                                IconButton(
-                                    enabled = !loading,
-                                    onClick = { showComposerTools = !showComposerTools }
-                                ) {
-                                    Icon(Icons.Default.Add, contentDescription = "FYNX AI tools")
+                                IconButton(enabled = !loading, onClick = { showComposerTools = !showComposerTools }) {
+                                    Icon(Icons.Default.Add, contentDescription = "Attach to FYNX AI")
                                 }
-                                DropdownMenu(
-                                    expanded = showComposerTools,
-                                    onDismissRequest = { showComposerTools = false }
-                                ) {
+                                DropdownMenu(expanded = showComposerTools, onDismissRequest = { showComposerTools = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text("Image") },
+                                        leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
+                                        onClick = { showComposerTools = false; imagePicker.launch("image/*") }
+                                    )
                                     toolLinks.forEach { (destination, label) ->
                                         DropdownMenuItem(
                                             text = { Text(label) },
                                             leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
-                                            onClick = {
-                                                showComposerTools = false
-                                                onOpenDestination(destination)
-                                            }
+                                            onClick = { showComposerTools = false; onOpenDestination(destination) }
                                         )
                                     }
                                 }
