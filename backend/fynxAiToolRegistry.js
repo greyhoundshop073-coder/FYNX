@@ -268,7 +268,7 @@ export function registerFynxAiRoutes({ app }) {
     }
     const historyLength = normalizedHistory.reduce((total, item) => total + item.text.length, 0);
     if (historyLength > 12000) return res.status(413).json({ error: "conversation history too long" });
-    try { return res.json({ reply: await runAssistantAgent({ message, userId, history: normalizedHistory, context: { summary: contextSummary, currentTask: contextTask } }) }); }
+    try { const result = await runAssistantAgent({ message, userId, history: normalizedHistory, context: { summary: contextSummary, currentTask: contextTask } }); return res.json(result); }
     catch (error) { console.error("FYNX AI agent", error?.message || error); return res.status(502).json({ error: "FYNX AI is temporarily unavailable" }); }
   });
 
