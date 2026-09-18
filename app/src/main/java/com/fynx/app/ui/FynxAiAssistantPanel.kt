@@ -297,41 +297,16 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                 .fillMaxSize()
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = FynxDesign.LargeCardShape,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = .96f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .5f)),
-                tonalElevation = 2.dp
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("FYNX AI", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            if (voiceConnected) "Voice is connected" else "Your intelligent FYNX assistant",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Text("FYNX AI", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                Box {
                     IconButton(enabled = !loading, onClick = { showConversationHistory = !showConversationHistory }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "AI conversation history")
+                        Icon(Icons.Default.MoreVert, contentDescription = "FYNX AI menu")
                     }
                     DropdownMenu(expanded = showConversationHistory, onDismissRequest = { showConversationHistory = false }) {
                         DropdownMenuItem(text = { Text("New conversation") }, onClick = { startNewConversation() })
@@ -351,24 +326,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                             )
                         }
                     }
-                    IconButton(enabled = !loading, onClick = { startNewConversation() }) {
-                        Icon(Icons.Default.DeleteSweep, contentDescription = "New conversation")
-                    }
                 }
-            }
-
-            if (voiceConnected) {
-                Spacer(Modifier.height(8.dp))
-                AssistChip(
-                    onClick = {
-                        voiceMuted = !voiceMuted
-                        voiceEngine.setMicrophoneEnabled(!voiceMuted)
-                    },
-                    label = { Text(if (voiceMuted) "Voice muted" else "Listening — tap to mute") },
-                    leadingIcon = {
-                        Icon(if (voiceMuted) Icons.Default.MicOff else Icons.Default.Mic, contentDescription = null)
-                    }
-                )
             }
 
             Spacer(Modifier.height(8.dp))
@@ -458,38 +416,6 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                             }
                         }
                     }
-                }
-            }
-
-            Spacer(Modifier.height(6.dp))
-
-            LazyRow(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 2.dp)
-            ) {
-                items(toolLinks) { (destination, label) ->
-                    AssistChip(
-                        onClick = { onOpenDestination(destination) },
-                        label = { Text(label) },
-                        leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) }
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(6.dp))
-
-            LazyRow(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 2.dp)
-            ) {
-                items(discoveryPrompts) { (label, prompt) ->
-                    AssistChip(
-                        onClick = { input = prompt; errorMessage = null },
-                        label = { Text(label) },
-                        leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) }
-                    )
                 }
             }
 
