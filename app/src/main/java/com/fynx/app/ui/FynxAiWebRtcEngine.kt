@@ -89,7 +89,8 @@ class FynxAiWebRtcEngine(
                 .put("type", "conversation.item.create")
                 .put("item", JSONObject().put("type", "function_call_output").put("call_id", callId).put("output", limitOutput))
             sendEvent(limitResponse.toString())
-            onStateChanged?.invoke(State.FAILED, "FYNX AI realtime tool-processing limit reached")
+            setState(State.FAILED, "FYNX AI realtime tool-processing limit reached")
+            close()
             return
         }
         toolScope.launch {
