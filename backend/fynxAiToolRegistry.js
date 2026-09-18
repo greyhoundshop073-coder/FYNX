@@ -153,13 +153,22 @@ async function runAssistantAgent({ message, userId }) {
   if (!OPENAI_API_KEY) throw new Error("AI provider is not configured");
   const input = [{ role: "user", content: [{ type: "input_text", text: message }] }];
   const instructions = "You are FYNX AI inside the FYNX social, communication, marketplace, planning and safety app. Be concise, helpful and friendly. You may use only the approved FYNX tools supplied to you. Never claim an action happened unless a tool actually completed it. Never expose secrets or private data. Reading private account data is allowed only through an approved tool for the authenticated user. Never perform payments, refunds, purchases, transfers, deletions, settings changes, or messages because those actions are not available as tools yet. If a requested action is unavailable, say so clearly.";
+  const seenToolCalls = new Set();
   for (let turn = 0; turn < 4; turn += 1) {
     const response = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: OPENAI_MODEL, instructions, input, tools: TOOL_DEFINITIONS, store: false }) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data?.error?.message || "AI provider request failed");
     const calls = Array.isArray(data?.output) ? data.output.filter(item => item?.type === "function_call") : [];
     const text = typeof data?.output_text === "string" ? data.output_text.trim() : "";
-    if (!calls.length) return text || "FYNX AI could not produce a response.";
+    if (!calls.length) {
+      if (!text) throw new Error("AI provider returned an empty response");
+      return text;
+    }
+    for (const call of calls) {
+      const signature = `${call.name}|${call.arguments || "{}"}`;
+      if (seenToolCalls.has(signature)) throw new Error("AI tool loop detected");
+      seenToolCalls.add(signature);
+    }
     input.push(...data.output);
     for (const call of calls) {
       let result;
@@ -168,7 +177,7 @@ async function runAssistantAgent({ message, userId }) {
       input.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(result) });
     }
   }
-  return "FYNX AI reached the tool-processing limit. Please try the request again.";
+  throw new Error("AI tool-processing limit reached");
 }
 
 export function registerFynxAiRoutes({ app }) {

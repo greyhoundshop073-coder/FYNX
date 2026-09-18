@@ -35,6 +35,8 @@ class FynxAiWebRtcEngine(
     private var eventsChannel: DataChannel? = null
     private var localDescriptionReady: CompletableDeferred<String>? = null
     private var iceGatheringReady: CompletableDeferred<Unit>? = null
+    private var dataChannelReady: CompletableDeferred<Unit>? = null
+    private val handledToolCalls = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private var state: State = State.IDLE
     private var onStateChanged: ((State, String?) -> Unit)? = null
     private var onEvent: ((String) -> Unit)? = null
@@ -45,11 +47,12 @@ class FynxAiWebRtcEngine(
         val connection = factory.createPeerConnection(PeerConnection.RTCConfiguration(iceServers), observer()) ?: error("Unable to create FYNX AI peer connection")
         peerConnection = connection
         audioSource = factory.createAudioSource(MediaConstraints()); audioTrack = factory.createAudioTrack("fynx-ai-microphone", audioSource); audioTrack?.setEnabled(true); audioTrack?.let { connection.addTrack(it) }
+        dataChannelReady = CompletableDeferred()
         eventsChannel = connection.createDataChannel("oai-events", DataChannel.Init()).also { it.registerObserver(dataChannelObserver()) }
         val offer = createOffer(connection); iceGatheringReady = CompletableDeferred(); connection.setLocalDescriptionAwait(offer); awaitLocalDescription(); iceGatheringReady?.awaitWithTimeout()
         val localSdp = connection.localDescription?.description ?: error("FYNX AI local SDP is unavailable")
         val answerSdp = FynxAiVoiceSession.requestSession(appContext, localSdp).getOrThrow(); require(answerSdp.isNotBlank()) { "FYNX AI returned an empty SDP answer" }
-        connection.setRemoteDescriptionAwait(SessionDescription(SessionDescription.Type.ANSWER, answerSdp)); setState(State.CONNECTED, null); sendEvent("{\"type\":\"response.create\"}"); Unit
+        connection.setRemoteDescriptionAwait(SessionDescription(SessionDescription.Type.ANSWER, answerSdp)); setState(State.CONNECTED, null); dataChannelReady?.awaitWithTimeout(); if (!sendEvent("{\"type\":\"response.create\"}")) error("FYNX AI voice event channel is unavailable"); Unit
     }.onFailure { error -> setState(State.FAILED, error.message ?: "FYNX AI voice connection failed"); close() }
     fun setMicrophoneEnabled(enabled: Boolean) { audioTrack?.setEnabled(enabled) }
     fun sendEvent(json: String): Boolean { val channel = eventsChannel ?: return false; if (channel.state() != DataChannel.State.OPEN) return false; return channel.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(json.toByteArray(StandardCharsets.UTF_8)), false)) }
@@ -60,7 +63,7 @@ class FynxAiWebRtcEngine(
     private suspend fun awaitLocalDescription() { localDescriptionReady?.awaitWithTimeout() ?: error("Local FYNX AI SDP was not prepared") }
     private fun PeerConnection.setLocalDescriptionAwait(description: SessionDescription) { localDescriptionReady = CompletableDeferred(); setLocalDescription(object : SdpObserverAdapter() { override fun onSetSuccess() { localDescriptionReady?.complete(description.description) }; override fun onSetFailure(error: String) { localDescriptionReady?.completeExceptionally(IllegalStateException(error)) } }, description) }
     private suspend fun PeerConnection.setRemoteDescriptionAwait(description: SessionDescription) = CompletableDeferred<Unit>().also { deferred -> setRemoteDescription(object : SdpObserverAdapter() { override fun onSetSuccess() { deferred.complete(Unit) }; override fun onSetFailure(error: String) { deferred.completeExceptionally(IllegalStateException(error)) } }, description) }.awaitWithTimeout()
-    private fun dataChannelObserver() = object : DataChannel.Observer { override fun onBufferedAmountChange(previousAmount: Long) = Unit; override fun onStateChange() = Unit; override fun onMessage(buffer: DataChannel.Buffer) { if (buffer.binary) return; val bytes = ByteArray(buffer.data.remaining()); buffer.data.get(bytes); val event = String(bytes, StandardCharsets.UTF_8); if (event.isNotBlank()) { onEvent?.invoke(event); handleRealtimeToolEvent(event) } } }
+    private fun dataChannelObserver() = object : DataChannel.Observer { override fun onBufferedAmountChange(previousAmount: Long) = Unit; override fun onStateChange() { if (eventsChannel?.state() == DataChannel.State.OPEN) dataChannelReady?.complete(Unit) }; override fun onMessage(buffer: DataChannel.Buffer) { if (buffer.binary) return; val bytes = ByteArray(buffer.data.remaining()); buffer.data.get(bytes); val event = String(bytes, StandardCharsets.UTF_8); if (event.isNotBlank()) { onEvent?.invoke(event); handleRealtimeToolEvent(event) } } }
     private fun handleRealtimeToolEvent(event: String) {
         val json = runCatching { JSONObject(event) }.getOrNull() ?: return
         if (json.optString("type") != "response.function_call_arguments.done") return
@@ -68,6 +71,7 @@ class FynxAiWebRtcEngine(
         val name = json.optString("name").trim()
         val arguments = json.optString("arguments", "{}")
         if (callId.isBlank() || name.isBlank()) return
+        if (!handledToolCalls.add(callId)) return
         toolScope.launch {
             val result = FynxAiVoiceSession.executeTool(appContext, name, arguments)
             val output = result.getOrElse { error -> JSONObject().put("error", error.message ?: "tool request failed").toString() }
