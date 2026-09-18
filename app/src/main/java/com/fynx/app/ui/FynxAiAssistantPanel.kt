@@ -414,7 +414,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                             Icon(Icons.Default.Send, contentDescription = "Send")
                         }
                     )
-                )
+                }
             }
         }
     }
