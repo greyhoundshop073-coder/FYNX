@@ -68,6 +68,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
     var showConversationHistory by remember { mutableStateOf(false) }
     var pendingMediaId by remember { mutableStateOf<String?>(null) }
     var pendingMediaUploading by remember { mutableStateOf(false) }
+    var pendingMessageAction by remember { mutableStateOf<FynxAiPendingMessageAction?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val listState = rememberLazyListState()
@@ -93,7 +94,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
 
     fun startNewConversation() {
         scope.launch {
-            loading = false; errorMessage = null; failedPrompt = null; input = ""; pendingMediaId = null
+            loading = false; errorMessage = null; failedPrompt = null; input = ""; pendingMediaId = null; pendingMessageAction = null
             conversationSummary = ""; currentTask = ""
             FynxAiConversationClient.create(context)
                 .onSuccess { conversationId = it.id; messages = listOf(welcome); showConversationHistory = false }
@@ -108,7 +109,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                 .onSuccess { conversation ->
                     conversationId = conversation.id
                     messages = conversation.messages.map { AiMessage(it.text, it.role == "user") }.ifEmpty { listOf(welcome) }
-                    input = ""; pendingMediaId = null; showConversationHistory = false
+                    input = ""; pendingMediaId = null; pendingMessageAction = null; showConversationHistory = false
                 }
                 .onFailure { errorMessage = it.message ?: "Unable to load that conversation." }
             loading = false
@@ -129,9 +130,52 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                     voiceConnected = state == FynxAiWebRtcEngine.State.CONNECTED
                     if (error != null) errorMessage = error
                 },
-                onEvent = { rawEvent -> parseRealtimeAssistantEvent(rawEvent)?.let(appendAssistantMessage) }
+                onEvent = { rawEvent ->
+                    parseRealtimeAssistantEvent(rawEvent)?.let { spoken ->
+                        appendAssistantMessage(spoken)
+                        val transcript = extractRealtimeUserTranscript(rawEvent)
+                        if (transcript != null && pendingMessageAction != null) {
+                            val normalized = transcript.trim().lowercase().replace(Regex("[^a-z0-9\\s]"), " ").replace(Regex("\\s+"), " ").trim()
+                            when {
+                                normalized.matches(Regex("^(yes|yeah|yep|yup|sure|send|send it|yes send it|go ahead|do it)( please)?$")) -> confirmPendingMessage()
+                                normalized.matches(Regex("^(no|nope|cancel|dont|do not|not now|stop)( please)?$")) -> cancelPendingMessage()
+                            }
+                        }
+                    }
+                },
+                onToolResult = { name, output ->
+                    if (name == "prepare_send_message") {
+                        runCatching { JSONObject(output) }.getOrNull()?.takeIf { it.optBoolean("confirmationRequired") }?.let { action ->
+                            val recipient = action.optJSONObject("recipient")
+                            pendingMessageAction = FynxAiPendingMessageAction(action.optString("actionId"), recipient?.optString("username","") ?: "", recipient?.optString("displayName","") ?: "", action.optString("message"))
+                        }
+                    }
+                }
             )
             voiceConnecting = false
+        }
+    }
+
+    fun confirmPendingMessage() {
+        val action = pendingMessageAction ?: return
+        scope.launch {
+            FynxAiConversationClient.confirmMessage(context, action.actionId)
+                .onSuccess {
+                    pendingMessageAction = null
+                    appendAssistantMessage("Message sent to ${action.recipientDisplayName.ifBlank { action.recipientUsername }}.")
+                    if (voiceConnected) voiceEngine.sendEvent(JSONObject().put("type","conversation.item.create").put("item", JSONObject().put("type","message").put("role","system").put("content", org.json.JSONArray().put(JSONObject().put("type","input_text").put("text","The user explicitly confirmed the pending message. The FYNX backend has now sent it successfully. Do not send it again; acknowledge that it was sent.")))).toString())
+                    if (voiceConnected) voiceEngine.sendEvent("{\"type\":\"response.create\"}")
+                }
+                .onFailure { errorMessage = it.message ?: "The message could not be sent." }
+        }
+    }
+
+    fun cancelPendingMessage() {
+        val action = pendingMessageAction ?: return
+        scope.launch {
+            FynxAiConversationClient.cancelMessage(context, action.actionId)
+                .onSuccess { pendingMessageAction = null; appendAssistantMessage("Okay, I did not send the message.") }
+                .onFailure { errorMessage = it.message ?: "The pending message could not be cancelled." }
         }
     }
 
@@ -442,6 +486,20 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
 
             Spacer(Modifier.height(8.dp))
 
+            if (pendingMessageAction != null) {
+                Spacer(Modifier.height(6.dp))
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Text("Ready to send", style = MaterialTheme.typography.titleSmall)
+                        Text("To ${pendingMessageAction!!.recipientDisplayName.ifBlank { pendingMessageAction!!.recipientUsername }}: “${pendingMessageAction!!.message}”")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { confirmPendingMessage() }) { Text("Send") }
+                            OutlinedButton(onClick = { cancelPendingMessage() }) { Text("Cancel") }
+                        }
+                    }
+                }
+            }
+
             if (pendingMediaId != null) {
                 Spacer(Modifier.height(6.dp))
                 Surface(modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .75f), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .35f))) {
@@ -637,6 +695,11 @@ private fun AiChatBubble(
         }
     }
 }
+
+private fun extractRealtimeUserTranscript(rawEvent: String): String? = runCatching {
+    val event = JSONObject(rawEvent)
+    if (event.optString("type") == "conversation.item.input_audio_transcription.completed") event.optString("transcript").takeIf { it.isNotBlank() } else null
+}.getOrNull()
 
 private fun parseRealtimeAssistantEvent(rawEvent: String): String? = runCatching {
     val event = JSONObject(rawEvent)
