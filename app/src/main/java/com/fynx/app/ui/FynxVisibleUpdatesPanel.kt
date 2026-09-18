@@ -28,7 +28,6 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -65,9 +64,6 @@ fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, 
     var statuses by remember { mutableStateOf<List<FynxStatus>>(emptyList()) }
     var followingUsernames by remember { mutableStateOf<Set<String>>(emptySet()) }
     var ownerPhotoIds by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
-    var aiInput by remember { mutableStateOf("") }
-    var aiReply by remember { mutableStateOf<String?>(null) }
-    var aiLoading by remember { mutableStateOf(false) }
 
     fun resolveOwnerPhotos(items: List<FynxStatus>) {
         val names = items.map { it.ownerUsername.removePrefix("@").trim() }.filter { it.isNotBlank() }.distinct()
@@ -118,18 +114,8 @@ fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, 
                 Spacer(Modifier.width(10.dp)); Column(Modifier.weight(1f)) { Text("FYNX AI", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium); Text("Ask, create, translate and get help", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 IconButton(onClick = onOpenAi) { Icon(Icons.Default.Mic, contentDescription = "Talk to FYNX AI", tint = MaterialTheme.colorScheme.primary) }
             }
-            OutlinedTextField(value = aiInput, onValueChange = { aiInput = it.take(4000) }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !aiLoading, placeholder = { Text("Ask FYNX AI…") }, trailingIcon = {
-                IconButton(enabled = !aiLoading && aiInput.trim().isNotEmpty(), onClick = {
-                    val prompt = aiInput.trim(); if (prompt.isEmpty()) return@IconButton
-                    val decision = FynxFutureIntelligencePolicy.authorize(permissions = listOf(FynxAiPermission(FynxAiCapability.ASSISTANT, setOf(FynxAiDataScope.NONE), true)), request = FynxAiRequest(FynxAiCapability.ASSISTANT, prompt, setOf(FynxAiDataScope.NONE)))
-                    if (!decision.allowed) { aiReply = "FYNX AI cannot assist with that request right now."; return@IconButton }
-                    aiInput = ""; aiReply = null; aiLoading = true
-                    scope.launch { val result = withContext(Dispatchers.IO) { AiAssistantClient.sendMessage(context, prompt) }; result.onSuccess { aiReply = it.trim().ifBlank { "FYNX AI returned no response." } }.onFailure { aiReply = "FYNX AI is temporarily unavailable. Please try again." }; aiLoading = false }
-                }) { Icon(Icons.Default.Send, contentDescription = "Send to FYNX AI", tint = MaterialTheme.colorScheme.primary) }
-            })
-            if (aiLoading) Text("FYNX AI is thinking…", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            aiReply?.let { reply -> Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) { Text(reply, modifier = Modifier.fillMaxWidth().padding(10.dp), style = MaterialTheme.typography.bodyMedium) } }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { AssistChip(onClick = onOpenAi, label = { Text("Ask anything") }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) }); AssistChip(onClick = onOpenAi, label = { Text("Translate") }); AssistChip(onClick = onOpenAi, label = { Text("Write") }) }
+            Text("Ask, create, translate and get help with FYNX AI.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = onOpenAi, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.AutoAwesome, null); Spacer(Modifier.width(6.dp)); Text("Open FYNX AI") }
         }
     }
 }
