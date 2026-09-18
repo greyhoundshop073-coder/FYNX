@@ -43,6 +43,7 @@ fun GroupChatPanel(
     var description by remember { mutableStateOf(group.description) }
     var text by remember { mutableStateOf("") }
     var messages by remember(group.id) { mutableStateOf(loadGroupMessages(context, group.id)) }
+    var isNewGroupConversation by remember(group.id) { mutableStateOf(false) }
     var attachment by remember { mutableStateOf<Uri?>(null) }
     var attachmentType by remember { mutableStateOf("image") }
     var showCamera by remember { mutableStateOf(false) }
@@ -125,13 +126,15 @@ fun GroupChatPanel(
                 .onSuccess { remote ->
                     messages = remote.map { FynxGroupRemoteClient.toChatMessage(it, currentUsername, FynxBackendClient.baseUrl(context)) }
                     saveGroupMessages(context, group.id, messages)
+                    isNewGroupConversation = remote.isEmpty()
                 }
-                .onFailure { error = it.message }
+                .onFailure { error = it.message; isNewGroupConversation = false }
             syncing = false
         }
     }
 
     fun sendMessage(message: ChatMessage) {
+        isNewGroupConversation = false
         messages = messages + message
         saveGroupMessages(context, group.id, messages)
         feedback()
@@ -241,6 +244,11 @@ fun GroupChatPanel(
                 verticalArrangement = Arrangement.spacedBy(7.dp),
                 contentPadding = PaddingValues(bottom = 10.dp)
             ) {
+                if (isNewGroupConversation) {
+                    item(key = "fynx-first-group-intro") {
+                        FynxFirstGroupContactIntro(group)
+                    }
+                }
                 items(messages, key = { it.id }) { message ->
                     Row(
                         Modifier.fillMaxWidth(),
@@ -449,6 +457,42 @@ fun GroupChatPanel(
         }
     }
     if (showWallpaper) FynxGroupWallpaperDialog(group.id) { showWallpaper = false }
+}
+
+@Composable
+private fun FynxFirstGroupContactIntro(group: GroupChat) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            FynxAvatar(group.name, Modifier.size(58.dp))
+            Spacer(Modifier.height(8.dp))
+            Text(group.name, style = MaterialTheme.typography.titleMedium)
+            Text(
+                "${group.memberUsernames.size} members",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (group.description.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    group.description.trim(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "You're starting a new group conversation",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
 }
 
 private fun groupMessagesPrefs(context: Context) = context.getSharedPreferences(
