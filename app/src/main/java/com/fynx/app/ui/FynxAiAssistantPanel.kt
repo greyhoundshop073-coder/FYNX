@@ -354,18 +354,17 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
             ) {
                 OutlinedTextField(
                     value = input,
-                    onValueChange = { input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH); errorMessage = null },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(6.dp),
+                    onValueChange = {
+                        input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH)
+                        errorMessage = null
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(6.dp),
                     enabled = !loading,
                     minLines = 1,
                     maxLines = 5,
                     shape = FynxDesign.ControlShape,
                     placeholder = { Text("Message FYNX AI…") },
-                    leadingIcon = {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null)
-                    },
+                    leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
                     trailingIcon = {
                         IconButton(
                             enabled = !loading && input.trim().isNotEmpty(),
@@ -400,21 +399,21 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                                         AiAssistantClient.sendMessage(context, prompt, history)
                                     }
                                     result.onSuccess { reply ->
-                                            messages = messages + AiMessage(reply, false)
-                                            failedPrompt = null
-                                        }.onFailure {
-                                            failedPrompt = prompt
-                                            input = prompt
-                                            errorMessage = "FYNX AI is temporarily unavailable. You can retry or edit your message."
-                                        }
+                                        messages = messages + AiMessage(reply, false)
+                                        failedPrompt = null
+                                    }.onFailure {
+                                        failedPrompt = prompt
+                                        input = prompt
+                                        errorMessage = "FYNX AI is temporarily unavailable. You can retry or edit your message."
+                                    }
                                     loading = false
                                 }
                             }
                         ) {
                             Icon(Icons.Default.Send, contentDescription = "Send")
                         }
-                    )
-                }
+                    }
+                )
             }
         }
     }
