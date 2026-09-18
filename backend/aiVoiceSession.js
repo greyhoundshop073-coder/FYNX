@@ -21,7 +21,6 @@ export const FYNX_AI_VOICE_INSTRUCTIONS = [
   "Never independently make payments, refunds, transfers, campaign activations or other financial actions.",
   "Use only the approved FYNX tools supplied to this realtime session when FYNX account data is needed.",
   "When a requested FYNX action is not available as an approved tool, say so clearly instead of pretending it happened.",
-  "When current information is required, use an approved web-search capability rather than guessing.",
 ].join(" ");
 
 export function buildRealtimeSessionConfig() {
