@@ -79,6 +79,8 @@ object FynxSocialClient {
         phone = item.optString("phone"),
         id = item.optString("id"),
         profilePhotoMediaId = item.optString("profile_photo_media_id", item.optString("profilePhotoMediaId"))
+            .takeIf { it.isNotBlank() && it != "null" },
+        createdAt = item.optString("created_at", item.optString("createdAt"))
             .takeIf { it.isNotBlank() && it != "null" }
     )
 
