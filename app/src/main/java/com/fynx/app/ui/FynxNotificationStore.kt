@@ -34,7 +34,17 @@ object FynxNotificationStore {
                             timestamp = item.optLong("timestamp", System.currentTimeMillis()),
                             read = item.optBoolean("read", false),
                             targetId = item.optString("targetId").ifBlank { null },
-                            sourceUsername = item.optString("sourceUsername").ifBlank { null }
+                            sourceUsername = item.optString("sourceUsername").ifBlank { null },
+                            targetIds = buildList {
+                                val ids = item.optJSONArray("targetIds")
+                                if (ids != null) for (targetIndex in 0 until ids.length()) ids.optString(targetIndex).trim().takeIf { it.isNotEmpty() }?.let(::add)
+                                if (isEmpty()) item.optString("targetId").trim().takeIf { it.isNotEmpty() }?.let(::add)
+                            },
+                            sourceUsernames = buildList {
+                                val names = item.optJSONArray("sourceUsernames")
+                                if (names != null) for (nameIndex in 0 until names.length()) names.optString(nameIndex).trim().takeIf { it.isNotEmpty() }?.let(::add)
+                                if (isEmpty()) item.optString("sourceUsername").trim().takeIf { it.isNotEmpty() }?.let(::add)
+                            }
                         ))
                     }
                 }
@@ -54,6 +64,8 @@ object FynxNotificationStore {
                 put("read", notification.read)
                 put("targetId", notification.targetId)
                 put("sourceUsername", notification.sourceUsername)
+                put("targetIds", JSONArray(notification.targetIds))
+                put("sourceUsernames", JSONArray(notification.sourceUsernames))
             })
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
