@@ -120,6 +120,29 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
         if (text.isNotBlank()) messages = messages + AiMessage(text, false)
     }
 
+    fun confirmPendingMessage() {
+        val action = pendingMessageAction ?: return
+        scope.launch {
+            FynxAiConversationClient.confirmMessage(context, action.actionId)
+                .onSuccess {
+                    pendingMessageAction = null
+                    appendAssistantMessage("Message sent to ${action.recipientDisplayName.ifBlank { action.recipientUsername }}.")
+                    if (voiceConnected) voiceEngine.sendEvent(JSONObject().put("type","conversation.item.create").put("item", JSONObject().put("type","message").put("role","system").put("content", org.json.JSONArray().put(JSONObject().put("type","input_text").put("text","The user explicitly confirmed the pending message. The FYNX backend has now sent it successfully. Do not send it again; acknowledge that it was sent.")))).toString())
+                    if (voiceConnected) voiceEngine.sendEvent("{\"type\":\"response.create\"}")
+                }
+                .onFailure { errorMessage = it.message ?: "The message could not be sent." }
+        }
+    }
+
+    fun cancelPendingMessage() {
+        val action = pendingMessageAction ?: return
+        scope.launch {
+            FynxAiConversationClient.cancelMessage(context, action.actionId)
+                .onSuccess { pendingMessageAction = null; appendAssistantMessage("Okay, I did not send the message.") }
+                .onFailure { errorMessage = it.message ?: "The pending message could not be cancelled." }
+        }
+    }
+
     val connectVoice: () -> Unit = {
         scope.launch {
             voiceConnecting = true
@@ -153,29 +176,6 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                 }
             )
             voiceConnecting = false
-        }
-    }
-
-    fun confirmPendingMessage() {
-        val action = pendingMessageAction ?: return
-        scope.launch {
-            FynxAiConversationClient.confirmMessage(context, action.actionId)
-                .onSuccess {
-                    pendingMessageAction = null
-                    appendAssistantMessage("Message sent to ${action.recipientDisplayName.ifBlank { action.recipientUsername }}.")
-                    if (voiceConnected) voiceEngine.sendEvent(JSONObject().put("type","conversation.item.create").put("item", JSONObject().put("type","message").put("role","system").put("content", org.json.JSONArray().put(JSONObject().put("type","input_text").put("text","The user explicitly confirmed the pending message. The FYNX backend has now sent it successfully. Do not send it again; acknowledge that it was sent.")))).toString())
-                    if (voiceConnected) voiceEngine.sendEvent("{\"type\":\"response.create\"}")
-                }
-                .onFailure { errorMessage = it.message ?: "The message could not be sent." }
-        }
-    }
-
-    fun cancelPendingMessage() {
-        val action = pendingMessageAction ?: return
-        scope.launch {
-            FynxAiConversationClient.cancelMessage(context, action.actionId)
-                .onSuccess { pendingMessageAction = null; appendAssistantMessage("Okay, I did not send the message.") }
-                .onFailure { errorMessage = it.message ?: "The pending message could not be cancelled." }
         }
     }
 
@@ -254,7 +254,11 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
         input = ""; pendingMediaId = null; loading = true; errorMessage = null
         scope.launch {
             val result = withContext(Dispatchers.IO) { FynxAiConversationClient.send(context, activeConversation, prompt, listOfNotNull(attachment)) }
-            result.onSuccess { reply ->\n                    messages = messages + AiMessage(reply.assistantMessage.text, false)\n                    pendingMessageAction = reply.pendingAction\n                    failedPrompt = null\n                }
+            result.onSuccess { reply ->
+                    messages = messages + AiMessage(reply.assistantMessage.text, false)
+                    pendingMessageAction = reply.pendingAction
+                    failedPrompt = null
+                }
                 .onFailure {
                     failedPrompt = prompt; input = prompt; if (attachment != null) pendingMediaId = attachment
                     errorMessage = "FYNX AI is temporarily unavailable. You can retry or edit your message."
