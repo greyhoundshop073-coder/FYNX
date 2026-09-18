@@ -449,10 +449,12 @@ fun GroupChatPanel(
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
         ) {
             Surface(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize().safeDrawingPadding()) {
                 FynxCameraCapturePanel(
                     onCaptured = { uri, type -> attachment = uri; attachmentType = type; showCamera = false },
                     onDismiss = { showCamera = false }
                 )
+                }
             }
         }
     }
