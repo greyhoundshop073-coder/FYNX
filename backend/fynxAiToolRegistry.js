@@ -111,7 +111,7 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
     const where = ["l.active=TRUE", "l.quantity>0", "l.seller_id<>$1"];
     if (query) { params.push(`%${query}%`); where.push(`(l.title ILIKE $${params.length} OR l.description ILIKE $${params.length} OR u.username ILIKE $${params.length} OR u.display_name ILIKE $${params.length})`); }
     if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category=$${params.length}`); }
-    const result = await databasePool.query(`SELECT l.id,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,l.location,u.username AS seller_username,u.display_name AS seller_display_name FROM marketplace_listings l JOIN users u ON u.id=l.seller_id WHERE ${where.join(" AND ")} ORDER BY l.created_at DESC LIMIT 20`, params);
+    const result = await databasePool.query(`SELECT l.id,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,l.location,u.username AS seller_username,u.display_name AS seller_display_name FROM marketplace_listings l JOIN users u ON u.id=l.seller_id WHERE ${where.join(" AND ")}\n      AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocker_id=l.seller_id AND b.blocked_id=$1))\n      ORDER BY l.created_at DESC LIMIT 20`, params);
     return { listings: result.rows.map(row => ({ id: String(row.id), title: row.title, description: row.description, price: Number(row.price), currency: row.currency, category: row.category, condition: row.condition, quantity: Number(row.quantity), location: row.location, sellerUsername: row.seller_username, sellerDisplayName: row.seller_display_name || "" })) };
   }
 
