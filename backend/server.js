@@ -431,6 +431,49 @@ app.get("/api/messages/:username", auth, async (req, res) => {
   } catch (error) { console.error("messages", error); return res.status(500).json({ error: "message history failed" }); }
 });
 
+app.post("/api/assistant/message-confirm", auth, async (req, res) => {
+  try {
+    requireConfig("DATABASE_URL", DATABASE_URL);
+    const actionId = typeof req.body?.actionId === "string" ? req.body.actionId.trim() : "";
+    if (!/^[0-9a-f-]{36}$/i.test(actionId)) return res.status(400).json({ error: "invalid confirmation action" });
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const action = await client.query(`
+        SELECT a.id,a.user_id,a.recipient_id,a.message_text,u.username AS recipient_username,u.display_name AS recipient_display_name
+        FROM ai_pending_message_actions a
+        JOIN users u ON u.id=a.recipient_id
+        WHERE a.id=$1 AND a.user_id=$2 AND a.status='pending' AND a.expires_at>NOW()
+        FOR UPDATE
+      `, [actionId, req.user.sub]);
+      if (!action.rows[0]) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "message confirmation expired or already used" });
+      }
+      const row = action.rows[0];
+      const blocked = await client.query("SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1) LIMIT 1", [req.user.sub, row.recipient_id]);
+      if (blocked.rowCount) {
+        await client.query("UPDATE ai_pending_message_actions SET status='cancelled' WHERE id=$1", [actionId]);
+        await client.query("COMMIT");
+        return res.status(403).json({ error: "conversation unavailable" });
+      }
+      const inserted = await client.query("INSERT INTO messages (sender_id,recipient_id,text) VALUES ($1,$2,$3) RETURNING id,created_at", [req.user.sub,row.recipient_id,row.message_text]);
+      await client.query("UPDATE ai_pending_message_actions SET status='sent',sent_message_id=$2 WHERE id=$1", [actionId,inserted.rows[0].id]);
+      await client.query("COMMIT");
+      const sender = await pool.query("SELECT username,display_name FROM users WHERE id=$1", [req.user.sub]);
+      const message = { id:String(inserted.rows[0].id), senderId:String(req.user.sub), senderUsername:sender.rows[0]?.username || req.user.username || null, senderDisplayName:sender.rows[0]?.display_name || null, recipientId:String(row.recipient_id), recipientUsername:row.recipient_username, recipientDisplayName:row.recipient_display_name, text:row.message_text, timestamp:new Date(inserted.rows[0].created_at).getTime(), delivered:false, read:false, edited:false, deleted:false, replyToId:null, mediaId:null, mediaType:null, mediaUrl:null, voiceDurationMs:0 };
+      await broadcastMessage(message);
+      return res.status(201).json({ message, actionId });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally { client.release(); }
+  } catch (error) {
+    console.error("AI message confirmation", error);
+    return res.status(500).json({ error: "message confirmation failed" });
+  }
+});
+
 app.post("/api/messages", auth, async (req, res) => {
   try {
     const recipientUsername = typeof req.body?.recipientUsername === "string" ? req.body.recipientUsername.trim().toLowerCase() : "";
