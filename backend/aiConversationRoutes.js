@@ -153,19 +153,27 @@ export function registerFynxAiConversationRoutes({ app }) {
       const images=await loadImageInputs(db,mediaIds,userId);
       const prior=await db.query("SELECT role,text FROM ai_messages WHERE conversation_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 12",[conversation.id,userId]);
       const history=prior.rows.reverse().map(row=>({role:row.role,text:row.text})).filter(row=>row.text);
-      const userMessage=await db.query("INSERT INTO ai_messages(conversation_id,user_id,role,text) VALUES($1,$2,'user',$3) RETURNING id,created_at",[conversation.id,userId,message]);
-      const userMessageId=String(userMessage.rows[0].id);
-      for(const image of images) await db.query("INSERT INTO ai_message_media(message_id,media_id,media_type) VALUES($1,$2,$3)",[userMessageId,image.id,image.type]);
-      const reply = await runAssistantAgent({
+      await db.query("BEGIN");
+      let committed = false;
+      try {
+        const userMessage=await db.query("INSERT INTO ai_messages(conversation_id,user_id,role,text) VALUES($1,$2,'user',$3) RETURNING id,created_at",[conversation.id,userId,message]);
+        const userMessageId=String(userMessage.rows[0].id);
+        for(const image of images) await db.query("INSERT INTO ai_message_media(message_id,media_id,media_type) VALUES($1,$2,$3)",[userMessageId,image.id,image.type]);
+        const reply = await runAssistantAgent({
         message: message || "Analyze the attached image.",
         userId,
         history,
         context: {},
         imageInputs: images
       });
-      const assistant=await db.query("INSERT INTO ai_messages(conversation_id,user_id,role,text) VALUES($1,$2,'assistant',$3) RETURNING id,created_at",[conversation.id,userId,reply]);
-      await db.query("UPDATE ai_conversations SET updated_at=NOW(),title=CASE WHEN title='New conversation' AND $2<>'' THEN LEFT($2,120) ELSE title END WHERE id=$1",[conversation.id,message]);
-      return res.json({conversationId:String(conversation.id),userMessageId,assistantMessage:{id:String(assistant.rows[0].id),text:reply,timestamp:new Date(assistant.rows[0].created_at).getTime()}});
+        const assistant=await db.query("INSERT INTO ai_messages(conversation_id,user_id,role,text) VALUES($1,$2,'assistant',$3) RETURNING id,created_at",[conversation.id,userId,reply]);
+        await db.query("UPDATE ai_conversations SET updated_at=NOW(),title=CASE WHEN title='New conversation' AND $2<>'' THEN LEFT($2,120) ELSE title END WHERE id=$1",[conversation.id,message]);
+        await db.query("COMMIT");
+        committed = true;
+        return res.json({conversationId:String(conversation.id),userMessageId:String(userMessageId),assistantMessage:{id:String(assistant.rows[0].id),text:reply,timestamp:new Date(assistant.rows[0].created_at).getTime()}});
+      } finally {
+        if (!committed) await db.query("ROLLBACK").catch(() => {});
+      }
     } catch(error) {
       console.error("AI conversation message",error);
       return res.status(502).json({error:"FYNX AI is temporarily unavailable"});
