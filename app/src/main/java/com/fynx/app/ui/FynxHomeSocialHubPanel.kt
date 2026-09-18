@@ -140,7 +140,7 @@ fun FynxHomeSocialHubPanel(
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.fillMaxSize().imePadding()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { clearComposer() }, enabled = !posting && !aiCaptionLoading) { Icon(Icons.Default.Close, "Close") }
+                        IconButton(onClick = { clearComposer() }, enabled = !posting && !false) { Icon(Icons.Default.Close, "Close") }
                         Text("Create post", style = MaterialTheme.typography.titleLarge)
                         Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUris.isNotEmpty()), onClick = {
                             if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) { notice = "You are offline. Reconnect before publishing this post."; return@Button }
@@ -166,10 +166,10 @@ fun FynxHomeSocialHubPanel(
                 
                         Text("Add to your post", style = MaterialTheme.typography.titleMedium)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            ComposerAction("Photo", Icons.Default.Image, { gallery.launch(arrayOf("image/*")) }, !posting && !aiCaptionLoading && postingAllowed, Modifier.weight(1f))
-                            ComposerAction("Video", Icons.Default.VideoLibrary, { gallery.launch(arrayOf("video/*")) }, !posting && !aiCaptionLoading && postingAllowed, Modifier.weight(1f))
-                            ComposerAction("Camera", Icons.Default.CameraAlt, { showComposer = false; showCamera = true }, !posting && !aiCaptionLoading && postingAllowed, Modifier.weight(1f))
-                            ComposerAction("Voice", Icons.Default.Mic, { showComposer = false; showVoiceRecorder = true }, !posting && !aiCaptionLoading && postingAllowed, Modifier.weight(1f))
+                            ComposerAction("Photo", Icons.Default.Image, { gallery.launch(arrayOf("image/*")) }, !posting && !false && postingAllowed, Modifier.weight(1f))
+                            ComposerAction("Video", Icons.Default.VideoLibrary, { gallery.launch(arrayOf("video/*")) }, !posting && !false && postingAllowed, Modifier.weight(1f))
+                            ComposerAction("Camera", Icons.Default.CameraAlt, { showComposer = false; showCamera = true }, !posting && !false && postingAllowed, Modifier.weight(1f))
+                            ComposerAction("Voice", Icons.Default.Mic, { showComposer = false; showVoiceRecorder = true }, !posting && !false && postingAllowed, Modifier.weight(1f))
                         }
 
                         if (capturedUris.isNotEmpty()) {
@@ -193,7 +193,7 @@ fun FynxHomeSocialHubPanel(
                                     if (visualItems.size > 1) {
                                         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             visualItems.forEachIndexed { visualIndex, (_, uri, type) ->
-                                                Box(Modifier.size(76.dp).clickable(enabled = !posting && !aiCaptionLoading) { selectedVisualIndex = visualIndex }) {
+                                                Box(Modifier.size(76.dp).clickable(enabled = !posting && !false) { selectedVisualIndex = visualIndex }) {
                                                     Card(Modifier.fillMaxSize()) {
                                                         if (type == "video") {
                                                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(Icons.Default.VideoLibrary, "Video ${visualIndex + 1}", modifier = Modifier.size(28.dp)) }
@@ -201,12 +201,12 @@ fun FynxHomeSocialHubPanel(
                                                             AndroidView(factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.CENTER_CROP } }, update = { view -> view.setImageURI(uri) }, modifier = Modifier.fillMaxSize())
                                                         }
                                                     }
-                                                    IconButton(onClick = { removeCapturedUri(uri) }, enabled = !posting && !aiCaptionLoading, modifier = Modifier.align(Alignment.TopEnd).size(30.dp)) { Icon(Icons.Default.Close, "Remove media") }
+                                                    IconButton(onClick = { removeCapturedUri(uri) }, enabled = !posting && !false, modifier = Modifier.align(Alignment.TopEnd).size(30.dp)) { Icon(Icons.Default.Close, "Remove media") }
                                                 }
                                             }
                                         }
                                     } else if (visualItems.size == 1) {
-                                        TextButton(onClick = { removeCapturedUri(visualItems.first().second) }, enabled = !posting && !aiCaptionLoading) { Icon(Icons.Default.Close, null); Spacer(Modifier.width(4.dp)); Text("Remove photo/video") }
+                                        TextButton(onClick = { removeCapturedUri(visualItems.first().second) }, enabled = !posting && !false) { Icon(Icons.Default.Close, null); Spacer(Modifier.width(4.dp)); Text("Remove photo/video") }
                                     }
                                     Text("${capturedUris.size} item${if (capturedUris.size == 1) "" else "s"} ready${if (audioCount > 0) " • $audioCount audio" else ""}", color = MaterialTheme.colorScheme.primary)
                                     Text("Preview before publishing. Select any thumbnail to inspect it, or remove media you don't want to post.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -216,8 +216,8 @@ fun FynxHomeSocialHubPanel(
 
                         Text("Who can see this?", style = MaterialTheme.typography.titleMedium)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(selected = visibility == FynxPostVisibility.PUBLIC, onClick = { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") }, enabled = !posting && !aiCaptionLoading && postingAllowed && configuredPostVisibility == "Everyone")
-                            FilterChip(selected = visibility == FynxPostVisibility.FRIENDS_ONLY, onClick = { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") }, enabled = !posting && !aiCaptionLoading && postingAllowed)
+                            FilterChip(selected = visibility == FynxPostVisibility.PUBLIC, onClick = { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") }, enabled = !posting && !false && postingAllowed && configuredPostVisibility == "Everyone")
+                            FilterChip(selected = visibility == FynxPostVisibility.FRIENDS_ONLY, onClick = { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") }, enabled = !posting && !false && postingAllowed)
                         }
                         if (networkLevel == FynxNetworkQuality.Level.OFFLINE) Text("You are offline. Reconnect before publishing this post.", color = MaterialTheme.colorScheme.error)
                         notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -239,7 +239,6 @@ fun FynxHomeSocialHubPanel(
         )
     }
 
-    if (showPhotoEditor) Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { FynxAiPhotoEditorPanel(initialUri = capturedUris.firstOrNull(), onDone = { editedUri -> if (editedUri != null) { capturedUris = listOf(editedUri); capturedTypes = listOf("image") }; selectedVisualIndex = 0; showPhotoEditor = false; showComposer = true }) }
     if (showCamera) Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { FynxCameraCapturePanel(onCaptured = { uri, type -> capturedUris = (capturedUris + uri).take(12); recomputeTypes(); selectedVisualIndex = 0; showCamera = false; showComposer = true }, onDismiss = { showCamera = false; showComposer = true }) }
 }
 
