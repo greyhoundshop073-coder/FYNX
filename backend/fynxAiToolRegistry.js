@@ -14,7 +14,7 @@ const TOOL_DEFINITIONS = [
   { type: "function", name: "search_users", description: "Search real FYNX users by username or display name. Never use this to reveal phone numbers. Use when the user asks to find a person on FYNX.", strict: true, parameters: { type: "object", properties: { query: { type: "string", description: "At least 2 characters of a FYNX username or display name." } }, required: ["query"], additionalProperties: false } },
   { type: "function", name: "get_my_friends", description: "Read the authenticated user's accepted FYNX friends. Use when the user asks who their friends are or asks about their own friend list.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } },
   { type: "function", name: "get_people_recommendations", description: "Recommend real FYNX people the authenticated user may know, using safe server-side signals such as mutual accepted friends and existing follow relationships. Exclude the user, existing friends, blocked users and users already followed by the requester. Never expose private follower/following lists or invent people.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } },
-  { type: "function", name: "search_marketplace", description: "Search real active FYNX marketplace listings available to the authenticated user. Use for product discovery only; never claim a purchase or payment happened.", strict: true, parameters: { type: "object", properties: { query: { type: "string", description: "Optional product, seller, or description search text." }, category: { type: "string", description: "Optional marketplace category." } }, required: ["query", "category"], additionalProperties: false } },
+  { type: "function", name: "search_marketplace", description: "Search real active FYNX marketplace listings available to the authenticated user. Use for product discovery only; never claim a purchase or payment happened.", strict: true, parameters: { type: "object", properties: { query: { type: "string", description: "Optional product, seller, or description search text." }, category: { type: "string", description: "Optional marketplace category." } }, required: [], additionalProperties: false } },
   { type: "function", name: "get_trending_posts", description: "Read public trending FYNX posts visible to the authenticated user. Blocked users and recent NOT_INTERESTED posts must be excluded. Use when the user asks what is trending or wants public content to discover.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } },
   { type: "function", name: "get_my_saved_posts", description: "Read the authenticated user's own saved FYNX posts, respecting post visibility and block rules. Never expose another user's private saved-post list.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } }
 ];
@@ -34,6 +34,17 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
   if (!userId) throw new Error("authenticated user is required");
   let args = {};
   try { args = argumentsJson ? JSON.parse(argumentsJson) : {}; } catch { throw new Error("invalid tool arguments"); }
+  if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("tool arguments must be an object");
+  const definition = TOOL_DEFINITIONS.find(tool => tool.name === name);
+  if (!definition) throw new Error(`unsupported FYNX AI tool: ${name}`);
+  const allowedKeys = new Set(Object.keys(definition.parameters?.properties || {}));
+  for (const key of Object.keys(args)) if (!allowedKeys.has(key)) throw new Error(`unsupported argument: ${key}`);
+  for (const key of definition.parameters?.required || []) {
+    if (!(key in args) || args[key] === null || args[key] === undefined) throw new Error(`missing required argument: ${key}`);
+  }
+  for (const [key, schema] of Object.entries(definition.parameters?.properties || {})) {
+    if (key in args && schema?.type === "string" && typeof args[key] !== "string") throw new Error(`invalid argument type: ${key}`);
+  }
 
   if (name === "get_my_profile") {
     const result = await databasePool.query(`SELECT u.id,u.username,u.display_name,u.bio,u.country,u.verified,
