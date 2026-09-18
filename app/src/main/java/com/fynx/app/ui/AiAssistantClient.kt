@@ -5,7 +5,13 @@ import org.json.JSONObject
 
 /** Authenticated client for the FYNX AI backend. */
 object AiAssistantClient {
-    suspend fun sendMessage(\n        context: Context,\n        message: String,\n        history: List<AiMessage> = emptyList(),\n        conversationSummary: String = "",\n        currentTask: String = ""\n    ): Result<String> = runCatching {
+    suspend fun sendMessage(
+        context: Context,
+        message: String,
+        history: List<AiMessage> = emptyList(),
+        conversationSummary: String = "",
+        currentTask: String = ""
+    ): Result<String> = runCatching {
         val historyJson = org.json.JSONArray().apply {
             history.takeLast(12).forEach { item ->
                 put(JSONObject().put("role", if (item.fromUser) "user" else "assistant").put("text", item.text.trim().take(2000)))
