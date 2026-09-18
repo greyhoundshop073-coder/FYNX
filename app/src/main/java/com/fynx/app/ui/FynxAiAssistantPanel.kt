@@ -48,6 +48,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
     var input by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var failedPrompt by remember { mutableStateOf<String?>(null) }
     var voiceConnected by remember { mutableStateOf(false) }
     var voiceConnecting by remember { mutableStateOf(false) }
     var voiceMuted by remember { mutableStateOf(false) }
@@ -190,7 +191,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                     }
                     IconButton(
                         enabled = !loading && messages.size > 1,
-                        onClick = { messages = listOf(welcome); errorMessage = null }
+                        onClick = { messages = listOf(welcome); errorMessage = null; failedPrompt = null }
                     ) {
                         Icon(Icons.Default.DeleteSweep, contentDescription = "Clear chat")
                     }
@@ -286,11 +287,25 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                             Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                         ) {
-                            Text(
-                                errorMessage!!,
+                            Column(
                                 Modifier.padding(12.dp),
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    errorMessage!!,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                if (failedPrompt != null) {
+                                    TextButton(
+                                        onClick = {
+                                            input = failedPrompt.orEmpty()
+                                            errorMessage = null
+                                        }
+                                    ) {
+                                        Text("Retry")
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -384,8 +399,14 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                                     val result = withContext(Dispatchers.IO) {
                                         AiAssistantClient.sendMessage(context, prompt, history)
                                     }
-                                    result.onSuccess { reply -> messages = messages + AiMessage(reply, false) }
-                                        .onFailure { errorMessage = "FYNX AI is temporarily unavailable. Please try again." }
+                                    result.onSuccess { reply ->
+                                            messages = messages + AiMessage(reply, false)
+                                            failedPrompt = null
+                                        }.onFailure {
+                                            failedPrompt = prompt
+                                            input = prompt
+                                            errorMessage = "FYNX AI is temporarily unavailable. You can retry or edit your message."
+                                        }
                                     loading = false
                                 }
                             }
