@@ -10,6 +10,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -22,6 +27,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
@@ -54,6 +60,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
     var voiceConnected by remember { mutableStateOf(false) }
     var voiceConnecting by remember { mutableStateOf(false) }
     var voiceMuted by remember { mutableStateOf(false) }
+    var showComposerTools by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val listState = rememberLazyListState()
@@ -247,12 +254,6 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                     ) {
                         Icon(Icons.Default.DeleteSweep, contentDescription = "Clear chat")
                     }
-                    IconButton(enabled = !voiceConnecting, onClick = { toggleVoice() }) {
-                        Icon(
-                            if (voiceConnected) Icons.Default.StopCircle else Icons.Default.Mic,
-                            contentDescription = if (voiceConnected) "Stop FYNX AI voice" else "Start FYNX AI voice"
-                        )
-                    }
                 }
             }
 
@@ -394,34 +395,123 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
 
             Spacer(Modifier.height(8.dp))
 
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = FynxDesign.LargeCardShape,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = .98f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f)),
-                tonalElevation = 4.dp
-            ) {
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = {
-                        input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH)
-                        errorMessage = null
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(6.dp),
-                    enabled = !loading,
-                    minLines = 1,
-                    maxLines = 5,
-                    shape = FynxDesign.ControlShape,
-                    placeholder = { Text("Message FYNX AI…") },
-                    leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
-                    trailingIcon = {
-                        IconButton(
-                            enabled = !loading && input.trim().isNotEmpty(),
-                            onClick = { sendPrompt(input, true) }
-                        ) {
-                            Icon(Icons.Default.Send, contentDescription = "Send")
+            Box {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = FynxDesign.LargeCardShape,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = .98f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f)),
+                    tonalElevation = 4.dp
+                ) {
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = {
+                            input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH)
+                            errorMessage = null
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(6.dp),
+                        enabled = !loading && !voiceConnected,
+                        minLines = 1,
+                        maxLines = 5,
+                        shape = FynxDesign.ControlShape,
+                        placeholder = { Text(if (voiceConnected) "Listening to you…" else "Message FYNX AI…") },
+                        leadingIcon = {
+                            Box {
+                                IconButton(
+                                    enabled = !loading,
+                                    onClick = { showComposerTools = !showComposerTools }
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = "FYNX AI tools")
+                                }
+                                DropdownMenu(
+                                    expanded = showComposerTools,
+                                    onDismissRequest = { showComposerTools = false }
+                                ) {
+                                    toolLinks.forEach { (destination, label) ->
+                                        DropdownMenuItem(
+                                            text = { Text(label) },
+                                            leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
+                                            onClick = {
+                                                showComposerTools = false
+                                                onOpenDestination(destination)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        trailingIcon = {
+                            when {
+                                voiceConnected -> {
+                                    VoiceListeningIndicator(
+                                        muted = voiceMuted,
+                                        onClick = {
+                                            voiceMuted = !voiceMuted
+                                            voiceEngine.setMicrophoneEnabled(!voiceMuted)
+                                        }
+                                    )
+                                }
+                                input.trim().isNotEmpty() -> {
+                                    IconButton(
+                                        enabled = !loading,
+                                        onClick = { sendPrompt(input, true) }
+                                    ) {
+                                        Icon(Icons.Default.Send, contentDescription = "Send")
+                                    }
+                                }
+                                else -> {
+                                    IconButton(
+                                        enabled = !voiceConnecting && !loading,
+                                        onClick = { toggleVoice() }
+                                    ) {
+                                        Icon(Icons.Default.Mic, contentDescription = "Speak to FYNX AI")
+                                    }
+                                }
+                            }
                         }
-                    }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VoiceListeningIndicator(
+    muted: Boolean,
+    onClick: () -> Unit
+) {
+    val transition = rememberInfiniteTransition(label = "fynxVoiceBubbles")
+    val heights = (0..4).map { index ->
+        val value by transition.animateFloat(
+            initialValue = 0.35f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(420 + (index * 70)),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "voiceBubble$index"
+        )
+        value
+    }
+    IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
+        Row(
+            modifier = Modifier.fillMaxHeight(),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            heights.forEach { height ->
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .height((16.dp * height).coerceAtLeast(5.dp))
+                        .clip(RoundedCornerShape(50))
+                        .background(
+                            if (muted) MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.primary
+                        )
                 )
             }
         }
