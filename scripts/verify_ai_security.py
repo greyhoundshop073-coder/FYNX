@@ -32,6 +32,7 @@ check("Android AI uses persistent conversation transport", "FynxAiConversationCl
 check("Android AI tracks conversation summary and current task", 'conversationSummary' in android_panel and 'currentTask' in android_panel and 'buildAiConversationContext' in read("app/src/main/java/com/fynx/app/ui/AiConversationContext.kt"))
 check("AI conversation routes are registered", "registerFynxAiConversationRoutes({ app });" in read("backend/scalability.js"))
 check("AI conversations are authenticated and user-scoped", 'authenticate(req)' in ai_routes and "user_id=$2" in ai_routes and "WHERE user_id=$1" in ai_routes)
+check("Persistent AI text conversations reuse the approved tool agent", "runAssistantAgent" in ai_routes and "runAssistantAgent" in registry)
 check("AI conversation messages persist with attachments", "ai_messages" in ai_routes and "ai_message_media" in ai_routes and "mediaIds" in ai_routes)
 check("AI image attachments reuse authenticated media ownership", "owner_id=$1" in ai_routes and "message_media" in ai_routes)
 check("AI conversation client supports create/load/list/delete", all(x in ai_conversations for x in ["suspend fun create", "suspend fun list", "suspend fun get", "suspend fun delete"]))
