@@ -67,6 +67,7 @@ fun FynxGroupCameraPicker(context: Context, onMediaSelected: (Uri, String) -> Un
     if (openCamera) {
         androidx.compose.ui.window.Dialog(onDismissRequest = { if (!uploading) openCamera = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.fillMaxSize().safeDrawingPadding()) {
                 FynxCameraCapturePanel(
                     onCaptured = { uri, type -> onMediaSelected(uri, type); openCamera = false },
                     onDismiss = { if (!uploading) openCamera = false }
