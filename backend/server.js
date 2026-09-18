@@ -474,6 +474,20 @@ app.post("/api/assistant/message-confirm", auth, async (req, res) => {
   }
 });
 
+app.post("/api/assistant/message-cancel", auth, async (req, res) => {
+  try {
+    requireConfig("DATABASE_URL", DATABASE_URL);
+    const actionId = typeof req.body?.actionId === "string" ? req.body.actionId.trim() : "";
+    if (!/^[0-9a-f-]{36}$/i.test(actionId)) return res.status(400).json({ error: "invalid confirmation action" });
+    const result = await pool.query("UPDATE ai_pending_message_actions SET status='cancelled' WHERE id=$1 AND user_id=$2 AND status='pending' AND expires_at>NOW() RETURNING id", [actionId, req.user.sub]);
+    if (!result.rows[0]) return res.status(409).json({ error: "message confirmation expired or already used" });
+    return res.json({ ok:true, actionId });
+  } catch (error) {
+    console.error("AI message cancellation", error);
+    return res.status(500).json({ error: "message cancellation failed" });
+  }
+});
+
 app.post("/api/messages", auth, async (req, res) => {
   try {
     const recipientUsername = typeof req.body?.recipientUsername === "string" ? req.body.recipientUsername.trim().toLowerCase() : "";
