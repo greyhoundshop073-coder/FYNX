@@ -10,7 +10,9 @@ data class FynxNotification(
     val timestamp: Long = System.currentTimeMillis(),
     val read: Boolean = false,
     val targetId: String? = null,
-    val sourceUsername: String? = null
+    val sourceUsername: String? = null,
+    val targetIds: List<String> = emptyList(),
+    val sourceUsernames: List<String> = emptyList()
 )
 
 fun List<FynxNotification>.markNotificationRead(id: String): List<FynxNotification> =
