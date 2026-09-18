@@ -106,6 +106,7 @@ function preferenceColumn(type) {
   switch (type) {
     case "MESSAGE": return "messages_enabled";
     case "FRIEND_REQUEST": return "friend_requests_enabled";
+    case "FOLLOW": return "friend_requests_enabled";
     case "STORY": return "stories_enabled";
     case "GROUP": return "group_enabled";
     case "COMMENT": return "comments_enabled";
