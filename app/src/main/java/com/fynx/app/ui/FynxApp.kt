@@ -41,7 +41,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var appearance by remember { mutableStateOf(FynxPreferencesStore.loadAppearance(context)) }
     var openProfileSettings by remember { mutableStateOf(false) }
     var profileVersion by remember { mutableIntStateOf(0) }
-    var remoteMyPhotoId by remember(authSession.username, profileVersion) { mutableStateOf(FynxProfileRemoteClient.cachedProfilePhotoId(context, authSession.username ?: "")) }
+    var remoteMyPhotoId: String? by remember(authSession.username, profileVersion) { mutableStateOf(FynxProfileRemoteClient.cachedProfilePhotoId(context, authSession.username ?: "")) }
     var aiCaptionDraft by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(context) {
