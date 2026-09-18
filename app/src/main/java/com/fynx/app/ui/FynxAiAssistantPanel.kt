@@ -415,7 +415,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                         }
                     )
                 }
-            )
+            }
         }
     }
 }
