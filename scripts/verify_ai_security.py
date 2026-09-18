@@ -24,6 +24,8 @@ check("AI provider key stays server-side", 'process.env.OPENAI_API_KEY' in regis
 check("AI tool execution requires authenticated user", 'if (!userId) throw new Error("authenticated user is required")' in registry)
 check("AI tool arguments are JSON validated", 'JSON.parse(argumentsJson)' in registry)
 check("AI agent rejects empty provider responses", 'throw new Error("AI provider returned an empty response")' in registry)
+check("AI agent accepts bounded conversation history", 'history = []' in registry and 'slice(-12)' in registry and 'conversation history too long' in registry)
+check("Android AI sends bounded conversation history", 'takeLast(12)' in android and 'AiAssistantClient.sendMessage(context, prompt, history)' in android)
 check("AI agent detects repeated tool calls", 'AI tool loop detected' in registry and 'seenToolCalls' in registry)
 check("AI agent fails clearly at tool-processing limit", 'AI tool-processing limit reached' in registry)
 check("Sensitive write actions remain unavailable", 'Never perform payments, refunds, purchases, transfers, deletions, settings changes, or messages' in registry)

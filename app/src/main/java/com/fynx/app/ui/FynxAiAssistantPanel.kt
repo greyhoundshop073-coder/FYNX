@@ -189,9 +189,10 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                         request = FynxAiRequest(capability = FynxAiCapability.ASSISTANT, prompt = prompt, requestedScopes = setOf(FynxAiDataScope.NONE))
                     )
                     if (!decision.allowed) { errorMessage = "I couldn't process that request safely."; return@IconButton }
+                    val history = messages.drop(1).filter { it.text.isNotBlank() }.takeLast(12)
                     messages = messages + AiMessage(prompt, true); input = ""; loading = true; errorMessage = null
                     scope.launch {
-                        val result = withContext(Dispatchers.IO) { AiAssistantClient.sendMessage(context, prompt) }
+                        val result = withContext(Dispatchers.IO) { AiAssistantClient.sendMessage(context, prompt, history) }
                         result.onSuccess { reply -> messages = messages + AiMessage(reply, false) }.onFailure { errorMessage = "FYNX AI is temporarily unavailable. Please try again." }
                         loading = false
                     }
