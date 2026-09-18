@@ -125,8 +125,8 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
         // to the outer layout moves the sheet as a unit instead of pushing only
         // the composer row, which previously allowed the typing box to sit below
         // the visible keyboard/screen boundary on some Android window sizes.
-        Box(Modifier.fillMaxSize().imePadding(), contentAlignment = Alignment.BottomCenter) {
-            Surface(Modifier.fillMaxWidth().fillMaxHeight(0.84f), color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.extraLarge, tonalElevation = 8.dp) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+            Surface(Modifier.fillMaxSize().imePadding(), color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.extraLarge, tonalElevation = 8.dp) {
                 Column(Modifier.fillMaxSize()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Close comments") }
