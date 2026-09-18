@@ -246,7 +246,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), "", mediaId = media.id, mediaType = "audio", voiceDurationMs = duration)
                             .onSuccess { remote ->
                                 isNewConversation = false
-                                                    $sendOld
+                                currentUserId?.let { myId -> messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp } }
                                 pendingFile.delete()
                             }.onFailure { networkError = it.message ?: "Voice message could not be sent" }
                     }.onFailure { networkError = it.message ?: "Voice recording upload failed" }
