@@ -42,7 +42,7 @@ fun BudgetPlannerPanel() {
         } }
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("Weekly", "Monthly").forEach { option -> FilterChip(selected = period == option, onClick = { period = option; aiResult = ""; aiError = null }, label = { Text(option) }) }
+            listOf("Weekly", "Monthly").forEach { option -> FilterChip(selected = period == option, onClick = { period = option }, label = { Text(option) }) }
         }
         OutlinedTextField(category, { category = it }, label = { Text("Budget category") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(limitText, { limitText = it }, label = { Text("Category limit") }, singleLine = true, modifier = Modifier.fillMaxWidth())
