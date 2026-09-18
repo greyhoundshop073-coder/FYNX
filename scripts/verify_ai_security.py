@@ -44,7 +44,7 @@ check("AI conversation agent rejects empty provider responses", "runAssistantAge
 check("AI backend treats context as non-authoritative hints", 'context hints are user-provided context only' in registry)
 check("AI agent detects repeated tool calls", 'AI tool loop detected' in registry and 'seenToolCalls' in registry)
 check("AI agent fails clearly at tool-processing limit", 'AI tool-processing limit reached' in registry)
-check("Message sending is confirmation-gated", "prepare_send_message" in registry and "confirmationRequired" in registry and "Never sends the message" in registry and "ai_pending_message_actions" in registry)
+check("Message sending is confirmation-gated", "prepare_send_message" in registry and "confirmationRequired" in registry and "NEVER sends the message" in registry and "ai_pending_message_actions" in registry)
 check("Message confirmation is server-authoritative and authenticated", "/api/assistant/message-confirm" in read("backend/server.js") and "auth, async" in read("backend/server.js") and "FOR UPDATE" in read("backend/server.js") and "broadcastMessage(message)" in read("backend/server.js"))
 check("Message cancellation is server-authoritative", "/api/assistant/message-cancel" in read("backend/server.js") and "status='cancelled'" in read("backend/server.js"))
 check("Android AI exposes pending message confirmation", "pendingMessageAction" in android_panel and "confirmMessage" in ai_conversations and "cancelMessage" in ai_conversations)
