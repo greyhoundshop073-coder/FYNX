@@ -93,7 +93,8 @@ class FynxAiWebRtcEngine(
         }
         toolScope.launch {
             val result = FynxAiVoiceSession.executeTool(appContext, name, arguments)
-            val output = result.getOrElse { error -> JSONObject().put("error", error.message ?: "tool request failed").toString() }\n            onToolResult(name, output)
+            val output = result.getOrElse { error -> JSONObject().put("error", error.message ?: "tool request failed").toString() }
+            onToolResult(name, output)
             val response = JSONObject()
                 .put("type", "conversation.item.create")
                 .put("item", JSONObject().put("type", "function_call_output").put("call_id", callId).put("output", output))
