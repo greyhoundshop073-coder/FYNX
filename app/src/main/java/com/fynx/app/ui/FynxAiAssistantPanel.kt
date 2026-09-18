@@ -107,7 +107,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
             FynxAiConversationClient.get(context, id)
                 .onSuccess { conversation ->
                     conversationId = conversation.id
-                    messages = listOf(welcome) + conversation.messages.map { AiMessage(it.text, it.role == "user") }
+                    messages = conversation.messages.map { AiMessage(it.text, it.role == "user") }.ifEmpty { listOf(welcome) }
                     input = ""; pendingMediaId = null; showConversationHistory = false
                 }
                 .onFailure { errorMessage = it.message ?: "Unable to load that conversation." }
