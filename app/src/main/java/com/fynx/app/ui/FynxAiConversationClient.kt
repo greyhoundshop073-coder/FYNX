@@ -46,8 +46,11 @@ object FynxAiConversationClient {
         }
     }
 
-    suspend fun uploadImage(context: Context, uri: Uri): Result<String> =
-        FynxProductionMessaging.uploadMedia(context, uri, "image/jpeg").map { it.id }
+    suspend fun uploadImage(context: Context, uri: Uri): Result<String> {
+        val mime = context.contentResolver.getType(uri)?.trim()?.lowercase().orEmpty()
+        if (!mime.startsWith("image/")) return Result.failure(IllegalArgumentException("Select an image file."))
+        return FynxProductionMessaging.uploadMedia(context, uri, mime).map { it.id }
+    }
 
     private fun parseConversation(item: JSONObject): FynxAiConversation {
         val messagesArray = item.optJSONArray("messages") ?: JSONArray()
