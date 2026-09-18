@@ -45,7 +45,7 @@ class FynxAiWebRtcEngine(
     private var onStateChanged: ((State, String?) -> Unit)? = null
     private var onEvent: ((String) -> Unit)? = null
     init { PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(appContext).createInitializationOptions()); factory = PeerConnectionFactory.builder().createPeerConnectionFactory() }
-    suspend fun connect(onStateChanged: (State, String?) -> Unit = { _, _ -> }, onEvent: (String) -> Unit = {}): Result<Unit> = runCatching {
+    suspend fun connect(onStateChanged: (State, String?) -> Unit = { _, _ -> }, onEvent: (String) -> Unit = {}, onToolResult: (String, String) -> Unit = { _, _ -> }): Result<Unit> = runCatching {
         require(state != State.CONNECTING && state != State.CONNECTED) { "FYNX AI voice is already connected" }
         if (toolJob.isCancelled) {
             toolJob = SupervisorJob()
@@ -93,7 +93,7 @@ class FynxAiWebRtcEngine(
         }
         toolScope.launch {
             val result = FynxAiVoiceSession.executeTool(appContext, name, arguments)
-            val output = result.getOrElse { error -> JSONObject().put("error", error.message ?: "tool request failed").toString() }
+            val output = result.getOrElse { error -> JSONObject().put("error", error.message ?: "tool request failed").toString() }\n            onToolResult(name, output)
             val response = JSONObject()
                 .put("type", "conversation.item.create")
                 .put("item", JSONObject().put("type", "function_call_output").put("call_id", callId).put("output", output))
