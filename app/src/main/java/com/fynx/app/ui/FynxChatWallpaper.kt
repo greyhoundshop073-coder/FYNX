@@ -16,18 +16,110 @@ private val FynxChatWallpaperOptions = listOf("FYNX Default", "Midnight", "Auror
 @Composable
 fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    // FYNX chat wallpaper reads preferences on recomposition so closing the personalization
-    // dialog immediately applies the newly selected wallpaper.
     val wallpaper = FynxPreferencesStore.loadChatWallpaper(context)
-    val brush = when (wallpaper) {
-        "Midnight" -> Brush.verticalGradient(listOf(Color(0xFF090D18), Color(0xFF1A2338)))
-        "Aurora" -> Brush.verticalGradient(listOf(Color(0xFF092B2A), Color(0xFF14243D)))
-        "Sunrise" -> Brush.verticalGradient(listOf(Color(0xFF39241A), Color(0xFF261B36)))
-        "Ocean" -> Brush.verticalGradient(listOf(Color(0xFF06243A), Color(0xFF0C4260)))
-        "Minimal" -> Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surface))
-        else -> Brush.verticalGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surfaceVariant))
+    val base = when (wallpaper) {
+        "Midnight" -> Color(0xFF171A20)
+        "Aurora" -> Color(0xFF182323)
+        "Sunrise" -> Color(0xFF211D21)
+        "Ocean" -> Color(0xFF17242B)
+        "Minimal" -> MaterialTheme.colorScheme.background
+        else -> Color(0xFF202326)
     }
-    Box(modifier.background(brush), content = content)
+    Box(modifier.background(base)) {
+        if (wallpaper == "FYNX Default") FynxChatDoodlePattern()
+        content()
+    }
+}
+
+@Composable
+private fun FynxChatDoodlePattern() {
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        val ink = Color.White.copy(alpha = 0.052f)
+        val sw = 1.1.dp.toPx()
+        val w = 210.dp.toPx()
+        val h = 175.dp.toPx()
+        fun line(a: androidx.compose.ui.geometry.Offset, b: androidx.compose.ui.geometry.Offset) =
+            drawLine(ink, a, b, sw)
+        fun circle(x: Float, y: Float, r: Float) =
+            drawCircle(ink, r, androidx.compose.ui.geometry.Offset(x, y),
+                androidx.compose.ui.graphics.drawscope.Stroke(sw))
+        fun bubble(x: Float, y: Float, s: Float) {
+            drawRoundRect(ink, androidx.compose.ui.geometry.Offset(x, y),
+                androidx.compose.ui.geometry.Size(42*s, 28*s), 9*s, 9*s,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(sw))
+            line(androidx.compose.ui.geometry.Offset(x+8*s,y+28*s),
+                androidx.compose.ui.geometry.Offset(x+5*s,y+36*s))
+        }
+        fun camera(x: Float, y: Float, s: Float) {
+            drawRect(ink, androidx.compose.ui.geometry.Offset(x,y),
+                androidx.compose.ui.geometry.Size(42*s,30*s),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(sw))
+            circle(x+21*s,y+15*s,7*s)
+            line(androidx.compose.ui.geometry.Offset(x+8*s,y),
+                androidx.compose.ui.geometry.Offset(x+14*s,y-6*s))
+        }
+        fun bicycle(x: Float, y: Float, s: Float) {
+            circle(x,y,13*s); circle(x+42*s,y,13*s)
+            line(androidx.compose.ui.geometry.Offset(x,y),
+                androidx.compose.ui.geometry.Offset(x+18*s,y-20*s))
+            line(androidx.compose.ui.geometry.Offset(x+18*s,y-20*s),
+                androidx.compose.ui.geometry.Offset(x+42*s,y))
+            line(androidx.compose.ui.geometry.Offset(x,y),
+                androidx.compose.ui.geometry.Offset(x+34*s,y))
+        }
+        fun pin(x: Float, y: Float, s: Float) {
+            circle(x,y,7*s)
+            line(androidx.compose.ui.geometry.Offset(x-7*s,y+2*s),
+                androidx.compose.ui.geometry.Offset(x,y+19*s))
+            line(androidx.compose.ui.geometry.Offset(x,y+19*s),
+                androidx.compose.ui.geometry.Offset(x+7*s,y+2*s))
+        }
+        fun house(x: Float, y: Float, s: Float) {
+            line(androidx.compose.ui.geometry.Offset(x,y+18*s),
+                androidx.compose.ui.geometry.Offset(x+21*s,y))
+            line(androidx.compose.ui.geometry.Offset(x+21*s,y),
+                androidx.compose.ui.geometry.Offset(x+42*s,y+18*s))
+            line(androidx.compose.ui.geometry.Offset(x,y+18*s),
+                androidx.compose.ui.geometry.Offset(x,y+43*s))
+            line(androidx.compose.ui.geometry.Offset(x+42*s,y+18*s),
+                androidx.compose.ui.geometry.Offset(x+42*s,y+43*s))
+            line(androidx.compose.ui.geometry.Offset(x,y+43*s),
+                androidx.compose.ui.geometry.Offset(x+42*s,y+43*s))
+        }
+        fun fynx(x: Float, y: Float) {
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.WHITE
+                alpha = 13
+                textSize = 12.dp.toPx()
+                typeface = android.graphics.Typeface.create("sans-serif-medium", 0)
+            }
+            drawContext.canvas.nativeCanvas.drawText("FYNX", x, y, paint)
+        }
+        var row = 0
+        var y = -30f
+        while (y < size.height + h) {
+            var col = 0
+            var x = if (row % 2 == 0) -45f else -145f
+            while (x < size.width + w) {
+                when ((row * 5 + col) % 10) {
+                    0 -> bicycle(x, y+58, .62f)
+                    1 -> camera(x+25, y+20, .68f)
+                    2 -> pin(x+52, y+48, .72f)
+                    3 -> bubble(x+18, y+55, .72f)
+                    4 -> house(x+10, y+20, .68f)
+                    5 -> fynx(x+20, y+50)
+                    6 -> { circle(x+34,y+45,14f); line(androidx.compose.ui.geometry.Offset(x+20,y+45),androidx.compose.ui.geometry.Offset(x+48,y+45)) }
+                    7 -> { line(androidx.compose.ui.geometry.Offset(x+10,y+62),androidx.compose.ui.geometry.Offset(x+30,y+42)); line(androidx.compose.ui.geometry.Offset(x+30,y+42),androidx.compose.ui.geometry.Offset(x+50,y+62)) }
+                    8 -> { circle(x+28,y+42,8f); line(androidx.compose.ui.geometry.Offset(x+28,y+42),androidx.compose.ui.geometry.Offset(x+28,y+25)) }
+                    else -> { circle(x+30,y+45,10f); line(androidx.compose.ui.geometry.Offset(x+20,y+35),androidx.compose.ui.geometry.Offset(x+40,y+55)); line(androidx.compose.ui.geometry.Offset(x+40,y+35),androidx.compose.ui.geometry.Offset(x+20,y+55)) }
+                }
+                x += w
+                col++
+            }
+            y += h
+            row++
+        }
+    }
 }
 
 @Composable
