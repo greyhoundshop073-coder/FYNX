@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ContentCopy
@@ -411,9 +412,9 @@ private fun AiChatBubble(
         Surface(
             modifier = Modifier.widthIn(max = 340.dp),
             shape = if (message.fromUser) {
-                MaterialTheme.shapes.large.copy(bottomEnd = 6.dp)
+                RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomStart = 22.dp, bottomEnd = 6.dp)
             } else {
-                MaterialTheme.shapes.large.copy(bottomStart = 6.dp)
+                RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomStart = 6.dp, bottomEnd = 22.dp)
             },
             color = if (message.fromUser) {
                 MaterialTheme.colorScheme.primaryContainer
