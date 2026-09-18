@@ -55,7 +55,6 @@ fun FynxHomeSocialHubPanel(
     var showComposer by remember { mutableStateOf(false) }
     var showCamera by remember { mutableStateOf(false) }
     var showVoiceRecorder by remember { mutableStateOf(false) }
-    var showPhotoEditor by remember { mutableStateOf(false) }
     var capturedUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var capturedTypes by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedVisualIndex by remember { mutableIntStateOf(0) }
@@ -101,13 +100,13 @@ fun FynxHomeSocialHubPanel(
     }
 
     fun removeCapturedUri(uri: Uri) {
-        if (posting || aiCaptionLoading) return
+        if (posting) return
         capturedUris = capturedUris.filterNot { it == uri }
         recomputeTypes()
     }
 
     fun clearComposer() {
-        if (!posting && !aiCaptionLoading) {
+        if (!posting) {
             showComposer = false
             capturedUris = emptyList()
             capturedTypes = emptyList()
@@ -136,14 +135,14 @@ fun FynxHomeSocialHubPanel(
     if (showComposer) {
         Dialog(
             onDismissRequest = { clearComposer() },
-            properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = !posting && !aiCaptionLoading, dismissOnClickOutside = !posting && !aiCaptionLoading)
+            properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = !posting, dismissOnClickOutside = !posting)
         ) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.fillMaxSize().imePadding()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { clearComposer() }, enabled = !posting && !aiCaptionLoading) { Icon(Icons.Default.Close, "Close") }
                         Text("Create post", style = MaterialTheme.typography.titleLarge)
-                        Button(enabled = !posting && !aiCaptionLoading && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUris.isNotEmpty()), onClick = {
+                        Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUris.isNotEmpty()), onClick = {
                             if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) { notice = "You are offline. Reconnect before publishing this post."; return@Button }
                             posting = true; notice = null
                             scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
@@ -162,10 +161,9 @@ fun FynxHomeSocialHubPanel(
                             maxLines = 14,
                             placeholder = { Text("What's on your mind? Write your post here…", style = MaterialTheme.typography.titleMedium) },
                             textStyle = MaterialTheme.typography.bodyLarge,
-                            enabled = !posting && !aiCaptionLoading && postingAllowed,
+                            enabled = !posting && postingAllowed,
                         )
-                        if (aiCaptionLoading) Text("FYNX AI is improving your caption…", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
-
+                
                         Text("Add to your post", style = MaterialTheme.typography.titleMedium)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             ComposerAction("Photo", Icons.Default.Image, { gallery.launch(arrayOf("image/*")) }, !posting && !aiCaptionLoading && postingAllowed, Modifier.weight(1f))
