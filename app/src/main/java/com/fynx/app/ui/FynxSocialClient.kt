@@ -11,7 +11,8 @@ object FynxSocialClient {
         val displayName: String,
         val phone: String,
         val id: String = "",
-        val profilePhotoMediaId: String? = null
+        val profilePhotoMediaId: String? = null,
+        val createdAt: String? = null
     )
     data class FriendRequest(val id: String, val username: String, val displayName: String, val status: String)
 
