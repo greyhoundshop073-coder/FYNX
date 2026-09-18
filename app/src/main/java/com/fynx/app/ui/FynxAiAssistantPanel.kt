@@ -133,6 +133,56 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
         }
     }
 
+    val sendPrompt: (String, Boolean) -> Unit = sendPrompt@{ rawPrompt, appendUser ->
+        val prompt = rawPrompt.trim()
+        if (prompt.isEmpty() || loading) return@sendPrompt
+        val decision = FynxFutureIntelligencePolicy.authorize(
+            permissions = listOf(
+                FynxAiPermission(
+                    capability = FynxAiCapability.ASSISTANT,
+                    allowedScopes = setOf(FynxAiDataScope.NONE),
+                    enabled = true
+                )
+            ),
+            request = FynxAiRequest(
+                capability = FynxAiCapability.ASSISTANT,
+                prompt = prompt,
+                requestedScopes = setOf(FynxAiDataScope.NONE)
+            )
+        )
+        if (!decision.allowed) {
+            errorMessage = "I couldn't process that request safely."
+            return@sendPrompt
+        }
+        val baseMessages = if (
+            !appendUser &&
+            messages.lastOrNull()?.fromUser == true &&
+            messages.last().text == prompt
+        ) messages.dropLast(1) else messages
+        val history = baseMessages
+            .drop(1)
+            .filter { it.text.isNotBlank() }
+            .takeLast(12)
+        if (appendUser) messages = messages + AiMessage(prompt, true)
+        input = ""
+        loading = true
+        errorMessage = null
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                AiAssistantClient.sendMessage(context, prompt, history)
+            }
+            result.onSuccess { reply ->
+                messages = messages + AiMessage(reply, false)
+                failedPrompt = null
+            }.onFailure {
+                failedPrompt = prompt
+                input = prompt
+                errorMessage = "FYNX AI is temporarily unavailable. You can retry or edit your message."
+            }
+            loading = false
+        }
+    }
+
     LaunchedEffect(messages.size, loading, voiceConnecting) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
     }
@@ -297,10 +347,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                                 )
                                 if (failedPrompt != null) {
                                     TextButton(
-                                        onClick = {
-                                            input = failedPrompt.orEmpty()
-                                            errorMessage = null
-                                        }
+                                        onClick = { failedPrompt?.let { sendPrompt(it, false) } }
                                     ) {
                                         Text("Retry")
                                     }
@@ -368,46 +415,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                     trailingIcon = {
                         IconButton(
                             enabled = !loading && input.trim().isNotEmpty(),
-                            onClick = {
-                                val prompt = input.trim()
-                                if (prompt.isEmpty()) return@IconButton
-                                val decision = FynxFutureIntelligencePolicy.authorize(
-                                    permissions = listOf(
-                                        FynxAiPermission(
-                                            capability = FynxAiCapability.ASSISTANT,
-                                            allowedScopes = setOf(FynxAiDataScope.NONE),
-                                            enabled = true
-                                        )
-                                    ),
-                                    request = FynxAiRequest(
-                                        capability = FynxAiCapability.ASSISTANT,
-                                        prompt = prompt,
-                                        requestedScopes = setOf(FynxAiDataScope.NONE)
-                                    )
-                                )
-                                if (!decision.allowed) {
-                                    errorMessage = "I couldn't process that request safely."
-                                    return@IconButton
-                                }
-                                val history = messages.drop(1).filter { it.text.isNotBlank() }.takeLast(12)
-                                messages = messages + AiMessage(prompt, true)
-                                input = ""
-                                loading = true
-                                errorMessage = null
-                                scope.launch {
-                                    val result = withContext(Dispatchers.IO) {
-                                        AiAssistantClient.sendMessage(context, prompt, history)
-                                    }
-                                    result.onSuccess { reply ->
-                                        messages = messages + AiMessage(reply, false)
-                                        failedPrompt = null
-                                    }.onFailure {
-                                        failedPrompt = prompt
-                                        input = prompt
-                                        errorMessage = "FYNX AI is temporarily unavailable. You can retry or edit your message."
-                                    }
-                                    loading = false
-                                }
+                            onClick = { sendPrompt(input, true) }
                             }
                         ) {
                             Icon(Icons.Default.Send, contentDescription = "Send")
