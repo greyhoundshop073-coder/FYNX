@@ -97,14 +97,16 @@ class FynxAiWebRtcEngine(
             val response = JSONObject()
                 .put("type", "conversation.item.create")
                 .put("item", JSONObject().put("type", "function_call_output").put("call_id", callId).put("output", output))
-            sendEvent(response.toString())
-            sendEvent("{\"type\":\"response.create\"}")
+            if (!sendEvent(response.toString()) || !sendEvent("{\"type\":\"response.create\"}")) {
+                setState(State.FAILED, "FYNX AI voice event channel became unavailable")
+                close()
+            }
         }
     }
     private suspend fun <T> CompletableDeferred<T>.awaitWithTimeout(): T = withTimeout(15_000) { await() }
     private fun observer() = object : PeerConnection.Observer {
         override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
-        override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) { if (state == PeerConnection.IceConnectionState.FAILED) setState(State.FAILED, "FYNX AI network connection failed") }
+        override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) { if (state == PeerConnection.IceConnectionState.FAILED) { setState(State.FAILED, "FYNX AI network connection failed"); close() } }
         override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
         override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) { if (state == PeerConnection.IceGatheringState.COMPLETE) iceGatheringReady?.complete(Unit) }
         override fun onIceCandidate(candidate: org.webrtc.IceCandidate) = Unit
