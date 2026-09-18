@@ -18,6 +18,7 @@ import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpReceiver
 import org.webrtc.SessionDescription
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.atomic.AtomicInteger
 
 /** WebRTC transport for FYNX AI realtime voice. The provider credential remains server-side. */
 class FynxAiWebRtcEngine(
@@ -38,6 +39,8 @@ class FynxAiWebRtcEngine(
     private var iceGatheringReady: CompletableDeferred<Unit>? = null
     private var dataChannelReady: CompletableDeferred<Unit>? = null
     private val handledToolCalls = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    private val realtimeToolCallCount = AtomicInteger(0)
+    private val maxRealtimeToolCalls = 8
     private var state: State = State.IDLE
     private var onStateChanged: ((State, String?) -> Unit)? = null
     private var onEvent: ((String) -> Unit)? = null
@@ -49,6 +52,7 @@ class FynxAiWebRtcEngine(
             toolScope = CoroutineScope(toolJob + Dispatchers.IO)
         }
         handledToolCalls.clear()
+        realtimeToolCallCount.set(0)
         this.onStateChanged = onStateChanged; this.onEvent = onEvent; setState(State.CONNECTING, null)
         val connection = factory.createPeerConnection(PeerConnection.RTCConfiguration(iceServers), observer()) ?: error("Unable to create FYNX AI peer connection")
         peerConnection = connection
@@ -78,6 +82,15 @@ class FynxAiWebRtcEngine(
         val arguments = json.optString("arguments", "{}")
         if (callId.isBlank() || name.isBlank()) return
         if (!handledToolCalls.add(callId)) return
+        if (realtimeToolCallCount.incrementAndGet() > maxRealtimeToolCalls) {
+            val limitOutput = JSONObject().put("error", "realtime AI tool-processing limit reached").toString()
+            val limitResponse = JSONObject()
+                .put("type", "conversation.item.create")
+                .put("item", JSONObject().put("type", "function_call_output").put("call_id", callId).put("output", limitOutput))
+            sendEvent(limitResponse.toString())
+            onStateChanged?.invoke(State.FAILED, "FYNX AI realtime tool-processing limit reached")
+            return
+        }
         toolScope.launch {
             val result = FynxAiVoiceSession.executeTool(appContext, name, arguments)
             val output = result.getOrElse { error -> JSONObject().put("error", error.message ?: "tool request failed").toString() }
