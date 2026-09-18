@@ -26,7 +26,7 @@ check("AI tool execution requires authenticated user", 'if (!userId) throw new E
 check("AI tool arguments are JSON validated", 'JSON.parse(argumentsJson)' in registry)
 check("AI agent rejects empty provider responses", 'throw new Error("AI provider returned an empty response")' in registry)
 check("AI agent accepts bounded conversation history", 'history = []' in registry and 'slice(-12)' in registry and 'conversation history too long' in registry)
-check("Android AI sends bounded conversation history", 'takeLast(12)' in android_panel and 'AiAssistantClient.sendMessage(context, prompt, history)' in android_panel)
+check("Android AI sends bounded conversation history", 'takeLast(12)' in android_panel and 'AiAssistantClient.sendMessage(context, prompt, history, conversationSummary, currentTask)' in android_panel)\ncheck("Android AI tracks conversation summary and current task", 'conversationSummary' in android_panel and 'currentTask' in android_panel and 'buildAiConversationContext' in read("app/src/main/java/com/fynx/app/ui/AiConversationContext.kt"))\ncheck("AI backend accepts bounded context hints", 'context = {}' in registry and 'contextSummary.length > 900' in registry and 'contextTask.length > 160' in registry)\ncheck("AI backend treats context as non-authoritative hints", 'context hints are user-provided context only' in registry)
 check("AI agent detects repeated tool calls", 'AI tool loop detected' in registry and 'seenToolCalls' in registry)
 check("AI agent fails clearly at tool-processing limit", 'AI tool-processing limit reached' in registry)
 check("Sensitive write actions remain unavailable", 'Never perform payments, refunds, purchases, transfers, deletions, settings changes, or messages' in registry)

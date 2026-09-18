@@ -5,13 +5,13 @@ import org.json.JSONObject
 
 /** Authenticated client for the FYNX AI backend. */
 object AiAssistantClient {
-    suspend fun sendMessage(context: Context, message: String, history: List<AiMessage> = emptyList()): Result<String> = runCatching {
+    suspend fun sendMessage(\n        context: Context,\n        message: String,\n        history: List<AiMessage> = emptyList(),\n        conversationSummary: String = "",\n        currentTask: String = ""\n    ): Result<String> = runCatching {
         val historyJson = org.json.JSONArray().apply {
             history.takeLast(12).forEach { item ->
                 put(JSONObject().put("role", if (item.fromUser) "user" else "assistant").put("text", item.text.trim().take(2000)))
             }
         }
-        val body = JSONObject().put("message", message).put("history", historyJson).toString()
+        val body = JSONObject().put("message", message).put("history", historyJson).put("context", JSONObject().put("summary", conversationSummary.trim().take(900)).put("currentTask", currentTask.trim().take(160))).toString()
         val response = FynxBackendClient.postJson(context, "/api/assistant/agent", body).getOrThrow()
         JSONObject(response).optString("reply").ifBlank { throw IllegalStateException("Assistant returned an empty response") }
     }

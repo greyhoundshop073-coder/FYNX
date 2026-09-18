@@ -48,7 +48,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
     var input by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var failedPrompt by remember { mutableStateOf<String?>(null) }
+    var failedPrompt by remember { mutableStateOf<String?>(null) }\n    var conversationSummary by remember { mutableStateOf("") }\n    var currentTask by remember { mutableStateOf("") }
     var voiceConnected by remember { mutableStateOf(false) }
     var voiceConnecting by remember { mutableStateOf(false) }
     var voiceMuted by remember { mutableStateOf(false) }
@@ -169,7 +169,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
         errorMessage = null
         scope.launch {
             val result = withContext(Dispatchers.IO) {
-                AiAssistantClient.sendMessage(context, prompt, history)
+                AiAssistantClient.sendMessage(context, prompt, history, conversationSummary, currentTask)
             }
             result.onSuccess { reply ->
                 messages = messages + AiMessage(reply, false)
@@ -241,7 +241,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                     }
                     IconButton(
                         enabled = !loading && messages.size > 1,
-                        onClick = { messages = listOf(welcome); errorMessage = null; failedPrompt = null }
+                        onClick = { messages = listOf(welcome); errorMessage = null; failedPrompt = null; conversationSummary = ""; currentTask = "" }
                     ) {
                         Icon(Icons.Default.DeleteSweep, contentDescription = "Clear chat")
                     }
