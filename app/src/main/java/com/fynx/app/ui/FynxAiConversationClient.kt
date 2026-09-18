@@ -8,7 +8,8 @@ import org.json.JSONObject
 data class FynxAiConversationSummary(val id: String, val title: String, val createdAt: Long, val updatedAt: Long)
 data class FynxAiStoredMessage(val id: String, val role: String, val text: String, val timestamp: Long, val attachmentIds: List<String> = emptyList())
 data class FynxAiConversation(val id: String, val title: String, val createdAt: Long, val updatedAt: Long, val messages: List<FynxAiStoredMessage>)
-data class FynxAiPendingMessageAction(val actionId: String, val recipientUsername: String, val recipientDisplayName: String, val message: String)\ndata class FynxAiConversationReply(val conversationId: String, val userMessageId: String, val assistantMessage: FynxAiStoredMessage, val pendingAction: FynxAiPendingMessageAction? = null)
+data class FynxAiPendingMessageAction(val actionId: String, val recipientUsername: String, val recipientDisplayName: String, val message: String)
+data class FynxAiConversationReply(val conversationId: String, val userMessageId: String, val assistantMessage: FynxAiStoredMessage, val pendingAction: FynxAiPendingMessageAction? = null)
 
 object FynxAiConversationClient {
     suspend fun create(context: Context): Result<FynxAiConversation> =
