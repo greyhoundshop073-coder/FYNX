@@ -63,7 +63,6 @@ fun FynxHomeSocialHubPanel(
     var visibility by remember { mutableStateOf(defaultPostVisibility) }
     var notice by remember { mutableStateOf<String?>(null) }
     var posting by remember { mutableStateOf(false) }
-    var aiCaptionLoading by remember { mutableStateOf(false) }
     var networkLevel by remember { mutableStateOf(FynxNetworkQuality.current(context)) }
 
     LaunchedEffect(Unit) {
@@ -94,15 +93,6 @@ fun FynxHomeSocialHubPanel(
         if (!initialCaption.isNullOrBlank()) { text = initialCaption.trim().take(4000); capturedUris = emptyList(); capturedTypes = emptyList(); selectedVisualIndex = 0; notice = null; showComposer = true; onCaptionConsumed() }
     }
 
-    fun requestInlineCaptionHelp() {
-        if (aiCaptionLoading || text.trim().isBlank()) return
-        val capability = FynxAiCapability.MEDIA_ASSIST
-        val instruction = "Improve this social-media post caption. Keep the user's original meaning and facts, make it natural, clear and engaging, and do not add invented personal details. Return only the finished caption.\n\nCaption:\n${text.trim().take(4000)}"
-        val decision = FynxFutureIntelligencePolicy.authorize(permissions = listOf(FynxAiPermission(capability, setOf(FynxAiDataScope.NONE), true)), request = FynxAiRequest(capability, instruction, setOf(FynxAiDataScope.NONE)))
-        if (!decision.allowed) { notice = "FYNX AI could not assist with this caption right now."; return }
-        aiCaptionLoading = true; notice = null
-        scope.launch { val response = withContext(Dispatchers.IO) { AiAssistantClient.improvePostCaption(context, text) }; response.onSuccess { improved -> text = improved.trim().take(4000) }.onFailure { notice = "FYNX AI caption assistance is temporarily unavailable." }; aiCaptionLoading = false }
-    }
 
     fun recomputeTypes() {
         capturedTypes = capturedUris.map { item -> when { context.contentResolver.getType(item)?.startsWith("video/") == true -> "video"; context.contentResolver.getType(item)?.startsWith("audio/") == true -> "audio"; else -> "image" } }
@@ -173,7 +163,6 @@ fun FynxHomeSocialHubPanel(
                             placeholder = { Text("What's on your mind? Write your post here…", style = MaterialTheme.typography.titleMedium) },
                             textStyle = MaterialTheme.typography.bodyLarge,
                             enabled = !posting && !aiCaptionLoading && postingAllowed,
-                            trailingIcon = { IconButton(onClick = ::requestInlineCaptionHelp, enabled = !posting && !aiCaptionLoading && postingAllowed && text.trim().isNotBlank()) { Icon(Icons.Default.AutoAwesome, "Improve caption with FYNX AI") } }
                         )
                         if (aiCaptionLoading) Text("FYNX AI is improving your caption…", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
 
@@ -222,7 +211,6 @@ fun FynxHomeSocialHubPanel(
                                         TextButton(onClick = { removeCapturedUri(visualItems.first().second) }, enabled = !posting && !aiCaptionLoading) { Icon(Icons.Default.Close, null); Spacer(Modifier.width(4.dp)); Text("Remove photo/video") }
                                     }
                                     Text("${capturedUris.size} item${if (capturedUris.size == 1) "" else "s"} ready${if (audioCount > 0) " • $audioCount audio" else ""}", color = MaterialTheme.colorScheme.primary)
-                                    if (visualItems.size == 1 && visualItems.first().third == "image" && audioCount == 0) TextButton(onClick = { showComposer = false; showPhotoEditor = true }, enabled = !posting && !aiCaptionLoading) { Icon(Icons.Default.AutoAwesome, null); Spacer(Modifier.width(4.dp)); Text("Edit this photo with FYNX AI") }
                                     Text("Preview before publishing. Select any thumbnail to inspect it, or remove media you don't want to post.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
