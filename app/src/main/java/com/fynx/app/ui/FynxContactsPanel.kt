@@ -109,7 +109,7 @@ fun FynxContactsPanel(
                     username = "@${target.lowercase()}",
                     lastMessage = "",
                     time = "Now",
-                    avatarUri = targetUser?.profilePhotoMediaId?.let { "/api/social/media/$it" }
+                    avatarUri = targetUser?.profilePhotoMediaId?.let { "/api/media/$it" }
                 )
                 FynxChatStore.savePreview(context, preview)
                 profileUser = null
@@ -175,7 +175,7 @@ fun FynxContactsPanel(
                                 }
                                 TextButton(onClick = {
                                     val username = user.username.removePrefix("@").lowercase()
-                                    val preview = ChatPreview(name = user.displayName.ifBlank { username }, username = "@$username", lastMessage = "", time = "Now", online = false, avatarUri = user.profilePhotoMediaId?.let { "/api/social/media/$it" })
+                                    val preview = ChatPreview(name = user.displayName.ifBlank { username }, username = "@$username", lastMessage = "", time = "Now", online = false, avatarUri = user.profilePhotoMediaId?.let { "/api/media/$it" })
                                     FynxChatStore.savePreview(context, preview)
                                     openChat = preview
                                 }) {
