@@ -141,7 +141,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var showMembers by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showTools by remember { mutableStateOf(false) }
-    var showMore by remember { mutableStateOf(false) }
+    var showMore by remember { mutableStateOf(false) }\n    var showEmojiPanel by remember { mutableStateOf(false) }\n    var reactionMessageId by remember { mutableStateOf<String?>(null) }\n    var replyToId by remember { mutableStateOf<String?>(null) }
     var syncMessage by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
     val selectedGroup = currentGroup
@@ -183,8 +183,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             items(messages, key = { it.id }) { message ->
                 Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant, contentColor = if (message.fromMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth(if (message.fromMe) 0.86f else 1f).wrapContentWidth(if (message.fromMe) Alignment.End else Alignment.Start)) {
                     Column(Modifier.padding(horizontal = 13.dp, vertical = 10.dp)) {
-                        Text(message.text.ifBlank { if (message.attachmentUri != null) "Media attachment" else "Message" })
-                        if (message.attachmentUri != null) Text("📷 Media attached", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
+                        if (!message.fromMe) Text(message.senderUsername, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)\n                        if (message.replyToId != null) Text("↳ Reply", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)\n                        Text(message.text.ifBlank { if (message.attachmentUri != null) "Media attachment" else "Message" })
+                        if (message.attachmentUri != null) Text("📷 Media attached", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))\n                        message.reaction?.let { Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.surface) { Text(it, Modifier.padding(horizontal = 7.dp, vertical = 2.dp)) } }
                     }
                 }
             }
