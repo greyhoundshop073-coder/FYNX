@@ -126,35 +126,37 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         val myPhoto = FynxPreferencesStore.loadProfilePhoto(context)
         Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
             if (selected == "Home") {
-                Box(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 6.dp)) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().height(56.dp).shadow(6.dp, RoundedCornerShape(28.dp)),
-                        shape = RoundedCornerShape(28.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                        tonalElevation = 0.dp
+                // Home header is part of the normal top-bar flow, not a floating overlay.
+                // This keeps the feed clear while preserving the profile, FYNX title,
+                // camera, Settings and notification controls.
+                Row(
+                    Modifier.fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                        .height(52.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(Modifier.fillMaxSize().padding(horizontal = 6.dp), contentAlignment = Alignment.Center) {
-                            Row(Modifier.align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = { selected = "Profile"; openProfileSettings = false }) {
-                                    if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(40.dp))
-                                    else FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp))
-                                }
-                            }
-                            Row(
-                                Modifier.align(Alignment.CenterStart).padding(start = 50.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                                Spacer(Modifier.width(4.dp))
-                                Icon(Icons.Default.Verified, "Verified FYNX", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                            }
-                            Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = { homeCameraRequest++ }) { Icon(Icons.Default.CameraAlt, "Open camera") }
-                                IconButton(onClick = { selected = "Profile"; openProfileSettings = true }) { Icon(Icons.Default.Settings, "Settings") }
-                                BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
-                                    IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
-                                }
-                            }
+                        IconButton(onClick = { selected = "Profile"; openProfileSettings = false }) {
+                            if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(40.dp))
+                            else FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp))
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                            Spacer(Modifier.width(4.dp))
+                            Icon(Icons.Default.Verified, "Verified FYNX", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { homeCameraRequest++ }) { Icon(Icons.Default.CameraAlt, "Open camera") }
+                        IconButton(onClick = { selected = "Profile"; openProfileSettings = true }) { Icon(Icons.Default.Settings, "Settings") }
+                        BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
+                            IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
                         }
                     }
                 }
