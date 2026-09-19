@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -121,6 +122,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     if (openGroup != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }) { FynxGroupConversationPanel(groupId = openGroup!!, currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", onBack = { openGroup = null }) }; return }
     FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }) {
         val mainIndex = mainNav.indexOfFirst { it.key == selected }.coerceAtLeast(0)
+        // When the IME is open, hide the floating navigation instead of moving it
+        // over the Home feed. It returns automatically when the keyboard closes.
+        val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
         val unread = notifications.unreadNotificationCount()
         val myProfile = remember(authSession.username, profileVersion) { FynxPreferencesStore.loadProfile(context, authSession.username) }
         val myPhoto = FynxPreferencesStore.loadProfilePhoto(context)
@@ -203,59 +207,62 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 }
             }
         }, bottomBar = {
-            // Keep the navigation inside the rounded floating surface requested for FYNX.
-            // The whole surface stays above system navigation and lifts above the IME.
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .imePadding()
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-                Surface(
+            // Keep the navigation in its rounded floating surface.
+            // Stay above the system navigation area, but do not follow the IME.
+            // When the keyboard opens, the whole surface disappears so no Home
+            // post/content is covered. It reappears when the keyboard closes.
+            if (!isKeyboardVisible) {
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(64.dp)
-                        .shadow(8.dp, RoundedCornerShape(32.dp)),
-                    shape = RoundedCornerShape(32.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                    tonalElevation = 0.dp
+                        .navigationBarsPadding()
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
-                    NavigationBar(
-                        modifier = Modifier.fillMaxSize(),
-                        containerColor = Color.Transparent,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                        tonalElevation = 0.dp,
-                        windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp)
+                            .shadow(8.dp, RoundedCornerShape(32.dp)),
+                        shape = RoundedCornerShape(32.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                        tonalElevation = 0.dp
                     ) {
-                        mainNav.forEach { item ->
-                            NavigationBarItem(
-                                modifier = Modifier.height(64.dp),
-                                selected = selected == item.key,
-                                onClick = { selected = item.key },
-                                icon = {
-                                    Icon(
-                                        item.icon,
-                                        contentDescription = item.label,
-                                        modifier = Modifier.size(20.dp)
+                        NavigationBar(
+                            modifier = Modifier.fillMaxSize(),
+                            containerColor = Color.Transparent,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            tonalElevation = 0.dp,
+                            windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
+                        ) {
+                            mainNav.forEach { item ->
+                                NavigationBarItem(
+                                    modifier = Modifier.height(64.dp),
+                                    selected = selected == item.key,
+                                    onClick = { selected = item.key },
+                                    icon = {
+                                        Icon(
+                                            item.icon,
+                                            contentDescription = item.label,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            item.label,
+                                            maxLines = 1,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    },
+                                    alwaysShowLabel = true,
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                                        indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                },
-                                label = {
-                                    Text(
-                                        item.label,
-                                        maxLines = 1,
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
-                                },
-                                alwaysShowLabel = true,
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                                    indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                            )
+                            }
                         }
                     }
                 }
