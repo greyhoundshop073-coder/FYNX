@@ -38,6 +38,7 @@ fun FynxHomeSocialHubPanel(
     currentUsername: String,
     initialCaption: String? = null,
     onCaptionConsumed: () -> Unit = {},
+    cameraRequest: Int = 0,
     onOpenChats: () -> Unit = {},
     onOpenStories: () -> Unit = {},
     onOpenProfile: () -> Unit = {},
@@ -88,6 +89,10 @@ fun FynxHomeSocialHubPanel(
         }
     }
 
+    LaunchedEffect(cameraRequest) {
+        if (cameraRequest > 0) { showCamera = true; showComposer = false }
+    }
+
     LaunchedEffect(initialCaption) {
         if (!initialCaption.isNullOrBlank()) { text = initialCaption.trim().take(4000); capturedUris = emptyList(); capturedTypes = emptyList(); selectedVisualIndex = 0; notice = null; showComposer = true; onCaptionConsumed() }
     }
@@ -126,7 +131,6 @@ fun FynxHomeSocialHubPanel(
     }
 
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (networkLevel != FynxNetworkQuality.Level.GOOD) Surface(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) { Text(if (networkLevel == FynxNetworkQuality.Level.OFFLINE) "You are offline. FYNX will keep the app usable while you reconnect." else "Weak connection detected. Media uploads may take longer.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             HomePanel(currentUsername = currentUsername, onOpenChats = onOpenChats, onOpenStories = onOpenStories, onOpenProfile = onOpenProfile, onOpenMarketplace = onOpenMarketplace, onOpenNotifications = onOpenNotifications, onOpenFindPeople = onOpenFindPeople, onOpenAi = onOpenAi, onCreatePost = { showComposer = true; notice = null }, onOpenAuthorProfile = onOpenAuthorProfile)
         }
@@ -239,7 +243,27 @@ fun FynxHomeSocialHubPanel(
         )
     }
 
-    if (showCamera) Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { FynxCameraCapturePanel(onCaptured = { uri, type -> capturedUris = (capturedUris + uri).take(12); recomputeTypes(); selectedVisualIndex = 0; showCamera = false; showComposer = true }, onDismiss = { showCamera = false; showComposer = true }) }
+    if (showCamera) {
+        Dialog(
+            onDismissRequest = { showCamera = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+        ) {
+            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                    FynxCameraCapturePanel(
+                        onCaptured = { uri, type ->
+                            capturedUris = (capturedUris + uri).take(12)
+                            recomputeTypes()
+                            selectedVisualIndex = 0
+                            showCamera = false
+                            showComposer = true
+                        },
+                        onDismiss = { showCamera = false; showComposer = true }
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
