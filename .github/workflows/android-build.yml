@@ -73,6 +73,8 @@ jobs:
         run: |
           gcloud auth list --filter=status:ACTIVE --format="value(account)"
           gcloud config get-value project
+      - name: Verify FYNX network transport architecture
+        run: python3 scripts/verify_network_transport_architecture.py
       - name: Verify consolidated FCM notification phase
         run: python3 scripts/verify_fcm_notifications.py
       - name: Verify notifications and settings integration
