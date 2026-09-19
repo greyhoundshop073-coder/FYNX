@@ -31,7 +31,7 @@ ai = (ROOT / REQUIRED[5]).read_text(encoding="utf-8")
 workflow = (ROOT / REQUIRED[-1]).read_text(encoding="utf-8")
 
 check("production app is not left in preview mode", "FYNX_PREVIEW_MODE = false" in app)
-check("bottom navigation uses the compact primary navigation", 'FynxNavItem("Home", "Home", Icons.Default.Home)' in app and 'FynxNavItem("Chats", "Chat", Icons.Default.ChatBubbleOutline)' in app and 'FynxNavItem("Friends", "Friends", Icons.Default.Person)' in app and 'FynxNavItem("Marketplace", "Market", Icons.Default.ShoppingBag)' in app and 'FynxNavItem("Features", "More", Icons.Default.MoreHoriz)' in app)
+check("bottom navigation uses the compact primary navigation", 'FynxNavItem("Home", "Home", Icons.Default.Home)' in app and 'FynxNavItem("Chats", "Chat", Icons.Default.ChatBubbleOutline)' in app and 'FynxNavItem("Friends", "Friends", Icons.Default.Person)' in app and 'FynxNavItem("Stories", "Stories", Icons.Default.AutoAwesome)' in app and 'FynxNavItem("Features", "More", Icons.Default.MoreHoriz)' in app)
 check("business and money tools remain reachable outside the primary bottom bar", '"Business Account" -> FynxBusinessAccountPanel' in app and '"Money Tools" -> MoneyCenterPanel()' in app and 'Triple("Money Tools", "Money Center"' in app)
 check("deep-link routing remains connected", all(x in deep_link for x in ["homeWebLink", "profileWebLink", "chatWebLink", "groupWebLink", "marketplaceWebLink", "storiesWebLink", "moneyWebLink"]))
 check("share layer uses FYNX deep links", "FynxDeepLinkParser.homeWebLink()" in share and "FynxDeepLinkParser.inviteWebLink(code)" in share)
