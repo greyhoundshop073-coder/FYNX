@@ -26,6 +26,10 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.FormatAlignLeft
+import androidx.compose.material.icons.filled.FormatAlignCenter
+import androidx.compose.material.icons.filled.FormatAlignRight
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TextFields
@@ -64,6 +68,7 @@ fun FynxMatureStatusComposerPanel(onClose: () -> Unit = {}) {
     var background by remember { mutableLongStateOf(MATURE_STATUS_BACKGROUNDS.first()) }
     var foreground by remember { mutableLongStateOf(0xFFFFFFFF) }
     var font by remember { mutableStateOf(FynxStatusTextFont.CLASSIC) }
+    var alignment by remember { mutableIntStateOf(1) }
     var audience by remember { mutableStateOf(FynxStatusAudience.EVERYONE) }
     var publishing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -90,7 +95,7 @@ fun FynxMatureStatusComposerPanel(onClose: () -> Unit = {}) {
     }
     DisposableEffect(Unit) { onDispose { recorder?.let { runCatching { it.stop() }; runCatching { it.release() } }; recordingFile?.let { if (it.exists()) runCatching { it.delete() } } } }
 
-    fun clearDraft() { if (publishing || recording) return; mediaUri = null; text = ""; type = FynxStatusType.TEXT; background = MATURE_STATUS_BACKGROUNDS.first(); foreground = 0xFFFFFFFF; font = FynxStatusTextFont.CLASSIC; showColors = false; showTools = false; error = null }
+    fun clearDraft() { if (publishing || recording) return; mediaUri = null; text = ""; type = FynxStatusType.TEXT; background = MATURE_STATUS_BACKGROUNDS.first(); foreground = 0xFFFFFFFF; font = FynxStatusTextFont.CLASSIC; alignment = 1; showColors = false; showTools = false; error = null }
     fun publish() {
         if (publishing || recording) return
         if (type == FynxStatusType.TEXT && text.isBlank()) { error = "Write something first."; return }
@@ -104,7 +109,7 @@ fun FynxMatureStatusComposerPanel(onClose: () -> Unit = {}) {
                     FynxStatusClient.uploadMedia(context, source, mime).getOrElse { error = it.message ?: "Media upload failed."; return@launch }
                 }
                 val now = System.currentTimeMillis()
-                val status = FynxStatus(id = UUID.randomUUID().toString(), ownerUsername = username, ownerDisplayName = displayName, type = type, contentUri = mediaId?.let { "/api/media/$it" }, text = text.trim().ifBlank { null }, createdAtMillis = now, expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS, textStyle = FynxStatusTextStyle(background, foreground, font, 1), privateStatus = audience != FynxStatusAudience.EVERYONE, voiceDurationMs = if (type == FynxStatusType.VOICE) elapsed else 0L, audience = audience)
+                val status = FynxStatus(id = UUID.randomUUID().toString(), ownerUsername = username, ownerDisplayName = displayName, type = type, contentUri = mediaId?.let { "/api/media/$it" }, text = text.trim().ifBlank { null }, createdAtMillis = now, expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS, textStyle = FynxStatusTextStyle(background, foreground, font, alignment), privateStatus = audience != FynxStatusAudience.EVERYONE, voiceDurationMs = if (type == FynxStatusType.VOICE) elapsed else 0L, audience = audience)
                 FynxStatusClient.create(context, status, mediaId).getOrElse { error = it.message ?: "Status publishing failed."; return@launch }
                 FynxStatusStore.save(context, status)
                 onClose()
@@ -141,6 +146,11 @@ fun FynxMatureStatusComposerPanel(onClose: () -> Unit = {}) {
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) { items(MATURE_STATUS_BACKGROUNDS) { value -> Surface(shape = CircleShape, color = Color(value), modifier = Modifier.size(32.dp).clickable(enabled = !recording && !publishing) { background = value }) {} } }
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) { items(MATURE_STATUS_TEXT_COLORS) { value -> Surface(shape = CircleShape, color = Color(value), modifier = Modifier.size(28.dp).clickable(enabled = !recording && !publishing) { foreground = value }) {} } }
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(FynxStatusTextFont.values().toList()) { option -> FilterChip(selected = font == option, onClick = { font = option }, enabled = !recording && !publishing, label = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() }) }) } }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                                    IconButton(onClick = { alignment = 0 }, enabled = !recording && !publishing) { Icon(Icons.Default.FormatAlignLeft, "Align left", tint = if (alignment == 0) Color.White else Color.White.copy(alpha = .5f)) }
+                                    IconButton(onClick = { alignment = 1 }, enabled = !recording && !publishing) { Icon(Icons.Default.FormatAlignCenter, "Align center", tint = if (alignment == 1) Color.White else Color.White.copy(alpha = .5f)) }
+                                    IconButton(onClick = { alignment = 2 }, enabled = !recording && !publishing) { Icon(Icons.Default.FormatAlignRight, "Align right", tint = if (alignment == 2) Color.White else Color.White.copy(alpha = .5f)) }
+                                }
                                 TextButton(onClick = { showColors = false }) { Text("Done", color = Color.White) }
                             }
                         }
@@ -149,6 +159,16 @@ fun FynxMatureStatusComposerPanel(onClose: () -> Unit = {}) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.TextFields, null, tint = Color.White)
                             Text("${text.length}/$FYNX_STATUS_MAX_TEXT_LENGTH", color = Color.White, modifier = Modifier.padding(start = 8.dp))
+                            Spacer(Modifier.weight(1f))
+                            var showStatusEmoji by remember { mutableStateOf(false) }
+                            Box {
+                                IconButton(onClick = { showStatusEmoji = true }, enabled = !recording && !publishing) { Icon(Icons.Default.EmojiEmotions, "Add emoji", tint = Color.White) }
+                                DropdownMenu(expanded = showStatusEmoji, onDismissRequest = { showStatusEmoji = false }) {
+                                    listOf("😀","😂","😍","🔥","❤️","👍","🎉","😮").forEach { emoji ->
+                                        DropdownMenuItem(text = { Text(emoji, fontSize = 22.sp) }, onClick = { text = (text + emoji).take(FYNX_STATUS_MAX_TEXT_LENGTH); showStatusEmoji = false })
+                                    }
+                                }
+                            }
                         }
                     }
                     if (type != FynxStatusType.TEXT && mediaUri != null) {
