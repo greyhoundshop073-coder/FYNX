@@ -19,6 +19,7 @@ checks = [
     ("location chip is wired", 'ComposerQuickChip("Location"' in composer and 'locationPermissionLauncher.launch' in composer),
     ("permission flow is real", 'RequestMultiplePermissions' in composer and 'ACCESS_FINE_LOCATION' in composer),
     ("location sent through real post client", 'location: String? = null' in client and 'put("location", location?.trim()?.take(160) ?: JSONObject.NULL)' in client),
+    ("server bounds stored location", "slice(0,160)" in routes and "slice(0, 160)" in multi),
     ("feed model carries location", 'val location: String? = null' in remote and 'o.optString("location")' in remote),
     ("feed renders location", 'post.location' in feed and 'Icons.Default.LocationOn' in feed),
     ("social schema persists location", 'ADD COLUMN IF NOT EXISTS location TEXT' in routes),
