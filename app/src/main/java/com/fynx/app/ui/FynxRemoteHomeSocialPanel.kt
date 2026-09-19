@@ -332,7 +332,8 @@ private fun AudioPostPlayer(file: File) {
 
     Surface(
         modifier = Modifier
-            .fillMaxWidth()
+            .fillMaxWidth(0.82f)
+            .widthIn(min = 220.dp, max = 340.dp)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.secondaryContainer,
