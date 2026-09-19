@@ -27,6 +27,7 @@ check("media downloads require HTTPS and same trusted host", 'target.protocol.eq
 check("media downloads have bounded bytes and partial-file protection", "maxBytes: Long" in client and ".part" in client and "temporary.renameTo(destination)" in client)
 check("media downloads cancel the underlying connection", "invokeOnCompletion" in client and "connection.disconnect()" in client)
 check("currency conversion has validated-network protection", "ConnectivityManager" in currency and "awaitValidatedNetwork(context)" in currency and "NET_CAPABILITY_INTERNET" in currency and "NET_CAPABILITY_VALIDATED" in currency)
+check("currency converter rate function declaration is syntactically intact", "Result<Map<String, Double>> = withContext(Dispatchers.IO)" in currency and "Doubprivate suspend fun fetchOpenRates" not in currency)
 check("CI contains the complete R2 sequence", all(x in workflow for x in ["verify_r2c_realtime.py", "verify_r2d_recovery.py", "verify_r2e_final.py"]))
 check("R2-E runs before production certification", workflow.index("verify_r2e_final.py") < workflow.index("verify_fynx_production.py"))
 
