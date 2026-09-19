@@ -118,7 +118,7 @@ async function initDatabase() {
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_id BIGINT;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_type TEXT;
-    ALTER TABLE messages ADD COLUMN IF NOT EXISTS voice_duration_ms BIGINT NOT NULL DEFAULT 0;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS voice_duration_ms BIGINT NOT NULL DEFAULT 0;\n    ALTER TABLE messages ADD COLUMN IF NOT EXISTS reaction TEXT;
     CREATE TABLE IF NOT EXISTS message_media (
       id BIGSERIAL PRIMARY KEY,
       owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -417,10 +417,10 @@ app.get("/api/media/:id", auth, async (req, res) => {
 });
 
 function messageProjection() {
-  return `SELECT m.id, m.sender_id, sender.username AS sender_username, sender.display_name AS sender_display_name, m.recipient_id, recipient.username AS recipient_username, recipient.display_name AS recipient_display_name, m.text, EXTRACT(EPOCH FROM m.created_at) * 1000 AS timestamp, m.delivered_at IS NOT NULL AS delivered, m.read_at IS NOT NULL AS read, m.edited, m.deleted, m.reply_to_id, m.media_id, m.media_type, m.voice_duration_ms FROM messages m JOIN users sender ON sender.id = m.sender_id JOIN users recipient ON recipient.id = m.recipient_id`;
+  return `SELECT m.id, m.sender_id, sender.username AS sender_username, sender.display_name AS sender_display_name, m.recipient_id, recipient.username AS recipient_username, recipient.display_name AS recipient_display_name, m.text, EXTRACT(EPOCH FROM m.created_at) * 1000 AS timestamp, m.delivered_at IS NOT NULL AS delivered, m.read_at IS NOT NULL AS read, m.edited, m.deleted, m.reply_to_id, m.media_id, m.media_type, m.voice_duration_ms, m.reaction FROM messages m JOIN users sender ON sender.id = m.sender_id JOIN users recipient ON recipient.id = m.recipient_id`;
 }
 function rowToMessage(row) {
-  return { id: String(row.id), senderId: String(row.sender_id), senderUsername: row.sender_username || null, senderDisplayName: row.sender_display_name || null, recipientId: String(row.recipient_id), recipientUsername: row.recipient_username || null, recipientDisplayName: row.recipient_display_name || null, text: row.text, timestamp: Number(row.timestamp), delivered: row.delivered, read: row.read, edited: row.edited, deleted: row.deleted, replyToId: row.reply_to_id == null ? null : String(row.reply_to_id), mediaId: row.media_id == null ? null : String(row.media_id), mediaType: row.media_type || null, mediaUrl: row.media_id == null ? null : `/api/media/${row.media_id}`, voiceDurationMs: Number(row.voice_duration_ms || 0) };
+  return { id: String(row.id), senderId: String(row.sender_id), senderUsername: row.sender_username || null, senderDisplayName: row.sender_display_name || null, recipientId: String(row.recipient_id), recipientUsername: row.recipient_username || null, recipientDisplayName: row.recipient_display_name || null, text: row.text, timestamp: Number(row.timestamp), delivered: row.delivered, read: row.read, edited: row.edited, deleted: row.deleted, replyToId: row.reply_to_id == null ? null : String(row.reply_to_id), mediaId: row.media_id == null ? null : String(row.media_id), mediaType: row.media_type || null, mediaUrl: row.media_id == null ? null : `/api/media/${row.media_id}`, voiceDurationMs: Number(row.voice_duration_ms || 0), reaction: row.reaction || null };
 }
 
 app.get("/api/messages/:username", auth, async (req, res) => {
@@ -557,6 +557,23 @@ app.patch("/api/messages/:id", auth, async (req, res) => {
     broadcastMessage(message);
     return res.json({ message });
   } catch (error) { console.error("message edit", error); return res.status(500).json({ error: "message edit failed" }); }
+});
+
+app.patch("/api/messages/:id/reaction", auth, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const reaction = req.body?.reaction == null ? null : String(req.body.reaction).trim().slice(0, 16);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid message id" });
+    if (reaction === "") return res.status(400).json({ error: "reaction is invalid" });
+    const target = await pool.query("SELECT id,sender_id,recipient_id FROM messages WHERE id=$1 AND deleted=FALSE LIMIT 1", [id]);
+    const row = target.rows[0];
+    if (!row || ![String(row.sender_id), String(row.recipient_id)].includes(String(req.user.sub))) return res.status(404).json({ error: "message not found" });
+    const result = await pool.query("UPDATE messages SET reaction=$1 WHERE id=$2 RETURNING id,sender_id,recipient_id", [reaction, id]);
+    const full = await pool.query(messageProjection()+" WHERE m.id=$1 LIMIT 1", [id]);
+    const message = rowToMessage(full.rows[0]);
+    await broadcastMessage(message);
+    return res.json({ message });
+  } catch (error) { console.error("message reaction", error); return res.status(500).json({ error: "message reaction failed" }); }
 });
 
 app.delete("/api/messages/:id", auth, async (req, res) => {

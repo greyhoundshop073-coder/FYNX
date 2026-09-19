@@ -28,7 +28,7 @@ object FynxProductionMessaging {
         val id: String, val senderId: String, val senderUsername: String? = null, val senderDisplayName: String? = null,
         val recipientId: String, val recipientUsername: String? = null, val recipientDisplayName: String? = null,
         val text: String, val timestamp: Long, val delivered: Boolean, val read: Boolean, val edited: Boolean, val deleted: Boolean,
-        val replyToId: String?, val mediaId: String? = null, val mediaType: String? = null, val mediaUrl: String? = null, val voiceDurationMs: Long = 0L
+        val replyToId: String?, val reaction: String? = null, val mediaId: String? = null, val mediaType: String? = null, val mediaUrl: String? = null, val voiceDurationMs: Long = 0L
     )
 
     suspend fun history(context: Context, username: String): Result<List<RemoteMessage>> =
@@ -176,6 +176,12 @@ object FynxProductionMessaging {
             .maxByOrNull { it.timestamp }
     }
 
+    suspend fun reactToMessage(context: Context, messageId: String, reaction: String?): Result<RemoteMessage> {
+        val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id"))
+        val clean = reaction?.trim()?.takeIf { it.isNotBlank() }
+        return FynxBackendClient.patchJson(context, "/api/messages/$id/reaction", JSONObject().apply { if (clean == null) put("reaction", JSONObject.NULL) else put("reaction", clean) }.toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
+    }
+
     suspend fun editMessage(context: Context, messageId: String, text: String): Result<RemoteMessage> {
         val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id")); val cleanText = text.trim()
         if (cleanText.isBlank() || cleanText.length > MAX_MESSAGE_LENGTH) return Result.failure(IllegalArgumentException("Message text is invalid."))
@@ -200,7 +206,7 @@ object FynxProductionMessaging {
         text = if (message.deleted) "Message deleted" else message.text, fromMe = message.senderId == currentUserId, id = message.id,
         timestamp = message.timestamp, delivered = message.delivered, read = message.read, replyToId = message.replyToId, edited = message.edited,
         attachmentUri = message.mediaUrl, attachmentType = message.mediaType, voiceUri = if (message.mediaType == "audio") message.mediaUrl else null,
-        voiceDurationMs = message.voiceDurationMs, mediaId = message.mediaId, senderName = message.senderDisplayName, senderUsername = message.senderUsername
+        voiceDurationMs = message.voiceDurationMs, reaction = message.reaction, mediaId = message.mediaId, senderName = message.senderDisplayName, senderUsername = message.senderUsername
     )
 
     fun fromJson(item: JSONObject): RemoteMessage = RemoteMessage(
@@ -208,6 +214,7 @@ object FynxProductionMessaging {
         senderUsername = item.optString("sender_username", item.optString("senderUsername")).takeIf { it.isNotBlank() }, senderDisplayName = item.optString("sender_display_name", item.optString("senderDisplayName")).takeIf { it.isNotBlank() },
         recipientId = item.optString("recipient_id", item.optString("recipientId")), recipientUsername = item.optString("recipient_username", item.optString("recipientUsername")).takeIf { it.isNotBlank() }, recipientDisplayName = item.optString("recipient_display_name", item.optString("recipientDisplayName")).takeIf { it.isNotBlank() },
         text = item.optString("text"), timestamp = item.optDouble("timestamp", 0.0).toLong(), delivered = item.optBoolean("delivered", false), read = item.optBoolean("read", false), edited = item.optBoolean("edited", false), deleted = item.optBoolean("deleted", false),
+        reaction = item.optString("reaction").takeIf { it.isNotBlank() },
         replyToId = if (item.isNull("reply_to_id") && item.isNull("replyToId")) null else item.optString("reply_to_id", item.optString("replyToId")).takeIf { it.isNotBlank() },
         mediaId = if (item.isNull("media_id") && item.isNull("mediaId")) null else item.optString("media_id", item.optString("mediaId")).takeIf { it.isNotBlank() }, mediaType = item.optString("media_type", item.optString("mediaType")).takeIf { it.isNotBlank() },
         mediaUrl = item.optString("mediaUrl").takeIf { it.isNotBlank() }, voiceDurationMs = item.optLong("voiceDurationMs", 0L)

@@ -66,6 +66,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var showGifts by remember { mutableStateOf(false) }
     var showChatMenu by remember { mutableStateOf(false) }
     var showChatSettings by remember { mutableStateOf(false) }
+    var showEmojiPanel by remember { mutableStateOf(false) }
+    var reactionMessageId by remember { mutableStateOf<String?>(null) }
     var currentUserId by remember { mutableStateOf<String?>(null) }
     var recipientUserId by remember { mutableStateOf<String?>(null) }
     var recipientCreatedAt by remember(chat.username) { mutableStateOf<String?>(null) }
@@ -378,16 +380,18 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                     if (message.text.isNotBlank()) SelectionContainer { Text(message.text) }
                                 }
                                 if (message.edited) Text("Edited", style = MaterialTheme.typography.labelSmall)
-                                message.reaction?.let { Text(it) }
+                                message.reaction?.let { reaction -> Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f), modifier = Modifier.padding(top = 5.dp)) { Text(reaction, modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)) } }
                                 if (message.fromMe) Text(if (message.read) "✓✓ Read" else if (message.delivered) "✓✓ Delivered" else "✓ Sent", style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) {
+                        IconButton(onClick = { reactionMessageId = if (reactionMessageId == message.id) null else message.id }) { Icon(Icons.Default.EmojiEmotions, "React to message") }
                         IconButton(onClick = { menuMessageId = if (menuMessageId == message.id) null else message.id }) {
                             Icon(Icons.Default.MoreVert, "Message actions")
                         }
                     }
+                    if (reactionMessageId == message.id) { Row(Modifier.fillMaxWidth().padding(bottom = 2.dp), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) { listOf("❤️","😂","👍","🙏","🔥","😮","😢","👏").forEach { emoji -> TextButton(onClick = { reactionMessageId = null; scope.launch { FynxProductionMessaging.reactToMessage(context, message.id, if (message.reaction == emoji) null else emoji).onSuccess { remote -> currentUserId?.let { myId -> messages = messages.map { existing -> if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing } } }.onFailure { networkError = it.message ?: "Reaction could not be saved" } } }) { Text(emoji, style = MaterialTheme.typography.titleLarge) } }; TextButton(onClick = { reactionMessageId = null; showEmojiPanel = true }) { Text("+") } } }
                     if (menuMessageId == message.id) {
                         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) {
                             if (message.voiceUri == null && message.text.isNotBlank()) IconButton(onClick = { clipboardManager.setText(AnnotatedString(message.text)); menuMessageId = null }) { Icon(Icons.Default.ContentCopy, "Copy") }
@@ -432,7 +436,9 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         }
                     }
                 }
+                if (showEmojiPanel && !isRecording) { FynxChatEmojiPanel(onEmojiSelected = { emoji -> text += emoji; showEmojiPanel = false }) }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                    IconButton(onClick = { showEmojiPanel = !showEmojiPanel }, enabled = !isRecording) { Text("☺", style = MaterialTheme.typography.titleLarge) }
                     IconButton(onClick = { showCamera = true }, enabled = !isRecording) { Icon(Icons.Default.CameraAlt, "Camera") }
                     IconButton(onClick = { mediaPicker.launch(arrayOf("image/*", "video/*")) }, enabled = !isRecording) { Icon(Icons.Default.AttachFile, "Attach photo or video") }
                     OutlinedTextField(value = text, onValueChange = { value -> val wasBlank = text.isBlank(); text = value; if (value.isBlank() && typingSent) { recipientUserId?.let { realtimeClient.sendTyping(it, false) }; typingSent = false } else if (wasBlank && value.isNotBlank()) recipientUserId?.let { realtimeClient.sendTyping(it, true); typingSent = true } }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), placeholder = { Text(if (editingId == null) "Message" else "Edit message…") }, maxLines = 5, enabled = !isRecording)

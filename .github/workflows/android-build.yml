@@ -107,6 +107,8 @@ jobs:
         run: python3 scripts/verify_batch9_create_post_integration.py
       - name: Verify Batch 10 Create Post hardening
         run: python3 scripts/verify_batch10_create_post_hardening.py
+      - name: Verify Batch 11 chat expressions and reactions
+        run: python3 scripts/verify_batch11_chat_expressions.py
       - name: Verify FYNX AI extension contract
         run: python3 scripts/verify_ai_extension_contract.py
       - name: Verify FYNX AI security and tool integrity
