@@ -22,28 +22,28 @@ fun AccountsWalletsPanel() {
 
     val total = accounts.sumOf { it.balance }
 
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { Text("Accounts & Wallets 🏦", style = MaterialTheme.typography.headlineSmall) }
-        item { Text("Track balances locally without connecting to a real bank.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        items(accounts, key = { it.id }) { account ->
-        item { Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Accounts & Wallets 🏦", style = MaterialTheme.typography.headlineSmall)
+        Text("Track balances locally without connecting to a real bank.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(10.dp))
+        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
             Text("Combined balance", style = MaterialTheme.typography.titleMedium)
             Text(money(total), style = MaterialTheme.typography.headlineMedium)
             Text("${accounts.size} account(s)")
-        } } }
+        } }
         Spacer(Modifier.height(10.dp))
-        item { OutlinedTextField(name, { name = it }, label = { Text("Account / wallet name") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
-        item { OutlinedTextField(balanceText, { balanceText = it }, label = { Text("Starting balance") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
-        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        OutlinedTextField(name, { name = it }, label = { Text("Account / wallet name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(balanceText, { balanceText = it }, label = { Text("Starting balance") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("Cash", "Bank", "Wallet").forEach { option -> FilterChip(selected = type == option, onClick = { type = option }, label = { Text(option) }) }
         }
-        item { Button(onClick = {
+        Button(onClick = {
             val balance = balanceText.toDoubleOrNull()
             if (name.isNotBlank() && balance != null) {
                 val nextId = (accounts.maxOfOrNull { it.id } ?: 0L) + 1L
                 pendingAccount = FynxMoneyAccount(nextId, name.trim(), type, balance)
             }
-        }, enabled = name.isNotBlank() && balanceText.toDoubleOrNull() != null) { Text("Add Account") } }
+        }, enabled = name.isNotBlank() && balanceText.toDoubleOrNull() != null) { Text("Add Account") }
         Spacer(Modifier.height(10.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(accounts, key = { it.id }) { account ->
