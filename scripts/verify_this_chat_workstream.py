@@ -49,3 +49,5 @@ for name, ok in checks:
 if failed:
     raise SystemExit('FYNX this-chat workstream gate failed: ' + '; '.join(failed))
 print(f'FYNX this-chat workstream gate passed ({len(checks)} checks)')
+
+# Profile identity batch: server authority also governs Status and Marketplace after hydration.
