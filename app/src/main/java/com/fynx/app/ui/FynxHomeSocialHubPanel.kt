@@ -99,10 +99,10 @@ fun FynxHomeSocialHubPanel(
 
     LaunchedEffect(cameraRequest) {
         if (cameraRequest > 0) {
-            // The Home top-camera entry opens the existing full post/camera composer.
-            // Keep the standalone capture panel available only from inside that composer.
-            showCamera = false
-            showComposer = true
+            // The Home header camera opens the same real capture panel used by
+            // New Post -> Video/Camera. Keep one camera implementation.
+            showComposer = false
+            showCamera = true
             notice = null
         }
     }
