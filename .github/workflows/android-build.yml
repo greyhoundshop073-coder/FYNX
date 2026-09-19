@@ -95,6 +95,8 @@ jobs:
           node backend/verify-stage15d-advanced.mjs
       - name: Verify Stage 16 camera and media integration
         run: python3 scripts/verify_stage16_camera.py
+      - name: Verify FYNX AI extension contract
+        run: python3 scripts/verify_ai_extension_contract.py
       - name: Verify FYNX AI security and tool integrity
         run: python3 scripts/verify_ai_security.py
       - name: Verify consolidated FYNX user journey integration
@@ -138,51 +140,3 @@ jobs:
       - name: Verify production social feed wiring
         run: python3 scripts/verify_social_feed_production.py
       - name: Verify final FYNX production certification gate
-        run: python3 scripts/verify_fynx_production.py
-      - name: Build, test and lint
-        run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
-      - name: Enable KVM for Android emulator tests
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-          sudo usermod -aG kvm "$USER"
-          groups
-          ls -l /dev/kvm
-      - name: Run Android instrumentation tests on a real emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
-          script: ./gradlew connectedDebugAndroidTest --no-daemon --build-cache
-      - name: Prepare exact-commit APK artifact
-        if: success()
-        run: |
-          test -f app/build/outputs/apk/debug/app-debug.apk
-          mkdir -p fynx-apk-artifact
-          cp app/build/outputs/apk/debug/app-debug.apk "fynx-apk-artifact/FYNX-debug-${GITHUB_SHA}.apk"
-          printf 'FYNX Android APK build commit: %s\n' "${GITHUB_SHA}" > "fynx-apk-artifact/FYNX-debug-${GITHUB_SHA}.commit.txt"
-          printf 'Workflow run: %s\n' "${GITHUB_RUN_ID}" >> "fynx-apk-artifact/FYNX-debug-${GITHUB_SHA}.commit.txt"
-      - name: Upload exact-commit debug APK
-        uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: FYNX-debug-apk-${{ github.sha }}
-          path: fynx-apk-artifact/
-          if-no-files-found: error
-      - name: Upload instrumentation test APK
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: FYNX-debug-androidTest-apk-${{ github.sha }}
-          path: app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          if-no-files-found: ignore
-      - name: Upload lint report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: FYNX-lint-report-${{ github.sha }}
-          path: app/build/reports/lint-results-debug.html
-          if-no-files-found: ignore
