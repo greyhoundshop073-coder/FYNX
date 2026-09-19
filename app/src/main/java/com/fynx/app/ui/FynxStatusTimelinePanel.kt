@@ -16,6 +16,8 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.focus.onFocusChanged
@@ -269,30 +271,66 @@ private fun FynxStatusStoryViewer(
                             TextButton(onClick = { scope.launch { FynxStatusClient.toggleLike(context, status.id).onSuccess { refreshInteractions() }.onFailure { interactionError = it.message } } }) { Text(if (interactions.likedByMe) "♥ ${interactions.likeCount}" else "♡ ${interactions.likeCount}", color = Color.White) }
                             Text("💬 ${interactions.replyCount}", color = Color.White, style = MaterialTheme.typography.labelMedium)
                         }
-                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf("❤️", "😂", "😮", "😢", "👍").forEach { emoji ->
-                                AssistChip(onClick = { scope.launch { FynxStatusClient.react(context, status.id, emoji).onSuccess { refreshInteractions() }.onFailure { interactionError = it.message } } }, label = { Text(emoji) })
+                        var showReactionPicker by remember(status.id) { mutableStateOf(false) }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box {
+                                OutlinedButton(onClick = { showReactionPicker = true }, enabled = !replying) {
+                                    Icon(Icons.Default.EmojiEmotions, "React")
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(if (interactions.myReaction.isNullOrBlank()) "React" else interactions.myReaction!!)
+                                }
+                                DropdownMenu(expanded = showReactionPicker, onDismissRequest = { showReactionPicker = false }) {
+                                    listOf("❤️", "😂", "😮", "😢", "👍", "👏", "🔥", "🎉").forEach { emoji ->
+                                        DropdownMenuItem(
+                                            text = { Text(emoji, fontSize = 22.sp) },
+                                            onClick = {
+                                                showReactionPicker = false
+                                                scope.launch {
+                                                    FynxStatusClient.react(context, status.id, emoji)
+                                                        .onSuccess { refreshInteractions() }
+                                                        .onFailure { interactionError = it.message }
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
                             }
+                            Text("Viewers ${interactions.viewCount}", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                            Spacer(Modifier.weight(1f))
+                            Text("Replies ${interactions.replyCount}", color = Color.White, style = MaterialTheme.typography.labelSmall)
                         }
-                        OutlinedTextField(
-                            value = replyText,
-                            onValueChange = { replyText = it.take(1000) },
-                            modifier = Modifier.fillMaxWidth().onFocusChanged { replyFocused = it.isFocused },
-                            enabled = !replying,
-                            singleLine = true,
-                            placeholder = { Text("Reply to this Status…") },
-                            trailingIcon = {
-                                TextButton(enabled = !replying && replyText.trim().isNotEmpty(), onClick = {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = replyText,
+                                onValueChange = { replyText = it.take(1000) },
+                                modifier = Modifier.weight(1f).onFocusChanged { replyFocused = it.isFocused },
+                                enabled = !replying,
+                                singleLine = true,
+                                placeholder = { Text("Reply to this Status…") },
+                                trailingIcon = null
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            IconButton(
+                                enabled = !replying && replyText.trim().isNotEmpty(),
+                                onClick = {
                                     val body = replyText.trim()
-                                    if (body.isEmpty()) return@TextButton
+                                    if (body.isEmpty()) return@IconButton
                                     replying = true
                                     scope.launch {
-                                        FynxStatusClient.reply(context, status.id, body).onSuccess { replyText = ""; refreshInteractions() }.onFailure { interactionError = it.message }
+                                        FynxStatusClient.reply(context, status.id, body)
+                                            .onSuccess { replyText = ""; refreshInteractions() }
+                                            .onFailure { interactionError = it.message }
                                         replying = false
                                     }
-                                }) { Text("Send") }
+                                }
+                            ) {
+                                Surface(shape = CircleShape, color = if (!replying && replyText.trim().isNotEmpty()) Color(0xFF1976D2) else Color.White.copy(alpha = .18f), modifier = Modifier.size(42.dp)) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.Send, "Send reply", tint = Color.White, modifier = Modifier.size(20.dp))
+                                    }
+                                }
                             }
-                        )
+                        }
                         interactionError?.let { Text(it, color = Color(0xFFFF8A80), style = MaterialTheme.typography.labelSmall) }
                         deleteError?.let { Text(it, color = Color(0xFFFF8A80), style = MaterialTheme.typography.labelSmall) }
                     }
