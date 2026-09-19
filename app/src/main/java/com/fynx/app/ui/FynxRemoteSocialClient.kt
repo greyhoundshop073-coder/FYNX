@@ -8,7 +8,7 @@ import java.net.URLEncoder
 import java.util.Locale
 
 object FynxRemoteSocialClient {
-    data class RemotePost(val id: String, val authorId: String, val authorUsername: String, val authorDisplayName: String, val text: String, val visibility: String, val mediaId: String?, val mediaType: String?, val mediaUrl: String?, val timestamp: Long, val likeCount: Int, val commentCount: Int, val likedByCurrentUser: Boolean, val followedByCurrentUser: Boolean)
+    data class RemotePost(val id: String, val authorId: String, val authorUsername: String, val authorDisplayName: String, val text: String, val visibility: String, val mediaId: String?, val mediaType: String?, val mediaUrl: String?, val timestamp: Long, val likeCount: Int, val commentCount: Int, val likedByCurrentUser: Boolean, val followedByCurrentUser: Boolean, val textBackground: String? = null, val textBackgroundColor: Long? = null, val textForegroundColor: Long? = null)
     data class FeedPage(val posts: List<RemotePost>, val hasMore: Boolean)
     data class RemoteComment(val id: String, val text: String, val timestamp: Long, val authorId: String, val authorUsername: String, val authorDisplayName: String, val parentCommentId: String? = null)
     data class CommentPage(val comments: List<RemoteComment>, val nextCursor: String?)
@@ -44,7 +44,7 @@ object FynxRemoteSocialClient {
         val posts = buildList {
             for (i in 0 until array.length()) {
                 val o = array.getJSONObject(i)
-                add(RemotePost(o.optString("id"), o.optString("authorId"), o.optString("authorUsername"), o.optString("authorDisplayName"), o.optString("text"), o.optString("visibility"), o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaUrl").takeIf { it.isNotBlank() }, o.optDouble("timestamp", 0.0).toLong(), o.optInt("likeCount"), o.optInt("commentCount"), o.optBoolean("likedByCurrentUser"), o.optBoolean("followedByCurrentUser")))
+                add(RemotePost(o.optString("id"), o.optString("authorId"), o.optString("authorUsername"), o.optString("authorDisplayName"), o.optString("text"), o.optString("visibility"), o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaUrl").takeIf { it.isNotBlank() }, o.optDouble("timestamp", 0.0).toLong(), o.optInt("likeCount"), o.optInt("commentCount"), o.optBoolean("likedByCurrentUser"), o.optBoolean("followedByCurrentUser"), o.optString("textBackground").takeIf { it.isNotBlank() }, if (o.has("textBackgroundColor") && !o.isNull("textBackgroundColor")) o.optLong("textBackgroundColor") else null, if (o.has("textForegroundColor") && !o.isNull("textForegroundColor")) o.optLong("textForegroundColor") else null))
             }
         }
         return FeedPage(posts, root.optBoolean("hasMore", posts.size >= FEED_PAGE_SIZE))
