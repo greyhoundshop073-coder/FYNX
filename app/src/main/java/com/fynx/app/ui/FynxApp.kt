@@ -1,6 +1,11 @@
 package com.fynx.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
@@ -13,10 +18,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.LocalContext
@@ -122,13 +132,44 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     if (openGroup != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }) { FynxGroupConversationPanel(groupId = openGroup!!, currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", onBack = { openGroup = null }) }; return }
     FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }) {
         val mainIndex = mainNav.indexOfFirst { it.key == selected }.coerceAtLeast(0)
+        // Home uses one LazyColumn for the real feed. Observe its nested-scroll deltas
+        // here so the existing header and floating navigation can get out of the way
+        // without adding a second vertical scroll container or consuming feed gestures.
+        var homeChromeProgress by remember { mutableFloatStateOf(0f) }
+        var homeChromeHidden by remember { mutableStateOf(false) }
+        val homeChromeMaxPx = with(LocalDensity.current) { 52.dp.toPx() }
+        val homeScrollConnection = remember {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    if (selected != "Home" || source != NestedScrollSource.UserInput) return Offset.Zero
+                    val delta = -available.y
+                    if (kotlin.math.abs(delta) > 0.5f) {
+                        homeChromeProgress = (homeChromeProgress + delta / homeChromeMaxPx).coerceIn(0f, 1f)
+                        when {
+                            !homeChromeHidden && homeChromeProgress >= 0.55f -> homeChromeHidden = true
+                            homeChromeHidden && homeChromeProgress <= 0.35f -> homeChromeHidden = false
+                        }
+                    }
+                    return Offset.Zero
+                }
+            }
+        }
+        LaunchedEffect(selected) {
+            if (selected != "Home") {
+                homeChromeProgress = 0f
+                homeChromeHidden = false
+            }
+        }
         // When the IME is open, hide the floating navigation instead of moving it
         // over the Home feed. It returns automatically when the keyboard closes.
         val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
         val unread = notifications.unreadNotificationCount()
         val myProfile = remember(authSession.username, profileVersion) { FynxPreferencesStore.loadProfile(context, authSession.username) }
         val myPhoto = FynxPreferencesStore.loadProfilePhoto(context)
-        Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
+        Scaffold(
+            modifier = Modifier.nestedScroll(homeScrollConnection),
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar = {
             if (selected == "Home") {
                 // Home header is part of the normal top-bar flow, not a floating overlay.
                 // This keeps the feed clear while preserving the profile, FYNX title,
@@ -137,7 +178,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     Modifier.fillMaxWidth()
                         .statusBarsPadding()
                         .padding(horizontal = 8.dp, vertical = 2.dp)
-                        .height(52.dp),
+                        .height(52.dp * (1f - homeChromeProgress))
+                        .graphicsLayer { alpha = 1f - homeChromeProgress },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
@@ -211,13 +253,18 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             // Stay above the system navigation area, but do not follow the IME.
             // When the keyboard opens, the whole surface disappears so no Home
             // post/content is covered. It reappears when the keyboard closes.
-            if (!isKeyboardVisible) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
+            if (!isKeyboardVisible && selected == "Home") {
+                AnimatedVisibility(
+                    visible = !homeChromeHidden,
+                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -264,6 +311,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                                 )
                             }
                         }
+                    }
                     }
                 }
             }
