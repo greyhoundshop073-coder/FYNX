@@ -115,6 +115,9 @@ jobs:
         run: python3 scripts/verify_r3_final_integration.py
       - name: Verify R4 people, profiles and privacy security gate
         run: python3 scripts/verify_r4_people_privacy.py
+      - name: Verify Batch 4 Text background integrity
+        run: python3 scripts/verify_batch4_text_backgrounds.py
+
       - name: Verify Batch 3 People audience integrity
         run: python3 scripts/verify_batch3_people_audience.py
       - name: Verify R5A groups security gate
