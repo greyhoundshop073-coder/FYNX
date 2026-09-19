@@ -97,7 +97,12 @@ private suspend fun fetchOpenRates(context: Context, base: String): Result<Map<S
     repeat(RATE_RETRIES + 1) { attempt ->
         try {
             awaitValidatedNetwork(context)
-            val result = fetchOpenRatesOnce(base)
+            val path = "/api/money-planner/rates?base=" + base.uppercase(Locale.US)
+            val result = FynxBackendClient.get(context, path).mapCatching { raw ->
+                val json = JSONObject(raw)
+                val source = json.getJSONObject("rates")
+                buildMap { supportedCurrencies.forEach { code -> if (source.has(code)) put(code, source.getDouble(code)) }; put(base.uppercase(Locale.US), 1.0) }
+            }
             if (result.isSuccess || attempt == RATE_RETRIES) return@withContext result
             lastError = result.exceptionOrNull()
         } catch (error: Throwable) {
@@ -109,47 +114,11 @@ private suspend fun fetchOpenRates(context: Context, base: String): Result<Map<S
     Result.failure(lastError ?: IOException("Rate service unavailable"))
 }
 
-private fun fetchOpenRatesOnce(base: String): Result<Map<String, Double>> = runCatching {
-    val connection = (URL("https://open.er-api.com/v6/latest/${base.uppercase(Locale.US)}").openConnection() as HttpURLConnection).apply {
-        requestMethod = "GET"
-        connectTimeout = RATE_CONNECT_TIMEOUT_MS
-        readTimeout = RATE_READ_TIMEOUT_MS
-        useCaches = false
-        instanceFollowRedirects = false
-        setRequestProperty("Accept", "application/json")
-        setRequestProperty("Accept-Encoding", "identity")
-        setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0")
-        setRequestProperty("User-Agent", "FYNX-Android/1")
-    }
-    try {
-        val status = connection.responseCode
-        val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-        val body = stream?.use { input ->
-            val out = ByteArrayOutputStream()
-            val buffer = ByteArray(8192)
-            var total = 0
-            while (true) {
-                val count = input.read(buffer)
-                if (count < 0) break
-                total += count
-                if (total > RATE_MAX_RESPONSE_BYTES) error("Rate response is too large")
-                out.write(buffer, 0, count)
-            }
-            out.toString(Charsets.UTF_8.name())
-        }.orEmpty()
-        if (status !in 200..299) error("HTTP $status")
-        val json = JSONObject(body)
-        if (json.optString("result") != "success") error("Rate service unavailable")
-        val source = json.getJSONObject("rates")
-        buildMap { supportedCurrencies.forEach { code -> if (source.has(code)) put(code, source.getDouble(code)) }; put(base.uppercase(Locale.US), 1.0) }
-    } finally { connection.disconnect() }
-}
-
 private fun awaitValidatedNetwork(context: Context) {
     val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: throw IOException("Network service unavailable")
     val valid = manager.allNetworks.any { network ->
         val capabilities = manager.getNetworkCapabilities(network)
-        capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     }
     if (!valid) throw IOException("Network connection is unavailable")
 }
