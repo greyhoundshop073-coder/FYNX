@@ -76,6 +76,10 @@ object FynxConversationPreferences {
     fun chatWallpaper(context: Context, username: String): String =
         chatString(context, username, "wallpaper", "FYNX Default")
 
+    fun setChatWallpaper(context: Context, username: String, value: String) {
+        chat(context, username).edit().putString("wallpaper_${chatKey(username)}", value).apply()
+    }
+
     fun chatTextSize(context: Context, username: String): String =
         chatString(context, username, "textsize", "Medium")
 
