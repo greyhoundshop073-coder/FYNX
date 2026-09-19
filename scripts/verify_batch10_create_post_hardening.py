@@ -25,7 +25,7 @@ checks = [
     ("Audience metadata reaches both real post endpoints", '"audienceUserIds"' in client and 'selectedAudienceUserIds' in client and 'rawAudience' in routes),
     ("Location is label-only and bounded", '"location"' in client and 'take(160)' in client and 'location TEXT' in routes),
     ("Text backgrounds are persisted by the backend", '"textBackground"' in client and 'text_background' in routes),
-    ("Music ownership and audio type are verified by the backend", 'music_media_id' in routes and 'mime_type' in routes and 'startsWith(\'audio/\')' in routes),
+    ("Music ownership and audio type are verified by the backend", 'music_media_id' in routes and 'mime_type' in routes and 'startsWith("audio/")' in routes),
     ("Feeling/Activity is validated and persisted", 'allowedFeelingActivityTypes' in routes and 'feeling_activity_type' in routes),
     ("Multi-media backend persists ordered media", 'social_post_media' in bootstrap and 'position' in bootstrap),
     ("Backend media retrieval checks authenticated visibility", 'visibleSocialPost(postId, req.user.sub)' in bootstrap),
