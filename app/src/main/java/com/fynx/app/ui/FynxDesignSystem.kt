@@ -103,6 +103,13 @@ fun FynxTheme(
             surfaceVariant = if (amoled) FynxDesign.AmoledSurfaceRaised else FynxDesign.SurfaceRaised,
             onSurfaceVariant = if (amoled) FynxDesign.AmoledTextSecondary else FynxDesign.TextSecondary,
             outline = if (amoled) FynxDesign.AmoledOutline else FynxDesign.Outline,
+            surfaceContainerLowest = if (amoled) FynxDesign.AmoledBackground else FynxDesign.Background,
+            surfaceContainerLow = if (amoled) FynxDesign.AmoledSurface else FynxDesign.Surface,
+            surfaceContainer = if (amoled) FynxDesign.AmoledSurface else FynxDesign.Surface,
+            surfaceContainerHigh = if (amoled) FynxDesign.AmoledSurfaceRaised else FynxDesign.SurfaceRaised,
+            surfaceContainerHighest = if (amoled) FynxDesign.AmoledSurfaceRaised else FynxDesign.SurfaceRaised,
+            surfaceDim = if (amoled) FynxDesign.AmoledBackground else FynxDesign.Background,
+            surfaceBright = if (amoled) FynxDesign.AmoledSurfaceRaised else FynxDesign.SurfaceRaised,
             surfaceTint = if (amoled) Color.Black else effectiveAccent.primary
         )
     } else {
@@ -117,7 +124,14 @@ fun FynxTheme(
             onSurface = FynxDesign.LightTextPrimary,
             surfaceVariant = FynxDesign.LightSurfaceRaised,
             onSurfaceVariant = FynxDesign.LightTextSecondary,
-            outline = FynxDesign.LightOutline
+            outline = FynxDesign.LightOutline,
+            surfaceContainerLowest = FynxDesign.LightBackground,
+            surfaceContainerLow = FynxDesign.LightSurface,
+            surfaceContainer = FynxDesign.LightSurface,
+            surfaceContainerHigh = FynxDesign.LightSurfaceRaised,
+            surfaceContainerHighest = FynxDesign.LightSurfaceRaised,
+            surfaceDim = FynxDesign.LightBackground,
+            surfaceBright = FynxDesign.LightSurface
         )
     }
     MaterialTheme(
