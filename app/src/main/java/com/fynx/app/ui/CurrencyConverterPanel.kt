@@ -15,10 +15,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.Locale
 
 private val supportedCurrencies = listOf("USD", "NGN", "EUR", "GBP", "AED", "JPY", "CAD", "AUD", "INR", "CNY", "ZAR", "GHS", "KES")
@@ -92,7 +89,7 @@ private fun CurrencyChoice(label: String, selected: String, onSelected: (String)
     }
 }
 
-private suspend fun fetchOpenRates(context: Context, base: String): Result<Map<String, Double>> = withContext(Dispatchers.IO) {
+private suspend fun fetchOpenRates(context: Context, base: String): Result<Map<String, Doubprivate suspend fun fetchOpenRates(context: Context, base: String): Result<Map<String, Double>> = withContext(Dispatchers.IO) {
     var lastError: Throwable? = null
     repeat(RATE_RETRIES + 1) { attempt ->
         try {
@@ -101,7 +98,10 @@ private suspend fun fetchOpenRates(context: Context, base: String): Result<Map<S
             val result = FynxBackendClient.get(context, path).mapCatching { raw ->
                 val json = JSONObject(raw)
                 val source = json.getJSONObject("rates")
-                buildMap { supportedCurrencies.forEach { code -> if (source.has(code)) put(code, source.getDouble(code)) }; put(base.uppercase(Locale.US), 1.0) }
+                buildMap {
+                    supportedCurrencies.forEach { code -> if (source.has(code)) put(code, source.getDouble(code)) }
+                    put(base.uppercase(Locale.US), 1.0)
+                }
             }
             if (result.isSuccess || attempt == RATE_RETRIES) return@withContext result
             lastError = result.exceptionOrNull()
@@ -109,18 +109,19 @@ private suspend fun fetchOpenRates(context: Context, base: String): Result<Map<S
             if (error is CancellationException) throw error
             lastError = error
         }
-        if (attempt < RATE_RETRIES) { awaitValidatedNetwork(context); delay(750L * (attempt + 1)) }
+        if (attempt < RATE_RETRIES) delay(750L * (attempt + 1))
     }
     Result.failure(lastError ?: IOException("Rate service unavailable"))
 }
 
 private fun awaitValidatedNetwork(context: Context) {
-    val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: throw IOException("Network service unavailable")
+    val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        ?: throw IOException("Network service unavailable")
     val valid = manager.allNetworks.any { network ->
         val capabilities = manager.getNetworkCapabilities(network)
-        capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
     if (!valid) throw IOException("Network connection is unavailable")
 }
 
-private fun money(value: Double): String = String.format(Locale.US, "%.2f", value)
