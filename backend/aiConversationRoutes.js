@@ -166,6 +166,7 @@ export function registerFynxAiConversationRoutes({ app }) {
         context: {},
         imageInputs: images
       });
+        const reply = agentResult.reply;
         const assistant=await db.query("INSERT INTO ai_messages(conversation_id,user_id,role,text) VALUES($1,$2,'assistant',$3) RETURNING id,created_at",[conversation.id,userId,reply]);
         await db.query("UPDATE ai_conversations SET updated_at=NOW(),title=CASE WHEN title='New conversation' AND $2<>'' THEN LEFT($2,120) ELSE title END WHERE id=$1",[conversation.id,message]);
         await db.query("COMMIT");
