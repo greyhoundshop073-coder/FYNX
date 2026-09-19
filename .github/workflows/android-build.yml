@@ -95,6 +95,8 @@ jobs:
           node backend/verify-stage15d-advanced.mjs
       - name: Verify Stage 16 camera and media integration
         run: python3 scripts/verify_stage16_camera.py
+      - name: Verify Batch 5 location integration
+        run: python3 scripts/verify_batch5_location.py
       - name: Verify FYNX AI extension contract
         run: python3 scripts/verify_ai_extension_contract.py
       - name: Verify FYNX AI security and tool integrity
