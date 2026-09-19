@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import java.io.File
 import java.security.MessageDigest
+import org.json.JSONObject
 
 /**
  * Local persistence for the existing profile/settings foundation.
@@ -34,6 +35,7 @@ object FynxPreferencesStore {
     private const val KEY_EMOJI_SIZE = "emoji_size"
     private const val KEY_CHAT_LIST_STATE = "chat_list_state"
     private const val KEY_REMOTE_IDENTITY_CACHE = "remote_identity_cache"
+    private const val KEY_REMOTE_PROFILE_STATS_CACHE = "remote_profile_stats_cache"
     private const val LEGACY_ASSET_FILE = "fynx_customization.jpg"
     private const val ASSET_FILE_PREFIX = "fynx_customization_"
 
@@ -78,6 +80,31 @@ object FynxPreferencesStore {
         prefs.edit().apply {
             if (mediaId.isNullOrBlank()) remove(cacheKey(username)) else putString(cacheKey(username), mediaId)
         }.apply()
+    }
+
+    data class RemoteProfileStats(val postCount: Int, val followerCount: Int?, val followingCount: Int?)
+
+    fun loadRemoteProfileStats(context: Context, username: String): RemoteProfileStats? {
+        val raw = context.getSharedPreferences("${KEY_REMOTE_PROFILE_STATS_CACHE}_\${accountNamespace(context)}", Context.MODE_PRIVATE)
+            .getString(cacheKey(username), null) ?: return null
+        return runCatching {
+            val json = JSONObject(raw)
+            RemoteProfileStats(
+                postCount = json.optInt("postCount", 0),
+                followerCount = if (json.has("followerCount") && !json.isNull("followerCount")) json.optInt("followerCount") else null,
+                followingCount = if (json.has("followingCount") && !json.isNull("followingCount")) json.optInt("followingCount") else null
+            )
+        }.getOrNull()
+    }
+
+    fun saveRemoteProfileStats(context: Context, username: String, postCount: Int, followerCount: Int?, followingCount: Int?) {
+        val json = JSONObject().apply {
+            put("postCount", postCount.coerceAtLeast(0))
+            if (followerCount != null) put("followerCount", followerCount.coerceAtLeast(0))
+            if (followingCount != null) put("followingCount", followingCount.coerceAtLeast(0))
+        }
+        context.getSharedPreferences("${KEY_REMOTE_PROFILE_STATS_CACHE}_\${accountNamespace(context)}", Context.MODE_PRIVATE)
+            .edit().putString(cacheKey(username), json.toString()).apply()
     }
 
     private fun accountNamespace(context: Context): String = storageKey(FynxAuthStore.accountStorageKey(context) ?: "signed_out")
@@ -167,6 +194,7 @@ object FynxPreferencesStore {
             .remove(KEY_EMOJI_SIZE)
             .apply()
         runCatching { context.getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_$accountNamespace", Context.MODE_PRIVATE).edit().clear().apply() }
+        runCatching { context.getSharedPreferences("${KEY_REMOTE_PROFILE_STATS_CACHE}_$accountNamespace", Context.MODE_PRIVATE).edit().clear().apply() }
         runCatching {
             File(context.applicationInfo.dataDir, "shared_prefs")
                 .listFiles()
