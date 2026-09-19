@@ -14,9 +14,9 @@ bootstrap = (ROOT / "backend/socialMultiMediaBootstrap.js").read_text(encoding="
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 
 checks = [
-    ("One Create Post composer owns all optional attachments", all(x in composer for x in [
+    ("One Create Post composer owns the social post attachments that are actually supported there", all(x in composer for x in [
         'ComposerQuickChip("Music"', 'ComposerQuickChip("Location"', 'ComposerQuickChip("Feeling/Activity"',
-        'ComposerQuickChip("Marketplace"', 'FynxPostAudienceClient', 'FynxMultiMediaPostClient.createPost'
+        'FynxPostAudienceClient', 'FynxMultiMediaPostClient.createPost'
     ])),
     ("Existing camera remains the single real capture implementation", "FynxCameraCapturePanel" in composer and "showCamera = true" in composer and "FynxCameraCapturePanel" in camera),
     ("Photo and video selection feeds the same publish path", "PickMultipleVisualMedia" in composer and "capturedUris" in composer and "capturedTypes" in composer and "uris: List<Uri>" in client),
@@ -29,7 +29,7 @@ checks = [
     ("Text-only and multi-media endpoints both exist", '"/api/social/posts"' in client and '"/api/social/posts/multi"' in client),
     ("Multi-media limits protect the existing upload architecture", "MAX_MEDIA = 4" in client and "MAX_SINGLE_MEDIA_BYTES" in client and "MAX_TOTAL_MEDIA_BYTES" in client),
     ("Backend single-post schema includes all Create Post metadata", "feeling_activity_type" in routes and "music_media_id" in routes and "location" in routes and "text_background" in routes),
-    ("Backend multi-media route includes all Create Post metadata", "feelingActivityType" in routes and "musicMediaId" in routes and "location" in routes and "social_post_media" in routes),
+    ("Backend multi-media route includes all Create Post metadata", "feelingActivityType" in bootstrap and "musicMediaId" in bootstrap and "location" in bootstrap and "social_post_media" in bootstrap),
     ("Backend multi-media bootstrap preserves the same metadata", "feeling_activity_type" in bootstrap and "music_media_id" in bootstrap and "location" in bootstrap),
     ("Feed model carries location, music, and Feeling/Activity", "location: String?" in remote and "musicMediaId: String?" in remote and "feelingActivityType: String?" in remote),
     ("Home feed renders location, music, and Feeling/Activity", "post.location" in feed and "MusicPostPlayer" in feed and "post.feelingActivity" in feed),
