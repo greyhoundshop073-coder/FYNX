@@ -76,6 +76,7 @@ require('legacy composer voice recording','MediaRecorder' in composer and 'FYNX_
 require('legacy composer friends-only wording','Friends only' in composer and 'Only me' not in composer)
 require('mature composer exists','fun FynxMatureStatusComposerPanel' in mature)
 require('mature Text mode','FynxStatusType.TEXT' in mature and 'Type a Status' in mature)
+require('mature creation controls fit small screens','LazyRow(' in mature and 'Text(\"Stop • \\${formatMatureTime(elapsed)}\")' in mature)
 require('mature Photo mode','FynxStatusType.PHOTO' in mature and 'pickImage.launch' in mature)
 require('mature Video mode','FynxStatusType.VIDEO' in mature and 'pickVideo.launch' in mature)
 require('mature Voice mode','FynxStatusType.VOICE' in mature and 'beginMatureVoiceRecording' in mature and 'stopMatureVoiceRecording' in mature)
