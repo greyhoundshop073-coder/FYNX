@@ -26,7 +26,8 @@ object FynxMultiMediaPostClient {
         text: String,
         visibility: FynxPostVisibility,
         uris: List<Uri>,
-        selectedAudienceUserIds: List<String> = emptyList()
+        selectedAudienceUserIds: List<String> = emptyList(),
+        textBackground: FynxPostTextBackground? = null
     ): Result<String> = runCatching {
         val selected = uris.distinct().take(MAX_MEDIA)
         val caption = text.trim().take(4000)
@@ -42,6 +43,7 @@ object FynxMultiMediaPostClient {
                     put("text", caption)
                     put("visibility", visibility.name)
                     put("audienceUserIds", JSONArray(selectedAudienceUserIds.distinct().take(100)))
+                    put("textBackground", textBackground?.key ?: "")
                     put("mediaId", JSONObject.NULL)
                     put("mediaType", JSONObject.NULL)
                 }.toString()
@@ -97,6 +99,7 @@ object FynxMultiMediaPostClient {
                     put("text", caption)
                     put("visibility", visibility.name)
                     put("audienceUserIds", JSONArray(selectedAudienceUserIds.distinct().take(100)))
+                    put("textBackground", textBackground?.key ?: "")
                     put("mediaIds", mediaIds)
                     put("mediaTypes", mediaTypes)
                 }.toString()
