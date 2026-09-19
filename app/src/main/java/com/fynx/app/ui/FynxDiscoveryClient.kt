@@ -39,8 +39,8 @@ object FynxDiscoveryClient {
             }
         }
 
-    suspend fun marketplaceDiscovery(context: Context, query: String = "", category: String = "All", limit: Int = 30): Result<List<FynxMarketplaceClient.Listing>> {
-        val path = "/api/marketplace/discovery?q=${encode(query)}&category=${encode(category)}&limit=${limit.coerceIn(1, 60)}"
+    suspend fun marketplaceDiscovery(context: Context, query: String = "", category: String = "All", limit: Int = 30, location: String = ""): Result<List<FynxMarketplaceClient.Listing>> {
+        val path = "/api/marketplace/discovery?q=${encode(query)}&category=${encode(category)}&limit=${limit.coerceIn(1, 60)}&location=${encode(location)}"
         return FynxBackendClient.get(context, path).mapCatching(::parseListings)
     }
 
