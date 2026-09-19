@@ -22,7 +22,7 @@ export async function installSocialMultiMedia() {
       ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL;
       ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_title TEXT;
       ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_artist TEXT;
-      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_duration_ms BIGINT;");
+undefined");
 
     if (source.includes("p.media_type,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp")) {
       source = source.replace("p.media_type,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp", "p.media_type,p.location,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp");
@@ -46,7 +46,11 @@ export async function installSocialMultiMedia() {
       const musicMediaId = req.body?.musicMediaId == null ? null : Number(req.body.musicMediaId);
       const musicTitle = typeof req.body?.musicTitle === 'string' ? req.body.musicTitle.trim().slice(0, 120) : null;
       const musicArtist = typeof req.body?.musicArtist === 'string' ? req.body.musicArtist.trim().slice(0, 120) : null;
-      const musicDurationMs = req.body?.musicDurationMs == null ? 0 : Math.max(0, Math.min(Number(req.body.musicDurationMs) || 0, 86400000));";
+      const musicDurationMs = req.body?.musicDurationMs == null ? 0 : Math.max(0, Math.min(Number(req.body.musicDurationMs) || 0, 86400000));
+      const feelingActivityType = typeof req.body?.feelingActivityType === 'string' ? req.body.feelingActivityType.trim().toUpperCase() : null;
+      const feelingActivity = typeof req.body?.feelingActivity === 'string' ? req.body.feelingActivity.trim().slice(0, 80) : null;
+      const allowedFeelingActivityTypes = ['FEELING','ACTIVITY'];
+      if (feelingActivityType != null && (!allowedFeelingActivityTypes.includes(feelingActivityType) || !feelingActivity)) return res.status(400).json({ error: 'invalid feeling or activity' });";
     if (source.includes(multiLocationNeedle) && !source.includes("const location = typeof req.body?.location")) {
       source = source.replace(multiLocationNeedle, multiLocationNeedle + "\n      const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : null;");
     }
@@ -200,8 +204,8 @@ export async function installSocialMultiMedia() {
 
       await client.query('BEGIN');
       const post = await client.query(
-        \`INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,music_media_id,music_title,music_artist,music_duration_ms,text_background,text_background_color,text_foreground_color,location) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id\`,
-        [req.user.sub, text, visibility, mediaIds[0], mediaTypes[0], musicMediaId, musicTitle, musicArtist, musicDurationMs, backgroundStyle?.[0] ? backgroundKey : '', backgroundStyle?.[0] ?? null, backgroundStyle?.[1] ?? null, location]
+        \`INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,music_media_id,music_title,music_artist,music_duration_ms,feeling_activity_type,feeling_activity,text_background,text_background_color,text_foreground_color,location) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id\`,
+        [req.user.sub, text, visibility, mediaIds[0], mediaTypes[0], musicMediaId, musicTitle, musicArtist, musicDurationMs, feelingActivityType, feelingActivity, backgroundStyle?.[0] ? backgroundKey : '', backgroundStyle?.[0] ?? null, backgroundStyle?.[1] ?? null, location]
       );
       const postId = Number(post.rows[0].id);
       for (let position = 0; position < mediaIds.length; position += 1) {
