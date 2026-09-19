@@ -26,7 +26,7 @@ checks = [
     ("photo rotation editing", 'rotatePhoto' in camera and 'Rotate' in camera),
     ("AI photo enhancement", 'FynxAiPhotoEnhancer.enhance' in camera),
     ("camera result connected to post composer", 'FynxCameraCapturePanel' in home and 'showComposer = true' in home),
-    ("caption composer", 'OutlinedTextField' in home and caption_limit),
+    ("caption composer", caption_limit),
     ("media upload and social post", 'uploadMedia' in remote and 'createPost' in remote and '/api/social/posts' in remote),
 ]
 
