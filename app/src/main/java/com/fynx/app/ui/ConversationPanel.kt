@@ -317,7 +317,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         return
     }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    FynxChatWallpaperBackground(
+        modifier = Modifier.fillMaxSize(),
+        wallpaperOverride = FynxConversationPreferences.chatWallpaper(context, chat.username)
+    ) {
+    Column(Modifier.fillMaxSize()) {
         Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
             Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -494,6 +498,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 }
             }
         }
+    }
+
     }
 
     if (showCamera) {
