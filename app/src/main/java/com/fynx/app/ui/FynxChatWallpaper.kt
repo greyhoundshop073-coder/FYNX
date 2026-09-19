@@ -14,9 +14,9 @@ import androidx.compose.ui.unit.dp
 private val FynxChatWallpaperOptions = listOf("FYNX Default", "Midnight", "Aurora", "Sunrise", "Ocean", "Minimal")
 
 @Composable
-fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
+fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, wallpaperOverride: String? = null, content: @Composable BoxScope.() -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val wallpaper = FynxPreferencesStore.loadChatWallpaper(context)
+    val wallpaper = wallpaperOverride ?: FynxPreferencesStore.loadChatWallpaper(context)
     val base = when (wallpaper) {
         "Midnight" -> Color(0xFF171A20)
         "Aurora" -> Color(0xFF182323)
@@ -32,7 +32,7 @@ fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, content: @Composa
 }
 
 @Composable
-private fun FynxChatDoodlePattern() {
+fun FynxChatDoodlePattern() {
     androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
         val ink = Color.White.copy(alpha = 0.052f)
         val sw = 1.1.dp.toPx()
