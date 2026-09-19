@@ -49,6 +49,7 @@ private const val FEED_REFRESH_DEBOUNCE_MS = 1000L
 fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}, header: (@Composable () -> Unit)? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val publishRefreshKey = FynxHomeLifecycleRefreshBus.currentVersion()
     var posts by remember { mutableStateOf<List<FynxRemoteSocialClient.RemotePost>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
@@ -83,6 +84,10 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         val ids = items.map { it.id }.filter { it.isNotBlank() && !reactionStates.containsKey(it) }.distinct(); if (ids.isEmpty()) return
         scope.launch { val resolved = ids.map { id -> async(Dispatchers.IO) { id to FynxHomePostReactionsClient.state(context, id).getOrNull() } }.awaitAll().mapNotNull { (id, state) -> state?.let { id to it } }.toMap(); if (resolved.isNotEmpty()) reactionStates = reactionStates + resolved }
     }
+    LaunchedEffect(publishRefreshKey) {
+        if (publishRefreshKey > 0) reload(true)
+    }
+
     fun reload(forceRefresh: Boolean = false) {
         val now = System.currentTimeMillis(); if (feedRequestInFlight) return; if (forceRefresh && now - lastFeedRequestAt < FEED_REFRESH_DEBOUNCE_MS) return
         feedRequestInFlight = true; lastFeedRequestAt = now

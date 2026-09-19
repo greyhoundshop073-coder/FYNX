@@ -11,6 +11,16 @@ object FynxMultiMediaPostClient {
     private const val MAX_SINGLE_MEDIA_BYTES = 12L * 1024L * 1024L
     private const val MAX_TOTAL_MEDIA_BYTES = 48L * 1024L * 1024L
 
+    fun mediaKind(context: Context, uri: Uri): String {
+        val mime = detectMimeType(context, uri)
+        return when {
+            mime.startsWith("image/") -> "image"
+            mime.startsWith("video/") -> "video"
+            mime.startsWith("audio/") -> "audio"
+            else -> "unknown"
+        }
+    }
+
     suspend fun createPost(
         context: Context,
         text: String,

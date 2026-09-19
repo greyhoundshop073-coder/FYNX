@@ -71,10 +71,10 @@ fun FynxHomeSocialHubPanel(
 
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) {
-            uris.take(12).forEach { uri -> runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
-            val selected = uris.distinct().take(12)
+            uris.take(4).forEach { uri -> runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
+            val selected = uris.distinct().take(4)
             capturedUris = (capturedUris.filterNot { it in selected } + selected).take(12)
-            capturedTypes = capturedUris.map { uri -> if (context.contentResolver.getType(uri)?.startsWith("video/") == true) "video" else "image" }
+            capturedTypes = capturedUris.map { uri -> FynxMultiMediaPostClient.mediaKind(context, uri) }
             selectedVisualIndex = 0
             showComposer = true
         }
@@ -84,7 +84,7 @@ fun FynxHomeSocialHubPanel(
         if (uri != null) {
             runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
             capturedUris = (capturedUris.filterNot { it == uri } + uri).take(12)
-            capturedTypes = capturedUris.map { item -> when { context.contentResolver.getType(item)?.startsWith("video/") == true -> "video"; context.contentResolver.getType(item)?.startsWith("audio/") == true -> "audio"; else -> "image" } }
+            capturedTypes = capturedUris.map { item -> FynxMultiMediaPostClient.mediaKind(context, item) }
             showComposer = true
         }
     }
@@ -183,6 +183,7 @@ fun FynxHomeSocialHubPanel(
                                     }
                                     val selectedVisual = visualItems.getOrNull(selectedVisualIndex.coerceIn(0, (visualItems.size - 1).coerceAtLeast(0)))
                                     Text("Attached media", style = MaterialTheme.typography.titleMedium)
+                                    Text("Up to 4 items per FYNX post.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
                                     if (selectedVisual != null) {
                                         Box(Modifier.fillMaxWidth().heightIn(min = 150.dp, max = 280.dp)) {
                                             if (selectedVisual.third == "video") {
@@ -232,7 +233,7 @@ fun FynxHomeSocialHubPanel(
     if (showVoiceRecorder) {
         FynxVoicePostRecorder(
             onRecorded = { uri ->
-                capturedUris = (capturedUris.filterNot { it == uri } + uri).take(12)
+                capturedUris = (capturedUris.filterNot { it == uri } + uri).take(4)
                 recomputeTypes()
                 showVoiceRecorder = false
                 showComposer = true
