@@ -191,7 +191,7 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier) {
 
 
 /** Video surface stays passive so parent LazyColumn/LazyRow containers keep ownership of drag gestures. */
-private class FynxPassiveVideoView(context: android.content.Context) : android.widget.VideoView(context) {
+internal class FynxPassiveVideoView(context: android.content.Context) : android.widget.VideoView(context) {
     override fun onTouchEvent(event: android.view.MotionEvent): Boolean = false
     override fun performClick(): Boolean = false
 }
