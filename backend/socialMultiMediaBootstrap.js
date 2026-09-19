@@ -37,14 +37,15 @@ export async function installSocialMultiMedia() {
       source = source.replace("[req.user.sub,text,visibility,mediaId,mediaType]", "[req.user.sub,text,visibility,mediaId,mediaType,location]");
     }
 
-    const multiLocationNeedle = "const backgroundKey = typeof req.body?.textBackground === 'string' ? req.body.textBackground.trim().toUpperCase() : '';";
+    const multiLocationNeedle = "const backgroundKey = typeof req.body?.textBackground === 'string' ? req.body.textBackground.trim().toUpperCase() : '';
+      const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : null;";
     if (source.includes(multiLocationNeedle) && !source.includes("const location = typeof req.body?.location")) {
       source = source.replace(multiLocationNeedle, multiLocationNeedle + "\n      const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : null;");
     }
-    const multiInsert = "INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,text_background,text_background_color,text_foreground_color) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id";
+    const multiInsert = "INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,text_background,text_background_color,text_foreground_color,location) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id";
     if (source.includes(multiInsert)) {
       source = source.replace(multiInsert, "INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,text_background,text_background_color,text_foreground_color,location) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id");
-      source = source.replace("[req.user.sub, text, visibility, mediaIds[0], mediaTypes[0], backgroundStyle?.[0] ? backgroundKey : '', backgroundStyle?.[0] ?? null, backgroundStyle?.[1] ?? null]", "[req.user.sub, text, visibility, mediaIds[0], mediaTypes[0], backgroundStyle?.[0] ? backgroundKey : '', backgroundStyle?.[0] ?? null, backgroundStyle?.[1] ?? null, location]");
+      source = source.replace("[req.user.sub, text, visibility, mediaIds[0], mediaTypes[0], backgroundStyle?.[0] ? backgroundKey : '', backgroundStyle?.[0] ?? null, backgroundStyle?.[1] ?? null, location]", "[req.user.sub, text, visibility, mediaIds[0], mediaTypes[0], backgroundStyle?.[0] ? backgroundKey : '', backgroundStyle?.[0] ?? null, backgroundStyle?.[1] ?? null, location]");
     }
 
     source += "\n  // fynxBatch5LocationV1\n";
@@ -130,7 +131,8 @@ export async function installSocialMultiMedia() {
       ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS text_foreground_color BIGINT;
       ALTER TABLE social_posts ADD CONSTRAINT social_posts_visibility_check CHECK (visibility IN ('PUBLIC','FRIENDS_ONLY','SELECTED_PEOPLE','ONLY_ME'));
       CREATE TABLE IF NOT EXISTS social_post_audience (post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(post_id,user_id));
-      CREATE INDEX IF NOT EXISTS social_post_audience_user_idx ON social_post_audience(user_id, created_at DESC);`);
+      CREATE INDEX IF NOT EXISTS social_post_audience_user_idx ON social_post_audience(user_id, created_at DESC);
+      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS location TEXT;`);
 
   const routes = `
   // fynxHomeMultiMediaPosts: one real post can own an ordered set of up to four visual assets.
