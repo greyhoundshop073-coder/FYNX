@@ -189,8 +189,10 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 }
             }
         }
+        if (showEmojiPanel && canSendMessages) { FynxChatEmojiPanel(onEmojiSelected = { emoji -> text += emoji; showEmojiPanel = false }) }
         Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp, modifier = Modifier.navigationBarsPadding().imePadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
+                IconButton(enabled = canSendMessages, onClick = { showEmojiPanel = !showEmojiPanel }) { Icon(Icons.Default.EmojiEmotions, "Emoji") }
                 OutlinedTextField(value = text, onValueChange = { text = it }, enabled = canSendMessages, modifier = Modifier.weight(1f), placeholder = { Text(if (canSendMessages) "Write a message…" else "Messaging is restricted") }, maxLines = 4, shape = MaterialTheme.shapes.large, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Default))
                 Spacer(Modifier.width(6.dp))
                 IconButton(enabled = canSendMessages && text.trim().isNotEmpty() && !sending && selectedGroup != null, onClick = {
