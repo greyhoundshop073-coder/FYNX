@@ -144,7 +144,14 @@ fun FynxHomeSocialHubPanel(
     }
 
     LaunchedEffect(showPeoplePicker) {
-        if (showFeelingActivityPicker) {
+        if (showPeoplePicker) {
+            audienceLoading = true
+            FynxPostAudienceClient.friends(context).onSuccess { audienceFriends = it }.onFailure { notice = it.message ?: "Could not load your friends." }
+            audienceLoading = false
+        }
+    }
+
+    if (showFeelingActivityPicker) {
         val filteredOptions = FynxFeelingActivityLibrary.options.filter {
             feelingActivitySearch.isBlank() ||
                 it.label.contains(feelingActivitySearch.trim(), ignoreCase = true) ||
@@ -242,13 +249,6 @@ fun FynxHomeSocialHubPanel(
                     }
                 }
             }
-        }
-    }
-
-    if (showPeoplePicker) {
-            audienceLoading = true
-            FynxPostAudienceClient.friends(context).onSuccess { audienceFriends = it }.onFailure { notice = it.message ?: "Could not load your friends." }
-            audienceLoading = false
         }
     }
 
