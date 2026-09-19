@@ -1,4 +1,5 @@
-import pg from 'pg';\nimport { ensureMarketplaceProtectionSchema } from './marketplaceProtection.js';
+import pg from 'pg';
+import { ensureMarketplaceProtectionSchema } from './marketplaceProtection.js';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
