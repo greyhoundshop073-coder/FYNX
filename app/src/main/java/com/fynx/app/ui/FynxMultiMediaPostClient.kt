@@ -100,17 +100,22 @@ object FynxMultiMediaPostClient {
         val resolverType = context.contentResolver.getType(uri)?.trim()?.lowercase()
         if (!resolverType.isNullOrBlank()) return resolverType
         return when (uri.scheme?.lowercase()) {
-            "file" -> when (uri.path?.substringAfterLast('.', "").lowercase()) {
-                "m4a", "mp4", "aac" -> if (uri.path?.lowercase()?.endsWith(".mp4") == true) "video/mp4" else "audio/mp4"
-                "mp3" -> "audio/mpeg"
-                "wav" -> "audio/wav"
-                "3gp" -> "audio/3gpp"
-                "webm" -> "video/webm"
-                "mov" -> "video/quicktime"
-                "jpg", "jpeg" -> "image/jpeg"
-                "png" -> "image/png"
-                "webp" -> "image/webp"
-                else -> throw IllegalArgumentException("FYNX could not determine the selected media type.")
+            "file" -> {
+                val path = uri.path
+                    ?: throw IllegalArgumentException("FYNX could not determine the selected media type.")
+                when (path.substringAfterLast('.', "").lowercase()) {
+                    "m4a", "aac" -> "audio/mp4"
+                    "mp4" -> "video/mp4"
+                    "mp3" -> "audio/mpeg"
+                    "wav" -> "audio/wav"
+                    "3gp" -> "audio/3gpp"
+                    "webm" -> "video/webm"
+                    "mov" -> "video/quicktime"
+                    "jpg", "jpeg" -> "image/jpeg"
+                    "png" -> "image/png"
+                    "webp" -> "image/webp"
+                    else -> throw IllegalArgumentException("FYNX could not determine the selected media type.")
+                }
             }
             else -> throw IllegalArgumentException("FYNX could not determine the selected media type.")
         }
