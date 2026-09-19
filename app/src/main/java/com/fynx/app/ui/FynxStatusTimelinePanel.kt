@@ -156,6 +156,7 @@ private fun StatusBubble(status: FynxStatus, isMe: Boolean, onClick: () -> Unit)
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FynxStatusStoryViewer(
     statuses: List<FynxStatus>,
