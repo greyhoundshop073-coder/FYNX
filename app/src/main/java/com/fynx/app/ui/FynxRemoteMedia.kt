@@ -101,7 +101,7 @@ fun FynxRemoteMedia(
             Box(modifier.clip(RoundedCornerShape(14.dp))) {
                 AndroidView(
                     factory = { ctx ->
-                        android.widget.VideoView(ctx).apply {
+                        FynxPassiveVideoView(ctx).apply {
                             tag = file.absolutePath
                             setVideoPath(file.absolutePath)
                             setOnPreparedListener { player -> player.isLooping = loopVideo; player.start(); videoPlaying = true }
@@ -187,4 +187,11 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier) {
         Icon(Icons.Default.GraphicEq, "Voice Status")
         error?.let { Text(it, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 8.dp)) }
     }
+}
+
+
+/** Video surface stays passive so parent LazyColumn/LazyRow containers keep ownership of drag gestures. */
+private class FynxPassiveVideoView(context: android.content.Context) : android.widget.VideoView(context) {
+    override fun onTouchEvent(event: android.view.MotionEvent): Boolean = false
+    override fun performClick(): Boolean = false
 }
