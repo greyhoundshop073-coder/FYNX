@@ -58,7 +58,7 @@ export async function installSocialPostReactions() {
       if (!Number.isSafeInteger(postId) || postId < 1 || !reaction) return res.status(400).json({ error: 'invalid reaction' });
       if (!(await visibleSocialPost(postId, req.user.sub))) return res.status(404).json({ error: 'post not found' });
 
-      const context = await pool.query(`
+      const context = await pool.query(\`
         SELECT p.author_id AS post_author_id,
                owner.username AS post_author_username,
                actor.username AS actor_username,
@@ -69,29 +69,29 @@ export async function installSocialPostReactions() {
           LEFT JOIN social_post_reactions r ON r.post_id=p.id AND r.user_id=$2
          WHERE p.id=$1
          LIMIT 1
-      `, [postId, req.user.sub]);
+      \`, [postId, req.user.sub]);
       const reactionContext = context.rows[0];
       if (!reactionContext) return res.status(404).json({ error: 'post not found' });
 
-      await pool.query(`
+      await pool.query(\`
         INSERT INTO social_post_reactions(post_id,user_id,reaction_type)
         VALUES($1,$2,$3)
         ON CONFLICT(post_id,user_id) DO UPDATE SET reaction_type=EXCLUDED.reaction_type, updated_at=NOW()
-      `, [postId, req.user.sub, reaction]);
+      \`, [postId, req.user.sub, reaction]);
 
       const isNewOrChangedReaction = !reactionContext.previous_reaction || reactionContext.previous_reaction !== reaction;
       if (isNewOrChangedReaction && String(reactionContext.post_author_id) !== String(req.user.sub)) {
         const actor = reactionContext.actor_username || 'A FYNX user';
-        const reactionMessage = reaction === 'LIKE' ? 'Liked your post.' : `${reaction.toLowerCase()} reaction on your post.`;
+        const reactionMessage = reaction === 'LIKE' ? 'Liked your post.' : \`${reaction.toLowerCase()} reaction on your post.\`;
         await queueFynxNotification(pool, {
           userId: reactionContext.post_author_id,
           type: 'REACTION',
-          title: `@${actor} reacted to your post`,
+          title: \`@${actor} reacted to your post\`,
           message: reactionMessage,
           targetId: postId,
           sourceUsername: reactionContext.actor_username || null,
           route: 'fynx://home',
-          notificationId: `post-reaction-${postId}-${req.user.sub}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`
+          notificationId: \`post-reaction-${postId}-${req.user.sub}-${Date.now()}-${Math.random().toString(36).slice(2,8)}\`
         });
       }
 
