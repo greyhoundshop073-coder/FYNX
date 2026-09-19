@@ -89,7 +89,7 @@ private fun CurrencyChoice(label: String, selected: String, onSelected: (String)
     }
 }
 
-private suspend fun fetchOpenRates(context: Context, base: String): Result<Map<String, Doubprivate suspend fun fetchOpenRates(context: Context, base: String): Result<Map<String, Double>> = withContext(Dispatchers.IO) {
+private suspend fun fetchOpenRates(context: Context, base: String): Result<Map<String, Double>> = withContext(Dispatchers.IO) {
     var lastError: Throwable? = null
     repeat(RATE_RETRIES + 1) { attempt ->
         try {
