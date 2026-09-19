@@ -22,7 +22,7 @@ checks = [
     ("Backend validates Feeling/Activity type", "allowedFeelingActivityTypes" in routes and "invalid feeling or activity type" in routes),
     ("Single-post backend stores Feeling/Activity", "feeling_activity_type,feeling_activity,text_background" in routes),
     ("Feed exposes Feeling/Activity", "feelingActivityType:x.feeling_activity_type" in routes and "feelingActivity:x.feeling_activity" in routes),
-    ("Android feed model parses Feeling/Activity", "feelingActivityType: String?" in models and "o.optString("feelingActivity")" in models),
+    ("Android feed model parses Feeling/Activity", "feelingActivityType: String?" in models and 'o.optString("feelingActivity")' in models),
     ("Home feed renders Feeling/Activity", "post.feelingActivity" in feed and "SentimentSatisfied" in feed),
     ("Multi-media bootstrap carries Feeling/Activity", "feelingActivityType" in bootstrap and "feeling_activity_type,feeling_activity" in bootstrap),
     ("CI has Batch 8 verification gate", "scripts/verify_batch8_feeling_activity.py" in workflow),
