@@ -18,7 +18,11 @@ export async function installSocialMultiMedia() {
   if (!source.includes(locationMarker)) {
     const schemaMarker = "CREATE INDEX IF NOT EXISTS social_posts_created_idx ON social_posts(created_at DESC);";
     if (!source.includes(schemaMarker)) throw new Error("FYNX location bootstrap could not locate social post schema marker");
-    source = source.replace(schemaMarker, schemaMarker + "\n      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS location TEXT;");
+    source = source.replace(schemaMarker, schemaMarker + "\n      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS location TEXT;
+      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL;
+      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_title TEXT;
+      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_artist TEXT;
+      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_duration_ms BIGINT;");
 
     if (source.includes("p.media_type,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp")) {
       source = source.replace("p.media_type,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp", "p.media_type,p.location,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp");
@@ -38,7 +42,11 @@ export async function installSocialMultiMedia() {
     }
 
     const multiLocationNeedle = "const backgroundKey = typeof req.body?.textBackground === 'string' ? req.body.textBackground.trim().toUpperCase() : '';
-      const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : null;";
+      const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : null;
+      const musicMediaId = req.body?.musicMediaId == null ? null : Number(req.body.musicMediaId);
+      const musicTitle = typeof req.body?.musicTitle === 'string' ? req.body.musicTitle.trim().slice(0, 120) : null;
+      const musicArtist = typeof req.body?.musicArtist === 'string' ? req.body.musicArtist.trim().slice(0, 120) : null;
+      const musicDurationMs = req.body?.musicDurationMs == null ? 0 : Math.max(0, Math.min(Number(req.body.musicDurationMs) || 0, 86400000));";
     if (source.includes(multiLocationNeedle) && !source.includes("const location = typeof req.body?.location")) {
       source = source.replace(multiLocationNeedle, multiLocationNeedle + "\n      const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : null;");
     }
@@ -166,7 +174,12 @@ export async function installSocialMultiMedia() {
       if (!hasAudio && mediaTypes.some((type) => type !== 'image' && type !== 'video')) {
         return res.status(400).json({ error: 'Home posts support images and videos' });
       }
-      if (!text && mediaIds.length === 0) return res.status(400).json({ error: 'add a caption or media' });
+      if (!text && mediaIds.length === 0 && musicMediaId == null) return res.status(400).json({ error: 'add a caption or media' });
+      if (musicMediaId != null) {
+        if (!Number.isSafeInteger(musicMediaId) || musicMediaId < 1) return res.status(400).json({ error: 'invalid music media' });
+        const musicResult = await client.query('SELECT id,mime_type,owner_id FROM message_media WHERE id=$1', [musicMediaId]);
+        if (!musicResult.rows[0] || String(musicResult.rows[0].owner_id) !== String(req.user.sub) || !String(musicResult.rows[0].mime_type || '').toLowerCase().startsWith('audio/')) return res.status(403).json({ error: 'music media ownership check failed' });
+      }
       if (visibility === 'SELECTED_PEOPLE') {
         const friends = await client.query(`SELECT CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END AS id FROM friendships f WHERE (f.user_id=$1 OR f.friend_id=$1) AND f.status='accepted' AND CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END = ANY($2::bigint[])`, [req.user.sub, audienceUserIds]);
         if (friends.rows.length !== audienceUserIds.length) return res.status(403).json({ error: 'selected audience must contain your accepted friends' });
@@ -187,8 +200,8 @@ export async function installSocialMultiMedia() {
 
       await client.query('BEGIN');
       const post = await client.query(
-        \`INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,text_background,text_background_color,text_foreground_color) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id\`,
-        [req.user.sub, text, visibility, mediaIds[0], mediaTypes[0], backgroundStyle?.[0] ? backgroundKey : '', backgroundStyle?.[0] ?? null, backgroundStyle?.[1] ?? null]
+        \`INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,music_media_id,music_title,music_artist,music_duration_ms,text_background,text_background_color,text_foreground_color,location) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id\`,
+        [req.user.sub, text, visibility, mediaIds[0], mediaTypes[0], musicMediaId, musicTitle, musicArtist, musicDurationMs, backgroundStyle?.[0] ? backgroundKey : '', backgroundStyle?.[0] ?? null, backgroundStyle?.[1] ?? null, location]
       );
       const postId = Number(post.rows[0].id);
       for (let position = 0; position < mediaIds.length; position += 1) {
