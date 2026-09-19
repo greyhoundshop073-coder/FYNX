@@ -85,6 +85,9 @@ fun FynxHomeSocialHubPanel(
     var locationLoading by remember { mutableStateOf(false) }
     var selectedMusic by remember { mutableStateOf<FynxSelectedMusic?>(null) }
     var musicPlaying by remember { mutableStateOf(false) }
+    var selectedFeelingActivity by remember { mutableStateOf<FynxFeelingActivityOption?>(null) }
+    var showFeelingActivityPicker by remember { mutableStateOf(false) }
+    var feelingActivitySearch by remember { mutableStateOf("") }
     var showPeoplePicker by remember { mutableStateOf(false) }
     var audienceFriends by remember { mutableStateOf<List<FynxFriend>>(emptyList()) }
     var audienceLoading by remember { mutableStateOf(false) }
@@ -148,6 +151,107 @@ fun FynxHomeSocialHubPanel(
         }
     }
 
+    if (showFeelingActivityPicker) {
+        val filteredOptions = FynxFeelingActivityLibrary.options.filter {
+            feelingActivitySearch.isBlank() ||
+                it.label.contains(feelingActivitySearch.trim(), ignoreCase = true) ||
+                it.type.contains(feelingActivitySearch.trim(), ignoreCase = true)
+        }
+        AlertDialog(
+            onDismissRequest = {
+                showFeelingActivityPicker = false
+                feelingActivitySearch = ""
+            },
+            title = { Text("Feeling / Activity") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = feelingActivitySearch,
+                        onValueChange = { feelingActivitySearch = it.take(50) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Search") },
+                        placeholder = { Text("Find a feeling or activity") }
+                    )
+                    Column(
+                        Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        filteredOptions.forEach { option ->
+                            TextButton(
+                                onClick = {
+                                    selectedFeelingActivity = option
+                                    showFeelingActivityPicker = false
+                                    feelingActivitySearch = ""
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text(option.icon, style = MaterialTheme.typography.titleMedium)
+                                    Column(Modifier.weight(1f)) {
+                                        Text(option.label, style = MaterialTheme.typography.bodyLarge)
+                                        Text(
+                                            if (option.type == "FEELING") "Feeling" else "Activity",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (filteredOptions.isEmpty()) {
+                            Text("No matching feeling or activity.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    selectedFeelingActivity = null
+                    showFeelingActivityPicker = false
+                    feelingActivitySearch = ""
+                }) { Text("Remove") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showFeelingActivityPicker = false
+                    feelingActivitySearch = ""
+                }) { Text("Cancel") }
+            }
+        )
+    }
+
+    selectedFeelingActivity?.let { option ->
+        if (showComposer) {
+            Card(Modifier.fillMaxWidth()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(option.icon, style = MaterialTheme.typography.titleLarge)
+                    Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                        Text(
+                            if (option.type == "FEELING") "Feeling ${option.label}" else "Activity: ${option.label}",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            "Attached to this post",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { selectedFeelingActivity = null }, enabled = !posting) {
+                        Icon(Icons.Default.Close, "Remove feeling or activity")
+                    }
+                }
+            }
+        }
+    }
+
     LaunchedEffect(initialCaption) {
         if (!initialCaption.isNullOrBlank()) { text = initialCaption.trim().take(4000); capturedUris = emptyList(); capturedTypes = emptyList(); selectedVisualIndex = 0; notice = null; showComposer = true; onCaptionConsumed() }
     }
@@ -176,6 +280,9 @@ fun FynxHomeSocialHubPanel(
             postLocation = null
             selectedMusic = null
             musicPlaying = false
+            selectedFeelingActivity = null
+            feelingActivitySearch = ""
+            showFeelingActivityPicker = false
             selectedAudienceIds = emptySet()
             audience = if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS
             visibility = defaultPostVisibility
@@ -193,6 +300,9 @@ fun FynxHomeSocialHubPanel(
         postLocation = null
         selectedMusic = null
         musicPlaying = false
+        selectedFeelingActivity = null
+        feelingActivitySearch = ""
+        showFeelingActivityPicker = false
         selectedAudienceIds = emptySet()
         audience = if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS
         visibility = defaultPostVisibility
@@ -216,7 +326,7 @@ fun FynxHomeSocialHubPanel(
                         Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUris.isNotEmpty()), onClick = {
                             if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) { notice = "You are offline. Reconnect before publishing this post."; return@Button }
                             posting = true; notice = null
-                            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground, postLocation, selectedMusic) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
+                            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground, postLocation, selectedMusic, selectedFeelingActivity) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
                         }) { Text(if (posting) "Publishing…" else "Post") }
                     }
 
@@ -253,7 +363,7 @@ fun FynxHomeSocialHubPanel(
                                     }
                                 } else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                             }
-                            ComposerQuickChip("Feeling/Activity", Icons.Default.SentimentSatisfied, enabled = false) {}
+                            ComposerQuickChip("Feeling/Activity", Icons.Default.SentimentSatisfied, enabled = !posting && postingAllowed) { showFeelingActivityPicker = true }
                         }
 
                         selectedMusic?.let { music ->
