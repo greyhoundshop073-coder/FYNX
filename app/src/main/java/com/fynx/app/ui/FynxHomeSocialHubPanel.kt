@@ -77,7 +77,9 @@ fun FynxHomeSocialHubPanel(
         while (true) { networkLevel = FynxNetworkQuality.current(context); delay(5_000L) }
     }
 
-    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+    val gallery = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(12)
+    ) { uris ->
         if (uris.isNotEmpty()) {
             uris.take(4).forEach { uri -> runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
             val selected = uris.distinct().take(4)
@@ -212,7 +214,11 @@ fun FynxHomeSocialHubPanel(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            ComposerAction("Photo", Icons.Default.Image, { gallery.launch(arrayOf("image/*", "video/*")) }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
+                            ComposerAction("Photo", Icons.Default.Image, { gallery.launch(
+                                    ActivityResultContracts.PickVisualMediaRequest(
+                                        ActivityResultContracts.PickVisualMedia.ImageAndVideo
+                                    )
+                                ) }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
                             ComposerAction("Video/Camera", Icons.Default.VideoLibrary, { showComposer = false; showCamera = true }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
                             ComposerAction("Voice", Icons.Default.Mic, { showComposer = false; showVoiceRecorder = true }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
                             ComposerAction("Marketplace", Icons.Default.Storefront, { showComposer = false; onOpenMarketplace() }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
