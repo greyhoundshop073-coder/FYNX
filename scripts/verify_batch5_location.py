@@ -14,7 +14,7 @@ multi = (ROOT / "backend/socialMultiMediaBootstrap.js").read_text()
 checks = [
     ("location permissions declared", 'android.permission.ACCESS_FINE_LOCATION' in manifest and 'android.permission.ACCESS_COARSE_LOCATION' in manifest),
     ("real device location resolver exists", 'LocationManager' in location and 'Geocoder' in location and 'currentPlace' in location),
-    ("raw coordinates stay local", 'location.latitude' in location and 'location.longitude' in location and 'Raw device coordinates never' not in location),
+    ("raw coordinates stay local", 'location.latitude' in location and 'location.longitude' in location and 'put("latitude"' not in client and 'put("longitude"' not in client),
     ("location is optional in composer", 'var postLocation by remember' in composer and 'postLocation = null' in composer),
     ("location chip is wired", 'ComposerQuickChip("Location"' in composer and 'locationPermissionLauncher.launch' in composer),
     ("permission flow is real", 'RequestMultiplePermissions' in composer and 'ACCESS_FINE_LOCATION' in composer),
