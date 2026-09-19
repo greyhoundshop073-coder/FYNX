@@ -38,6 +38,7 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
     var muted by rememberSaveable(chatUsername) { mutableStateOf(FynxPreferencesStore.isChatMuted(context, chatUsername)) }
     var showClearDialog by rememberSaveable(chatUsername) { mutableStateOf(false) }
     var showResetDialog by rememberSaveable(chatUsername) { mutableStateOf(false) }
+    var wallpaper by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatWallpaper(context, chatUsername)) }
 
     if (showClearDialog) {
         AlertDialog(
@@ -98,6 +99,26 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+
+        ChatSettingsSection("Appearance", Icons.Default.RestartAlt) {
+            Text("Chat wallpaper", style = MaterialTheme.typography.titleMedium)
+            listOf("FYNX Default", "Midnight", "Aurora", "Sunrise", "Ocean", "Minimal").forEach { option ->
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(option)
+                    RadioButton(
+                        selected = wallpaper == option,
+                        onClick = {
+                            wallpaper = option
+                            FynxConversationPreferences.setChatWallpaper(context, chatUsername, option)
+                        }
+                    )
+                }
+            }
         }
 
         ChatSettingsSection("Chat Management", Icons.Default.DeleteOutline) {
