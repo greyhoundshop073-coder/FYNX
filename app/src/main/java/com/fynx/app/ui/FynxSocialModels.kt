@@ -7,5 +7,14 @@ package com.fynx.app.ui
  */
 enum class FynxPostVisibility {
     PUBLIC,
-    FRIENDS_ONLY
+    FRIENDS_ONLY,
+    SELECTED_PEOPLE,
+    ONLY_ME
+}
+
+enum class FynxPostAudience(val label: String) {
+    EVERYONE("Everyone"),
+    FRIENDS("Friends"),
+    SELECTED("Selected people"),
+    ONLY_ME("Only me")
 }
