@@ -86,6 +86,9 @@ export async function installSocialMultiMedia() {
   }
   source = source.replace(schemaNeedle, `${schemaNeedle}\n      CREATE TABLE IF NOT EXISTS social_post_media (\n        post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE,\n        media_id BIGINT NOT NULL REFERENCES message_media(id) ON DELETE CASCADE,\n        media_type TEXT NOT NULL CHECK (media_type IN ('image','video','audio')),\n        position INTEGER NOT NULL CHECK (position >= 0 AND position < 4),\n        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n        PRIMARY KEY (post_id, media_id),\n        UNIQUE (post_id, position)\n      );\n      CREATE INDEX IF NOT EXISTS social_post_media_post_idx ON social_post_media(post_id, position);\n      CREATE INDEX IF NOT EXISTS social_post_media_media_idx ON social_post_media(media_id);
       ALTER TABLE social_posts DROP CONSTRAINT IF EXISTS social_posts_visibility_check;
+      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS text_background TEXT NOT NULL DEFAULT '';
+      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS text_background_color BIGINT;
+      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS text_foreground_color BIGINT;
       ALTER TABLE social_posts ADD CONSTRAINT social_posts_visibility_check CHECK (visibility IN ('PUBLIC','FRIENDS_ONLY','SELECTED_PEOPLE','ONLY_ME'));
       CREATE TABLE IF NOT EXISTS social_post_audience (post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(post_id,user_id));
       CREATE INDEX IF NOT EXISTS social_post_audience_user_idx ON social_post_audience(user_id, created_at DESC);`);
@@ -98,6 +101,9 @@ export async function installSocialMultiMedia() {
       await ensureSocialSchema();
       const text = typeof req.body?.text === 'string' ? req.body.text.trim().slice(0, 4000) : '';
       const visibility = ['PUBLIC','FRIENDS_ONLY','SELECTED_PEOPLE','ONLY_ME'].includes(String(req.body?.visibility || '').toUpperCase()) ? String(req.body.visibility).toUpperCase() : 'PUBLIC';
+      const backgroundKey = typeof req.body?.textBackground === 'string' ? req.body.textBackground.trim().toUpperCase() : '';
+      const backgroundStyles = { OCEAN: [4280329664,4294967295], VIOLET: [4274672282,4294967295], EMERALD: [4278216060,4294967295], SUNSET: [4293291520,4294967295], CHARCOAL: [4280694328,4294967295] };
+      const backgroundStyle = backgroundKey && backgroundStyles[backgroundKey] ? backgroundStyles[backgroundKey] : null;
       const audienceUserIds = Array.isArray(req.body?.audienceUserIds) ? req.body.audienceUserIds.map(String).map(value => value.trim()).filter(Boolean).slice(0, 100) : [];
       if (visibility === 'SELECTED_PEOPLE' && audienceUserIds.length === 0) return res.status(400).json({ error: 'select at least one person' });
       if (visibility !== 'SELECTED_PEOPLE' && audienceUserIds.length) return res.status(400).json({ error: 'invalid selected audience' });
@@ -140,8 +146,8 @@ export async function installSocialMultiMedia() {
 
       await client.query('BEGIN');
       const post = await client.query(
-        \`INSERT INTO social_posts(author_id,text,visibility,media_id,media_type) VALUES($1,$2,$3,$4,$5) RETURNING id\`,
-        [req.user.sub, text, visibility, mediaIds[0], mediaTypes[0]]
+        \`INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,text_background,text_background_color,text_foreground_color) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id\`,
+        [req.user.sub, text, visibility, mediaIds[0], mediaTypes[0], backgroundStyle?.[0] ? backgroundKey : '', backgroundStyle?.[0] ?? null, backgroundStyle?.[1] ?? null]
       );
       const postId = Number(post.rows[0].id);
       for (let position = 0; position < mediaIds.length; position += 1) {
