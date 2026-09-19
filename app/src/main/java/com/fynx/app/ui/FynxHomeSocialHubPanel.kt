@@ -147,6 +147,9 @@ fun FynxHomeSocialHubPanel(
             capturedTypes = emptyList()
             selectedVisualIndex = 0
             text = ""
+            selectedAudienceIds = emptySet()
+            audience = if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS
+            visibility = defaultPostVisibility
             notice = null
         }
     }
@@ -157,6 +160,9 @@ fun FynxHomeSocialHubPanel(
         capturedTypes = emptyList()
         selectedVisualIndex = 0
         text = ""
+        selectedAudienceIds = emptySet()
+        audience = if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS
+        visibility = defaultPostVisibility
         notice = null
     }
 
