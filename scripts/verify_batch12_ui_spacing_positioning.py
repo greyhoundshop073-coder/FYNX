@@ -25,6 +25,7 @@ checks = {
     "emoji categories can scroll horizontally": '.horizontalScroll(rememberScrollState())' in emoji,
     "emoji grid capped for compact screens": 'heightIn(min = 176.dp, max = 260.dp)' in emoji,
     "status composer actions respect bottom safe area": 'navigationBarsPadding()' in status,
+    "friends header actions can scroll horizontally": '.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)' in (ROOT / "app/src/main/java/com/fynx/app/ui/FriendsPanel.kt").read_text(),
     "home status row is horizontally scrollable": 'LazyRow(contentPadding = PaddingValues(horizontal = 12.dp)' in updates,
 }
 
