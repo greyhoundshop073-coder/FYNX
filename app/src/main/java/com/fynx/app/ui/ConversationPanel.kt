@@ -38,7 +38,12 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var recipientProfile by remember(chat.username) { mutableStateOf<FynxProfileRemoteClient.Profile?>(null) }
-    val resolvedAvatarUri = recipientProfile?.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" } ?: chat.avatarUri
+    var remoteProfileLoaded by remember(chat.username) { mutableStateOf(false) }
+    val resolvedAvatarUri = if (remoteProfileLoaded) {
+        recipientProfile?.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
+    } else {
+        chat.avatarUri
+    }
     val fallbackMessage = remember(chat.lastMessage, resolvedAvatarUri) { chat.lastMessage.takeIf { it.isNotBlank() }?.let { ChatMessage(it, false, id = "initial", delivered = true, read = true, senderName = chat.name, senderUsername = chat.username, senderAvatarUri = resolvedAvatarUri) } }
     var text by remember(chat.username) { mutableStateOf("") }
     var messages by remember(chat.username) { mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage)) }
@@ -79,7 +84,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 val myId = currentUserId ?: return@FynxRealtimeClient
                 if (remote.senderId != myId && remote.recipientId != myId) return@FynxRealtimeClient
                 val converted = FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
-                    if (message.fromMe) message else message.copy(senderAvatarUri = chat.avatarUri)
+                    if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
                 }
                 isNewConversation = false
                 messages = (messages.filterNot { it.id == remote.id } + converted).sortedBy { it.timestamp }
@@ -165,14 +170,17 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         recipientUserId = searchedUser?.id
         recipientCreatedAt = searchedUser?.createdAt
         FynxProfileRemoteClient.get(context, normalizedUsername)
-            .onSuccess { profile -> recipientProfile = profile }
+            .onSuccess { profile ->
+                recipientProfile = profile
+                remoteProfileLoaded = true
+            }
         FynxProductionMessaging.history(context, normalizedUsername)
             .onSuccess { remoteMessages ->
                 isNewConversation = remoteMessages.isEmpty()
                 val myId = currentUserId
                 if (myId != null) messages = remoteMessages.map { remote ->
                     FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
-                        if (message.fromMe) message else message.copy(senderAvatarUri = chat.avatarUri)
+                        if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
                     }
                 }
                 val unread = remoteMessages.filter { it.recipientId == myId && !it.read }.map { it.id }
