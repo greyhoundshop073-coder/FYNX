@@ -11,7 +11,7 @@ const backendDir = path.dirname(fileURLToPath(import.meta.url));
 const bootstrapPath = path.join(backendDir, "serverBootstrap.js");
 let source = await readFile(bootstrapPath, "utf8");
 
-const brokenQuery = `SELECT u.id FROM users u WHERE u.id=$1 AND (COALESCE(u.messages_visibility, 'EVERYONE')='EVERYONE' OR (COALESCE(u.messages_visibility, 'EVERYONE')='MY_FRIENDS' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.requester_id=$1 AND f.addressee_id=$2) OR (f.requester_id=$2 AND f.addressee_id=$1)) AND f.status='ACCEPTED')) LIMIT 1`;
+const brokenQuery = `SELECT u.id FROM users u WHERE u.id=$1 AND (COALESCE(u.messages_visibility, 'EVERYONE')='EVERYONE' OR (COALESCE(u.messages_visibility, 'EVERYONE')='MY_FRIENDS' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.requester_id=$1 AND f.addressee_id=$2) OR (f.requester_id=$2 AND f.addressee_id=$1)) AND f.status='ACCEPTED'))) LIMIT 1`;
 const fixedQuery = `SELECT u.id FROM users u WHERE u.id=$1 AND (COALESCE((SELECT ps.messages_visibility FROM privacy_settings ps WHERE ps.user_id=u.id), 'My friends')='Everyone' OR (COALESCE((SELECT ps.messages_visibility FROM privacy_settings ps WHERE ps.user_id=u.id), 'My friends')='My friends' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id=$1 AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=$1)) AND f.status='accepted')) LIMIT 1`;
 
 if (source.includes(brokenQuery)) {
