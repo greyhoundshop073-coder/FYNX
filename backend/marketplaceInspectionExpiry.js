@@ -18,6 +18,12 @@ const AUTO_COMPLETE_INTERVAL_MS = 60_000;
 
 export async function autoCompleteExpiredMarketplaceInspections({ logger = console } = {}) {
   if (!pool) return 0;
+  try {
+    await ensureMarketplaceProtectionSchema();
+  } catch (error) {
+    logger.error('[fynx-marketplace] protection schema initialization failed', error?.message || error);
+    return 0;
+  }
   let completed = 0;
   const client = await pool.connect();
   try {
