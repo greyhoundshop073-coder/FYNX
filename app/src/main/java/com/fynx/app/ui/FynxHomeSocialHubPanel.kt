@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.SentimentSatisfied
@@ -81,6 +83,8 @@ fun FynxHomeSocialHubPanel(
     var textBackground by remember { mutableStateOf<FynxPostTextBackground?>(null) }
     var postLocation by remember { mutableStateOf<String?>(null) }
     var locationLoading by remember { mutableStateOf(false) }
+    var selectedMusic by remember { mutableStateOf<FynxSelectedMusic?>(null) }
+    var musicPlaying by remember { mutableStateOf(false) }
     var showPeoplePicker by remember { mutableStateOf(false) }
     var audienceFriends by remember { mutableStateOf<List<FynxFriend>>(emptyList()) }
     var audienceLoading by remember { mutableStateOf(false) }
@@ -115,12 +119,14 @@ fun FynxHomeSocialHubPanel(
         } else notice = "Location permission was not granted."
     }
 
-    val soundPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val musicPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-            capturedUris = (capturedUris.filterNot { it == uri } + uri).take(12)
-            capturedTypes = capturedUris.map { item -> FynxMultiMediaPostClient.mediaKind(context, item) }
-            showComposer = true
+            scope.launch {
+                FynxMusicLibraryClient.readSelection(context, uri)
+                    .onSuccess { selectedMusic = it; musicPlaying = false; notice = null; showComposer = true }
+                    .onFailure { notice = it.message ?: "Could not read that music track." }
+            }
         }
     }
 
@@ -168,6 +174,8 @@ fun FynxHomeSocialHubPanel(
             text = ""
             textBackground = null
             postLocation = null
+            selectedMusic = null
+            musicPlaying = false
             selectedAudienceIds = emptySet()
             audience = if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS
             visibility = defaultPostVisibility
@@ -183,6 +191,8 @@ fun FynxHomeSocialHubPanel(
         text = ""
         textBackground = null
         postLocation = null
+        selectedMusic = null
+        musicPlaying = false
         selectedAudienceIds = emptySet()
         audience = if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS
         visibility = defaultPostVisibility
@@ -206,7 +216,7 @@ fun FynxHomeSocialHubPanel(
                         Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUris.isNotEmpty()), onClick = {
                             if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) { notice = "You are offline. Reconnect before publishing this post."; return@Button }
                             posting = true; notice = null
-                            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground, postLocation) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
+                            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground, postLocation, selectedMusic) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
                         }) { Text(if (posting) "Publishing…" else "Post") }
                     }
 
@@ -230,7 +240,7 @@ fun FynxHomeSocialHubPanel(
                             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            ComposerQuickChip("Music", Icons.Default.MusicNote, enabled = false) {}
+                            ComposerQuickChip("Music", Icons.Default.MusicNote, enabled = !posting && postingAllowed) { musicPicker.launch(arrayOf("audio/*")) }
                             ComposerQuickChip("People", Icons.Default.People, enabled = !posting && postingAllowed) { showPeoplePicker = true }
                             ComposerQuickChip("Location", Icons.Default.LocationOn, enabled = !posting && postingAllowed) {
                                 val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -244,6 +254,39 @@ fun FynxHomeSocialHubPanel(
                                 } else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                             }
                             ComposerQuickChip("Feeling/Activity", Icons.Default.SentimentSatisfied, enabled = false) {}
+                        }
+
+                        selectedMusic?.let { music ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.MusicNote, contentDescription = "Selected music", tint = MaterialTheme.colorScheme.primary)
+                                    Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                                        Text(music.title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                                        Text(music.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                    }
+                                    val player = remember(music.uri) {
+                                        android.media.MediaPlayer().apply {
+                                            setDataSource(context, music.uri)
+                                            prepare()
+                                        }
+                                    }
+                                    DisposableEffect(player) {
+                                        player.setOnCompletionListener { musicPlaying = false }
+                                        onDispose { runCatching { player.release() } }
+                                    }
+                                    IconButton(onClick = {
+                                        runCatching {
+                                            if (player.isPlaying) { player.pause(); musicPlaying = false }
+                                            else { player.start(); musicPlaying = true }
+                                        }
+                                    }, enabled = !posting) {
+                                        Icon(if (musicPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (musicPlaying) "Pause music" else "Preview music")
+                                    }
+                                    IconButton(onClick = { selectedMusic = null; musicPlaying = false }, enabled = !posting) {
+                                        Icon(Icons.Default.Close, "Remove music")
+                                    }
+                                }
+                            }
                         }
 
                         if (postLocation != null || locationLoading) {

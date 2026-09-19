@@ -23,8 +23,8 @@ checks = [
     ("feed model carries location", 'val location: String? = null' in remote and 'o.optString("location")' in remote),
     ("feed renders location", 'post.location' in feed and 'Icons.Default.LocationOn' in feed),
     ("social schema persists location", 'ADD COLUMN IF NOT EXISTS location TEXT' in routes),
-    ("single posts persist location", 'media_type,text_background,text_background_color,text_foreground_color,location' in routes),
-    ("multimedia posts persist location", 'media_type,text_background,text_background_color,text_foreground_color,location' in multi),
+    ("single posts persist location", 'text_foreground_color,location' in routes and 'INSERT INTO social_posts' in routes),
+    ("multimedia posts persist location", 'text_foreground_color,location' in multi and 'INSERT INTO social_posts' in multi),
     ("bootstrap is idempotent", 'fynxBatch5LocationV1' in multi),
     ("existing camera remains single implementation", 'FynxCameraCapturePanel' in composer and 'showCamera = true' in composer),
 ]

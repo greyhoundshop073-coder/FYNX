@@ -28,12 +28,22 @@ object FynxMultiMediaPostClient {
         uris: List<Uri>,
         selectedAudienceUserIds: List<String> = emptyList(),
         textBackground: FynxPostTextBackground? = null,
-        location: String? = null
+        location: String? = null,
+        music: FynxSelectedMusic? = null
     ): Result<String> = runCatching {
         val selected = uris.distinct().take(MAX_MEDIA)
         val caption = text.trim().take(4000)
         if (caption.isBlank() && selected.isEmpty()) {
             throw IllegalArgumentException("Add a caption or at least one media item.")
+        }
+
+        var musicMediaId: Long? = null
+        if (music != null) {
+            val mime = detectMimeType(context, music.uri)
+            require(mime.startsWith("audio/")) { "The selected music track is not a valid audio file." }
+            val size = runCatching { context.contentResolver.openAssetFileDescriptor(music.uri, "r")?.use { it.length } ?: -1L }.getOrDefault(-1L)
+            require(size != 0L && size <= MAX_SINGLE_MEDIA_BYTES) { "The music file must be 12 MB or smaller." }
+            musicMediaId = FynxProductionMessaging.uploadMedia(context, music.uri, mime).getOrThrow().id.toLong()
         }
 
         val postId = if (selected.isEmpty()) {
@@ -48,6 +58,10 @@ object FynxMultiMediaPostClient {
                     put("location", location?.trim()?.take(160) ?: JSONObject.NULL)
                     put("mediaId", JSONObject.NULL)
                     put("mediaType", JSONObject.NULL)
+                    put("musicMediaId", musicMediaId ?: JSONObject.NULL)
+                    put("musicTitle", music?.title?.trim()?.take(120) ?: JSONObject.NULL)
+                    put("musicArtist", music?.artist?.trim()?.take(120) ?: JSONObject.NULL)
+                    put("musicDurationMs", music?.durationMs?.coerceAtLeast(0L) ?: JSONObject.NULL)
                 }.toString()
             ).getOrThrow()
             JSONObject(raw).optString("postId").takeIf { it.isNotBlank() }
@@ -105,6 +119,10 @@ object FynxMultiMediaPostClient {
                     put("location", location?.trim()?.take(160) ?: JSONObject.NULL)
                     put("mediaIds", mediaIds)
                     put("mediaTypes", mediaTypes)
+                    put("musicMediaId", musicMediaId ?: JSONObject.NULL)
+                    put("musicTitle", music?.title?.trim()?.take(120) ?: JSONObject.NULL)
+                    put("musicArtist", music?.artist?.trim()?.take(120) ?: JSONObject.NULL)
+                    put("musicDurationMs", music?.durationMs?.coerceAtLeast(0L) ?: JSONObject.NULL)
                 }.toString()
             ).getOrThrow()
             JSONObject(raw).optString("postId").takeIf { it.isNotBlank() }
