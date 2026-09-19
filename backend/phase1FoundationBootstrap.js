@@ -6,7 +6,7 @@ const backendDir = path.dirname(fileURLToPath(import.meta.url));
 const bootstrapPath = path.join(backendDir, "serverBootstrap.js");
 let source = await readFile(bootstrapPath, "utf8");
 
-const helperPattern = /const fynxRealtimeMessagingCanSend = async \(senderId, targetId\) => \{[\s\S]*?\n\};\nconst fynxRealtimeMessagingTypingTarget/;
+const helperPattern = /const fynxRealtimeMessagingCanSend = async \(senderId, targetId\) => \{[\s\S]*?const fynxRealtimeMessagingTypingTarget/;
 const replacement = `const fynxRealtimeMessagingCanSend = async (senderId, targetId) => {
   if (!pool || !fynxRealtimeMessagingValidUserId(targetId) || targetId === senderId) return false;
   if (await fynxRealtimeMessagingBlocks(senderId, targetId)) return false;
