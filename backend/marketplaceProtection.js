@@ -80,7 +80,11 @@ async function getOrderAndEscrow(client, orderId) {
   return { order, escrow };
 }
 
-export async function ensureMarketplaceProtectionSchema() {\n  return ensureSchema();\n}\n\nexport function registerMarketplaceProtectionRoutes({ app }) {
+export async function ensureMarketplaceProtectionSchema() {
+  return ensureSchema();
+}
+
+export function registerMarketplaceProtectionRoutes({ app }) {
   app.post('/api/marketplace/protection/order/:id/dispute', auth, async (req, res) => {
     await createCase(req, res, 'DISPUTE');
   });
