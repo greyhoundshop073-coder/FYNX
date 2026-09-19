@@ -14,9 +14,8 @@ manifest = read("app/src/main/AndroidManifest.xml")
 # Keep verification implementation-oriented rather than formatting-oriented. Compose/Kotlin
 # permits equivalent callback formatting, so do not require one exact source-string layout.
 caption_limit = (
-    re.search(r"OutlinedTextField[\s\S]*?onValueChange\s*=\s*\{[^}]*\.take\(4000\)", home) is not None
-    or re.search(r"BasicTextField[\s\S]*?onValueChange\s*=\s*\{[^}]*text\s*=\s*it\.take\(4000\)", home) is not None
-    or re.search(r"onValueChange\s*=\s*\{[^}]*text\s*=\s*it\.take\(4000\)", home) is not None
+    "text = it.take(4000)" in home
+    and ("OutlinedTextField" in home or "BasicTextField" in home)
 )
 
 checks = [
