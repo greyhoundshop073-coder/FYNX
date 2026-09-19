@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.shadow
@@ -154,9 +155,47 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         }
                     }
                 }
-            } else if (selected == "Friends") { IconButton(onClick = { selected = "Profile"; openProfileSettings = false }) { if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(40.dp)) else FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp)) }; Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text("Friends", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) }; Spacer(Modifier.size(48.dp)) }
-            else { if (isSecondary) IconButton(onClick = { selected = "Home" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } else Spacer(Modifier.size(48.dp)); Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text(when (selected) { "Marketplace" -> "Marketplace"; "Money Tools" -> "Money Center"; "Privacy" -> "Privacy & Safety"; "Seller Center" -> "Seller Center"; "Business Account" -> "Business Account"; "Advertising" -> "Advertising"; "Advertising Dashboard" -> "Advertising Dashboard"; "Advertising AI" -> "Advertising AI"; "AI" -> "FYNX AI"; "AI Creation" -> "AI Creation"; "AI Photo Editor" -> "AI Photo Editor"; "Announcements" -> "Official FYNX Announcements"; "Admin" -> "Admin Control Center"; else -> selected }, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) }; Spacer(Modifier.size(48.dp)) }
-        } }, bottomBar = { Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) { Surface(modifier = Modifier.fillMaxWidth().height(64.dp).shadow(8.dp, RoundedCornerShape(32.dp)), shape = RoundedCornerShape(32.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f), tonalElevation = 0.dp) { NavigationBar(modifier = Modifier.fillMaxSize(), containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface, tonalElevation = 0.dp) { mainNav.forEach { item -> NavigationBarItem(selected = selected == item.key, onClick = { selected = item.key }, icon = { Icon(item.icon, item.label) }, label = { Text(item.label, maxLines = 1) }, colors = NavigationBarItemDefaults.colors(selectedIconColor = MaterialTheme.colorScheme.primary, selectedTextColor = MaterialTheme.colorScheme.primary, indicatorColor = MaterialTheme.colorScheme.secondaryContainer, unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant, unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant)) } } } } }) { padding -> Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 6.dp).pointerInput(selected) { var drag = 0f; detectHorizontalDragGestures(onDragStart = { drag = 0f }, onHorizontalDrag = { _, amount -> drag += amount }, onDragEnd = { if (kotlin.math.abs(drag) >= 80f) { val next = if (drag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex) else (mainIndex - 1).coerceAtLeast(0); selected = mainNav[next].key } }) }) { when (selected) {
+            } else if (selected == "Friends") {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { selected = "Profile"; openProfileSettings = false }) {
+                        if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(40.dp))
+                        else FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp))
+                    }
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        Text("Friends", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                    }
+                    Spacer(Modifier.size(48.dp))
+                }
+            } else {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (isSecondary) IconButton(onClick = { selected = "Home" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } else Spacer(Modifier.size(48.dp))
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        Text(
+                            when (selected) {
+                                "Marketplace" -> "Marketplace"
+                                "Money Tools" -> "Money Center"
+                                "Privacy" -> "Privacy & Safety"
+                                "Seller Center" -> "Seller Center"
+                                "Business Account" -> "Business Account"
+                                "Advertising" -> "Advertising"
+                                "Advertising Dashboard" -> "Advertising Dashboard"
+                                "Advertising AI" -> "FYNX AI"
+                                "AI" -> "FYNX AI"
+                                "AI Creation" -> "AI Creation"
+                                "AI Photo Editor" -> "AI Photo Editor"
+                                "Announcements" -> "Official FYNX Announcements"
+                                "Admin" -> "Admin Control Center"
+                                else -> selected
+                            },
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    }
+                    Spacer(Modifier.size(48.dp))
+                }
+            }
+        }, bottomBar = { Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) { Surface(modifier = Modifier.fillMaxWidth().height(64.dp).shadow(8.dp, RoundedCornerShape(32.dp)), shape = RoundedCornerShape(32.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f), tonalElevation = 0.dp) { NavigationBar(modifier = Modifier.fillMaxSize(), containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface, tonalElevation = 0.dp) { mainNav.forEach { item -> NavigationBarItem(selected = selected == item.key, onClick = { selected = item.key }, icon = { Icon(item.icon, item.label) }, label = { Text(item.label, maxLines = 1) }, colors = NavigationBarItemDefaults.colors(selectedIconColor = MaterialTheme.colorScheme.primary, selectedTextColor = MaterialTheme.colorScheme.primary, indicatorColor = MaterialTheme.colorScheme.secondaryContainer, unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant, unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant)) } } } } }) { padding -> Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 6.dp).pointerInput(selected) { var drag = 0f; detectHorizontalDragGestures(onDragStart = { drag = 0f }, onHorizontalDrag = { _, amount -> drag += amount }, onDragEnd = { if (kotlin.math.abs(drag) >= 80f) { val next = if (drag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex) else (mainIndex - 1).coerceAtLeast(0); selected = mainNav[next].key } }) }) { when (selected) {
             "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it })
             "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" })
             "Friends" -> FriendsPanel(onOpenProfile = { profileUser = it })
