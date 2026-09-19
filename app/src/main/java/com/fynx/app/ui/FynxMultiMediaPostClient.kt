@@ -43,8 +43,7 @@ object FynxMultiMediaPostClient {
             var hasAudio = false
 
             for ((index, uri) in selected.withIndex()) {
-                val mime = context.contentResolver.getType(uri)?.lowercase()
-                    ?: throw IllegalArgumentException("FYNX could not determine the selected media type.")
+                val mime = detectMimeType(context, uri)
                 val type = when {
                     mime.startsWith("image/") -> "image"
                     mime.startsWith("video/") -> "video"
@@ -65,12 +64,12 @@ object FynxMultiMediaPostClient {
                     throw IllegalArgumentException("One of the selected media files is empty or unavailable.")
                 }
                 if (size > MAX_SINGLE_MEDIA_BYTES) {
-                    throw IllegalArgumentException("A selected media file is too large. Each file must be 200 MB or smaller.")
+                    throw IllegalArgumentException("A selected media file is too large. Each file must be 12 MB or smaller.")
                 }
                 if (size > 0L) {
                     totalBytes += size
                     if (totalBytes > MAX_TOTAL_MEDIA_BYTES) {
-                        throw IllegalArgumentException("The selected media is too large to publish together. Keep the total below 500 MB.")
+                        throw IllegalArgumentException("The selected media is too large to publish together. Keep the total at or below 48 MB.")
                     }
                 }
 
@@ -95,5 +94,25 @@ object FynxMultiMediaPostClient {
 
         FynxHomeLifecycleRefreshBus.request(context)
         postId
+    }
+
+    private fun detectMimeType(context: Context, uri: Uri): String {
+        val resolverType = context.contentResolver.getType(uri)?.trim()?.lowercase()
+        if (!resolverType.isNullOrBlank()) return resolverType
+        return when (uri.scheme?.lowercase()) {
+            "file" -> when (uri.path?.substringAfterLast('.', "").lowercase()) {
+                "m4a", "mp4", "aac" -> if (uri.path?.lowercase()?.endsWith(".mp4") == true) "video/mp4" else "audio/mp4"
+                "mp3" -> "audio/mpeg"
+                "wav" -> "audio/wav"
+                "3gp" -> "audio/3gpp"
+                "webm" -> "video/webm"
+                "mov" -> "video/quicktime"
+                "jpg", "jpeg" -> "image/jpeg"
+                "png" -> "image/png"
+                "webp" -> "image/webp"
+                else -> throw IllegalArgumentException("FYNX could not determine the selected media type.")
+            }
+            else -> throw IllegalArgumentException("FYNX could not determine the selected media type.")
+        }
     }
 }
