@@ -140,9 +140,11 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         val homeChromeMaxPx = with(LocalDensity.current) { 52.dp.toPx() }
         val homeScrollConnection = remember {
             object : NestedScrollConnection {
-                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
                     if (selected != "Home" || source != NestedScrollSource.UserInput) return Offset.Zero
-                    val delta = -available.y
+                    // Observe the feed after it has handled the gesture. Never participate
+                    // in pre-scroll so the feed keeps first ownership of vertical movement.
+                    val delta = -(consumed.y + available.y)
                     if (kotlin.math.abs(delta) > 0.5f) {
                         homeChromeProgress = (homeChromeProgress + delta / homeChromeMaxPx).coerceIn(0f, 1f)
                         when {
