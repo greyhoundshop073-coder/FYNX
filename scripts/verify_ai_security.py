@@ -41,6 +41,7 @@ check("AI conversation client supports create/load/list/delete", all(x in ai_con
 check("AI image picker preserves the actual image MIME type", "contentResolver.getType(uri)" in ai_conversations and "uploadMedia(context, uri, mime)" in ai_conversations)
 check("AI backend accepts bounded context hints", 'context = {}' in registry and 'contextSummary.length > 900' in registry and 'contextTask.length > 160' in registry)
 check("AI conversation agent rejects empty provider responses", "runAssistantAgent" in ai_routes and "AI provider returned an empty response" in registry)
+check("AI conversation route persists the agent reply", "const reply = agentResult.reply" in ai_routes and "text:reply" in ai_routes)
 check("AI backend treats context as non-authoritative hints", 'context hints are user-provided context only' in registry)
 check("AI agent detects repeated tool calls", 'AI tool loop detected' in registry and 'seenToolCalls' in registry)
 check("AI agent fails clearly at tool-processing limit", 'AI tool-processing limit reached' in registry)
