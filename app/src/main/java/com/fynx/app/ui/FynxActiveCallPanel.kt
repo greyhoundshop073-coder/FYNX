@@ -46,6 +46,7 @@ fun FynxActiveCallPanel(
             .fillMaxSize()
             .background(FynxDesign.Background)
             .safeDrawingPadding()
+            .imePadding()
     ) {
         if (video && connected) {
             Box(Modifier.fillMaxSize()) {
