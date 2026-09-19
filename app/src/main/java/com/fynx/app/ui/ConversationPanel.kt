@@ -438,7 +438,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 }
                 if (showEmojiPanel && !isRecording) { FynxChatEmojiPanel(onEmojiSelected = { emoji -> text += emoji; showEmojiPanel = false }) }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                    IconButton(onClick = { showEmojiPanel = !showEmojiPanel }, enabled = !isRecording) { Icon(Icons.Default.EmojiEmotions, "Emoji") }
+                    IconButton(onClick = { showEmojiPanel = !showEmojiPanel }, enabled = !isRecording) { Text("☺", style = MaterialTheme.typography.titleLarge) }
                     IconButton(onClick = { showCamera = true }, enabled = !isRecording) { Icon(Icons.Default.CameraAlt, "Camera") }
                     IconButton(onClick = { mediaPicker.launch(arrayOf("image/*", "video/*")) }, enabled = !isRecording) { Icon(Icons.Default.AttachFile, "Attach photo or video") }
                     OutlinedTextField(value = text, onValueChange = { value -> val wasBlank = text.isBlank(); text = value; if (value.isBlank() && typingSent) { recipientUserId?.let { realtimeClient.sendTyping(it, false) }; typingSent = false } else if (wasBlank && value.isNotBlank()) recipientUserId?.let { realtimeClient.sendTyping(it, true); typingSent = true } }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), placeholder = { Text(if (editingId == null) "Message" else "Edit message…") }, maxLines = 5, enabled = !isRecording)
