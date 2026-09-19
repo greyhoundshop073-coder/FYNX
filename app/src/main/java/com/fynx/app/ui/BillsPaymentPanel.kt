@@ -23,32 +23,32 @@ fun BillsPaymentPanel() {
 
     val outstanding = bills.filterNot { it.paid }.sumOf { it.amount }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Bills & Payment Reminders 🧾", style = MaterialTheme.typography.headlineSmall)
-        Text("Track bills and due dates. FYNX does not make payments automatically.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(10.dp))
-        Card(Modifier.fillMaxWidth()) {
+    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+        item { Text("Bills & Payment Reminders 🧾", style = MaterialTheme.typography.headlineSmall) }
+        item { Text("Track bills and due dates. FYNX does not make payments automatically.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        items(bills, key = { it.id }) { bill ->
+        item { Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 Text("Outstanding", style = MaterialTheme.typography.titleMedium)
                 Text(money(outstanding), style = MaterialTheme.typography.headlineMedium)
                 Text("${bills.count { !it.paid }} unpaid bill(s)")
-            }
+            } }
         }
         Spacer(Modifier.height(10.dp))
-        OutlinedTextField(name, { name = it }, label = { Text("Bill name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(amount, { amount = it }, label = { Text("Amount") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(dueDate, { dueDate = it }, label = { Text("Due date") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        item { OutlinedTextField(name, { name = it }, label = { Text("Bill name") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(amount, { amount = it }, label = { Text("Amount") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(dueDate, { dueDate = it }, label = { Text("Due date") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+        item { Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = recurring, onCheckedChange = { recurring = it })
             Text("Recurring bill")
         }
-        Button(onClick = {
+        item { Button(onClick = {
             val value = amount.toDoubleOrNull()
             if (name.isNotBlank() && value != null && value > 0 && dueDate.isNotBlank()) {
                 bills = bills + BillItem(nextId++, name.trim(), value, dueDate.trim(), recurring, false)
                 name = ""; amount = ""; dueDate = ""; recurring = false
             }
-        }) { Text("Add Bill") }
+        }) { Text("Add Bill") } }
         Spacer(Modifier.height(10.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(bills, key = { it.id }) { bill ->
