@@ -77,11 +77,11 @@ export function registerStatusInteractionRoutes({ app }) {
       SELECT s.id, s.owner_id
       FROM statuses s
       WHERE s.id=$1 AND s.expires_at > NOW()
-        AND (s.owner_id=$2 OR s.private_status=FALSE OR EXISTS(
+        AND (s.owner_id=$2 OR s.audience='EVERYONE' OR (s.audience='FRIENDS' AND EXISTS(
           SELECT 1 FROM friendships f
           WHERE ((f.user_id=s.owner_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=s.owner_id))
             AND f.status='accepted'
-        ))
+        )))
         AND NOT EXISTS (
           SELECT 1 FROM blocks b
           WHERE (b.blocker_id=$2 AND b.blocked_id=s.owner_id) OR (b.blocker_id=s.owner_id AND b.blocked_id=$2)
