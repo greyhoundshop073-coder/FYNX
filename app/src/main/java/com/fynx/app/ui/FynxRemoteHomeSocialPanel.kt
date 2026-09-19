@@ -309,4 +309,98 @@ private fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: ((
 private fun relative(timestamp: Long): String { val minutes = TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L)); return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" } }
 
 @Composable
-private fun AudioPostPlayer(file: File) { val player = remember(file) { MediaPlayer().apply { setDataSource(file.absolutePath); prepare() } }; var playing by remember(file) { mutableStateOf(false) }; DisposableEffect(player) { onDispose { player.release() } }; Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Button(onClick = { if (player.isPlaying) { player.pause(); playing = false } else { player.start(); playing = true } }) { Text(if (playing) "Pause" else "Play voice") }; Spacer(Modifier.width(10.dp)); Text("${(player.duration / 1000).coerceAtLeast(0)}s") } }
+private fun AudioPostPlayer(file: File) {
+    val player = remember(file) {
+        MediaPlayer().apply {
+            setDataSource(file.absolutePath)
+            prepare()
+        }
+    }
+    var playing by remember(file) { mutableStateOf(false) }
+
+    DisposableEffect(player) {
+        player.setOnCompletionListener {
+            playing = false
+            runCatching { player.seekTo(0) }
+        }
+        onDispose {
+            runCatching { player.release() }
+        }
+    }
+
+    val durationSeconds = (player.duration / 1000).coerceAtLeast(0)
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        tonalElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = {
+                    runCatching {
+                        if (player.isPlaying) {
+                            player.pause()
+                            playing = false
+                        } else {
+                            if (player.currentPosition >= player.duration) player.seekTo(0)
+                            player.start()
+                            playing = true
+                        }
+                    }
+                },
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (playing) "Pause voice note" else "Play voice note",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(Modifier.width(4.dp))
+
+            val waveformHeights = listOf(12, 18, 24, 15, 28, 20, 32, 17, 25, 13, 22, 30, 18, 26, 15, 23, 12, 20)
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(34.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                waveformHeights.forEach { height ->
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .height(height.dp)
+                            .clip(MaterialTheme.shapes.small)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.72f))
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+            ) {
+                Text(
+                    text = "${durationSeconds}s",
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+    }
+}
