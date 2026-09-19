@@ -65,7 +65,11 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                 postCount = remote.postCount
                 followerCount = remote.followerCount
                 followingCount = remote.followingCount
-                // Once the server responds, its profilePhotoMediaId is authoritative.\n                // Do not resurrect a stale local/cached photo when the server says null.\n                remotePhotoId = remote.profilePhotoMediaId\n                remoteProfileLoaded = true\n                profile = profile.copy(
+                // Once the server responds, its profilePhotoMediaId is authoritative.
+                // Do not resurrect a stale local/cached photo when the server says null.
+                remotePhotoId = remote.profilePhotoMediaId
+                remoteProfileLoaded = true
+                profile = profile.copy(
                     displayName = remote.displayName.ifBlank { profile.displayName },
                     username = remote.username.ifBlank { profile.username },
                     bio = remote.bio.ifBlank { profile.bio }
