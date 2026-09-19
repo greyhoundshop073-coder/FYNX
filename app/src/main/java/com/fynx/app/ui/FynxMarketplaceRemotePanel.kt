@@ -60,8 +60,19 @@ fun FynxMarketplaceRemotePanel(currentUsername: String = "preview", onOpenProfil
 
 @Composable
 private fun RemoteMarketCard(listing: FynxMarketplaceClient.Listing, context: android.content.Context, onOpenProfile: () -> Unit, onOpen: () -> Unit, onContact: () -> Unit) {
-    var sellerPhotoId by remember(listing.sellerUsername) { mutableStateOf(FynxProfileRemoteClient.cachedProfilePhotoId(context, listing.sellerUsername)) }
-    LaunchedEffect(listing.sellerUsername) { FynxProfileRemoteClient.get(context, listing.sellerUsername).onSuccess { sellerPhotoId = it.profilePhotoMediaId } }
+    val cachedSellerPhotoId = remember(listing.sellerUsername) { FynxProfileRemoteClient.cachedProfilePhotoId(context, listing.sellerUsername) }
+    var sellerPhotoId by remember(listing.sellerUsername) { mutableStateOf(cachedSellerPhotoId) }
+    var remoteSellerProfileLoaded by remember(listing.sellerUsername) { mutableStateOf(false) }
+    LaunchedEffect(listing.sellerUsername) {
+        FynxProfileRemoteClient.get(context, listing.sellerUsername)
+            .onSuccess {
+                sellerPhotoId = it.profilePhotoMediaId
+                remoteSellerProfileLoaded = true
+            }
+            .onFailure {
+                if (!remoteSellerProfileLoaded) sellerPhotoId = cachedSellerPhotoId
+            }
+    }
     Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) {
         Column {
             Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onOpenProfile, Modifier.size(46.dp)) { FynxAvatar(listing.sellerDisplayName.ifBlank { listing.sellerUsername }, sellerPhotoId?.let { "/api/media/$it" }, Modifier.size(40.dp).clip(RoundedCornerShape(50))) }; Column(Modifier.weight(1f)) { Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, fontWeight = FontWeight.SemiBold); Text("@${listing.sellerUsername.removePrefix("@")}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; IconButton(onClick = onOpen) { Icon(Icons.Default.MoreHoriz, "Details") } }

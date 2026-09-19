@@ -122,11 +122,19 @@ private fun StatusBubble(status: FynxStatus, isMe: Boolean, onClick: () -> Unit)
     val context = androidx.compose.ui.platform.LocalContext.current
     val cachedPhotoId = remember(status.ownerUsername) { FynxProfileRemoteClient.cachedProfilePhotoId(context, status.ownerUsername) }
     var profilePhotoMediaId by remember(status.ownerUsername) { mutableStateOf(cachedPhotoId) }
+    var remoteProfileLoaded by remember(status.ownerUsername) { mutableStateOf(false) }
 
     LaunchedEffect(status.ownerUsername) {
         FynxProfileRemoteClient.get(context, status.ownerUsername)
-            .onSuccess { profilePhotoMediaId = it.profilePhotoMediaId ?: cachedPhotoId }
-            .onFailure { if (profilePhotoMediaId == null) profilePhotoMediaId = cachedPhotoId }
+            .onSuccess {
+                // Cache is only a cold-start placeholder. Once the server responds,
+                // its profilePhotoMediaId is authoritative, including an explicit null.
+                profilePhotoMediaId = it.profilePhotoMediaId
+                remoteProfileLoaded = true
+            }
+            .onFailure {
+                if (!remoteProfileLoaded) profilePhotoMediaId = cachedPhotoId
+            }
     }
 
     Column(Modifier.width(74.dp).clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
