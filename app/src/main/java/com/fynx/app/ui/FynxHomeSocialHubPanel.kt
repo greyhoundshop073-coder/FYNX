@@ -70,6 +70,11 @@ fun FynxHomeSocialHubPanel(
     var selectedVisualIndex by remember { mutableIntStateOf(0) }
     var text by remember { mutableStateOf("") }
     var visibility by remember { mutableStateOf(defaultPostVisibility) }
+    var audience by remember { mutableStateOf(if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS) }
+    var selectedAudienceIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showPeoplePicker by remember { mutableStateOf(false) }
+    var audienceFriends by remember { mutableStateOf<List<FynxFriend>>(emptyList()) }
+    var audienceLoading by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     var posting by remember { mutableStateOf(false) }
     var networkLevel by remember { mutableStateOf(FynxNetworkQuality.current(context)) }
@@ -107,6 +112,14 @@ fun FynxHomeSocialHubPanel(
             showComposer = false
             showCamera = true
             notice = null
+        }
+    }
+
+    LaunchedEffect(showPeoplePicker) {
+        if (showPeoplePicker) {
+            audienceLoading = true
+            FynxPostAudienceClient.friends(context).onSuccess { audienceFriends = it }.onFailure { notice = it.message ?: "Could not load your friends." }
+            audienceLoading = false
         }
     }
 
@@ -164,7 +177,7 @@ fun FynxHomeSocialHubPanel(
                         Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUris.isNotEmpty()), onClick = {
                             if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) { notice = "You are offline. Reconnect before publishing this post."; return@Button }
                             posting = true; notice = null
-                            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
+                            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList()) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
                         }) { Text(if (posting) "Publishing…" else "Post") }
                     }
 
@@ -189,7 +202,7 @@ fun FynxHomeSocialHubPanel(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             ComposerQuickChip("Music", Icons.Default.MusicNote, enabled = false) {}
-                            ComposerQuickChip("People", Icons.Default.People, enabled = false) {}
+                            ComposerQuickChip("People", Icons.Default.People, enabled = !posting && postingAllowed) { showPeoplePicker = true }
                             ComposerQuickChip("Location", Icons.Default.LocationOn, enabled = false) {}
                             ComposerQuickChip("Feeling/Activity", Icons.Default.SentimentSatisfied, enabled = false) {}
                         }
@@ -268,17 +281,73 @@ fun FynxHomeSocialHubPanel(
                             }
                         }
 
-                        Text("Who can see this?", style = MaterialTheme.typography.titleMedium)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(selected = visibility == FynxPostVisibility.PUBLIC, onClick = { visibility = FynxPostVisibility.PUBLIC }, label = { Text("Public") }, enabled = !posting && !false && postingAllowed && configuredPostVisibility == "Everyone")
-                            FilterChip(selected = visibility == FynxPostVisibility.FRIENDS_ONLY, onClick = { visibility = FynxPostVisibility.FRIENDS_ONLY }, label = { Text("Friends") }, enabled = !posting && !false && postingAllowed)
-                        }
+                        Text("Audience: ${audience.label}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (networkLevel == FynxNetworkQuality.Level.OFFLINE) Text("You are offline. Reconnect before publishing this post.", color = MaterialTheme.colorScheme.error)
                         notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     }
                 }
             }
         }
+    }
+
+
+    if (showPeoplePicker) {
+        AlertDialog(
+            onDismissRequest = { if (!audienceLoading) showPeoplePicker = false },
+            title = { Text("Who can see this post?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(FynxPostAudience.EVERYONE, FynxPostAudience.FRIENDS, FynxPostAudience.SELECTED, FynxPostAudience.ONLY_ME).forEach { option ->
+                        val allowed = option != FynxPostAudience.EVERYONE || configuredPostVisibility == "Everyone"
+                        Row(
+                            Modifier.fillMaxWidth().clickable(enabled = !audienceLoading && allowed) {
+                                audience = option
+                                visibility = when (option) {
+                                    FynxPostAudience.EVERYONE -> FynxPostVisibility.PUBLIC
+                                    FynxPostAudience.FRIENDS -> FynxPostVisibility.FRIENDS_ONLY
+                                    FynxPostAudience.SELECTED -> FynxPostVisibility.SELECTED_PEOPLE
+                                    FynxPostAudience.ONLY_ME -> FynxPostVisibility.ONLY_ME
+                                }
+                            }.padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = audience == option, onClick = null, enabled = allowed && !audienceLoading)
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(option.label)
+                                if (!allowed) Text("Your Posts privacy setting does not allow Everyone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                    if (audience == FynxPostAudience.SELECTED) {
+                        HorizontalDivider(Modifier.padding(vertical = 6.dp))
+                        Text("Choose friends", style = MaterialTheme.typography.titleSmall)
+                        if (audienceLoading) CircularProgressIndicator(Modifier.size(22.dp))
+                        else if (audienceFriends.isEmpty()) Text("You have no accepted friends to select yet.", style = MaterialTheme.typography.bodySmall)
+                        else audienceFriends.forEach { friend ->
+                            val checked = friend.id in selectedAudienceIds
+                            Row(
+                                Modifier.fillMaxWidth().clickable { selectedAudienceIds = if (checked) selectedAudienceIds - friend.id else selectedAudienceIds + friend.id }.padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(checked = checked, onCheckedChange = { value -> selectedAudienceIds = if (value) selectedAudienceIds + friend.id else selectedAudienceIds - friend.id })
+                                Spacer(Modifier.width(8.dp))
+                                Column { Text(friend.displayName); Text("@" + friend.username, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (audience == FynxPostAudience.SELECTED && selectedAudienceIds.isEmpty()) notice = "Select at least one friend, or choose another audience."
+                        else showPeoplePicker = false
+                    },
+                    enabled = !audienceLoading
+                ) { Text("Done") }
+            }
+        )
     }
 
     if (showVoiceRecorder) {
