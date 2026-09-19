@@ -186,7 +186,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             items(messages, key = { it.id }) { message ->
                 Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant, contentColor = if (message.fromMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth(if (message.fromMe) 0.86f else 1f).wrapContentWidth(if (message.fromMe) Alignment.End else Alignment.Start)) {
                     Column(Modifier.padding(horizontal = 13.dp, vertical = 10.dp)) {
-                        if (!message.fromMe) Text(message.senderUsername, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        if (!message.fromMe) Text(message.senderUsername ?: "Member", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                         if (message.replyToId != null) Text("↳ Reply", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(message.text.ifBlank { if (message.attachmentUri != null) "Media attachment" else "Message" })
                         if (message.attachmentUri != null) Text("📷 Media attached", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
@@ -215,7 +215,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         if (showEmojiPanel && canSendMessages) { FynxChatEmojiPanel(onEmojiSelected = { emoji -> text += emoji; showEmojiPanel = false }) }
         Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp, modifier = Modifier.navigationBarsPadding().imePadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
-                IconButton(enabled = canSendMessages, onClick = { showEmojiPanel = !showEmojiPanel }) { Icon(Icons.Default.EmojiEmotions, "Emoji") }
+                IconButton(enabled = canSendMessages, onClick = { showEmojiPanel = !showEmojiPanel }) { Text("☺", style = MaterialTheme.typography.titleLarge) }
                 OutlinedTextField(value = text, onValueChange = { text = it }, enabled = canSendMessages, modifier = Modifier.weight(1f), placeholder = { Text(if (canSendMessages) "Write a message…" else "Messaging is restricted") }, maxLines = 4, shape = MaterialTheme.shapes.large, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Default))
                 Spacer(Modifier.width(6.dp))
                 IconButton(enabled = canSendMessages && text.trim().isNotEmpty() && !sending && selectedGroup != null, onClick = {
