@@ -35,6 +35,35 @@ async function ensureSchema() {
   if (!pool) throw Object.assign(new Error('DATABASE_URL is not configured'), { code: 'DATABASE_NOT_CONFIGURED' });
   if (!schemaPromise) {
     schemaPromise = pool.query(`
+      -- The protection/inspection worker can start before marketplace transaction routes
+      -- receive their first request. Ensure its prerequisite order table exists first.
+      CREATE TABLE IF NOT EXISTS marketplace_orders (
+        id UUID PRIMARY KEY,
+        buyer_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        seller_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        listing_id BIGINT NOT NULL REFERENCES marketplace_listings(id) ON DELETE RESTRICT,
+        quantity INTEGER NOT NULL CHECK (quantity > 0),
+        unit_price NUMERIC(14,2) NOT NULL CHECK (unit_price > 0),
+        delivery_fee NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (delivery_fee >= 0),
+        total_amount NUMERIC(14,2) NOT NULL CHECK (total_amount > 0),
+        currency TEXT NOT NULL,
+        product_snapshot JSONB NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('PAYMENT_PENDING','PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED','DISPUTED','CANCELLED','REFUNDED')),
+        payment_reference TEXT,
+        tracking_reference TEXT,
+        shipped_at TIMESTAMPTZ,
+        delivered_at TIMESTAMPTZ,
+        inspection_deadline TIMESTAMPTZ,
+        completed_at TIMESTAMPTZ,
+        cancelled_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS marketplace_orders_buyer_idx ON marketplace_orders (buyer_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS marketplace_orders_seller_idx ON marketplace_orders (seller_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS marketplace_orders_listing_idx ON marketplace_orders (listing_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS marketplace_orders_status_idx ON marketplace_orders (status, updated_at DESC);
+
       CREATE TABLE IF NOT EXISTS marketplace_protection_cases (
         id UUID PRIMARY KEY,
         order_id UUID NOT NULL REFERENCES marketplace_orders(id) ON DELETE CASCADE,
