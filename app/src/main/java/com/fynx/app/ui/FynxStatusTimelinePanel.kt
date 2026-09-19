@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.clip
@@ -171,7 +172,9 @@ private fun FynxStatusStoryViewer(
     var interactionError by remember(statuses, startIndex) { mutableStateOf<String?>(null) }
     var replyText by remember(statuses, startIndex) { mutableStateOf("") }
     var replying by remember { mutableStateOf(false) }
+    var replyFocused by remember { mutableStateOf(false) }
     val status = statuses.getOrNull(index) ?: return
+    var statusProgress by remember(status.id) { mutableFloatStateOf(0f) }
 
     fun refreshInteractions() {
         scope.launch {
@@ -183,8 +186,24 @@ private fun FynxStatusStoryViewer(
 
     LaunchedEffect(status.id) {
         replyText = ""
+        replyFocused = false
+        statusProgress = 0f
         FynxStatusClient.markViewed(context, status.id)
         refreshInteractions()
+    }
+
+    LaunchedEffect(status.id, replyFocused) {
+        val duration = statusViewerAutoAdvanceMs(status)
+        if (duration <= 0L) return@LaunchedEffect
+        while (statusProgress < 1f) {
+            if (!replyFocused) {
+                statusProgress = (statusProgress + 50f / duration.toFloat()).coerceAtMost(1f)
+            }
+            kotlinx.coroutines.delay(50L)
+        }
+        if (!replyFocused) {
+            if (index < statuses.lastIndex) index++ else onDismiss()
+        }
     }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
@@ -209,7 +228,25 @@ private fun FynxStatusStoryViewer(
                     }
                     TextButton(onClick = onDismiss) { Text("Close", color = Color.White) }
                 }
-                LinearProgressIndicator(progress = { (index + 1).toFloat() / statuses.size.toFloat() }, Modifier.fillMaxWidth().padding(horizontal = 12.dp))
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    statuses.forEachIndexed { segmentIndex, _ ->
+                        LinearProgressIndicator(
+                            progress = {
+                                when {
+                                    segmentIndex < index -> 1f
+                                    segmentIndex == index -> statusProgress
+                                    else -> 0f
+                                }
+                            },
+                            modifier = Modifier.weight(1f).height(3.dp),
+                            color = Color.White,
+                            trackColor = Color.White.copy(alpha = 0.28f)
+                        )
+                    }
+                }
 
                 Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                     when (status.type) {
@@ -240,7 +277,7 @@ private fun FynxStatusStoryViewer(
                         OutlinedTextField(
                             value = replyText,
                             onValueChange = { replyText = it.take(1000) },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().onFocusChanged { replyFocused = it.isFocused },
                             enabled = !replying,
                             singleLine = true,
                             placeholder = { Text("Reply to this Status…") },
@@ -285,6 +322,13 @@ private fun StatusViewerText(status: FynxStatus) {
     Box(Modifier.fillMaxSize().background(Color(status.textStyle.backgroundColor)), contentAlignment = Alignment.Center) {
         Text(status.text.orEmpty(), color = Color(status.textStyle.foregroundColor), fontFamily = family, fontWeight = weight, textAlign = textAlign, style = MaterialTheme.typography.headlineLarge.copy(fontSize = 32.sp, lineHeight = 38.sp), modifier = Modifier.fillMaxWidth().padding(horizontal = 30.dp, vertical = 20.dp))
     }
+}
+
+private fun statusViewerAutoAdvanceMs(status: FynxStatus): Long = when (status.type) {
+    FynxStatusType.TEXT -> 5_000L
+    FynxStatusType.PHOTO -> 5_000L
+    FynxStatusType.VOICE -> status.voiceDurationMs.coerceIn(1_000L, FYNX_STATUS_MAX_VOICE_DURATION_MS)
+    FynxStatusType.VIDEO -> 0L
 }
 
 private fun statusTypeLabel(type: FynxStatusType) = when (type) { FynxStatusType.TEXT -> "Text"; FynxStatusType.PHOTO -> "Photo"; FynxStatusType.VIDEO -> "Video"; FynxStatusType.VOICE -> "Voice" }
