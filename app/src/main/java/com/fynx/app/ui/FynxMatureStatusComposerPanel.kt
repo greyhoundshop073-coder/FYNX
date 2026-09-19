@@ -22,6 +22,10 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TextFields
@@ -100,7 +104,7 @@ fun FynxMatureStatusComposerPanel(onClose: () -> Unit = {}) {
                     FynxStatusClient.uploadMedia(context, source, mime).getOrElse { error = it.message ?: "Media upload failed."; return@launch }
                 }
                 val now = System.currentTimeMillis()
-                val status = FynxStatus(id = UUID.randomUUID().toString(), ownerUsername = username, ownerDisplayName = displayName, type = type, contentUri = mediaId?.let { "/api/media/$it" }, text = text.trim().ifBlank { null }, createdAtMillis = now, expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS, textStyle = FynxStatusTextStyle(background, foreground, font, 1), privateStatus = audience == FynxStatusAudience.FRIENDS, voiceDurationMs = if (type == FynxStatusType.VOICE) elapsed else 0L, audience = audience)
+                val status = FynxStatus(id = UUID.randomUUID().toString(), ownerUsername = username, ownerDisplayName = displayName, type = type, contentUri = mediaId?.let { "/api/media/$it" }, text = text.trim().ifBlank { null }, createdAtMillis = now, expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS, textStyle = FynxStatusTextStyle(background, foreground, font, 1), privateStatus = audience != FynxStatusAudience.EVERYONE, voiceDurationMs = if (type == FynxStatusType.VOICE) elapsed else 0L, audience = audience)
                 FynxStatusClient.create(context, status, mediaId).getOrElse { error = it.message ?: "Status publishing failed."; return@launch }
                 FynxStatusStore.save(context, status)
                 onClose()
@@ -119,43 +123,96 @@ fun FynxMatureStatusComposerPanel(onClose: () -> Unit = {}) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onClose, enabled = !publishing && !recording) { Icon(Icons.Default.ArrowBack, "Back", tint = Color.White) }
                 Text("Create Status", color = Color.White, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                Box { IconButton(onClick = { showTools = !showTools; showColors = false }, enabled = !recording && !publishing) { Icon(Icons.Default.MoreVert, "Status tools", tint = Color.White) }; DropdownMenu(expanded = showTools, onDismissRequest = { showTools = false }) { if (type == FynxStatusType.TEXT) DropdownMenuItem(text = { Text("Colors & text") }, onClick = { showColors = true; showTools = false }); DropdownMenuItem(text = { Text("Clear") }, onClick = ::clearDraft); DropdownMenuItem(text = { Text("Share") }, enabled = !publishing && !recording && ((type == FynxStatusType.TEXT && text.isNotBlank()) || (type != FynxStatusType.TEXT && mediaUri != null)), onClick = ::publish) } }
+                Box {
+                    IconButton(onClick = { showTools = !showTools; showColors = false }, enabled = !recording && !publishing) { Icon(Icons.Default.MoreVert, "Status tools", tint = Color.White) }
+                    DropdownMenu(expanded = showTools, onDismissRequest = { showTools = false }) {
+                        if (type == FynxStatusType.TEXT) DropdownMenuItem(text = { Text("Text style") }, onClick = { showColors = true; showTools = false })
+                        DropdownMenuItem(text = { Text("Clear draft") }, onClick = ::clearDraft)
+                    }
+                }
             }
             Spacer(Modifier.weight(1f))
-            if (showColors && type == FynxStatusType.TEXT) Surface(color = Color.Black.copy(alpha = .72f), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) { items(MATURE_STATUS_BACKGROUNDS) { value -> Surface(shape = CircleShape, color = Color(value), modifier = Modifier.size(34.dp).clickable(enabled = !recording && !publishing) { background = value }) {} } }; LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) { items(MATURE_STATUS_TEXT_COLORS) { value -> Surface(shape = CircleShape, color = Color(value), modifier = Modifier.size(30.dp).clickable(enabled = !recording && !publishing) { foreground = value }) {} } }; LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(FynxStatusTextFont.values().toList()) { option -> FilterChip(selected = font == option, onClick = { font = option }, enabled = !recording && !publishing, label = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() }) }) } } } }
-            Surface(color = Color.Black.copy(alpha = .78f), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (type == FynxStatusType.TEXT) Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.TextFields, null, tint = Color.White); Text("${text.length}/$FYNX_STATUS_MAX_TEXT_LENGTH", color = Color.White, modifier = Modifier.padding(start = 8.dp)) }
-                if (type != FynxStatusType.TEXT && mediaUri != null) {
-                    OutlinedTextField(
-                        value = text,
-                        onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                        singleLine = true,
-                        placeholder = { Text("Add a caption…", color = Color.White.copy(alpha = .72f)) },
-                        textStyle = LocalTextStyle.current.copy(color = Color.White, fontWeight = FontWeight.Bold),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = Color.White.copy(alpha = .75f),
-                            unfocusedBorderColor = Color.White.copy(alpha = .45f),
-                            cursorColor = Color.White,
-                            focusedContainerColor = Color.Black.copy(alpha = .18f),
-                            unfocusedContainerColor = Color.Black.copy(alpha = .18f)
+            Surface(color = Color.Black.copy(alpha = .86f), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (showColors && type == FynxStatusType.TEXT) {
+                        Surface(color = Color.Black.copy(alpha = .55f), modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Text("Text style", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) { items(MATURE_STATUS_BACKGROUNDS) { value -> Surface(shape = CircleShape, color = Color(value), modifier = Modifier.size(32.dp).clickable(enabled = !recording && !publishing) { background = value }) {} } }
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) { items(MATURE_STATUS_TEXT_COLORS) { value -> Surface(shape = CircleShape, color = Color(value), modifier = Modifier.size(28.dp).clickable(enabled = !recording && !publishing) { foreground = value }) {} } }
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(FynxStatusTextFont.values().toList()) { option -> FilterChip(selected = font == option, onClick = { font = option }, enabled = !recording && !publishing, label = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() }) }) } }
+                                TextButton(onClick = { showColors = false }) { Text("Done", color = Color.White) }
+                            }
+                        }
+                    }
+                    if (type == FynxStatusType.TEXT) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.TextFields, null, tint = Color.White)
+                            Text("${text.length}/$FYNX_STATUS_MAX_TEXT_LENGTH", color = Color.White, modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                    if (type != FynxStatusType.TEXT && mediaUri != null) {
+                        OutlinedTextField(
+                            value = text,
+                            onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) },
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).imePadding(),
+                            singleLine = true,
+                            placeholder = { Text("Add a caption…", color = Color.White.copy(alpha = .72f)) },
+                            textStyle = LocalTextStyle.current.copy(color = Color.White, fontWeight = FontWeight.Bold),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color.White.copy(alpha = .75f),
+                                unfocusedBorderColor = Color.White.copy(alpha = .45f),
+                                cursorColor = Color.White,
+                                focusedContainerColor = Color.Black.copy(alpha = .18f),
+                                unfocusedContainerColor = Color.Black.copy(alpha = .18f)
+                            )
                         )
-                    )
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                        MatureStatusModeButton(Icons.Default.TextFields, "Text", type == FynxStatusType.TEXT, !recording && !publishing) { type = FynxStatusType.TEXT; mediaUri = null; showColors = false; error = null }
+                        MatureStatusModeButton(Icons.Default.Photo, "Photo", type == FynxStatusType.PHOTO, !recording && !publishing) { pickImage.launch(arrayOf("image/*")) }
+                        MatureStatusModeButton(Icons.Default.CameraAlt, "Camera", false, !recording && !publishing) { cameraOpen = true; showColors = false; showTools = false; error = null }
+                        MatureStatusModeButton(Icons.Default.Videocam, "Video", type == FynxStatusType.VIDEO, !recording && !publishing) { pickVideo.launch(arrayOf("video/*")) }
+                        MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording) { type = FynxStatusType.VOICE; showColors = false; error = null; if (mediaUri == null) if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true }, onError = { message -> error = message }) else micPermission.launch(Manifest.permission.RECORD_AUDIO) }
+                        if (type == FynxStatusType.VOICE && mediaUri != null) IconButton(onClick = { mediaUri = null; elapsed = 0L; error = null }, enabled = !publishing) { Icon(Icons.Default.Close, "Clear voice", tint = Color.White) }
+                        if (type == FynxStatusType.VOICE && recording) IconButton(onClick = { stopMatureVoiceRecording(recorder, recordingFile) { uri, message -> if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."; recorder = null; recordingFile = null; recording = false } }) { Icon(Icons.Default.Stop, "Stop", tint = Color.White) }
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Audience", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                        Spacer(Modifier.width(10.dp))
+                        var audienceMenu by remember { mutableStateOf(false) }
+                        Box {
+                            AssistChip(
+                                onClick = { audienceMenu = true },
+                                enabled = !recording && !publishing,
+                                leadingIcon = { Icon(if (audience == FynxStatusAudience.EVERYONE) Icons.Default.Public else if (audience == FynxStatusAudience.FRIENDS) Icons.Default.People else Icons.Default.Lock, null) },
+                                label = { Text(if (audience == FynxStatusAudience.EVERYONE) "Everyone" else if (audience == FynxStatusAudience.FRIENDS) "Friends" else "Only me") }
+                            )
+                            DropdownMenu(expanded = audienceMenu, onDismissRequest = { audienceMenu = false }) {
+                                DropdownMenuItem(text = { Text("Everyone") }, onClick = { audience = FynxStatusAudience.EVERYONE; audienceMenu = false })
+                                DropdownMenuItem(text = { Text("Friends") }, onClick = { audience = FynxStatusAudience.FRIENDS; audienceMenu = false })
+                                DropdownMenuItem(text = { Text("Only me") }, onClick = { audience = FynxStatusAudience.ONLY_ME; audienceMenu = false })
+                            }
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Button(
+                            onClick = ::publish,
+                            enabled = !publishing && !recording && ((type == FynxStatusType.TEXT && text.isNotBlank()) || (type != FynxStatusType.TEXT && mediaUri != null)),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
+                            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 9.dp)
+                        ) {
+                            Icon(Icons.Default.Send, "Send")
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (publishing) "Sending…" else "Send")
+                        }
+                    }
+                    if (publishing) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                    MatureStatusModeButton(Icons.Default.TextFields, "Text", type == FynxStatusType.TEXT, !recording && !publishing) { type = FynxStatusType.TEXT; mediaUri = null; showColors = false; error = null }
-                    MatureStatusModeButton(Icons.Default.Photo, "Photo", type == FynxStatusType.PHOTO, !recording && !publishing) { pickImage.launch(arrayOf("image/*")) }
-                    MatureStatusModeButton(Icons.Default.CameraAlt, "Camera", false, !recording && !publishing) { cameraOpen = true; showColors = false; showTools = false; error = null }
-                    MatureStatusModeButton(Icons.Default.Videocam, "Video", type == FynxStatusType.VIDEO, !recording && !publishing) { pickVideo.launch(arrayOf("video/*")) }
-                    MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording) { type = FynxStatusType.VOICE; showColors = false; error = null; if (mediaUri == null) if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true }, onError = { message -> error = message }) else micPermission.launch(Manifest.permission.RECORD_AUDIO) }
-                    if (type == FynxStatusType.VOICE && mediaUri != null) IconButton(onClick = { mediaUri = null; elapsed = 0L; error = null }, enabled = !publishing) { Icon(Icons.Default.Close, "Clear voice", tint = Color.White) }
-                    if (type == FynxStatusType.VOICE && recording) IconButton(onClick = { stopMatureVoiceRecording(recorder, recordingFile) { uri, message -> if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."; recorder = null; recordingFile = null; recording = false } }) { Icon(Icons.Default.Stop, "Stop", tint = Color.White) }
-                }
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("Audience", color = Color.White, style = MaterialTheme.typography.labelLarge); Spacer(Modifier.width(10.dp)); AssistChip(onClick = { audience = if (audience == FynxStatusAudience.EVERYONE) FynxStatusAudience.FRIENDS else FynxStatusAudience.EVERYONE }, enabled = !recording && !publishing, label = { Text(if (audience == FynxStatusAudience.EVERYONE) "Everyone" else "Friends") }); Spacer(Modifier.weight(1f)); if (publishing) Text("Sharing…", color = Color.White, style = MaterialTheme.typography.labelLarge) }
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-            } }
+            }
+        }
         }
     }
 
