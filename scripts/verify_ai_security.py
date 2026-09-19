@@ -29,7 +29,7 @@ check("AI tool arguments are JSON validated", 'JSON.parse(argumentsJson)' in reg
 check("AI agent rejects empty provider responses", 'throw new Error("AI provider returned an empty response")' in registry)
 check("AI agent accepts bounded conversation history", 'history = []' in registry and 'slice(-12)' in registry and 'conversation history too long' in registry)
 check("Android AI uses persistent conversation transport", "FynxAiConversationClient.send" in android_panel and "FynxAiConversationClient" in ai_conversations)
-check("Android AI preserves persisted conversation history without injecting a second welcome", 'messages = mutableStateListOf<AiMessage>()' in android_panel and 'conversation.messages.map' in android_panel and 'listOf(welcome)' not in android_panel)
+check("Android AI preserves persisted conversation history without injecting a second welcome", 'var messages by remember { mutableStateOf(emptyList<AiMessage>()) }' in android_panel and 'messages = conversation.messages.map' in android_panel and 'listOf(welcome)' not in android_panel)
 check("Android AI tracks conversation summary and current task", 'conversationSummary' in android_panel and 'currentTask' in android_panel and 'buildAiConversationContext' in read("app/src/main/java/com/fynx/app/ui/AiConversationContext.kt"))
 check("AI conversation routes are registered", "registerFynxAiConversationRoutes({ app });" in read("backend/scalability.js"))
 check("AI conversations are authenticated and user-scoped", 'authenticate(req)' in ai_routes and "user_id=$2" in ai_routes and "WHERE user_id=$1" in ai_routes)
