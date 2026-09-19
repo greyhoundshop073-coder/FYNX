@@ -33,3 +33,4 @@ for name, ok in checks:
         raise SystemExit(f"FAIL: {name}")
     print(f"PASS: {name}")
 print("Batch 5 Location integrity verification passed")
+print("CI proxy check: source-level location gate is active")
