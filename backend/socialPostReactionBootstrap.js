@@ -82,16 +82,16 @@ export async function installSocialPostReactions() {
       const isNewOrChangedReaction = !reactionContext.previous_reaction || reactionContext.previous_reaction !== reaction;
       if (isNewOrChangedReaction && String(reactionContext.post_author_id) !== String(req.user.sub)) {
         const actor = reactionContext.actor_username || 'A FYNX user';
-        const reactionMessage = reaction === 'LIKE' ? 'Liked your post.' : \`${reaction.toLowerCase()} reaction on your post.\`;
+        const reactionMessage = reaction === 'LIKE' ? 'Liked your post.' : reaction.toLowerCase() + ' reaction on your post.';
         await queueFynxNotification(pool, {
           userId: reactionContext.post_author_id,
           type: 'REACTION',
-          title: \`@${actor} reacted to your post\`,
+          title: '@' + actor + ' reacted to your post',
           message: reactionMessage,
           targetId: postId,
           sourceUsername: reactionContext.actor_username || null,
           route: 'fynx://home',
-          notificationId: \`post-reaction-${postId}-${req.user.sub}-${Date.now()}-${Math.random().toString(36).slice(2,8)}\`
+          notificationId: 'post-reaction-' + postId + '-' + req.user.sub + '-' + Date.now() + '-' + Math.random().toString(36).slice(2,8)
         });
       }
 
