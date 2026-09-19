@@ -22,7 +22,9 @@ export async function installSocialMultiMedia() {
       ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL;
       ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_title TEXT;
       ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_artist TEXT;
-undefined");
+      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_duration_ms BIGINT;
+      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS feeling_activity_type TEXT;
+      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS feeling_activity TEXT;");
 
     if (source.includes("p.media_type,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp")) {
       source = source.replace("p.media_type,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp", "p.media_type,p.location,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp");
