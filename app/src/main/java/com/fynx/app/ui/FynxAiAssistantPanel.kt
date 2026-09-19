@@ -51,8 +51,7 @@ import org.json.JSONObject
 /** User-facing FYNX AI assistant. Sensitive FYNX data is not exposed by this panel. */
 @Composable
 fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
-    val welcome = remember { AiMessage("Hi, I'm FYNX AI. Ask me anything about your FYNX experience.", false) }
-    var messages by remember { mutableStateOf(listOf(welcome)) }
+    var messages by remember { mutableStateOf(emptyList<AiMessage>()) }
     var input by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -97,7 +96,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
             loading = false; errorMessage = null; failedPrompt = null; input = ""; pendingMediaId = null; pendingMessageAction = null
             conversationSummary = ""; currentTask = ""
             FynxAiConversationClient.create(context)
-                .onSuccess { conversationId = it.id; messages = listOf(welcome); showConversationHistory = false }
+                .onSuccess { conversationId = it.id; messages = emptyList(); showConversationHistory = false }
                 .onFailure { errorMessage = it.message ?: "Unable to start a new FYNX AI conversation." }
         }
     }
@@ -108,7 +107,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
             FynxAiConversationClient.get(context, id)
                 .onSuccess { conversation ->
                     conversationId = conversation.id
-                    messages = conversation.messages.map { AiMessage(it.text, it.role == "user") }.ifEmpty { listOf(welcome) }
+                    messages = conversation.messages.map { AiMessage(it.text, it.role == "user") }
                     input = ""; pendingMediaId = null; pendingMessageAction = null; showConversationHistory = false
                 }
                 .onFailure { errorMessage = it.message ?: "Unable to load that conversation." }
@@ -295,7 +294,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(top = 4.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 4.dp),
@@ -336,32 +335,9 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                contentPadding = PaddingValues(top = 4.dp, bottom = 8.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                if (messages.size == 1 && !loading && errorMessage == null) {
-                    item {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = FynxDesign.LargeCardShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .62f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .35f))
-                        ) {
-                            Column(
-                                Modifier.padding(18.dp),
-                                verticalArrangement = Arrangement.spacedBy(7.dp)
-                            ) {
-                                Text("What can I help you with?", style = MaterialTheme.typography.titleMedium)
-                                Text(
-                                    "Ask naturally. FYNX AI can use approved FYNX tools to find relevant information without exposing private data.",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        }
-                    }
-                }
-
                 items(messages) { message ->
                     AiChatBubble(
                         message = message,
@@ -452,14 +428,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
             if (pendingMediaUploading) { Spacer(Modifier.height(6.dp)); LinearProgressIndicator(Modifier.fillMaxWidth()) }
             Spacer(Modifier.height(2.dp))
             Box {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = FynxDesign.LargeCardShape,
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = .98f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f)),
-                    tonalElevation = 4.dp
-                ) {
-                    OutlinedTextField(
+                OutlinedTextField(
                         value = input,
                         onValueChange = {
                             input = it.take(FynxSecurityFoundation.MAX_AI_PROMPT_LENGTH)
@@ -524,7 +493,6 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                             }
                         }
                     )
-                }
             }
         }
     }
