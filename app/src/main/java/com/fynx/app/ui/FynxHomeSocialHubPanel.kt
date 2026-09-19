@@ -12,6 +12,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
@@ -31,6 +32,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -72,6 +74,7 @@ fun FynxHomeSocialHubPanel(
     var visibility by remember { mutableStateOf(defaultPostVisibility) }
     var audience by remember { mutableStateOf(if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS) }
     var selectedAudienceIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var textBackground by remember { mutableStateOf<FynxPostTextBackground?>(null) }
     var showPeoplePicker by remember { mutableStateOf(false) }
     var audienceFriends by remember { mutableStateOf<List<FynxFriend>>(emptyList()) }
     var audienceLoading by remember { mutableStateOf(false) }
@@ -147,6 +150,7 @@ fun FynxHomeSocialHubPanel(
             capturedTypes = emptyList()
             selectedVisualIndex = 0
             text = ""
+            textBackground = null
             selectedAudienceIds = emptySet()
             audience = if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS
             visibility = defaultPostVisibility
@@ -160,6 +164,7 @@ fun FynxHomeSocialHubPanel(
         capturedTypes = emptyList()
         selectedVisualIndex = 0
         text = ""
+        textBackground = null
         selectedAudienceIds = emptySet()
         audience = if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS
         visibility = defaultPostVisibility
@@ -183,7 +188,7 @@ fun FynxHomeSocialHubPanel(
                         Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUris.isNotEmpty()), onClick = {
                             if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) { notice = "You are offline. Reconnect before publishing this post."; return@Button }
                             posting = true; notice = null
-                            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList()) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
+                            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
                         }) { Text(if (posting) "Publishing…" else "Post") }
                     }
 
@@ -215,10 +220,21 @@ fun FynxHomeSocialHubPanel(
 
                         BasicTextField(
                             value = text,
-                            onValueChange = { text = it.take(4000) },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 220.dp, max = 420.dp).padding(top = 8.dp),
+                            onValueChange = { value ->
+                                text = value.take(4000)
+                                if (text.isBlank()) textBackground = null
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 220.dp, max = 420.dp)
+                                .padding(top = 8.dp)
+                                .background(
+                                    color = textBackground?.let { Color(it.color) } ?: MaterialTheme.colorScheme.background,
+                                    shape = RoundedCornerShape(18.dp)
+                                )
+                                .padding(horizontal = 2.dp, vertical = 8.dp),
                             enabled = !posting && postingAllowed,
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onBackground),
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(color = textBackground?.let { Color(it.foregroundColor) } ?: MaterialTheme.colorScheme.onBackground),
                             decorationBox = { innerTextField ->
                                 Box(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 8.dp)) {
                                     if (text.isEmpty()) {
@@ -228,6 +244,34 @@ fun FynxHomeSocialHubPanel(
                                 }
                             }
                         )
+
+                        if (text.isNotBlank()) {
+                            Text(
+                                "Text background",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Row(
+                                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                FynxPostTextBackground.entries.forEach { option ->
+                                    FilterChip(
+                                        selected = textBackground == option,
+                                        onClick = { textBackground = if (textBackground == option) null else option },
+                                        label = { Text(option.label) },
+                                        leadingIcon = {
+                                            Box(
+                                                Modifier
+                                                    .size(18.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(option.color))
+                                            )
+                                        }
+                                    )
+                                }
+                            }
+                        }
 
                         Row(
                             Modifier.fillMaxWidth().padding(top = 6.dp),
