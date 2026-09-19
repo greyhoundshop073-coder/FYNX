@@ -11,6 +11,45 @@ export async function installSocialMultiMedia() {
   const backendDir = path.dirname(fileURLToPath(import.meta.url));
   const socialPath = path.join(backendDir, "socialRoutes.js");
   let source = await readFile(socialPath, "utf8");
+
+  // Batch 5 location migration: persist a human-readable place label only.
+  // Raw device coordinates stay on the Android device and are never sent to FYNX.
+  const locationMarker = "fynxBatch5LocationV1";
+  if (!source.includes(locationMarker)) {
+    const schemaMarker = "CREATE INDEX IF NOT EXISTS social_posts_created_idx ON social_posts(created_at DESC);";
+    if (!source.includes(schemaMarker)) throw new Error("FYNX location bootstrap could not locate social post schema marker");
+    source = source.replace(schemaMarker, schemaMarker + "\n      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS location TEXT;");
+
+    if (source.includes("p.media_type,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp")) {
+      source = source.replace("p.media_type,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp", "p.media_type,p.location,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp");
+    }
+    if (!source.includes("location:x.location||null") && source.includes("timestamp:Number(x.timestamp)")) {
+      source = source.replace("timestamp:Number(x.timestamp)", "location:x.location||null,timestamp:Number(x.timestamp)");
+    }
+
+    const singleMediaType = "const mediaType=typeof req.body?.mediaType==='string'?req.body.mediaType.trim().toLowerCase():null;";
+    if (source.includes(singleMediaType) && !source.includes("const location=typeof req.body?.location")) {
+      source = source.replace(singleMediaType, singleMediaType + "const location=typeof req.body?.location==='string'?req.body.location.trim().slice(0,160):null;");
+    }
+    const singleInsert = "INSERT INTO social_posts(author_id,text,visibility,media_id,media_type) VALUES($1,$2,$3,$4,$5) RETURNING id";
+    if (source.includes(singleInsert)) {
+      source = source.replace(singleInsert, "INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,location) VALUES($1,$2,$3,$4,$5,$6) RETURNING id");
+      source = source.replace("[req.user.sub,text,visibility,mediaId,mediaType]", "[req.user.sub,text,visibility,mediaId,mediaType,location]");
+    }
+
+    const multiLocationNeedle = "const backgroundKey = typeof req.body?.textBackground === 'string' ? req.body.textBackground.trim().toUpperCase() : '';";
+    if (source.includes(multiLocationNeedle) && !source.includes("const location = typeof req.body?.location")) {
+      source = source.replace(multiLocationNeedle, multiLocationNeedle + "\n      const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : null;");
+    }
+    const multiInsert = "INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,text_background,text_background_color,text_foreground_color) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id";
+    if (source.includes(multiInsert)) {
+      source = source.replace(multiInsert, "INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,text_background,text_background_color,text_foreground_color,location) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id");
+      source = source.replace("[req.user.sub, text, visibility, mediaIds[0], mediaTypes[0], backgroundStyle?.[0] ? backgroundKey : '', backgroundStyle?.[0] ?? null, backgroundStyle?.[1] ?? null]", "[req.user.sub, text, visibility, mediaIds[0], mediaTypes[0], backgroundStyle?.[0] ? backgroundKey : '', backgroundStyle?.[0] ?? null, backgroundStyle?.[1] ?? null, location]");
+    }
+
+    source += "\n  // fynxBatch5LocationV1\n";
+    await writeFile(socialPath, source, "utf8");
+  }
   const mediaAuthMarker = "fynxHomeMultiMediaMediaAuthV2";
   if (source.includes(mediaAuthMarker)) return;
 
