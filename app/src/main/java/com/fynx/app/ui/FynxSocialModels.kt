@@ -18,3 +18,16 @@ enum class FynxPostAudience(val label: String) {
     SELECTED("Selected people"),
     ONLY_ME("Only me")
 }
+
+enum class FynxPostTextBackground(
+    val key: String,
+    val label: String,
+    val color: Long,
+    val foregroundColor: Long
+) {
+    OCEAN("OCEAN", "Ocean", 0xFF1565C0, 0xFFFFFFFF),
+    VIOLET("VIOLET", "Violet", 0xFF6A1B9A, 0xFFFFFFFF),
+    EMERALD("EMERALD", "Emerald", 0xFF00695C, 0xFFFFFFFF),
+    SUNSET("SUNSET", "Sunset", 0xFFE65100, 0xFFFFFFFF),
+    CHARCOAL("CHARCOAL", "Charcoal", 0xFF263238, 0xFFFFFFFF)
+}
