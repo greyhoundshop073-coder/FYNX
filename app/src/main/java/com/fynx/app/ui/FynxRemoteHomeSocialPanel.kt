@@ -84,15 +84,16 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         val ids = items.map { it.id }.filter { it.isNotBlank() && !reactionStates.containsKey(it) }.distinct(); if (ids.isEmpty()) return
         scope.launch { val resolved = ids.map { id -> async(Dispatchers.IO) { id to FynxHomePostReactionsClient.state(context, id).getOrNull() } }.awaitAll().mapNotNull { (id, state) -> state?.let { id to it } }.toMap(); if (resolved.isNotEmpty()) reactionStates = reactionStates + resolved }
     }
-    LaunchedEffect(publishRefreshKey) {
-        if (publishRefreshKey > 0) reload(true)
-    }
-
     fun reload(forceRefresh: Boolean = false) {
         val now = System.currentTimeMillis(); if (feedRequestInFlight) return; if (forceRefresh && now - lastFeedRequestAt < FEED_REFRESH_DEBOUNCE_MS) return
         feedRequestInFlight = true; lastFeedRequestAt = now
         scope.launch { loading = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh).onSuccess { page -> posts = page.posts; hasMore = page.hasMore; error = null; interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts) }.onFailure { error = if (it.message?.contains("HTTP 404", true) == true) "Your FYNX feed service is temporarily unavailable." else it.message ?: "Unable to load your feed." }; loading = false; feedRequestInFlight = false }
     }
+
+    LaunchedEffect(publishRefreshKey) {
+        if (publishRefreshKey > 0) reload(true)
+    }
+
     fun loadMore() {
         if (loading || loadingMore || !hasMore || feedRequestInFlight) return
         feedRequestInFlight = true

@@ -102,7 +102,7 @@ fun FynxVoicePostRecorder(onRecorded: (Uri) -> Unit, onDismiss: () -> Unit) {
         hasRecording = outputFile?.let { it.exists() && it.length() > 0L } == true
         elapsedMs = elapsedMs.coerceAtMost(MAX_VOICE_POST_DURATION_MS)
         previewPlayer?.let {
-            previewDurationMs = it.duration.coerceAtLeast(0)
+            previewDurationMs = it.duration.coerceAtLeast(0).toLong().toLong()
             previewPositionMs = 0L
         }
     }
