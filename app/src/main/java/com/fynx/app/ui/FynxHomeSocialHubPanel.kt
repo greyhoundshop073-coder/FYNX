@@ -323,7 +323,7 @@ fun FynxHomeSocialHubPanel(
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { clearComposer() }, enabled = !posting && !false) { Icon(Icons.Default.Close, "Close") }
                         Text("New post", style = MaterialTheme.typography.titleLarge)
-                        Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUris.isNotEmpty()), onClick = {
+                        Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUris.isNotEmpty() || selectedMusic != null), onClick = {
                             if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) { notice = "You are offline. Reconnect before publishing this post."; return@Button }
                             posting = true; notice = null
                             scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground, postLocation, selectedMusic, selectedFeelingActivity) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
