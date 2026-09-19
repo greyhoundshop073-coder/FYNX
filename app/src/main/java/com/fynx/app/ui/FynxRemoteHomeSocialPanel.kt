@@ -294,7 +294,7 @@ private fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: ((
     else if (type == "audio") AudioPostPlayer(file!!)
     else if (type == "video") {
         Box(Modifier.fillMaxWidth().aspectRatio(videoAspectRatio).clickable { when { onOpenMarketplace != null -> onOpenMarketplace(); onOpenMedia != null -> onOpenMedia(); else -> fullscreen = true } }) {
-            AndroidView(factory = { ctx -> VideoView(ctx).apply { videoView = this; layoutParams = ViewGroup.LayoutParams(-1, -1); setMediaController(MediaController(ctx)); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxSize())
+            AndroidView(factory = { ctx -> FynxPassiveVideoView(ctx).apply { videoView = this; layoutParams = ViewGroup.LayoutParams(-1, -1); setMediaController(MediaController(ctx)); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxSize())
             if (onOpenMarketplace == null && onOpenMedia == null) Text("Tap to view full screen", Modifier.align(Alignment.BottomEnd).padding(10.dp), style = MaterialTheme.typography.labelSmall, color = Color.White)
             else if (onOpenMedia != null) Text("Tap to discover videos", Modifier.align(Alignment.BottomEnd).padding(10.dp), style = MaterialTheme.typography.labelSmall, color = Color.White)
         }
