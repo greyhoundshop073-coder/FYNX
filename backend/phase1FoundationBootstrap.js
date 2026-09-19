@@ -14,7 +14,7 @@ const replacement = `const fynxRealtimeMessagingCanSend = async (senderId, targe
   const result = await pool.query("SELECT u.id FROM users u WHERE u.id=$1 AND (COALESCE((SELECT ps.messages_visibility FROM privacy_settings ps WHERE ps.user_id=u.id), 'My friends')='Everyone' OR (COALESCE((SELECT ps.messages_visibility FROM privacy_settings ps WHERE ps.user_id=u.id), 'My friends')='My friends' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id=$1 AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=$1)) AND f.status='accepted'))) LIMIT 1", [targetId, senderId]);
   return Boolean(result.rowCount);
 };
-const fynxRealtimeMessagingTypingTarget`;
+`;
 
 const helperStartIndex = source.indexOf(helperStart);
 const helperEndIndex = helperStartIndex >= 0 ? source.indexOf(helperEnd, helperStartIndex) : -1;
