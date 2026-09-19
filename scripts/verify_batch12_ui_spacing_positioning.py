@@ -15,7 +15,7 @@ checks = {
     "primary navigation includes Home": 'FynxNavItem("Home", "Home"' in app,
     "primary navigation includes Chat": 'FynxNavItem("Chats", "Chat"' in app,
     "primary navigation includes Friends": 'FynxNavItem("Friends", "Friends"' in app,
-    "primary navigation includes Stories": 'FynxNavItem("Stories", "Stories"' in app,
+    "primary navigation keeps Marketplace": 'FynxNavItem("Marketplace", "Market", Icons.Default.ShoppingBag)' in app,
     "primary navigation keeps More as fifth compact destination": 'FynxNavItem("Features", "More"' in app,
     "Marketplace remains reachable from More": 'Triple("Marketplace", "Marketplace", Icons.Default.ShoppingBag)' in app,
     "Money Center remains reachable from More": 'Triple("Money Tools", "Money Center", Icons.Default.AccountBalanceWallet)' in app,
