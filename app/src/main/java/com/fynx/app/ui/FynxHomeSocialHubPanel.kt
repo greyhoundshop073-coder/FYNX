@@ -7,6 +7,7 @@ import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -17,6 +18,11 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.SentimentSatisfied
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -143,7 +149,7 @@ fun FynxHomeSocialHubPanel(
                 Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { clearComposer() }, enabled = !posting && !false) { Icon(Icons.Default.Close, "Close") }
-                        Text("Create post", style = MaterialTheme.typography.titleLarge)
+                        Text("New post", style = MaterialTheme.typography.titleLarge)
                         Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUris.isNotEmpty()), onClick = {
                             if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) { notice = "You are offline. Reconnect before publishing this post."; return@Button }
                             posting = true; notice = null
@@ -154,24 +160,54 @@ fun FynxHomeSocialHubPanel(
                     Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         if (!postingAllowed) Text("Posting is disabled by your Posts privacy setting.", color = MaterialTheme.colorScheme.error)
 
-                        Text("Share something with your FYNX circle", style = MaterialTheme.typography.headlineSmall)
-                        OutlinedTextField(
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(44.dp)) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(currentUsername.take(1).uppercase(), style = MaterialTheme.typography.titleMedium)
+                                }
+                            }
+                            Text(currentUsername, style = MaterialTheme.typography.titleMedium)
+                        }
+
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            ComposerQuickChip("Music", Icons.Default.MusicNote, enabled = false) {}
+                            ComposerQuickChip("People", Icons.Default.People, enabled = false) {}
+                            ComposerQuickChip("Location", Icons.Default.LocationOn, enabled = false) {}
+                            ComposerQuickChip("Feeling/Activity", Icons.Default.SentimentSatisfied, enabled = false) {}
+                        }
+
+                        BasicTextField(
                             value = text,
                             onValueChange = { text = it.take(4000) },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp, max = 240.dp),
-                            minLines = 5,
-                            maxLines = 10,
-                            placeholder = { Text("What's on your mind? Write your post here…", style = MaterialTheme.typography.titleMedium) },
-                            textStyle = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 220.dp, max = 420.dp).padding(top = 8.dp),
                             enabled = !posting && postingAllowed,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onBackground),
+                            decorationBox = { innerTextField ->
+                                Box(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 8.dp)) {
+                                    if (text.isEmpty()) {
+                                        Text("What's on your mind?", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    innerTextField()
+                                }
+                            }
                         )
-                
-                        Text("Add to your post", style = MaterialTheme.typography.titleMedium)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            ComposerAction("Photo", Icons.Default.Image, { gallery.launch(arrayOf("image/*")) }, !posting && !false && postingAllowed, Modifier.weight(1f))
-                            ComposerAction("Video", Icons.Default.VideoLibrary, { gallery.launch(arrayOf("video/*")) }, !posting && !false && postingAllowed, Modifier.weight(1f))
-                            ComposerAction("Camera", Icons.Default.CameraAlt, { showComposer = false; showCamera = true }, !posting && !false && postingAllowed, Modifier.weight(1f))
-                            ComposerAction("Voice", Icons.Default.Mic, { showComposer = false; showVoiceRecorder = true }, !posting && !false && postingAllowed, Modifier.weight(1f))
+
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            ComposerAction("Photo", Icons.Default.Image, { gallery.launch(arrayOf("image/*", "video/*")) }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
+                            ComposerAction("Video/Camera", Icons.Default.VideoLibrary, { showComposer = false; showCamera = true }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
+                            ComposerAction("Voice", Icons.Default.Mic, { showComposer = false; showVoiceRecorder = true }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
+                            ComposerAction("Marketplace", Icons.Default.Storefront, { showComposer = false; onOpenMarketplace() }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
                         }
 
                         if (capturedUris.isNotEmpty()) {
@@ -266,12 +302,34 @@ fun FynxHomeSocialHubPanel(
 }
 
 @Composable
-private fun ComposerAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier) {
-    OutlinedButton(onClick = onClick, enabled = enabled, modifier = modifier.height(76.dp), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)) {
+private fun ComposerQuickChip(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, enabled: Boolean, onClick: () -> Unit) {
+    AssistChip(
+        onClick = onClick,
+        enabled = enabled,
+        label = { Text(label, maxLines = 1) },
+        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) }
+    )
+}
+
+@Composable
+private fun ComposerAction(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.height(if (compact) 62.dp else 76.dp),
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 6.dp)
+    ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Icon(icon, contentDescription = label, modifier = Modifier.size(28.dp))
-            Spacer(Modifier.height(5.dp))
-            Text(label, style = MaterialTheme.typography.labelLarge)
+            Icon(icon, contentDescription = label, modifier = Modifier.size(if (compact) 24.dp else 28.dp))
+            Spacer(Modifier.height(4.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
         }
     }
 }
