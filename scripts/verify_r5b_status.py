@@ -107,7 +107,7 @@ require('status viewer smooth progress segments','LinearProgressIndicator' in ti
 require('status viewer timed progress','statusViewerAutoAdvanceMs(status)' in timeline and 'delay(50L)' in timeline)
 require('status viewer reply pauses progress','if (!replyFocused)' in timeline and 'onFocusChanged' in timeline)
 require('status interaction controls','viewCount' in timeline and 'likeCount' in timeline and 'Reply to this Status' in timeline)
-require('status emoji reaction controls','listOf("❤️", "😂", "😮", "😢", "👍")' in timeline)
+require('status emoji reaction controls','EmojiEmotions' in timeline and 'showReactionPicker' in timeline and 'listOf("❤️", "😂", "😮", "😢", "👍", "👏", "🔥", "🎉")' in timeline)
 require('status external share action','FynxShareActions.share(context, FynxShareActions.statusPayload(status))' in timeline and 'fun statusPayload(status: FynxStatus)' in share)
 require('status share uses Stories destination','FynxDeepLinkParser.storiesWebLink()' in share and 'Stories' in deeplink)
 require('owner delete UI','FynxStatusClient.delete(context, status.id)' in timeline and 'status.ownerUsername.equals(viewerUsername, true)' in timeline)
