@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
@@ -165,11 +166,11 @@ fun FynxHomeSocialHubPanel(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(44.dp)) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(currentUsername.take(1).uppercase(), style = MaterialTheme.typography.titleMedium)
-                                }
-                            }
+                            FynxProfileImage(
+                                currentUsername,
+                                FynxPreferencesStore.loadProfilePhoto(context),
+                                Modifier.size(44.dp).clip(CircleShape)
+                            )
                             Text(currentUsername, style = MaterialTheme.typography.titleMedium)
                         }
 
