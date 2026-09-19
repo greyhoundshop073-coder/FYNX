@@ -202,7 +202,35 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     Spacer(Modifier.size(48.dp))
                 }
             }
-        }, bottomBar = { Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) { Surface(modifier = Modifier.fillMaxWidth().height(64.dp).shadow(8.dp, RoundedCornerShape(32.dp)), shape = RoundedCornerShape(32.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f), tonalElevation = 0.dp) { NavigationBar(modifier = Modifier.fillMaxSize(), containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface, tonalElevation = 0.dp) { mainNav.forEach { item -> NavigationBarItem(selected = selected == item.key, onClick = { selected = item.key }, icon = { Icon(item.icon, item.label) }, label = { Text(item.label, maxLines = 1) }, colors = NavigationBarItemDefaults.colors(selectedIconColor = MaterialTheme.colorScheme.primary, selectedTextColor = MaterialTheme.colorScheme.primary, indicatorColor = MaterialTheme.colorScheme.secondaryContainer, unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant, unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant)) } } } } }) { padding -> Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 6.dp).pointerInput(selected) { var drag = 0f; detectHorizontalDragGestures(onDragStart = { drag = 0f }, onHorizontalDrag = { _, amount -> drag += amount }, onDragEnd = { if (kotlin.math.abs(drag) >= 80f) { val next = if (drag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex) else (mainIndex - 1).coerceAtLeast(0); selected = mainNav[next].key } }) }) { when (selected) {
+        }, bottomBar = {
+            // Keep the primary navigation in the normal Scaffold flow instead of
+            // floating it over Home content. IME padding lifts it above the keyboard.
+            NavigationBar(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding(),
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                tonalElevation = 0.dp,
+                windowInsets = NavigationBarDefaults.windowInsets
+            ) {
+                mainNav.forEach { item ->
+                    NavigationBarItem(
+                        selected = selected == item.key,
+                        onClick = { selected = item.key },
+                        icon = { Icon(item.icon, contentDescription = item.label) },
+                        label = { Text(item.label, maxLines = 1) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
+                }
+            }
+        }) { padding -> Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 6.dp).pointerInput(selected) { var drag = 0f; detectHorizontalDragGestures(onDragStart = { drag = 0f }, onHorizontalDrag = { _, amount -> drag += amount }, onDragEnd = { if (kotlin.math.abs(drag) >= 80f) { val next = if (drag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex) else (mainIndex - 1).coerceAtLeast(0); selected = mainNav[next].key } }) }) { when (selected) {
             "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it })
             "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" })
             "Friends" -> FriendsPanel(onOpenProfile = { profileUser = it })
