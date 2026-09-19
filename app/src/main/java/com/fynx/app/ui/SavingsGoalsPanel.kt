@@ -20,22 +20,22 @@ fun SavingsGoalsPanel() {
     var nextId by remember { mutableLongStateOf(1L) }
     var goals by remember { mutableStateOf(emptyList<SavingsGoal>()) }
 
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { Text("Savings Goals 🎯", style = MaterialTheme.typography.headlineSmall) }
-        item { Text("Set targets and track your savings progress locally.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        items(goals, key = { it.id }) { goal ->
-        item { OutlinedTextField(name, { name = it }, label = { Text("Goal name") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
-        item { OutlinedTextField(targetText, { targetText = it }, label = { Text("Target amount") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
-        item { OutlinedTextField(savedText, { savedText = it }, label = { Text("Currently saved") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
-        item { OutlinedTextField(targetDate, { targetDate = it }, label = { Text("Target date") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
-        item { Button(onClick = {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Savings Goals 🎯", style = MaterialTheme.typography.headlineSmall)
+        Text("Set targets and track your savings progress locally.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(name, { name = it }, label = { Text("Goal name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(targetText, { targetText = it }, label = { Text("Target amount") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(savedText, { savedText = it }, label = { Text("Currently saved") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(targetDate, { targetDate = it }, label = { Text("Target date") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Button(onClick = {
             val target = targetText.toDoubleOrNull()
             val saved = savedText.toDoubleOrNull() ?: 0.0
             if (name.isNotBlank() && target != null && target > 0 && saved >= 0 && targetDate.isNotBlank()) {
                 goals = goals + SavingsGoal(nextId++, name.trim(), target, saved.coerceAtMost(target), targetDate.trim())
                 name = ""; targetText = ""; savedText = ""; targetDate = ""
             }
-        }) { Text("Add Savings Goal") } }
+        }) { Text("Add Savings Goal") }
         Spacer(Modifier.height(10.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(goals, key = { it.id }) { goal ->
