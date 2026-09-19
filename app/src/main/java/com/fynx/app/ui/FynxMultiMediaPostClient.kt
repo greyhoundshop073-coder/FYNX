@@ -8,8 +8,8 @@ import org.json.JSONObject
 /** Uploads selected assets through the existing authenticated media path, then creates one real post. */
 object FynxMultiMediaPostClient {
     private const val MAX_MEDIA = 4
-    private const val MAX_SINGLE_MEDIA_BYTES = 200L * 1024L * 1024L
-    private const val MAX_TOTAL_MEDIA_BYTES = 500L * 1024L * 1024L
+    private const val MAX_SINGLE_MEDIA_BYTES = 12L * 1024L * 1024L
+    private const val MAX_TOTAL_MEDIA_BYTES = 48L * 1024L * 1024L
 
     suspend fun createPost(
         context: Context,
