@@ -254,7 +254,6 @@ fun FynxMatureStatusComposerPanel(onClose: () -> Unit = {}) {
                 }
             }
         }
-        }
     }
 
     if (cameraOpen) {
