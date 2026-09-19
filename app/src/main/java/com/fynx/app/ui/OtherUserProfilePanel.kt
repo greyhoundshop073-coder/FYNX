@@ -26,6 +26,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -113,18 +115,18 @@ fun OtherUserProfilePanel(
                     item {
                         RemoteProfilePhoto(person.profilePhotoMediaId, person.displayName, Modifier.size(104.dp))
                         Spacer(Modifier.height(14.dp))
-                        Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.headlineSmall)
-                        Text("@${person.username.removePrefix("@").trim()}", color = FynxDesign.TextSecondary)
-                        if (person.bio.isNotBlank()) { Spacer(Modifier.height(10.dp)); Text(person.bio, color = FynxDesign.TextSecondary) }
-                        if (person.country.isNotBlank()) Text(person.country, color = FynxDesign.TextSecondary)
+                        Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().widthIn(max = 720.dp))
+                        Text("@${person.username.removePrefix("@").trim()}", color = FynxDesign.TextSecondary, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().widthIn(max = 720.dp))
+                        if (person.bio.isNotBlank()) { Spacer(Modifier.height(10.dp)); Text(person.bio, color = FynxDesign.TextSecondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().widthIn(max = 720.dp)) }
+                        if (person.country.isNotBlank()) Text(person.country, color = FynxDesign.TextSecondary, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().widthIn(max = 720.dp))
                         Spacer(Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(22.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().widthIn(max = 520.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                             ProfileCount(label = "Posts", value = person.postCount)
                             person.followerCount?.let { ProfileCount(label = "Followers", value = it) }
                             person.followingCount?.let { ProfileCount(label = "Following", value = it) }
                         }
                         Spacer(Modifier.height(14.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(Modifier.fillMaxWidth().widthIn(max = 520.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Button(enabled = !busy, onClick = {
                                 scope.launch {
                                     busy = true
@@ -214,9 +216,9 @@ fun OtherUserProfilePanel(
 
 @Composable
 private fun ProfileCount(label: String, value: Int) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value.toString(), style = MaterialTheme.typography.titleMedium)
-        Text(label, color = FynxDesign.TextSecondary, style = MaterialTheme.typography.labelSmall)
+    Column(Modifier.widthIn(min = 72.dp, max = 120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value.toString(), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        Text(label, color = FynxDesign.TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
     }
 }
 
