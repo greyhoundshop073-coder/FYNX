@@ -85,25 +85,23 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
     if (showUniversalSearch) { FynxUniversalSearchPanel(onOpenProfile = onOpenProfile); return }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp, vertical = 10.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Find People", style = MaterialTheme.typography.headlineSmall)
-                Text("Connect with real FYNX accounts.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = {
-                    context.startActivity(Intent(context, FynxContactsActivity::class.java))
-                }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
-                    Icon(Icons.Default.PersonAdd, "Open contacts", Modifier.size(17.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Contacts")
-                }
-                OutlinedButton(onClick = { showUniversalSearch = true }, shape = FynxDesign.ControlShape) {
-                    Icon(Icons.Default.Search, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text("Search all FYNX")
-                }
-            }
+        Column(Modifier.fillMaxWidth()) {
+            Text("Find People", style = MaterialTheme.typography.headlineSmall)
+            Text("Connect with real FYNX accounts.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
         Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = {
+                context.startActivity(Intent(context, FynxContactsActivity::class.java))
+            }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
+                Icon(Icons.Default.PersonAdd, "Open contacts", Modifier.size(17.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Contacts")
+            }
+            OutlinedButton(onClick = { showUniversalSearch = true }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
+                Icon(Icons.Default.Search, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text("Search all FYNX")
+            }
+        }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             FilterChip(searchMethod == FynxPeopleSearchMethod.USERNAME, { searchMethod = FynxPeopleSearchMethod.USERNAME; query = "" }, label = { Text("Username") })
             FilterChip(searchMethod == FynxPeopleSearchMethod.PHONE, { searchMethod = FynxPeopleSearchMethod.PHONE; query = "" }, label = { Text("Phone") })

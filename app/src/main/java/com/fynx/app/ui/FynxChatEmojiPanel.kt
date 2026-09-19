@@ -2,6 +2,8 @@ package com.fynx.app.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -38,10 +40,10 @@ fun FynxChatEmojiPanel(modifier: Modifier = Modifier, onEmojiSelected: (String) 
                 if (onClose != null) IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Close emoji panel") }
             }
             Spacer(Modifier.height(6.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 FynxEmojiCategories.keys.forEach { name -> FilterChip(selected = category == name, onClick = { category = name; query = "" }, label = { Text(name.take(3)) }) }
             }
-            LazyVerticalGrid(columns = GridCells.Fixed(8), modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 300.dp), contentPadding = PaddingValues(4.dp)) {
+            LazyVerticalGrid(columns = GridCells.Fixed(8), modifier = Modifier.fillMaxWidth().heightIn(min = 176.dp, max = 260.dp), contentPadding = PaddingValues(4.dp)) {
                 items(emojis) { emoji ->
                     Box(Modifier.padding(2.dp).aspectRatio(1f).clickable {
                         recent = listOf(emoji) + recent.filterNot { it == emoji }.take(31)
