@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.SentimentSatisfied
@@ -264,7 +266,7 @@ fun FynxHomeSocialHubPanel(
                                     }
                                     val player = remember(music.uri) {
                                         android.media.MediaPlayer().apply {
-                                            setDataSource(context, music.uri.toString())
+                                            setDataSource(context, music.uri)
                                             prepare()
                                         }
                                     }
