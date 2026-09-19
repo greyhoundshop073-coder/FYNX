@@ -65,7 +65,9 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var menuMessageId by remember { mutableStateOf<String?>(null) }
     var showGifts by remember { mutableStateOf(false) }
     var showChatMenu by remember { mutableStateOf(false) }
-    var showChatSettings by remember { mutableStateOf(false) }\n    var showEmojiPanel by remember { mutableStateOf(false) }\n    var reactionMessageId by remember { mutableStateOf<String?>(null) }
+    var showChatSettings by remember { mutableStateOf(false) }
+    var showEmojiPanel by remember { mutableStateOf(false) }
+    var reactionMessageId by remember { mutableStateOf<String?>(null) }
     var currentUserId by remember { mutableStateOf<String?>(null) }
     var recipientUserId by remember { mutableStateOf<String?>(null) }
     var recipientCreatedAt by remember(chat.username) { mutableStateOf<String?>(null) }
@@ -384,11 +386,13 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) {
-                        IconButton(onClick = { reactionMessageId = if (reactionMessageId == message.id) null else message.id }) { Icon(Icons.Default.EmojiEmotions, "React to message") }\n                        IconButton(onClick = { menuMessageId = if (menuMessageId == message.id) null else message.id }) {
+                        IconButton(onClick = { reactionMessageId = if (reactionMessageId == message.id) null else message.id }) { Icon(Icons.Default.EmojiEmotions, "React to message") }
+                        IconButton(onClick = { menuMessageId = if (menuMessageId == message.id) null else message.id }) {
                             Icon(Icons.Default.MoreVert, "Message actions")
                         }
                     }
-                    if (reactionMessageId == message.id) { Row(Modifier.fillMaxWidth().padding(bottom = 2.dp), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) { listOf("❤️","😂","👍","🙏","🔥","😮","😢","👏").forEach { emoji -> TextButton(onClick = { reactionMessageId = null; scope.launch { FynxProductionMessaging.reactToMessage(context, message.id, if (message.reaction == emoji) null else emoji).onSuccess { remote -> currentUserId?.let { myId -> messages = messages.map { existing -> if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing } } }.onFailure { networkError = it.message ?: "Reaction could not be saved" } } }) { Text(emoji, style = MaterialTheme.typography.titleLarge) } }; TextButton(onClick = { reactionMessageId = null; showEmojiPanel = true }) { Text("+") } } }\n                    if (menuMessageId == message.id) {
+                    if (reactionMessageId == message.id) { Row(Modifier.fillMaxWidth().padding(bottom = 2.dp), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) { listOf("❤️","😂","👍","🙏","🔥","😮","😢","👏").forEach { emoji -> TextButton(onClick = { reactionMessageId = null; scope.launch { FynxProductionMessaging.reactToMessage(context, message.id, if (message.reaction == emoji) null else emoji).onSuccess { remote -> currentUserId?.let { myId -> messages = messages.map { existing -> if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing } } }.onFailure { networkError = it.message ?: "Reaction could not be saved" } } }) { Text(emoji, style = MaterialTheme.typography.titleLarge) } }; TextButton(onClick = { reactionMessageId = null; showEmojiPanel = true }) { Text("+") } } }
+                    if (menuMessageId == message.id) {
                         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) {
                             if (message.voiceUri == null && message.text.isNotBlank()) IconButton(onClick = { clipboardManager.setText(AnnotatedString(message.text)); menuMessageId = null }) { Icon(Icons.Default.ContentCopy, "Copy") }
                             IconButton(onClick = { replyToId = message.id; menuMessageId = null }) { Icon(Icons.Default.Reply, "Reply") }
