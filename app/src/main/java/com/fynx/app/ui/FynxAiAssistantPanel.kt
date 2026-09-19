@@ -277,18 +277,9 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
     }
 
-    Box(
+    FynxAiAssistantBackdrop(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.surface,
-                        MaterialTheme.colorScheme.background
-                    )
-                )
-            )
             .imePadding()
     ) {
         Column(
