@@ -48,7 +48,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-/** User-facing FYNX AI assistant. Sensitive FYNX data is not exposed by this panel. */
+/** User-facing FYNX Assistant assistant. Sensitive FYNX data is not exposed by this panel. */
 @Composable
 fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
     var messages by remember { mutableStateOf(emptyList<AiMessage>()) }
@@ -88,7 +88,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
     LaunchedEffect(Unit) {
         FynxAiConversationClient.create(context)
             .onSuccess { conversationId = it.id }
-            .onFailure { errorMessage = it.message ?: "Unable to start a new FYNX AI conversation." }
+            .onFailure { errorMessage = it.message ?: "Unable to start a new FYNX Assistant conversation." }
     }
 
     fun startNewConversation() {
@@ -97,7 +97,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
             conversationSummary = ""; currentTask = ""
             FynxAiConversationClient.create(context)
                 .onSuccess { conversationId = it.id; messages = emptyList(); showConversationHistory = false }
-                .onFailure { errorMessage = it.message ?: "Unable to start a new FYNX AI conversation." }
+                .onFailure { errorMessage = it.message ?: "Unable to start a new FYNX Assistant conversation." }
         }
     }
 
@@ -180,7 +180,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
 
     val requestMicPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) connectVoice()
-        else errorMessage = "Microphone permission is required for FYNX AI voice."
+        else errorMessage = "Microphone permission is required for FYNX Assistant voice."
     }
 
     DisposableEffect(Unit) { onDispose { voiceEngine.close() } }
@@ -205,7 +205,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
 
     fun copyText(text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("FYNX AI", text))
+        clipboard.setPrimaryClip(ClipData.newPlainText("FYNX Assistant", text))
     }
 
     fun shareText(text: String) {
@@ -215,7 +215,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, text)
                 },
-                "Share FYNX AI response"
+                "Share FYNX Assistant response"
             )
         )
     }
@@ -260,7 +260,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                 }
                 .onFailure {
                     failedPrompt = prompt; input = prompt; if (attachment != null) pendingMediaId = attachment
-                    errorMessage = "FYNX AI is temporarily unavailable. You can retry or edit your message."
+                    errorMessage = "FYNX Assistant is temporarily unavailable. You can retry or edit your message."
                 }
             loading = false
         }
@@ -302,10 +302,10 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
             ) {
                 Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
-                Text("FYNX AI", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                Text("FYNX Assistant", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                 Box {
                     IconButton(enabled = !loading, onClick = { showConversationHistory = !showConversationHistory }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "FYNX AI menu")
+                        Icon(Icons.Default.MoreVert, contentDescription = "FYNX Assistant menu")
                     }
                     DropdownMenu(expanded = showConversationHistory, onDismissRequest = { showConversationHistory = false }) {
                         DropdownMenuItem(text = { Text("New conversation") }, onClick = { startNewConversation() })
@@ -360,7 +360,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                                 Spacer(Modifier.width(10.dp))
                                 Text(
-                                    if (voiceConnecting) "Connecting to FYNX AI…" else "FYNX AI is thinking…",
+                                    if (voiceConnecting) "Connecting to FYNX Assistant…" else "FYNX Assistant is thinking…",
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -441,11 +441,11 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                         minLines = 1,
                         maxLines = 5,
                         shape = FynxDesign.ControlShape,
-                        placeholder = { Text(if (voiceConnected) "Listening to you…" else "Message FYNX AI…") },
+                        placeholder = { Text(if (voiceConnected) "Listening to you…" else "Message FYNX Assistant…") },
                         leadingIcon = {
                             Box {
                                 IconButton(enabled = !loading, onClick = { showComposerTools = !showComposerTools }) {
-                                    Icon(Icons.Default.Add, contentDescription = "Attach to FYNX AI")
+                                    Icon(Icons.Default.Add, contentDescription = "Attach to FYNX Assistant")
                                 }
                                 DropdownMenu(expanded = showComposerTools, onDismissRequest = { showComposerTools = false }) {
                                     DropdownMenuItem(
@@ -487,7 +487,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                                         enabled = !voiceConnecting && !loading,
                                         onClick = { toggleVoice() }
                                     ) {
-                                        Icon(Icons.Default.Mic, contentDescription = "Speak to FYNX AI")
+                                        Icon(Icons.Default.Mic, contentDescription = "Speak to FYNX Assistant")
                                     }
                                 }
                             }
@@ -573,7 +573,7 @@ private fun AiChatBubble(
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text("FYNX AI", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        Text("FYNX Assistant", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     }
                     Spacer(Modifier.height(5.dp))
                 }
