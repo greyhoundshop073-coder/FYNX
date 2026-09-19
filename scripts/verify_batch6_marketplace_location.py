@@ -12,7 +12,7 @@ checks = [
     ("Marketplace requests location only from user actions", "RequestMultiplePermissions" in panel and "toggleNearby()" in panel and "useCurrentListingLocation()" in panel),
     ("Marketplace requests fine and coarse together", "ACCESS_FINE_LOCATION" in panel and "ACCESS_COARSE_LOCATION" in panel),
     ("Marketplace buyer has a real Near me control", 'Text(if (nearbyMode)' in panel and "Icons.Default.LocationOn" in panel),
-    ("Marketplace buyer uses real nearby discovery", "nearbyMarketplaceListings" in panel and "nearbyMarketplaceListings(context, query, category, nearbyLabel)" in remote),
+    ("Marketplace buyer uses real nearby discovery", "nearbyMarketplaceListings" in panel and "suspend fun nearbyMarketplaceListings(context: Context" in remote and "/api/marketplace/discovery" in remote),
     ("Discovery client sends the selected location area", 'location=${encode(location)}' in discovery),
     ("Backend filters only real listing locations", "l.location ILIKE" in routes and "req.query?.location" in routes),
     ("Seller can fill a real listing area from device location", 'Text(if (locationLoading) "Finding your area..." else "Use my current area")' in panel),
