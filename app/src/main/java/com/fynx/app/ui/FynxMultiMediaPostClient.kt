@@ -29,7 +29,8 @@ object FynxMultiMediaPostClient {
         selectedAudienceUserIds: List<String> = emptyList(),
         textBackground: FynxPostTextBackground? = null,
         location: String? = null,
-        music: FynxSelectedMusic? = null
+        music: FynxSelectedMusic? = null,
+        feelingActivity: FynxFeelingActivityOption? = null
     ): Result<String> = runCatching {
         val selected = uris.distinct().take(MAX_MEDIA)
         val caption = text.trim().take(4000)
@@ -62,6 +63,8 @@ object FynxMultiMediaPostClient {
                     put("musicTitle", music?.title?.trim()?.take(120) ?: JSONObject.NULL)
                     put("musicArtist", music?.artist?.trim()?.take(120) ?: JSONObject.NULL)
                     put("musicDurationMs", music?.durationMs?.coerceAtLeast(0L) ?: JSONObject.NULL)
+                    put("feelingActivityType", feelingActivity?.type ?: JSONObject.NULL)
+                    put("feelingActivity", feelingActivity?.label ?: JSONObject.NULL)
                 }.toString()
             ).getOrThrow()
             JSONObject(raw).optString("postId").takeIf { it.isNotBlank() }
@@ -123,6 +126,8 @@ object FynxMultiMediaPostClient {
                     put("musicTitle", music?.title?.trim()?.take(120) ?: JSONObject.NULL)
                     put("musicArtist", music?.artist?.trim()?.take(120) ?: JSONObject.NULL)
                     put("musicDurationMs", music?.durationMs?.coerceAtLeast(0L) ?: JSONObject.NULL)
+                    put("feelingActivityType", feelingActivity?.type ?: JSONObject.NULL)
+                    put("feelingActivity", feelingActivity?.label ?: JSONObject.NULL)
                 }.toString()
             ).getOrThrow()
             JSONObject(raw).optString("postId").takeIf { it.isNotBlank() }
