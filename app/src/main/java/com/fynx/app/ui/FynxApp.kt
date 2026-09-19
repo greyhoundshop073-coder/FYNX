@@ -140,7 +140,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                                     else FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp))
                                 }
                             }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                Modifier.align(Alignment.CenterStart).padding(start = 50.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                                 Spacer(Modifier.width(4.dp))
                                 Icon(Icons.Default.Verified, "Verified FYNX", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
