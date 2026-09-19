@@ -6,9 +6,6 @@ import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,16 +44,7 @@ fun HomePanel(
     }
 
     Column(Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.End
-        ) {
-            IconButton(onClick = onCreatePost) {
-                Icon(Icons.Default.CameraAlt, contentDescription = "Create photo or video post")
-            }
-        }
-
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        Box(Modifier.fillMaxSize()) {
             FynxHomeLifecycleRefresh { refreshKey ->
                 key(refreshKey) {
                     FynxRemoteHomeSocialPanel(
