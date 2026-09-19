@@ -64,6 +64,23 @@ export function registerMoneyPlannerRoutes({ app, pool, auth }) {
   const date = (value) => { const v = text(value, 10); return DATE_RE.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) ? v : null; };
   const id = (value) => { const n = Number(value); return Number.isSafeInteger(n) && n > 0 ? n : null; };
 
+  let ratesCache = new Map();
+  app.get('/api/money-planner/rates', auth, async (req, res) => {
+    try {
+      const base = currency(req.query?.base || 'USD');
+      if (!base) return res.status(400).json({ error: 'invalid currency base' });
+      const cached = ratesCache.get(base);
+      if (cached && cached.expiresAt > Date.now()) return res.json(cached.payload);
+      const response = await fetch('https://open.er-api.com/v6/latest/' + encodeURIComponent(base), { headers: { Accept: 'application/json', 'User-Agent': 'FYNX-Backend/1' }, signal: AbortSignal.timeout(10000) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.result !== 'success' || !data?.rates || typeof data.rates !== 'object') return res.status(502).json({ error: 'rate provider unavailable' });
+      const payload = { base, rates: Object.fromEntries(Object.entries(data.rates).filter(([code, value]) => CURRENCY_RE.test(code) && Number.isFinite(Number(value))).map(([code, value]) => [code, Number(value)])), updatedAt: data.time_last_update_unix ? Number(data.time_last_update_unix) * 1000 : Date.now() };
+      payload.rates[base] = 1;
+      ratesCache.set(base, { payload, expiresAt: Date.now() + 5 * 60 * 1000 });
+      return res.json(payload);
+    } catch (error) { console.error('money rates', error); return res.status(502).json({ error: 'rate provider unavailable' }); }
+  });
+
   app.get('/api/money-planner', auth, async (req, res) => {
     try {
       await ensureSchema();
