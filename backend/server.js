@@ -379,7 +379,7 @@ const statusSchema = async () => {
     END IF;
   END $;`);
   await pool.query("CREATE INDEX IF NOT EXISTS statuses_owner_idx ON statuses(owner_id,created_at DESC)");
-  await pool.query("CREATE INDEX IF NOT EXISTS statuses_expiry_idx ON statuses(expires_at)");`);
+  await pool.query("CREATE INDEX IF NOT EXISTS statuses_expiry_idx ON statuses(expires_at)");
 };
 
 app.get("/api/statuses", auth, async (req, res) => {
