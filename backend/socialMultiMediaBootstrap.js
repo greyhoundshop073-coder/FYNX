@@ -84,7 +84,11 @@ export async function installSocialMultiMedia() {
   if (!source.includes(schemaNeedle)) {
     throw new Error("FYNX multi-media bootstrap could not locate social post schema marker");
   }
-  source = source.replace(schemaNeedle, `${schemaNeedle}\n      CREATE TABLE IF NOT EXISTS social_post_media (\n        post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE,\n        media_id BIGINT NOT NULL REFERENCES message_media(id) ON DELETE CASCADE,\n        media_type TEXT NOT NULL CHECK (media_type IN ('image','video','audio')),\n        position INTEGER NOT NULL CHECK (position >= 0 AND position < 4),\n        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n        PRIMARY KEY (post_id, media_id),\n        UNIQUE (post_id, position)\n      );\n      CREATE INDEX IF NOT EXISTS social_post_media_post_idx ON social_post_media(post_id, position);\n      CREATE INDEX IF NOT EXISTS social_post_media_media_idx ON social_post_media(media_id);`);
+  source = source.replace(schemaNeedle, `${schemaNeedle}\n      CREATE TABLE IF NOT EXISTS social_post_media (\n        post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE,\n        media_id BIGINT NOT NULL REFERENCES message_media(id) ON DELETE CASCADE,\n        media_type TEXT NOT NULL CHECK (media_type IN ('image','video','audio')),\n        position INTEGER NOT NULL CHECK (position >= 0 AND position < 4),\n        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n        PRIMARY KEY (post_id, media_id),\n        UNIQUE (post_id, position)\n      );\n      CREATE INDEX IF NOT EXISTS social_post_media_post_idx ON social_post_media(post_id, position);\n      CREATE INDEX IF NOT EXISTS social_post_media_media_idx ON social_post_media(media_id);
+      ALTER TABLE social_posts DROP CONSTRAINT IF EXISTS social_posts_visibility_check;
+      ALTER TABLE social_posts ADD CONSTRAINT social_posts_visibility_check CHECK (visibility IN ('PUBLIC','FRIENDS_ONLY','SELECTED_PEOPLE','ONLY_ME'));
+      CREATE TABLE IF NOT EXISTS social_post_audience (post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(post_id,user_id));
+      CREATE INDEX IF NOT EXISTS social_post_audience_user_idx ON social_post_audience(user_id, created_at DESC);`);
 
   const routes = `
   // fynxHomeMultiMediaPosts: one real post can own an ordered set of up to four visual assets.
@@ -93,7 +97,10 @@ export async function installSocialMultiMedia() {
     try {
       await ensureSocialSchema();
       const text = typeof req.body?.text === 'string' ? req.body.text.trim().slice(0, 4000) : '';
-      const visibility = req.body?.visibility === 'FRIENDS_ONLY' ? 'FRIENDS_ONLY' : 'PUBLIC';
+      const visibility = ['PUBLIC','FRIENDS_ONLY','SELECTED_PEOPLE','ONLY_ME'].includes(String(req.body?.visibility || '').toUpperCase()) ? String(req.body.visibility).toUpperCase() : 'PUBLIC';
+      const audienceUserIds = Array.isArray(req.body?.audienceUserIds) ? req.body.audienceUserIds.map(String).map(value => value.trim()).filter(Boolean).slice(0, 100) : [];
+      if (visibility === 'SELECTED_PEOPLE' && audienceUserIds.length === 0) return res.status(400).json({ error: 'select at least one person' });
+      if (visibility !== 'SELECTED_PEOPLE' && audienceUserIds.length) return res.status(400).json({ error: 'invalid selected audience' });
       const rawIds = Array.isArray(req.body?.mediaIds) ? req.body.mediaIds : [];
       const rawTypes = Array.isArray(req.body?.mediaTypes) ? req.body.mediaTypes : [];
       const mediaIds = rawIds.map(Number);
@@ -113,6 +120,10 @@ export async function installSocialMultiMedia() {
         return res.status(400).json({ error: 'Home posts support images and videos' });
       }
       if (!text && mediaIds.length === 0) return res.status(400).json({ error: 'add a caption or media' });
+      if (visibility === 'SELECTED_PEOPLE') {
+        const friends = await client.query(`SELECT CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END AS id FROM friendships f WHERE (f.user_id=$1 OR f.friend_id=$1) AND f.status='accepted' AND CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END = ANY($2::bigint[])`, [req.user.sub, audienceUserIds]);
+        if (friends.rows.length !== audienceUserIds.length) return res.status(403).json({ error: 'selected audience must contain your accepted friends' });
+      }
 
       const mediaResult = await client.query(
         \`SELECT id, owner_id, mime_type FROM message_media WHERE id = ANY($1::bigint[])\`,
@@ -139,6 +150,7 @@ export async function installSocialMultiMedia() {
           [postId, mediaIds[position], mediaTypes[position], position]
         );
       }
+      if (visibility === 'SELECTED_PEOPLE') await client.query('INSERT INTO social_post_audience(post_id,user_id) SELECT $1,unnest($2::bigint[])', [postId, audienceUserIds]);
       await client.query('COMMIT');
       return res.status(201).json({ postId: String(postId), mediaCount: mediaIds.length });
     } catch (error) {
