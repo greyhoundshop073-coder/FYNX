@@ -17,7 +17,7 @@ checks = [
     ("successful publish requests an authoritative Home refresh", "FynxHomeLifecycleRefreshBus.request(context)" in client and "publishRefreshKey" in refresh),
     ("Home multi-media post is bounded to four assets", "private const val MAX_MEDIA = 4" in client),
     ("backend stores ordered post media separately", "CREATE TABLE IF NOT EXISTS social_post_media" in backend and "UNIQUE (post_id, position)" in backend),
-    ("backend preserves first media for legacy feed clients", "INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,text_background,text_background_color,text_foreground_color)" in backend),
+    ("backend preserves first media for legacy feed clients", "INSERT INTO social_posts" in backend and "media_id,media_type" in backend and "mediaIds[0]" in backend),
     ("backend enforces media ownership", "String(row.owner_id) !== String(req.user.sub)" in backend),
     ("backend validates requested media MIME type", "startsWith(expectedPrefix)" in backend),
     ("backend exposes authorized post media", "app.get('/api/social/posts/:id/media'" in backend and "visibleSocialPost(postId, req.user.sub)" in backend),
