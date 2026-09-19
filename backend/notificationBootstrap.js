@@ -30,7 +30,7 @@ await patchOnce("server.js", [
   },
   {
     marker: '    await broadcastMessage(message);\n    return res.status(201).json({ message });',
-    replacement: '    await broadcastMessage(message);\n    await queueFynxNotification(pool, { userId: recipient.id, type: "MESSAGE", title: `Message from @${req.user.username || "FYNX user"}`, message: "You have a new message.", targetId: recipient.username, sourceUsername: req.user.username || null, route: `fynx://chat/${encodeURIComponent(req.user.username || "")}`, notificationId: `message-${message.id}` });\n    return res.status(201).json({ message });'
+    replacement: '    await broadcastMessage(message);\n    await queueFynxNotification(pool, { userId: recipient.id, type: "MESSAGE", title: "New message", message: "You have a new message.", targetId: recipient.username, sourceUsername: req.user.username || null, route: "fynx://chat/" + encodeURIComponent(req.user.username || ""), notificationId: "message-" + message.id });\n    return res.status(201).json({ message });'
   }
 ]);
 
