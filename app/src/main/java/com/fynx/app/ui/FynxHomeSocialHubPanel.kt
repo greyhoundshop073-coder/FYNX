@@ -1,12 +1,15 @@
 package com.fynx.app.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.ImageView
 import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.BasicTextField
@@ -76,6 +79,8 @@ fun FynxHomeSocialHubPanel(
     var audience by remember { mutableStateOf(if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS) }
     var selectedAudienceIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var textBackground by remember { mutableStateOf<FynxPostTextBackground?>(null) }
+    var postLocation by remember { mutableStateOf<String?>(null) }
+    var locationLoading by remember { mutableStateOf(false) }
     var showPeoplePicker by remember { mutableStateOf(false) }
     var audienceFriends by remember { mutableStateOf<List<FynxFriend>>(emptyList()) }
     var audienceLoading by remember { mutableStateOf(false) }
@@ -98,6 +103,16 @@ fun FynxHomeSocialHubPanel(
             selectedVisualIndex = 0
             showComposer = true
         }
+    }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true) {
+            locationLoading = true
+            scope.launch {
+                FynxPostLocationClient.currentPlace(context).onSuccess { postLocation = it; notice = null }.onFailure { notice = it.message ?: "Could not determine your location." }
+                locationLoading = false
+            }
+        } else notice = "Location permission was not granted."
     }
 
     val soundPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -152,6 +167,7 @@ fun FynxHomeSocialHubPanel(
             selectedVisualIndex = 0
             text = ""
             textBackground = null
+            postLocation = null
             selectedAudienceIds = emptySet()
             audience = if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS
             visibility = defaultPostVisibility
@@ -166,6 +182,7 @@ fun FynxHomeSocialHubPanel(
         selectedVisualIndex = 0
         text = ""
         textBackground = null
+        postLocation = null
         selectedAudienceIds = emptySet()
         audience = if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS
         visibility = defaultPostVisibility
@@ -189,7 +206,7 @@ fun FynxHomeSocialHubPanel(
                         Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUris.isNotEmpty()), onClick = {
                             if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) { notice = "You are offline. Reconnect before publishing this post."; return@Button }
                             posting = true; notice = null
-                            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
+                            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground, postLocation) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
                         }) { Text(if (posting) "Publishing…" else "Post") }
                     }
 
@@ -215,8 +232,26 @@ fun FynxHomeSocialHubPanel(
                         ) {
                             ComposerQuickChip("Music", Icons.Default.MusicNote, enabled = false) {}
                             ComposerQuickChip("People", Icons.Default.People, enabled = !posting && postingAllowed) { showPeoplePicker = true }
-                            ComposerQuickChip("Location", Icons.Default.LocationOn, enabled = false) {}
+                            ComposerQuickChip("Location", Icons.Default.LocationOn, enabled = !posting && postingAllowed) {
+                                val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                if (fine || coarse) {
+                                    locationLoading = true
+                                    scope.launch {
+                                        FynxPostLocationClient.currentPlace(context).onSuccess { postLocation = it; notice = null }.onFailure { notice = it.message ?: "Could not determine your location." }
+                                        locationLoading = false
+                                    }
+                                } else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                            }
                             ComposerQuickChip("Feeling/Activity", Icons.Default.SentimentSatisfied, enabled = false) {}
+                        }
+
+                        if (postLocation != null || locationLoading) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.LocationOn, contentDescription = "Post location", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                Text(if (locationLoading) "Getting location…" else postLocation.orEmpty(), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                                if (!locationLoading) IconButton(onClick = { postLocation = null }, enabled = !posting) { Icon(Icons.Default.Close, "Remove location") }
+                            }
                         }
 
                         BasicTextField(
