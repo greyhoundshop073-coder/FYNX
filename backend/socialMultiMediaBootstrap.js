@@ -102,7 +102,7 @@ export async function installSocialMultiMedia() {
       const text = typeof req.body?.text === 'string' ? req.body.text.trim().slice(0, 4000) : '';
       const visibility = ['PUBLIC','FRIENDS_ONLY','SELECTED_PEOPLE','ONLY_ME'].includes(String(req.body?.visibility || '').toUpperCase()) ? String(req.body.visibility).toUpperCase() : 'PUBLIC';
       const backgroundKey = typeof req.body?.textBackground === 'string' ? req.body.textBackground.trim().toUpperCase() : '';
-      const backgroundStyles = { OCEAN: [4280329664,4294967295], VIOLET: [4274672282,4294967295], EMERALD: [4278216060,4294967295], SUNSET: [4293291520,4294967295], CHARCOAL: [4280694328,4294967295] };
+      const backgroundStyles = { OCEAN: [0xFF1565C0,0xFFFFFFFF], VIOLET: [0xFF6A1B9A,0xFFFFFFFF], EMERALD: [0xFF00695C,0xFFFFFFFF], SUNSET: [0xFFE65100,0xFFFFFFFF], CHARCOAL: [0xFF263238,0xFFFFFFFF] };
       const backgroundStyle = backgroundKey && backgroundStyles[backgroundKey] ? backgroundStyles[backgroundKey] : null;
       const audienceUserIds = Array.isArray(req.body?.audienceUserIds) ? req.body.audienceUserIds.map(String).map(value => value.trim()).filter(Boolean).slice(0, 100) : [];
       if (visibility === 'SELECTED_PEOPLE' && audienceUserIds.length === 0) return res.status(400).json({ error: 'select at least one person' });
