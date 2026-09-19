@@ -24,9 +24,6 @@ private val fallbackRatesFromUsd: Map<String, Double> = linkedMapOf(
     "AED" to 3.67, "JPY" to 147.0, "CAD" to 1.38, "AUD" to 1.53,
     "INR" to 88.0, "CNY" to 7.15, "ZAR" to 17.5, "GHS" to 12.5, "KES" to 129.0
 )
-private const val RATE_CONNECT_TIMEOUT_MS = 8_000
-private const val RATE_READ_TIMEOUT_MS = 12_000
-private const val RATE_MAX_RESPONSE_BYTES = 1_000_000
 private const val RATE_RETRIES = 2
 
 @Composable
@@ -71,9 +68,9 @@ fun CurrencyConverterPanel() {
         converted?.let { value ->
             Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
                 Text("Converted amount", style = MaterialTheme.typography.titleMedium)
-                Text("${money(value)} $to", style = MaterialTheme.typography.headlineMedium)
+                Text("${String.format(Locale.US, "%.2f", value)} $to", style = MaterialTheme.typography.headlineMedium)
                 val reference = if (from == "USD") rates[to] ?: 0.0 else if (to == "USD") 1.0 / (rates[from] ?: 1.0) else (rates[to] ?: 0.0) / (rates[from] ?: 1.0)
-                Text("Reference: 1 $from ≈ ${money(reference)} $to", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Reference: 1 $from ≈ ${String.format(Locale.US, "%.4f", reference)} $to", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (ratesUpdated) Text("Rates by ExchangeRate-API • updated periodically", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } }
         }
@@ -124,4 +121,3 @@ private fun awaitValidatedNetwork(context: Context) {
     }
     if (!valid) throw IOException("Network connection is unavailable")
 }
-
