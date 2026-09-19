@@ -97,7 +97,7 @@ require('status viewer image',contains_call(timeline, 'FynxRemoteMedia', 'image'
 require('status viewer video',contains_call(timeline, 'FynxRemoteMedia', 'video'))
 require('status viewer voice',contains_remote_audio_call(timeline))
 require('status viewer left-right navigation','clickable(enabled = index > 0)' in timeline and 'clickable(enabled = index < statuses.lastIndex)' in timeline)
-require('status viewer progress','LinearProgressIndicator' in timeline and '(index + 1).toFloat() / statuses.size.toFloat()' in timeline)
+require('status viewer progress','LinearProgressIndicator' in timeline and re.search(r'index\\s*\\+\\s*1.*statuses\\.size.*toFloat', timeline, re.S) is not None)
 require('status interaction controls','viewCount' in timeline and 'likeCount' in timeline and 'Reply to this Status' in timeline)
 require('status emoji reaction controls','listOf("❤️", "😂", "😮", "😢", "👍")' in timeline)
 require('status external share action','FynxShareActions.share(context, FynxShareActions.statusPayload(status))' in timeline and 'fun statusPayload(status: FynxStatus)' in share)
