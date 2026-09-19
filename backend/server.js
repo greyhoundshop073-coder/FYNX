@@ -373,8 +373,13 @@ const statusSchema = async () => {
   await pool.query("UPDATE statuses SET audience = CASE WHEN private_status THEN 'FRIENDS' ELSE 'EVERYONE' END WHERE audience IS NULL");
   await pool.query("ALTER TABLE statuses ALTER COLUMN audience SET DEFAULT 'EVERYONE'");
   await pool.query("ALTER TABLE statuses ALTER COLUMN audience SET NOT NULL");
-  await pool.query("ALTER TABLE statuses ADD CONSTRAINT statuses_audience_check CHECK (audience IN ('EVERYONE','FRIENDS','ONLY_ME'))");
-  CREATE INDEX IF NOT EXISTS statuses_owner_idx ON statuses(owner_id,created_at DESC); CREATE INDEX IF NOT EXISTS statuses_expiry_idx ON statuses(expires_at);`);
+  await pool.query(`DO $ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'statuses_audience_check') THEN
+      ALTER TABLE statuses ADD CONSTRAINT statuses_audience_check CHECK (audience IN ('EVERYONE','FRIENDS','ONLY_ME'));
+    END IF;
+  END $;`);
+  await pool.query("CREATE INDEX IF NOT EXISTS statuses_owner_idx ON statuses(owner_id,created_at DESC)");
+  await pool.query("CREATE INDEX IF NOT EXISTS statuses_expiry_idx ON statuses(expires_at)");`);
 };
 
 app.get("/api/statuses", auth, async (req, res) => {
