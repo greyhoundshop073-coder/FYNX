@@ -5,6 +5,7 @@ import android.net.Uri
 import android.widget.ImageView
 import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.BasicTextField
@@ -215,7 +216,7 @@ fun FynxHomeSocialHubPanel(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             ComposerAction("Photo", Icons.Default.Image, { gallery.launch(
-                                    ActivityResultContracts.PickVisualMediaRequest(
+                                    PickVisualMediaRequest(
                                         ActivityResultContracts.PickVisualMedia.ImageAndVideo
                                     )
                                 ) }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
