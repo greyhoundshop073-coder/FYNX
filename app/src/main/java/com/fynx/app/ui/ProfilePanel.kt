@@ -38,6 +38,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
     var description by remember(session.username) { mutableStateOf(FynxPreferencesStore.loadDescription(context)) }
     var photo by remember(session.username) { mutableStateOf(FynxPreferencesStore.loadProfilePhoto(context)) }
     var remotePhotoId by remember(session.username) { mutableStateOf(session.username?.let { FynxProfileRemoteClient.cachedProfilePhotoId(context, it) }) }
+    var remoteProfileLoaded by remember(session.username) { mutableStateOf(false) }
     var syncing by remember { mutableStateOf(false) }
     var syncError by remember { mutableStateOf<String?>(null) }
     var settings by remember { mutableStateOf(FynxPreferencesStore.loadSettings(context)) }
@@ -64,8 +65,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                 postCount = remote.postCount
                 followerCount = remote.followerCount
                 followingCount = remote.followingCount
-                remotePhotoId = remote.profilePhotoMediaId ?: FynxProfileRemoteClient.cachedProfilePhotoId(context, session.username)
-                profile = profile.copy(
+                // Once the server responds, its profilePhotoMediaId is authoritative.\n                // Do not resurrect a stale local/cached photo when the server says null.\n                remotePhotoId = remote.profilePhotoMediaId\n                remoteProfileLoaded = true\n                profile = profile.copy(
                     displayName = remote.displayName.ifBlank { profile.displayName },
                     username = remote.username.ifBlank { profile.username },
                     bio = remote.bio.ifBlank { profile.bio }
@@ -121,7 +121,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(surface), border = BorderStroke(1.dp, outline)) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 20.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        if (remotePhotoId != null) FynxRemoteProfileAvatar(remotePhotoId, profile.displayName, Modifier.size(92.dp).clip(CircleShape)) else FynxProfileImage(profile.displayName, photo, Modifier.size(92.dp).clip(CircleShape))
+                        if (remotePhotoId != null) FynxRemoteProfileAvatar(remotePhotoId, profile.displayName, Modifier.size(92.dp).clip(CircleShape)) else if (!remoteProfileLoaded) FynxProfileImage(profile.displayName, photo, Modifier.size(92.dp).clip(CircleShape)) else FynxAvatar(profile.displayName, Modifier.size(92.dp).clip(CircleShape))
                         Spacer(Modifier.width(18.dp))
                         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly) {
                             ProfileStat("Posts", formatProfileCount(postCount), Modifier.weight(1f))
@@ -148,7 +148,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     ProfileInfoRow("Username", "@${profile.username.removePrefix("@")}")
-                    ProfileInfoRow("Profile photo", if (photo == null && remotePhotoId == null) "Not set" else "Set")
+                    ProfileInfoRow("Profile photo", if (remotePhotoId == null && (remoteProfileLoaded || photo == null)) "Not set" else "Set")
                     ProfileInfoRow("Account", if (session.state == AuthState.SIGNED_IN) "Signed in" else "Signed out")
                 }
             }
