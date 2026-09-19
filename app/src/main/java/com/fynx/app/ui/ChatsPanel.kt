@@ -54,7 +54,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             val normalized = chat.username.removePrefix("@").trim()
             if (normalized.isBlank()) chat else FynxProfileRemoteClient.get(context, normalized).getOrNull()?.let { profile ->
                 val mediaId = profile.profilePhotoMediaId
-                if (!mediaId.isNullOrBlank()) chat.copy(avatarUri = "/api/media/${mediaId.trim()}") else chat
+                if (!mediaId.isNullOrBlank()) chat.copy(avatarUri = "/api/media/${mediaId.trim()}") else chat.copy(avatarUri = null)
             } ?: chat
         }
         if (refreshed != stored) {
