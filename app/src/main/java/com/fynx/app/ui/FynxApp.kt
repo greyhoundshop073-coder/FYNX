@@ -110,7 +110,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     }
     if (!FYNX_PREVIEW_MODE && authSession.state != AuthState.SIGNED_IN) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }) { FynxAuthGate { username -> FynxAuthStore.save(context, username); authSession = AuthSession(AuthState.SIGNED_IN, username) } }; return }
     if (selected == "Admin" && adminRole == null) selected = "Features"
-    val mainNav = listOf(FynxNavItem("Home", "Home", Icons.Default.Home), FynxNavItem("Chats", "Chats", Icons.Default.ChatBubbleOutline), FynxNavItem("Friends", "Friends", Icons.Default.Person), FynxNavItem("Marketplace", "Market", Icons.Default.ShoppingBag), FynxNavItem("Business Account", "Business", Icons.Default.Storefront), FynxNavItem("Features", "More", Icons.Default.MoreHoriz))
+    val mainNav = listOf(FynxNavItem("Home", "Home", Icons.Default.Home), FynxNavItem("Chats", "Chat", Icons.Default.ChatBubbleOutline), FynxNavItem("Friends", "Friends", Icons.Default.Person), FynxNavItem("Marketplace", "Market", Icons.Default.ShoppingBag), FynxNavItem("Features", "More", Icons.Default.MoreHoriz))
     val isSecondary = selected !in mainNav.map { it.key }.toSet()
     BackHandler(enabled = profileUser != null) { profileUser = null }
     BackHandler(enabled = openChat != null) { openChat = null }
@@ -203,31 +203,61 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 }
             }
         }, bottomBar = {
-            // Keep the primary navigation in the normal Scaffold flow instead of
-            // floating it over Home content. IME padding lifts it above the keyboard.
-            NavigationBar(
+            // Keep the navigation inside the rounded floating surface requested for FYNX.
+            // The whole surface stays above system navigation and lifts above the IME.
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .imePadding(),
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                tonalElevation = 0.dp,
-                windowInsets = NavigationBarDefaults.windowInsets
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
-                mainNav.forEach { item ->
-                    NavigationBarItem(
-                        selected = selected == item.key,
-                        onClick = { selected = item.key },
-                        icon = { Icon(item.icon, contentDescription = item.label) },
-                        label = { Text(item.label, maxLines = 1) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    )
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .shadow(8.dp, RoundedCornerShape(32.dp)),
+                    shape = RoundedCornerShape(32.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                    tonalElevation = 0.dp
+                ) {
+                    NavigationBar(
+                        modifier = Modifier.fillMaxSize(),
+                        containerColor = Color.Transparent,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        tonalElevation = 0.dp,
+                        windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
+                    ) {
+                        mainNav.forEach { item ->
+                            NavigationBarItem(
+                                modifier = Modifier.height(64.dp),
+                                selected = selected == item.key,
+                                onClick = { selected = item.key },
+                                icon = {
+                                    Icon(
+                                        item.icon,
+                                        contentDescription = item.label,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        item.label,
+                                        maxLines = 1,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                },
+                                alwaysShowLabel = true,
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            )
+                        }
+                    }
                 }
             }
         }) { padding -> Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 6.dp).pointerInput(selected) { var drag = 0f; detectHorizontalDragGestures(onDragStart = { drag = 0f }, onHorizontalDrag = { _, amount -> drag += amount }, onDragEnd = { if (kotlin.math.abs(drag) >= 80f) { val next = if (drag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex) else (mainIndex - 1).coerceAtLeast(0); selected = mainNav[next].key } }) }) { when (selected) {
