@@ -359,10 +359,10 @@ private fun FynxRecentMediaCell(media: FynxRecentMedia) {
 
     LaunchedEffect(media.uri, context) {
         bitmap = runCatching {
-            if (media.isVideo) {
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
                 contextLoadThumbnail(context, media.uri)
             } else {
-                context.contentResolver.loadThumbnail(media.uri, Size(360, 360), null)
+                null
             }
         }.getOrNull()
     }
@@ -401,6 +401,7 @@ private fun FynxRecentMediaCell(media: FynxRecentMedia) {
     }
 }
 
+@androidx.annotation.RequiresApi(29)
 private fun contextLoadThumbnail(context: android.content.Context, uri: Uri): android.graphics.Bitmap? {
     return if (android.os.Build.VERSION.SDK_INT >= 29) {
         context.contentResolver.loadThumbnail(uri, Size(360, 360), null)
