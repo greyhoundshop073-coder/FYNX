@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -14,6 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Send
@@ -35,7 +38,10 @@ import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 
 @Composable
-fun FynxStatusTimelinePanel() {
+fun FynxStatusTimelinePanel(
+    onCameraClick: () -> Unit = {},
+    onCreateClick: () -> Unit = {}
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val auth = remember(context) { FynxAuthStore.load(context) }
     val username = auth.username?.removePrefix("@").orEmpty()
@@ -70,39 +76,61 @@ fun FynxStatusTimelinePanel() {
     val latestByOwner = visibleStatuses.groupBy { it.ownerUsername }
         .mapNotNull { (_, values) -> values.maxByOrNull { it.createdAtMillis } }
         .sortedByDescending { it.createdAtMillis }
+    val myStatus = latestByOwner.firstOrNull { it.ownerUsername.equals(username, true) }
+    val recentUpdates = latestByOwner.filterNot { it.ownerUsername.equals(username, true) }
+    var menuOpen by remember { mutableStateOf(false) }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Status", style = MaterialTheme.typography.headlineSmall)
-                Text("Photos, videos, text and voice • 24 hours", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            TextButton(onClick = { refreshKey++ }) { Text("Refresh") }
-        }
-        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        if (!loading && latestByOwner.isEmpty() && error == null) {
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Add, null)
-                    Spacer(Modifier.width(10.dp))
-                    Text("No active Status yet. Tap + to share your first one.")
-                }
-            }
-        } else {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(vertical = 4.dp)) {
-                items(latestByOwner, key = { it.ownerUsername }) { status ->
-                    StatusBubble(status, status.ownerUsername.equals(username, true)) { selected = status }
+    Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Status", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            IconButton(onClick = onCameraClick) { Icon(Icons.Default.CameraAlt, "Camera") }
+            Box {
+                IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, "Status menu") }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(text = { Text("Refresh") }, onClick = { menuOpen = false; refreshKey++ })
                 }
             }
         }
-        HorizontalDivider()
-        Text("Recent Status", style = MaterialTheme.typography.titleMedium)
-        Text("Tap a circle to open Status. Views, likes, reactions and replies are saved to FYNX.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (visibleStatuses.isNotEmpty()) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(visibleStatuses.take(12), key = { it.id }) { status ->
-                    AssistChip(onClick = { selected = status }, label = { Text("${status.ownerDisplayName.ifBlank { status.ownerUsername }} • ${statusTypeLabel(status.type)}") })
+        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 18.dp))
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)) }
+        LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 4.dp, bottom = 18.dp)
+        ) {
+            item {
+                StatusHomeRow(
+                    ownerUsername = username,
+                    ownerDisplayName = auth.displayName?.ifBlank { username } ?: username,
+                    status = myStatus,
+                    isMe = true,
+                    onClick = { if (myStatus != null) selected = myStatus else onCreateClick() },
+                    showAdd = true
+                )
+            }
+            item {
+                Spacer(Modifier.height(22.dp))
+                Text("Recent updates", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+            }
+            if (recentUpdates.isEmpty()) {
+                item {
+                    Text(
+                        if (loading) "Loading recent updates…" else "No recent updates.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 16.dp)
+                    )
+                }
+            } else {
+                items(recentUpdates, key = { it.ownerUsername }) { status ->
+                    StatusHomeRow(
+                        ownerUsername = status.ownerUsername,
+                        ownerDisplayName = status.ownerDisplayName.ifBlank { status.ownerUsername },
+                        status = status,
+                        isMe = false,
+                        onClick = { selected = status }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
                 }
             }
         }
@@ -121,38 +149,67 @@ fun FynxStatusTimelinePanel() {
 }
 
 @Composable
-private fun StatusBubble(status: FynxStatus, isMe: Boolean, onClick: () -> Unit) {
+private fun StatusAvatar(ownerUsername: String, ownerDisplayName: String, showAdd: Boolean = false) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val cachedPhotoId = remember(status.ownerUsername) { FynxProfileRemoteClient.cachedProfilePhotoId(context, status.ownerUsername) }
-    var profilePhotoMediaId by remember(status.ownerUsername) { mutableStateOf(cachedPhotoId) }
-    var remoteProfileLoaded by remember(status.ownerUsername) { mutableStateOf(false) }
-
-    LaunchedEffect(status.ownerUsername) {
-        FynxProfileRemoteClient.get(context, status.ownerUsername)
-            .onSuccess {
-                // Cache is only a cold-start placeholder. Once the server responds,
-                // its profilePhotoMediaId is authoritative, including an explicit null.
-                profilePhotoMediaId = it.profilePhotoMediaId
-                remoteProfileLoaded = true
-            }
-            .onFailure {
-                if (!remoteProfileLoaded) profilePhotoMediaId = cachedPhotoId
-            }
+    val cachedPhotoId = remember(ownerUsername) { FynxProfileRemoteClient.cachedProfilePhotoId(context, ownerUsername) }
+    var profilePhotoMediaId by remember(ownerUsername) { mutableStateOf(cachedPhotoId) }
+    LaunchedEffect(ownerUsername) {
+        FynxProfileRemoteClient.get(context, ownerUsername)
+            .onSuccess { profilePhotoMediaId = it.profilePhotoMediaId }
+            .onFailure { profilePhotoMediaId = cachedPhotoId }
     }
-
-    Column(Modifier.width(74.dp).clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(66.dp).border(3.dp, MaterialTheme.colorScheme.primary, CircleShape).padding(4.dp)) {
+    Box(Modifier.size(58.dp)) {
+        Box(Modifier.fillMaxSize().border(2.dp, MaterialTheme.colorScheme.primary, CircleShape).padding(3.dp)) {
             if (!profilePhotoMediaId.isNullOrBlank()) {
-                FynxRemoteProfileAvatar(profilePhotoMediaId, status.ownerDisplayName.ifBlank { status.ownerUsername }, Modifier.fillMaxSize().clip(CircleShape))
+                FynxRemoteProfileAvatar(profilePhotoMediaId, ownerDisplayName, Modifier.fillMaxSize().clip(CircleShape))
             } else {
                 Box(Modifier.fillMaxSize().clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-                    Text(status.ownerDisplayName.ifBlank { status.ownerUsername }.take(1).uppercase(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(ownerDisplayName.take(1).uppercase(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
             }
         }
-        Spacer(Modifier.height(5.dp))
-        Text(if (isMe) "My status" else status.ownerDisplayName.ifBlank { status.ownerUsername }, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-        Text(statusTypeLabel(status.type), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (showAdd) {
+            Box(Modifier.size(22.dp).align(Alignment.BottomEnd).background(MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Add, "Add Status", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(15.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusHomeRow(
+    ownerUsername: String,
+    ownerDisplayName: String,
+    status: FynxStatus?,
+    isMe: Boolean,
+    onClick: () -> Unit,
+    showAdd: Boolean = false
+) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+        StatusAvatar(ownerUsername, ownerDisplayName, showAdd)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(if (isMe) "My status" else ownerDisplayName, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(
+                if (isMe && status == null) "Tap to add status update"
+                else if (isMe) "Tap to view your latest update"
+                else formatStatusTimestamp(status?.createdAtMillis ?: 0L),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+private fun formatStatusTimestamp(timeMillis: Long): String {
+    val now = java.util.Calendar.getInstance()
+    val date = java.util.Calendar.getInstance().apply { timeInMillis = timeMillis }
+    val time = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(java.util.Date(timeMillis))
+    return if (now.get(java.util.Calendar.YEAR) == date.get(java.util.Calendar.YEAR) && now.get(java.util.Calendar.DAY_OF_YEAR) == date.get(java.util.Calendar.DAY_OF_YEAR)) {
+        "Today, " + time
+    } else {
+        java.text.SimpleDateFormat("MMM d, h:mm a", java.util.Locale.getDefault()).format(java.util.Date(timeMillis))
     }
 }
 
