@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.time.Instant
 import java.util.Locale
 import java.util.UUID
 
@@ -49,6 +50,8 @@ internal data class FynxMarketplaceCheckoutQuote(
     val total: Double,
     val protectionText: String
 )
+
+internal fun marketplaceQuoteExpired(expiresAt: String, now: Instant = Instant.now()): Boolean = runCatching { !Instant.parse(expiresAt).isAfter(now) }.getOrDefault(true)
 
 internal data class FynxMarketplaceCheckoutAddress(
     val name: String,
@@ -246,6 +249,11 @@ internal fun FynxMarketplaceCheckoutDialog(
                 enabled = quote != null && !busy,
                 onClick = {
                     val q = quote ?: return@Button
+                    if (marketplaceQuoteExpired(q.expiresAt)) {
+                        quote = null
+                        message = "This checkout quote has expired. Review the exact total again."
+                        return@Button
+                    }
                     busy = true
                     message = null
                     val stableOrderId = UUID.randomUUID().toString()
