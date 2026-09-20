@@ -312,6 +312,7 @@ private fun FynxAddStatusPanel(
     ) {
         Icon(Icons.Default.SelectAll, contentDescription = "Select multiple media")
     }
+    }
 }
 
 @Composable
