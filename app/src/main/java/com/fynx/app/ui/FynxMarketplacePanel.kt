@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -131,11 +132,18 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     fun contactSeller(username: String) {
         val normalized = username.removePrefix("@").trim()
         if (normalized.isNotBlank()) {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FynxDeepLinkParser.chatAppLink(normalized))))
+            runCatching {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FynxDeepLinkParser.chatAppLink(normalized))))
+            }.onFailure {
+                error = "FYNX could not open the seller chat. Please try again."
+            }
         }
     }
 
-    LaunchedEffect(query, category, nearbyMode, nearbyLabel) { reload() }
+    LaunchedEffect(query, category, nearbyMode, nearbyLabel) {
+        delay(if (query.isBlank()) 0L else 350L)
+        reload()
+    }
 
     LaunchedEffect(listings) {
         val sellers = listings.distinctBy { it.sellerUsername.removePrefix("@").trim().lowercase() }.take(12)
