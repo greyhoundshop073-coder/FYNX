@@ -8,6 +8,15 @@ object FynxAdminClient {
     data class Announcement(val id: String, val title: String, val body: String, val priority: String, val publishedAt: String)
     data class Dashboard(val role: String, val users: Int, val openReports: Int, val openAppeals: Int, val safetyEvents24h: Int)
     data class Admin(val id: String, val username: String, val displayName: String, val grantedAt: String)
+    data class MusicTrack(
+        val id: String,
+        val mediaId: String,
+        val title: String,
+        val artist: String,
+        val durationMs: Long,
+        val category: String,
+        val active: Boolean
+    )
     data class ProtectionCase(
         val id: String,
         val orderId: String,
@@ -52,6 +61,54 @@ object FynxAdminClient {
                 }
             }
         }
+
+    suspend fun musicCatalogue(context: Context): Result<List<MusicTrack>> =
+        FynxBackendClient.get(context, "/api/admin/social/music/catalogue").mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("tracks") ?: return@mapCatching emptyList()
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    add(
+                        MusicTrack(
+                            id = item.optString("id"),
+                            mediaId = item.optString("mediaId"),
+                            title = item.optString("title"),
+                            artist = item.optString("artist"),
+                            durationMs = item.optLong("durationMs", 0L),
+                            category = item.optString("category", "FYNX"),
+                            active = item.optBoolean("active", true)
+                        )
+                    )
+                }
+            }
+        }
+
+    suspend fun addMusicTrack(context: Context, mediaId: String, title: String, artist: String, durationMs: Long, category: String = "FYNX"): Result<MusicTrack> =
+        FynxBackendClient.postJson(
+            context,
+            "/api/admin/social/music/catalogue",
+            JSONObject()
+                .put("mediaId", mediaId)
+                .put("title", title.trim())
+                .put("artist", artist.trim())
+                .put("durationMs", durationMs.coerceAtLeast(0L))
+                .put("category", category.trim().ifBlank { "FYNX" })
+                .toString()
+        ).mapCatching { raw ->
+            val item = JSONObject(raw).optJSONObject("track") ?: throw IllegalStateException("Music track was not returned.")
+            MusicTrack(
+                id = item.optString("id"),
+                mediaId = item.optString("mediaId"),
+                title = item.optString("title"),
+                artist = item.optString("artist"),
+                durationMs = item.optLong("durationMs", 0L),
+                category = item.optString("category", "FYNX"),
+                active = item.optBoolean("active", true)
+            )
+        }
+
+    suspend fun removeMusicTrack(context: Context, trackId: String): Result<Unit> =
+        FynxBackendClient.delete(context, "/api/admin/social/music/catalogue/" + encode(trackId)).map { Unit }
 
     suspend fun marketplaceProtectionCases(context: Context, status: String? = null): Result<List<ProtectionCase>> {
         val path = if (status.isNullOrBlank()) "/api/admin/marketplace/protection/cases" else "/api/admin/marketplace/protection/cases?status=${encode(status.trim().uppercase())}"
