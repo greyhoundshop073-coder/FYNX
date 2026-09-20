@@ -84,8 +84,12 @@ fun FynxHomeSocialHubPanel(
     var textBackground by remember { mutableStateOf<FynxPostTextBackground?>(null) }
     var postLocation by remember { mutableStateOf<String?>(null) }
     var locationLoading by remember { mutableStateOf(false) }
-    var selectedMusic by remember { mutableStateOf<FynxSelectedMusic?>(null) }
+    var selectedCatalogueMusic by remember { mutableStateOf<FynxMusicCatalogueTrack?>(null) }
     var musicPlaying by remember { mutableStateOf(false) }
+    var showMusicPicker by remember { mutableStateOf(false) }
+    var musicSearch by remember { mutableStateOf("") }
+    var musicCatalogue by remember { mutableStateOf<List<FynxMusicCatalogueTrack>>(emptyList()) }
+    var musicLoading by remember { mutableStateOf(false) }
     var selectedFeelingActivity by remember { mutableStateOf<FynxFeelingActivityOption?>(null) }
     var showFeelingActivityPicker by remember { mutableStateOf(false) }
     var feelingActivitySearch by remember { mutableStateOf("") }
@@ -123,17 +127,6 @@ fun FynxHomeSocialHubPanel(
         } else notice = "Location permission was not granted."
     }
 
-    val musicPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-            scope.launch {
-                FynxMusicLibraryClient.readSelection(context, uri)
-                    .onSuccess { selectedMusic = it; musicPlaying = false; notice = null; showComposer = true }
-                    .onFailure { notice = it.message ?: "Could not read that music track." }
-            }
-        }
-    }
-
     LaunchedEffect(cameraRequest) {
         if (cameraRequest > 0) {
             // The Home header camera opens the same real capture panel used by
@@ -141,6 +134,16 @@ fun FynxHomeSocialHubPanel(
             showComposer = false
             showCamera = true
             notice = null
+        }
+    }
+
+    LaunchedEffect(showMusicPicker, musicSearch) {
+        if (showMusicPicker) {
+            musicLoading = true
+            FynxMusicCatalogueClient.listPublished(context, musicSearch)
+                .onSuccess { musicCatalogue = it }
+                .onFailure { notice = it.message ?: "Music catalogue could not be loaded." }
+            musicLoading = false
         }
     }
 
@@ -162,6 +165,74 @@ fun FynxHomeSocialHubPanel(
             }
             audienceLoading = false
         }
+    }
+
+    if (showMusicPicker) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!posting) {
+                    showMusicPicker = false
+                    musicSearch = ""
+                }
+            },
+            title = { Text("FYNX Music") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = musicSearch,
+                        onValueChange = { musicSearch = it.take(80) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Search music") },
+                        placeholder = { Text("Song or artist") }
+                    )
+                    Column(
+                        Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (musicLoading) {
+                            Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator()
+                            }
+                        } else if (musicCatalogue.isEmpty()) {
+                            Text(
+                                "No FYNX music is published yet. Music can only be added by FYNX administrators.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            musicCatalogue.forEach { track ->
+                                TextButton(
+                                    onClick = {
+                                        selectedCatalogueMusic = track
+                                        musicPlaying = false
+                                        showMusicPicker = false
+                                        musicSearch = ""
+                                        notice = null
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary)
+                                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
+                                            Text(track.title.ifBlank { "Untitled" }, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+                                            Text(track.artist.ifBlank { "FYNX" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                        }
+                                        Text(formatMusicDuration(track.durationMs), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showMusicPicker = false; musicSearch = "" }) { Text("Close") }
+            }
+        )
     }
 
     if (showFeelingActivityPicker) {
@@ -291,7 +362,7 @@ fun FynxHomeSocialHubPanel(
             text = ""
             textBackground = null
             postLocation = null
-            selectedMusic = null
+            selectedCatalogueMusic = null
             musicPlaying = false
             selectedFeelingActivity = null
             feelingActivitySearch = ""
@@ -311,7 +382,7 @@ fun FynxHomeSocialHubPanel(
         text = ""
         textBackground = null
         postLocation = null
-        selectedMusic = null
+        selectedCatalogueMusic = null
         musicPlaying = false
         selectedFeelingActivity = null
         feelingActivitySearch = ""
@@ -336,10 +407,10 @@ fun FynxHomeSocialHubPanel(
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { clearComposer() }, enabled = !posting && !false) { Icon(Icons.Default.Close, "Close") }
                         Text("New post", style = MaterialTheme.typography.titleLarge)
-                        Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUris.isNotEmpty() || selectedMusic != null), onClick = {
+                        Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUris.isNotEmpty() || selectedCatalogueMusic != null), onClick = {
                             if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) { notice = "You are offline. Reconnect before publishing this post."; return@Button }
                             posting = true; notice = null
-                            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground, postLocation, selectedMusic, selectedFeelingActivity) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
+                            scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground, postLocation, null, selectedCatalogueMusic, selectedFeelingActivity) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
                         }) { Text(if (posting) "Publishing…" else "Post") }
                     }
 
@@ -363,7 +434,7 @@ fun FynxHomeSocialHubPanel(
                             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            ComposerQuickChip("Music", Icons.Default.MusicNote, enabled = !posting && postingAllowed) { musicPicker.launch(arrayOf("audio/*")) }
+                            ComposerQuickChip("Music", Icons.Default.MusicNote, enabled = !posting && postingAllowed) { showMusicPicker = true; notice = null }
                             ComposerQuickChip("People", Icons.Default.People, enabled = !posting && postingAllowed) { showPeoplePicker = true }
                             ComposerQuickChip("Location", Icons.Default.LocationOn, enabled = !posting && postingAllowed) {
                                 val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -379,33 +450,41 @@ fun FynxHomeSocialHubPanel(
                             ComposerQuickChip("Feeling/Activity", Icons.Default.SentimentSatisfied, enabled = !posting && postingAllowed) { showFeelingActivityPicker = true }
                         }
 
-                        selectedMusic?.let { music ->
+                        selectedCatalogueMusic?.let { music ->
                             Card(Modifier.fillMaxWidth()) {
                                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.MusicNote, contentDescription = "Selected music", tint = MaterialTheme.colorScheme.primary)
+                                    Icon(Icons.Default.MusicNote, contentDescription = "Selected FYNX music", tint = MaterialTheme.colorScheme.primary)
                                     Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                                         Text(music.title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
                                         Text(music.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                                     }
-                                    val player = remember(music.uri) {
-                                        android.media.MediaPlayer().apply {
-                                            setDataSource(context, music.uri)
-                                            prepare()
+                                    val previewFile = remember(music.id) { mutableStateOf<java.io.File?>(null) }
+                                    LaunchedEffect(music.id) {
+                                        previewFile.value = withContext(Dispatchers.IO) {
+                                            FynxMediaCache.getOrDownload(context, "/api/social/music/catalogue/" + music.id + "/media", "audio")
                                         }
                                     }
-                                    DisposableEffect(player) {
-                                        player.setOnCompletionListener { musicPlaying = false }
-                                        onDispose { runCatching { player.release() } }
+                                    val player = remember(music.id, previewFile.value) {
+                                        previewFile.value?.let { file ->
+                                            runCatching { android.media.MediaPlayer().apply { setDataSource(file.absolutePath); prepare() } }.getOrNull()
+                                        }
                                     }
+                                    DisposableEffect(player) { onDispose { player?.release() } }
                                     IconButton(onClick = {
                                         runCatching {
-                                            if (player.isPlaying) { player.pause(); musicPlaying = false }
-                                            else { player.start(); musicPlaying = true }
+                                            if (player?.isPlaying == true) {
+                                                player.pause()
+                                                musicPlaying = false
+                                            } else if (player != null) {
+                                                if (player.currentPosition >= player.duration) player.seekTo(0)
+                                                player.start()
+                                                musicPlaying = true
+                                            }
                                         }
-                                    }, enabled = !posting) {
+                                    }, enabled = !posting && player != null) {
                                         Icon(if (musicPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (musicPlaying) "Pause music" else "Preview music")
                                     }
-                                    IconButton(onClick = { selectedMusic = null; musicPlaying = false }, enabled = !posting) {
+                                    IconButton(onClick = { selectedCatalogueMusic = null; musicPlaying = false }, enabled = !posting) {
                                         Icon(Icons.Default.Close, "Remove music")
                                     }
                                 }
