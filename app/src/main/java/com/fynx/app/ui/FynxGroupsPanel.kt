@@ -242,7 +242,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             if (!message.fromMe && !message.senderUsername.isNullOrBlank()) {
                                 Text(message.senderUsername!!, style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = Color.White.copy(alpha = 0.72f), modifier = Modifier.padding(bottom = 2.dp))
                             }
-                            Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primary else Color(0xFF303030), contentColor = Color.White, shape = RoundedCornerShape(18.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { replyToId = message.id }, onLongClick = { reactionMessageId = message.id })) {
+                            Box {
+                            Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primary else Color(0xFF303030), contentColor = Color.White, shape = RoundedCornerShape(18.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { reactionMessageId = message.id }, onLongClick = { reactionMessageId = message.id })) {
                                 Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
                                     if (message.replyToId != null) Text("Reply", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.82f), modifier = Modifier.padding(bottom = 5.dp))
                                 if (message.attachmentUri != null) {
@@ -256,12 +257,9 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 }
                                 }
                             }
-                        }
-                    }
-                    if (reactionMessageId == message.id) {
-                        Surface(color = Color(0xFF2A2A2A), contentColor = Color.White, shape = RoundedCornerShape(18.dp), tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                            Column(Modifier.padding(6.dp)) {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                            }
+                            DropdownMenu(expanded = reactionMessageId == message.id, onDismissRequest = { reactionMessageId = null }) {
+                                Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                                     listOf("❤️","😂","👍","🙏","🔥","😮","😢","👏").forEach { emoji ->
                                         TextButton(onClick = {
                                             reactionMessageId = null
@@ -270,33 +268,31 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                                     .onSuccess { remote -> val mapped = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context)); messages = messages.map { if (it.id == mapped.id) mapped else it }; FynxChatStore.save(context, "group_$groupId", messages) }
                                                     .onFailure { syncMessage = it.message ?: "Reaction could not be saved" }
                                             }
-                                        }, modifier = Modifier.size(38.dp), contentPadding = PaddingValues(0.dp)) { Text(emoji, style = MaterialTheme.typography.titleMedium) }
+                                        }, modifier = Modifier.size(34.dp), contentPadding = PaddingValues(0.dp)) { Text(emoji, style = MaterialTheme.typography.titleMedium) }
                                     }
                                 }
                                 HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    TextButton(onClick = { replyToId = message.id; reactionMessageId = null }, modifier = Modifier.weight(1f)) { Text("Reply") }
-                                    TextButton(onClick = {
-                                        val clip = android.content.ClipData.newPlainText("FYNX message", message.text)
-                                        (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
-                                        reactionMessageId = null
-                                    }, modifier = Modifier.weight(1f), enabled = message.text.isNotBlank()) { Text("Copy") }
-                                    TextButton(onClick = { reactionMessageId = null }, modifier = Modifier.weight(1f), enabled = false) { Text("Forward") }
-                                    TextButton(onClick = {
-                                        scope.launch {
-                                            FynxGroupRemoteClient.setPinned(context, groupId, message.id, !message.pinned)
-                                                .onSuccess { remote -> val mapped = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context)); messages = messages.map { if (it.id == mapped.id) mapped else it }; FynxChatStore.save(context, "group_$groupId", messages); reactionMessageId = null }
-                                                .onFailure { syncMessage = it.message ?: "Pin could not be saved" }
-                                        }
-                                    }, modifier = Modifier.weight(1f)) { Text(if (message.pinned) "Unpin" else "Pin") }
-                                    TextButton(onClick = {
-                                        scope.launch {
-                                            FynxGroupRemoteClient.deleteMessage(context, groupId, message.id)
-                                                .onSuccess { remote -> val mapped = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context)); messages = messages.map { if (it.id == mapped.id) mapped else it }; FynxChatStore.save(context, "group_$groupId", messages); reactionMessageId = null }
-                                                .onFailure { syncMessage = it.message ?: "Message could not be deleted" }
-                                        }
-                                    }, modifier = Modifier.weight(1f)) { Text("Delete") }
-                                }
+                                DropdownMenuItem(text = { Text("Reply") }, onClick = { replyToId = message.id; reactionMessageId = null }, leadingIcon = { Icon(Icons.Default.Reply, null) })
+                                DropdownMenuItem(text = { Text("Copy") }, enabled = message.text.isNotBlank(), onClick = {
+                                    val clip = android.content.ClipData.newPlainText("FYNX message", message.text)
+                                    (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
+                                    reactionMessageId = null
+                                }, leadingIcon = { Icon(Icons.Default.ContentCopy, null) })
+                                DropdownMenuItem(text = { Text("Forward") }, enabled = false, onClick = {}, leadingIcon = { Icon(Icons.Default.Forward, null) })
+                                DropdownMenuItem(text = { Text(if (message.pinned) "Unpin" else "Pin") }, onClick = {
+                                    scope.launch {
+                                        FynxGroupRemoteClient.setPinned(context, groupId, message.id, !message.pinned)
+                                            .onSuccess { remote -> val mapped = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context)); messages = messages.map { if (it.id == mapped.id) mapped else it }; FynxChatStore.save(context, "group_$groupId", messages); reactionMessageId = null }
+                                            .onFailure { syncMessage = it.message ?: "Pin could not be saved" }
+                                    }
+                                }, leadingIcon = { Icon(Icons.Default.PushPin, null) })
+                                DropdownMenuItem(text = { Text("Delete") }, onClick = {
+                                    scope.launch {
+                                        FynxGroupRemoteClient.deleteMessage(context, groupId, message.id)
+                                            .onSuccess { remote -> val mapped = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context)); messages = messages.map { if (it.id == mapped.id) mapped else it }; FynxChatStore.save(context, "group_$groupId", messages); reactionMessageId = null }
+                                            .onFailure { syncMessage = it.message ?: "Message could not be deleted" }
+                                    }
+                                }, leadingIcon = { Icon(Icons.Default.Delete, null) })
                             }
                         }
                     }                }
