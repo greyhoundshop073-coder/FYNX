@@ -424,7 +424,7 @@ app.post("/api/statuses", auth, async (req, res) => {
     let musicDurationMs = 0;
     if (musicCatalogueId != null) {
       if (!Number.isInteger(musicCatalogueId) || musicCatalogueId < 1) return res.status(400).json({error:"invalid music selection"});
-      const music = await pool.query("SELECT c.id,c.title,c.artist,c.duration_ms,mm.mime_type FROM fynx_music_catalogue c JOIN message_media mm ON mm.id=c.media_id WHERE c.id=$1 AND c.active=TRUE LIMIT 1", [musicCatalogueId]);
+      const music = await pool.query("SELECT c.id,c.media_id,c.title,c.artist,c.duration_ms,mm.mime_type FROM fynx_music_catalogue c JOIN message_media mm ON mm.id=c.media_id WHERE c.id=$1 AND c.active=TRUE LIMIT 1", [musicCatalogueId]);
       if (!music.rows[0] || !String(music.rows[0].mime_type || "").toLowerCase().startsWith("audio/")) return res.status(403).json({error:"music selection is not published in the FYNX catalogue"});
       musicTitle = music.rows[0].title;
       musicArtist = music.rows[0].artist;
