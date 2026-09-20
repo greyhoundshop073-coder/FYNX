@@ -168,6 +168,19 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     val canSendMessages = isAdmin || prefs.getBoolean("send_messages", true)
     val canSendMedia = isAdmin || prefs.getBoolean("send_media", true)
     val canAddMembers = isAdmin || prefs.getBoolean("add_members", true)
+    val senderAvatarUris = remember(groupId) { mutableStateMapOf<String, String?>() }
+    val senderUsernames = remember(messages) { messages.mapNotNull { it.senderUsername?.trim()?.takeIf { name -> name.isNotBlank() } }.distinct() }
+    LaunchedEffect(groupId, senderUsernames) {
+        senderUsernames.forEach { username ->
+            if (!senderAvatarUris.containsKey(username)) {
+                FynxProfileRemoteClient.get(context, username).onSuccess { profile ->
+                    senderAvatarUris[username] = profile.profilePhotoMediaId?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
+                }.onFailure {
+                    senderAvatarUris[username] = null
+                }
+            }
+        }
+    }
     LaunchedEffect(groupId, currentGroup?.id) {
         val selected = currentGroup ?: return@LaunchedEffect
         FynxGroupRemoteClient.syncGroup(context, selected).onFailure { if (FynxBackendClient.hasAccessToken(context)) syncMessage = it.message }
@@ -222,7 +235,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 items(visibleMessages, key = { it.id }) { message ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
                         if (!message.fromMe) {
-                            FynxAvatar(message.senderUsername ?: "", null, Modifier.size(32.dp))
+                            FynxAvatar(message.senderUsername ?: "", senderAvatarUris[message.senderUsername?.trim()], Modifier.size(32.dp))
                             Spacer(Modifier.width(6.dp))
                         }
                         Column(horizontalAlignment = if (message.fromMe) Alignment.End else Alignment.Start) {
