@@ -428,7 +428,7 @@ app.post("/api/statuses", auth, async (req, res) => {
       if (!music.rows[0] || !String(music.rows[0].mime_type || "").toLowerCase().startsWith("audio/")) return res.status(403).json({error:"music selection is not published in the FYNX catalogue"});
       musicTitle = music.rows[0].title;
       musicArtist = music.rows[0].artist;
-      musicDurationMs = Math.max(0, Math.min(Number(music.rows[0].duration_ms) || 0, 30000));
+      musicDurationMs = Math.max(0, Number(music.rows[0].duration_ms) || 0);
     }
     if (!id || !/^[0-9a-f-]{36}$/i.test(id) || !["TEXT","PHOTO","VIDEO","VOICE"].includes(type) || (type==="TEXT" && !text) || !Number.isFinite(backgroundColor) || !Number.isFinite(foregroundColor) || !Number.isInteger(alignment) || alignment<0 || alignment>2 || !["EVERYONE","FRIENDS","ONLY_ME"].includes(audience) || !Number.isFinite(voiceDurationMs) || voiceDurationMs<0 || voiceDurationMs>30000) return res.status(400).json({error:"invalid status"});
     if (type !== "TEXT" && (!Number.isInteger(mediaId) || mediaId < 1)) return res.status(400).json({error:"media is required"});
