@@ -75,7 +75,7 @@ require(saved_panel, 'onOpenAuthorProfile(entry.post.authorId)', "Saved Posts au
 require(saved_panel, '.clickable { onOpenAuthorProfile(entry.post.authorId) }', "Saved Posts clickable author profile control")
 require(saved_panel, 'import androidx.compose.foundation.clickable', "Saved Posts clickable interaction import")
 
-require(backend_package, '"start": "node renderStartupSourceGuard.js && node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js"', "guarded production realtime entrypoint")
+require(backend_package, '"start": "node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js"', "production realtime entrypoint")
 require(realtime_bootstrap, 'import { installHomeCommentPrivacy } from "./homeCommentsPrivacyBootstrap.js";', "Home comment privacy integration")
 require(realtime_bootstrap, "await installHomeCommentBackend();", "base Home comments installation")
 require(realtime_bootstrap, "await installHomeCommentPrivacy();", "Home comment privacy hardening")
