@@ -131,6 +131,7 @@ fun FynxStatusHubPanel() {
                     onLayout = { }
                 )
                 else -> key(timelineRefreshKey) {
+                    // FynxStatusTimelinePanel() remains the single backend Status hub surface.
                     FynxStatusTimelinePanel(
                         onCameraClick = {
                             if (!publishingCameraStatus) {
