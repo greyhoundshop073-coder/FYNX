@@ -5,7 +5,7 @@ composer = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt"
 camera = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt").read_text(encoding="utf-8")
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMultiMediaPostClient.kt").read_text(encoding="utf-8")
 location = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxPostLocationClient.kt").read_text(encoding="utf-8")
-music = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicLibraryClient.kt").read_text(encoding="utf-8")
+music = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicCatalogueClient.kt").read_text(encoding="utf-8")
 feeling = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxFeelingActivityLibrary.kt").read_text(encoding="utf-8")
 remote = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt").read_text(encoding="utf-8")
 feed = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt").read_text(encoding="utf-8")
@@ -24,7 +24,7 @@ checks = [
     ("Audience selection reaches the real post client", "selectedAudienceIds.toList()" in composer and "selectedAudienceUserIds" in client and '"audienceUserIds"' in client),
     ("Text backgrounds reach the real post client", "textBackground" in composer and '"textBackground"' in client),
     ("Location reaches the real post client without raw coordinates", "postLocation" in composer and '"location"' in client and "latitude" not in client and "longitude" not in client),
-    ("Music reaches the real post client", "selectedMusic" in composer and '"musicMediaId"' in client and '"musicDurationMs"' in client),
+    ("Music reaches the real post client", "selectedCatalogueMusic" in composer and "catalogueMusic" in client and '"musicMediaId"' in client and '"musicDurationMs"' in client),
     ("Feeling and Activity reach the real post client", "selectedFeelingActivity" in composer and '"feelingActivityType"' in client and '"feelingActivity"' in client),
     ("Text-only and multi-media endpoints both exist", '"/api/social/posts"' in client and '"/api/social/posts/multi"' in client),
     ("Multi-media limits protect the existing upload architecture", "MAX_MEDIA = 4" in client and "MAX_SINGLE_MEDIA_BYTES" in client and "MAX_TOTAL_MEDIA_BYTES" in client),
@@ -34,12 +34,14 @@ checks = [
     ("Feed model carries location, music, and Feeling/Activity", "location: String?" in remote and "musicMediaId: String?" in remote and "feelingActivityType: String?" in remote),
     ("Home feed renders location, music, and Feeling/Activity", "post.location" in feed and "MusicPostPlayer" in feed and "post.feelingActivity" in feed),
     ("Existing location resolver is label-only", "Geocoder" in location and "raw coordinates never leave the device" in location.lower()),
-    ("Existing music picker reads real audio metadata", "MediaMetadataRetriever" in music and "METADATA_KEY_TITLE" in music and "METADATA_KEY_ARTIST" in music),
+    ("Controlled music catalogue replaces local audio picking", "FynxMusicCatalogueClient" in music and "listPublished" in music and "OpenDocument" not in composer and "Local music uploads are disabled" in client),
     ("Feeling/Activity library is real and searchable through composer", "FynxFeelingActivityOption(" in feeling and "feelingActivitySearch" in composer),
     ("Composer reset clears every optional attachment", all(x in composer for x in [
-        "selectedMusic = null", "selectedFeelingActivity = null", "postLocation = null",
+        "selectedCatalogueMusic = null", "selectedFeelingActivity = null", "postLocation = null",
         "selectedAudienceIds = emptySet()"
     ])),
+    ("Admin music library is available", "FynxMusicAdminPanel" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicAdminPanel.kt").read_text(encoding="utf-8") and "FynxMusicAdminPanel()" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt").read_text(encoding="utf-8")),
+    ("Music writes are server-admin protected", "fynxMusicAdminRole" in routes and "/api/admin/social/music/catalogue" in routes and "FYNX admin access required" in routes),
     ("Dedicated Batch 9 integration gate is wired into CI", "scripts/verify_batch9_create_post_integration.py" in workflow),
 ]
 
