@@ -16,6 +16,7 @@ checks = [
     ("Discovery client sends the selected location area", 'location=${encode(location)}' in discovery),
     ("Backend filters only real listing locations", "l.location ILIKE" in routes and "req.query?.location" in routes),
     ("Seller can fill a real listing area from device location", 'Text(if (locationLoading) "Finding your area..." else "Use my current area")' in panel),
+    ("Seller publish is blocked until a listing area exists", 'enabled = !busy && location.trim().isNotBlank() && FynxMarketplaceSellerFlowSupport.validListing' in panel),
     ("Seller privacy copy prevents exact GPS publication", "exact GPS coordinates are not published with the listing" in panel),
     ("Marketplace location layer does not add coordinate fields", "latitude" not in panel.lower() and "longitude" not in panel.lower() and "location_lat" not in routes and "location_lng" not in routes),
     ("Existing location resolver remains label-only", "raw coordinates never leave the device" in location.lower()),
