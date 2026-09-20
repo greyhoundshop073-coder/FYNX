@@ -27,6 +27,7 @@ fun FynxMusicAdminPanel() {
     val scope = rememberCoroutineScope()
     var tracks by remember { mutableStateOf<List<FynxAdminClient.MusicTrack>>(emptyList()) }
     var selectedUri by remember { mutableStateOf<Uri?>(null) }
+    var uploadedMediaId by remember { mutableStateOf<String?>(null) }
     var title by remember { mutableStateOf("") }
     var artist by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("FYNX") }
@@ -43,6 +44,7 @@ fun FynxMusicAdminPanel() {
             return@rememberLauncherForActivityResult
         }
         selectedUri = uri
+        uploadedMediaId = null
         scope.launch {
             val metadata = withContext(Dispatchers.IO) {
                 runCatching {
@@ -99,7 +101,7 @@ fun FynxMusicAdminPanel() {
                         Text(title.ifBlank { "Untitled" }, style = MaterialTheme.typography.titleSmall)
                         Text(artist.ifBlank { "Unknown artist" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    TextButton(onClick = { selectedUri = null }) {
+                    TextButton(onClick = { selectedUri = null; uploadedMediaId = null }) {
                         Icon(Icons.Default.Close, "Clear")
                     }
                 }
@@ -107,37 +109,43 @@ fun FynxMusicAdminPanel() {
         }
 
         Button(
-            enabled = selectedUri != null && title.isNotBlank() && !loading,
+            enabled = (selectedUri != null || uploadedMediaId != null) && title.isNotBlank() && !loading,
             onClick = {
-                val uri = selectedUri ?: return@Button
+                val uri = selectedUri
                 loading = true
-                status = "Uploading and publishing music…"
+                status = if (uploadedMediaId == null) "Uploading music…" else "Publishing music…"
                 scope.launch {
-                    val result = withContext(Dispatchers.IO) {
-                        FynxProductionMessaging.uploadMedia(context, uri, context.contentResolver.getType(uri) ?: "audio/mpeg")
-                    }
-                    result.onSuccess { uploaded ->
-                        scope.launch {
-                            FynxAdminClient.addMusicTrack(context, uploaded.id.toString(), title, artist, durationMs, category)
-                                .onSuccess {
-                                    status = "Music published to the FYNX catalogue."
-                                    selectedUri = null
-                                    title = ""
-                                    artist = ""
-                                    durationMs = 0L
-                                    refresh++
-                                }
-                                .onFailure { status = it.message ?: "Music catalogue publish failed." }
+                    var mediaId = uploadedMediaId
+                    if (mediaId == null && uri != null) {
+                        val result = withContext(Dispatchers.IO) {
+                            FynxProductionMessaging.uploadMedia(context, uri, context.contentResolver.getType(uri) ?: "audio/mpeg")
+                        }
+                        result.onSuccess { uploadedMediaId = it.id }.onFailure {
+                            status = it.message ?: "Audio upload failed."
                             loading = false
                         }
-                    }.onFailure {
-                        status = it.message ?: "Audio upload failed."
-                        loading = false
+                        mediaId = uploadedMediaId
                     }
+                    if (!mediaId.isNullOrBlank()) {
+                        FynxAdminClient.addMusicTrack(context, mediaId!!, title, artist, durationMs, category)
+                            .onSuccess {
+                                status = "Music published to the FYNX catalogue."
+                                selectedUri = null
+                                uploadedMediaId = null
+                                title = ""
+                                artist = ""
+                                durationMs = 0L
+                                refresh++
+                            }
+                            .onFailure {
+                                status = (it.message ?: "Music catalogue publish failed.") + " The uploaded audio is retained so you can retry publishing without uploading it again."
+                            }
+                    }
+                    loading = false
                 }
             }
         ) {
-            Text(if (loading) "Working…" else "Publish to FYNX")
+            Text(if (loading) "Working…" else if (uploadedMediaId != null) "Retry publish" else "Publish to FYNX")
         }
 
         status?.let { Text(it, color = if (it.contains("failed", true) || it.contains("error", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
