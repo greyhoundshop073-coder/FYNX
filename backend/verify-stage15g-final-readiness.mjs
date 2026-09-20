@@ -15,7 +15,7 @@ const startUsesScalability = packageJson.scripts?.start === "node --import ./sca
   || (packageJson.scripts?.start === "node realtimeIsolationBootstrap.js"
     && isolation.includes('import("./serverBootstrap.js")')
     && bootstrap.includes('import("./scalability.js")'))
-  || (packageJson.scripts?.start === "node renderStartupSourceGuard.js && node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js"
+  || (packageJson.scripts?.start === "node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js"
     && scalabilityPreload.includes('import "./scalability.js"'));
 
 const checks = [
