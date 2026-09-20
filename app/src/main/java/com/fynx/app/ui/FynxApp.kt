@@ -236,6 +236,31 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to Home")
                     }
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        Text(
+                            when (selected) {
+                                "Marketplace" -> "Marketplace"
+                                "Money Tools" -> "Money Center"
+                                "Privacy" -> "Privacy & Safety"
+                                "Seller Center" -> "Seller Center"
+                                "Business Account" -> "Business Account"
+                                "Advertising" -> "Advertising"
+                                "Advertising Dashboard" -> "Advertising Dashboard"
+                                "Advertising AI" -> "FYNX AI"
+                                "AI" -> "FYNX AI"
+                                "AI Creation" -> "AI Creation"
+                                "AI Photo Editor" -> "AI Photo Editor"
+                                "Announcements" -> "Official FYNX Announcements"
+                                "Admin" -> "Admin Control Center"
+                                else -> selected
+                            },
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    }
+                    Spacer(Modifier.size(48.dp))
+                }
+            }
         }, bottomBar = {
             // Keep the navigation in its rounded floating surface.
             // Stay above the system navigation area, but do not follow the IME.
