@@ -171,6 +171,9 @@ jobs:
       - name: Run R6-F fulfillment integrity verification
         run: node verify-marketplace-fulfillment-integrity.mjs
 
+      - name: Run Batch 2 fulfillment and buyer-match verification
+        run: node verify-marketplace-batch2-fulfillment.mjs
+
       - name: Run R6-G advertising canonical creative verification
         run: node verify-marketplace-ad-creative-identity.mjs
 

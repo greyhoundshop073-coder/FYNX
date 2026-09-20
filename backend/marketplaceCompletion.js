@@ -279,10 +279,16 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (!isBuyer(order, req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the buyer can complete this order' }); }
       if (order.status !== 'INSPECTION') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order is not in inspection' }); }
       if (await hasActiveProtectionCase(client, id)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order has an active protection case or dispute' }); }
+      const receivedItemMatchesOrder = req.body?.receivedItemMatchesOrder === true;
+      const quantityMatchesOrder = req.body?.quantityMatchesOrder === true;
+      if (!receivedItemMatchesOrder || !quantityMatchesOrder) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'buyer must confirm that the received item and quantity match the protected order', code: 'ORDER_MATCH_CONFIRMATION_REQUIRED' });
+      }
       const updated = await client.query(`UPDATE marketplace_orders SET status='COMPLETED',completed_at=NOW(),fulfillment_status='COMPLETED',fulfillment_status_updated_at=NOW(),updated_at=NOW() WHERE id=$1 AND status='INSPECTION' RETURNING *`, [id]);
       if (!updated.rows[0]) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order changed before completion' }); }
       await client.query('UPDATE marketplace_listings SET quantity=GREATEST(0,quantity-$1),reserved_quantity=GREATEST(0,reserved_quantity-$1),active=CASE WHEN quantity-$1 <= 0 THEN FALSE ELSE active END,updated_at=NOW() WHERE id=$2', [order.quantity, order.listing_id]);
-      await recordFulfillmentEvent(client, id, req.user.sub, 'ORDER_COMPLETED', 'INSPECTION', 'COMPLETED', { payout: 'eligible_for_release', fulfillmentMethod: order.fulfillment_method });
+      await recordFulfillmentEvent(client, id, req.user.sub, 'ORDER_COMPLETED', 'INSPECTION', 'COMPLETED', { payout: 'eligible_for_release', fulfillmentMethod: order.fulfillment_method, receivedItemMatchesOrder: true, quantityMatchesOrder: true });
       await client.query('COMMIT');
       return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, fulfillmentStatus: updated.rows[0].fulfillment_status, completedAt: updated.rows[0].completed_at }, payout: { status: 'eligible_for_release' } });
     } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace complete', error); return res.status(500).json({ error: 'order completion failed' }); }

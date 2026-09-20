@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -35,6 +36,7 @@ fun FynxMarketplaceOrderLifecycle(
     var showFulfillment by remember { mutableStateOf(order.status == "PAID") }
     var showDispute by remember { mutableStateOf(false) }
     var disputeDetails by remember { mutableStateOf("") }
+    var confirmOrderMatch by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -108,7 +110,13 @@ fun FynxMarketplaceOrderLifecycle(
                     when (order.status) {
                         "PAID" -> Text("Choose delivery or pickup so the seller can fulfill the order.")
                         "SHIPPED" -> Text("The seller marked this order as shipped. Confirm only after the order reaches you.")
-                        "INSPECTION" -> Text("You have a 48-hour inspection window. Complete the order only when the product is correct and in acceptable condition.")
+                        "INSPECTION" -> {
+                            Text("You have a 48-hour inspection window. Complete the order only when the product is correct and in acceptable condition.")
+                            Row {
+                                Checkbox(checked = confirmOrderMatch, onCheckedChange = { confirmOrderMatch = it }, enabled = !busy)
+                                Text("I confirm the received item and quantity match my order.")
+                            }
+                        }
                         "COMPLETED" -> Text("Order completed. Payment is eligible for seller payout release when the protected settlement rules are satisfied.")
                         else -> Text("This order is protected by FYNX marketplace status controls.")
                     }
@@ -151,11 +159,11 @@ fun FynxMarketplaceOrderLifecycle(
                             busy = false
                         }
                     }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Confirm received") }
-                    "INSPECTION" -> Button(enabled = !busy, onClick = {
+                    "INSPECTION" -> Button(enabled = !busy && confirmOrderMatch, onClick = {
                         busy = true
                         error = null
                         scope.launch {
-                            FynxRemoteSocialClient.completeMarketplaceOrder(context, order.id)
+                            FynxRemoteSocialClient.completeMarketplaceOrder(context, order.id, true, true)
                                 .onSuccess { onChanged() }
                                 .onFailure { error = it.message ?: "Order could not be completed." }
                             busy = false
