@@ -211,10 +211,14 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     }
                 }
             } else if (selected == "Friends") {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { selected = "Profile"; openProfileSettings = false }) {
-                        if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(40.dp))
-                        else FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp))
+                Row(
+                    Modifier.fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { selected = "Home" }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to Home")
                     }
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                         Text("Friends", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
@@ -222,34 +226,16 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     Spacer(Modifier.size(48.dp))
                 }
             } else {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (isSecondary) IconButton(onClick = { selected = "Home" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } else Spacer(Modifier.size(48.dp))
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        Text(
-                            when (selected) {
-                                "Marketplace" -> "Marketplace"
-                                "Money Tools" -> "Money Center"
-                                "Privacy" -> "Privacy & Safety"
-                                "Seller Center" -> "Seller Center"
-                                "Business Account" -> "Business Account"
-                                "Advertising" -> "Advertising"
-                                "Advertising Dashboard" -> "Advertising Dashboard"
-                                "Advertising AI" -> "FYNX AI"
-                                "AI" -> "FYNX AI"
-                                "AI Creation" -> "AI Creation"
-                                "AI Photo Editor" -> "AI Photo Editor"
-                                "Announcements" -> "Official FYNX Announcements"
-                                "Admin" -> "Admin Control Center"
-                                else -> selected
-                            },
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleLarge
-                        )
+                Row(
+                    Modifier.fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { selected = "Home" }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to Home")
                     }
-                    Spacer(Modifier.size(48.dp))
-                }
-            }
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
         }, bottomBar = {
             // Keep the navigation in its rounded floating surface.
             // Stay above the system navigation area, but do not follow the IME.
