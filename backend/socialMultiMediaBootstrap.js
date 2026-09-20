@@ -37,19 +37,11 @@ export async function installSocialMultiMedia() {
       source = source.replace("[req.user.sub,text,visibility,mediaId,mediaType]", "[req.user.sub,text,visibility,mediaId,mediaType,location]");
     }
 
-    const multiLocationNeedle = "const backgroundKey = typeof req.body?.textBackground === 'string' ? req.body.textBackground.trim().toUpperCase() : '';
-      const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : null;
-      const musicMediaId = req.body?.musicMediaId == null ? null : Number(req.body.musicMediaId);
-      let musicTitle = typeof req.body?.musicTitle === 'string' ? req.body.musicTitle.trim().slice(0, 120) : null;
-      let musicArtist = typeof req.body?.musicArtist === 'string' ? req.body.musicArtist.trim().slice(0, 120) : null;
-      let musicDurationMs = req.body?.musicDurationMs == null ? 0 : Math.max(0, Math.min(Number(req.body.musicDurationMs) || 0, 86400000));
-      const feelingActivityType = typeof req.body?.feelingActivityType === 'string' ? req.body.feelingActivityType.trim().toUpperCase() : null;
-      const feelingActivity = typeof req.body?.feelingActivity === 'string' ? req.body.feelingActivity.trim().slice(0, 80) : null;
-      const allowedFeelingActivityTypes = ['FEELING','ACTIVITY'];
-      if (feelingActivityType != null && (!allowedFeelingActivityTypes.includes(feelingActivityType) || !feelingActivity)) return res.status(400).json({ error: 'invalid feeling or activity' });";
+    const multiLocationNeedle = "const backgroundKey = typeof req.body?.textBackground === 'string' ? req.body.textBackground.trim().toUpperCase() : '';";
     if (source.includes(multiLocationNeedle) && !source.includes("const location = typeof req.body?.location")) {
-      source = source.replace(multiLocationNeedle, multiLocationNeedle + "\n      const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : null;");
+      source = source.replace(multiLocationNeedle, multiLocationNeedle + " const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : null;");
     }
+
     const multiInsert = "INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,text_background,text_background_color,text_foreground_color,location) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id";
     if (source.includes(multiInsert)) {
       source = source.replace(multiInsert, "INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,text_background,text_background_color,text_foreground_color,location) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id");
