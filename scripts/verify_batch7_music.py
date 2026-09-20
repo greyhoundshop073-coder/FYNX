@@ -24,7 +24,7 @@ checks = [
     ("Admin music writes use the existing OWNER/ADMIN authorization model", "fynxMusicAdminRole" in routes and "fynx_admin_roles" in routes and "FYNX admin access required" in routes),
     ("Admin can publish a track through the real authenticated media path", "FynxProductionMessaging.uploadMedia" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicAdminPanel.kt").read_text(encoding="utf-8") and "addMusicTrack" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicAdminPanel.kt").read_text(encoding="utf-8")),
     ("Admin music controls are inside the existing admin center", "FynxMusicAdminPanel()" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt").read_text(encoding="utf-8")),
-    ("Backend accepts only published catalogue music for posts", "music selection is not published in the FYNX catalogue" in routes and "FROM fynx_music_catalogue" in routes),
+    ("Backend accepts only published catalogue music for posts", "music selection is not published in the FYNX catalogue" in routes and "FROM fynx_music_catalogue" in routes and "music selection is not published in the FYNX catalogue" in (ROOT / "backend/socialMultiMediaBootstrap.js").read_text(encoding="utf-8")),
     ("Feed still renders attached music", "MusicPostPlayer" in feed and 'musicMediaId' in feed),
     ("Android model still parses persisted music metadata", "musicMediaId: String?" in models and "musicDurationMs: Long" in models),
 ]
