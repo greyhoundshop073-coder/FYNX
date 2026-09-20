@@ -496,6 +496,25 @@ private fun FynxStatusStoryViewer(
                             .padding(horizontal = 12.dp, vertical = 9.dp),
                         verticalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
+                        status.musicCatalogueId?.let { musicId ->
+                            Surface(
+                                color = Color.White.copy(alpha = 0.10f),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.MusicNote, "Status music", tint = Color.White)
+                                    Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                                        Text(status.musicTitle?.ifBlank { "FYNX Music" } ?: "FYNX Music", color = Color.White, maxLines = 1)
+                                        Text(status.musicArtist?.ifBlank { "FYNX" } ?: "FYNX", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                    }
+                                    FynxRemoteAudio("/api/social/music/catalogue/" + musicId + "/media", Modifier.width(120.dp))
+                                }
+                            }
+                        }
                         Row(
                             Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
@@ -646,11 +665,16 @@ private fun StatusViewerText(status: FynxStatus) {
     }
 }
 
-private fun statusViewerAutoAdvanceMs(status: FynxStatus): Long = when (status.type) {
-    FynxStatusType.TEXT -> 5_000L
-    FynxStatusType.PHOTO -> 5_000L
-    FynxStatusType.VOICE -> status.voiceDurationMs.coerceIn(1_000L, FYNX_STATUS_MAX_VOICE_DURATION_MS)
-    FynxStatusType.VIDEO -> 0L
+private fun statusViewerAutoAdvanceMs(status: FynxStatus): Long {
+    val base = when (status.type) {
+        FynxStatusType.TEXT -> 5_000L
+        FynxStatusType.PHOTO -> 5_000L
+        FynxStatusType.VOICE -> status.voiceDurationMs.coerceIn(1_000L, FYNX_STATUS_MAX_VOICE_DURATION_MS)
+        FynxStatusType.VIDEO -> 0L
+    }
+    return if (status.musicCatalogueId != null && status.musicDurationMs > 0L) {
+        kotlin.math.max(base, status.musicDurationMs.coerceIn(1_000L, 30_000L))
+    } else base
 }
 
 private fun statusTypeLabel(type: FynxStatusType) = when (type) { FynxStatusType.TEXT -> "Text"; FynxStatusType.PHOTO -> "Photo"; FynxStatusType.VIDEO -> "Video"; FynxStatusType.VOICE -> "Voice" }
