@@ -28,6 +28,15 @@ checks = [
     ("active marketplace details are scrollable for phone screens", "verticalScroll(rememberScrollState())" in marketplace),
     ("active marketplace retains protected checkout", "FynxMarketplaceCheckoutDialog" in marketplace),
     ("active marketplace retains payment verification", "verifyMarketplacePayment" in marketplace),
+    ("marketplace header respects the status bar", "statusBarsPadding()" in marketplace),
+    ("marketplace uses a responsive two-column product grid", "GridCells.Fixed(2)" in marketplace),
+    ("marketplace leaves free bottom scroll space above navigation", "bottom = 132.dp" in marketplace),
+    ("marketplace sell button respects navigation and keyboard insets", "navigationBarsPadding().imePadding()" in marketplace),
+    ("marketplace product cards show the seller avatar and name", "FynxProfileRemoteClient.get" in marketplace and "l.sellerDisplayName" in marketplace),
+    ("marketplace product cards keep media square and bounded", "aspectRatio(1f)" in marketplace),
+    ("marketplace search is debounced before backend reload", "delay(if (query.isBlank()) 0L else 350L)" in marketplace),
+    ("marketplace top sellers are derived from real successful sales", "successfulSales" in marketplace and "Top Sellers (Highest Sales)" in marketplace),
+    ("marketplace filtered empty state can clear filters", "No matching products" in marketplace and "Clear filters" in marketplace),
     ("active marketplace retains order protection", "MarketplaceProtectedOrderDialog" in marketplace),
 ]
 
