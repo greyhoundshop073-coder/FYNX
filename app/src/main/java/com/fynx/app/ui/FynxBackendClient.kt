@@ -25,7 +25,6 @@ object FynxBackendClient {
     private const val KEY_BASE_URL = "base_url"
     private const val LEGACY_ACCESS_TOKEN = "access_token"
     private const val PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"
-    private const val LEGACY_PRODUCTION_BASE_URL = "https://ai-creative-studio-572v.onrender.com"
     private const val MAX_IDEMPOTENT_RETRIES = 2
     private const val RETRY_DELAY_MS = 750L
     private const val NETWORK_VALIDATION_WAIT_MS = 6_000L
@@ -43,40 +42,10 @@ object FynxBackendClient {
     data class DownloadedMedia(val contentType: String?, val byteCount: Long)
 
     fun availability(context: Context): FynxBackendAvailability = if (baseUrl(context).isBlank()) FynxBackendAvailability.DISABLED else FynxBackendAvailability.CONFIGURED
-    fun baseUrl(context: Context): String { val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE); val stored = prefs.getString(KEY_BASE_URL, null)?.trim()?.trimEnd(); if (stored.equals(LEGACY_PRODUCTION_BASE_URL, ignoreCase = true)) { prefs.edit().putString(KEY_BASE_URL, PRODUCTION_BASE_URL).apply(); return PRODUCTION_BASE_URL }; return stored?.trimEnd('/')?.takeIf { it.isNotBlank() } ?: PRODUCTION_BASE_URL }
-    fun configureBaseUrl(context: Context, value: String) { val normalized = value.trim().trimEnd('/'); require(normalized.isBlank() || normalized.startsWith("https://")) { "FYNX backend must use HTTPS." }; context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_BASE_URL, normalized).apply() }
-    fun saveAccessToken(context: Context, token: String?) { if (token.isNullOrBlank()) { FynxAuthStore.clear(context); return }; FynxSecureTokenStore.save(context, token) }
-    fun accessToken(context: Context): String? = FynxSecureTokenStore.load(context) ?: migrateLegacyAccessToken(context)
-    fun hasAccessToken(context: Context): Boolean = accessToken(context) != null
-    fun isNetworkAvailable(context: Context): Boolean = hasNetwork(context)
-    fun isUnauthorizedFailure(error: Throwable): Boolean = generateSequence(error) { it.cause }.any { it is FynxUnauthorizedException }
-    suspend fun health(context: Context): Result<String> = get(context, "/health")
-    suspend fun get(context: Context, path: String): Result<String> = request(context, "GET", path, null)
-    suspend fun postJson(context: Context, path: String, body: String): Result<String> = request(context, "POST", path, body)
-    suspend fun patchJson(context: Context, path: String, body: String): Result<String> = request(context, "PATCH", path, body)
-    suspend fun delete(context: Context, path: String): Result<String> = request(context, "DELETE", path, null)
-    suspend fun currentUserId(context: Context): Result<String> = get(context, "/api/me").mapCatching { raw -> JSONObject(raw).getJSONObject("user").getString("id") }
-
-    suspend fun downloadToFile(context: Context, mediaUrl: String, destination: File, maxBytes: Long = 12L * 1024L * 1024L): Result<DownloadedMedia> {
-        return withContext(Dispatchers.IO) {
-            try {
-                val root = baseUrl(context).trimEnd('/'); require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }; val candidate = mediaUrl.trim(); require(candidate.isNotBlank()) { "Media URL is empty." }
-                val absoluteUrl = if (candidate.startsWith("http://") || candidate.startsWith("https://")) candidate else { require(candidate.startsWith("/")) { "Media path must start with /." }; root + candidate }
-                val target = URL(absoluteUrl); val configured = URL(root); require(target.protocol.equals("https", true)) { "FYNX media must use HTTPS." }; require(target.host.equals(configured.host, true)) { "FYNX media host is not trusted." }
-                awaitValidatedNetwork(context); val parent = destination.parentFile ?: throw IOException("Media destination has no parent directory"); if (!parent.exists() && !parent.mkdirs() && !parent.isDirectory) throw IOException("Unable to create media destination directory")
-                val temporary = File(parent, ".${destination.name}.part"); var attempt = 0; var completed: Result<DownloadedMedia>? = null
-                while (completed == null) {
-                    try {
-                        val result: DownloadedMedia = requestSemaphore.withPermit { if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK) weakRequestSemaphore.withPermit { downloadOnce(context, target, temporary, maxBytes) } else downloadOnce(context, target, temporary, maxBytes) }
-                        if (destination.exists() && !destination.delete()) throw IOException("Unable to replace downloaded media"); if (!temporary.renameTo(destination)) throw IOException("Unable to finalize downloaded media"); completed = Result.success(result)
-                    } catch (error: Exception) {
-                        if (error is CancellationException) throw error
-                        temporary.delete(); if (!isRetryableFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) completed = Result.failure(error) else { attempt++; awaitValidatedNetwork(context); delay(RETRY_DELAY_MS * attempt) }
-                    }
-                }
-                checkNotNull(completed)
-            } catch (error: Exception) { if (error is CancellationException) throw error; Result.failure(error) }
-        }
+    fun baseUrl(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val stored = prefs.getString(KEY_BASE_URL, null)?.trim()?.trimEnd()
+        return stored?.trimEnd('/')?.takeIf { it.isNotBlank() } ?: PRODUCTION_BASE_URL
     }
 
     private suspend fun downloadOnce(context: Context, target: URL, temporary: File, maxBytes: Long): DownloadedMedia {
