@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
 
 @Composable
@@ -496,6 +497,10 @@ private fun FynxStatusStoryViewer(
                             Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // Counts remain available to accessibility/interaction state without being rendered on the viewer bar.
+                            Spacer(Modifier.size(0.dp).semantics {
+                                contentDescription = "Status views ${interactions.viewCount}, likes ${interactions.likeCount}"
+                            })
                             OutlinedTextField(
                                 value = replyText,
                                 onValueChange = { replyText = it.take(1000) },
