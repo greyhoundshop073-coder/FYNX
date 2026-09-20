@@ -48,6 +48,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Keeps the existing Home experience intact while providing a real, large social post composer. */
 @Composable
@@ -146,7 +147,19 @@ fun FynxHomeSocialHubPanel(
     LaunchedEffect(showPeoplePicker) {
         if (showPeoplePicker) {
             audienceLoading = true
-            FynxPostAudienceClient.friends(context).onSuccess { audienceFriends = it }.onFailure { notice = it.message ?: "Could not load your friends." }
+            notice = null
+            val result = withTimeoutOrNull(10_000L) {
+                FynxPostAudienceClient.friends(context)
+            }
+            if (result == null) {
+                notice = "People could not be loaded right now. Please try again."
+            } else {
+                result.onSuccess {
+                    audienceFriends = it
+                }.onFailure {
+                    notice = it.message ?: "Could not load your friends."
+                }
+            }
             audienceLoading = false
         }
     }
