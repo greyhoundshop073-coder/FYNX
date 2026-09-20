@@ -20,7 +20,7 @@ checks = [
     ("Legacy local music path is disabled", "Local music uploads are disabled" in legacy and "MediaMetadataRetriever" not in legacy),
     ("Backend creates a controlled music catalogue", "fynx_music_catalogue" in routes and "media_id BIGINT NOT NULL UNIQUE" in routes),
     ("Backend exposes published catalogue tracks", "/api/social/music/catalogue" in routes and "c.active = TRUE" in routes),
-    ("Backend exposes authenticated catalogue preview", "/api/social/music/catalogue/:id/media" in routes),
+    ("Backend exposes authenticated catalogue preview", "/api/social/music/catalogue/:id/media" in routes and "/api/social/music/media/:id" in routes),
     ("Admin music writes use the existing OWNER/ADMIN authorization model", "fynxMusicAdminRole" in routes and "fynx_admin_roles" in routes and "FYNX admin access required" in routes),
     ("Admin can publish a track through the real authenticated media path", "FynxProductionMessaging.uploadMedia" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicAdminPanel.kt").read_text(encoding="utf-8") and "addMusicTrack" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicAdminPanel.kt").read_text(encoding="utf-8")),
     ("Admin music controls are inside the existing admin center", "FynxMusicAdminPanel()" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt").read_text(encoding="utf-8")),
