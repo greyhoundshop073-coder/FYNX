@@ -68,7 +68,7 @@ fun FynxCameraCapturePanel(
     LaunchedEffect(Unit) { val missing = buildList { if (!hasCamera) add(Manifest.permission.CAMERA); if (!hasAudio) add(Manifest.permission.RECORD_AUDIO) }; if (missing.isNotEmpty()) permissionLauncher.launch(missing.toTypedArray()) }
 
     var lens by remember { mutableStateOf(CameraSelector.LENS_FACING_FRONT) }
-    var mode by remember { mutableStateOf(CameraMode.VIDEO) }
+    var mode by remember { mutableStateOf(CameraMode.PHOTO) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var videoCapture by remember { mutableStateOf<VideoCapture<Recorder>?>(null) }
     var cameraControl by remember { mutableStateOf<androidx.camera.core.CameraControl?>(null) }
