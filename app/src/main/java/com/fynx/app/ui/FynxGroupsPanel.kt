@@ -179,16 +179,16 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     FynxChatWallpaperBackground(modifier = Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         Surface(color = Color(0xFF1E1E1E), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth()) {
-            Row(Modifier.fillMaxWidth().statusBarsPadding().height(52.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().statusBarsPadding().height(52.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.ArrowBack, "Back", modifier = Modifier.size(24.dp)) }
-                Box(Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Icon(Icons.Default.Group, "Group", tint = MaterialTheme.colorScheme.primary) }
-                Column(Modifier.weight(1f).padding(start = 7.dp).padding(end = 4.dp)) {
-                    Text(groupTitle, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = Color.White, maxLines = 1)
+                Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Icon(Icons.Default.Group, "Group", tint = MaterialTheme.colorScheme.primary) }
+                Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                    Text(groupTitle, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = Color.White, maxLines = 1)
                     Text("${selectedGroup?.members?.size ?: 0} members", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.62f), maxLines = 1)
                 }
-                                IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, modifier = Modifier.size(38.dp)) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search", Modifier.size(21.dp)) }
+                                IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, modifier = Modifier.size(40.dp)) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search", Modifier.size(24.dp)) }
                 Box {
-                    IconButton(onClick = { showMore = true }, enabled = selectedGroup != null, modifier = Modifier.size(38.dp)) { Icon(Icons.Default.MoreVert, "More", Modifier.size(21.dp)) }
+                    IconButton(onClick = { showMore = true }, enabled = selectedGroup != null, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.MoreVert, "More", Modifier.size(24.dp)) }
                     DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
                         DropdownMenuItem(text = { Text("Members") }, onClick = { showMore = false; showMembers = true }, leadingIcon = { Icon(Icons.Default.Group, null) })
                         DropdownMenuItem(text = { Text("Group tools") }, onClick = { showMore = false; showTools = true }, leadingIcon = { Icon(Icons.Default.Build, null) })
@@ -201,7 +201,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         syncMessage?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         if (!canSendMessages) Text("Only admins can send messages in this group.", Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, true) }
-        LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(3.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
+        LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
             if (visibleMessages.isEmpty() && searchQuery.isBlank()) {
                 item(key = "fynx-empty-group") {
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -218,11 +218,14 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 }
             } else {
                 items(visibleMessages, key = { it.id }) { message ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 1.dp), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) {
-                        Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primary else Color(0xFF303030), contentColor = Color.White, shape = RoundedCornerShape(18.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { replyToId = message.id }, onLongClick = { reactionMessageId = message.id })) {
-                            Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
-                                if (!message.fromMe && !message.senderUsername.isNullOrBlank()) Text(message.senderUsername!!, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.72f))
-                                if (message.replyToId != null) Surface(color = Color.Black.copy(alpha = 0.20f), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 5.dp)) { Text("Reply", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.82f), modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) {
+                        Column(horizontalAlignment = if (message.fromMe) Alignment.End else Alignment.Start) {
+                            if (!message.fromMe && !message.senderUsername.isNullOrBlank()) {
+                                Text(message.senderUsername!!, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.72f), modifier = Modifier.padding(bottom = 2.dp))
+                            }
+                            Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primary else Color(0xFF303030), contentColor = Color.White, shape = RoundedCornerShape(18.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { replyToId = message.id }, onLongClick = { reactionMessageId = message.id })) {
+                                Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
+                                    if (message.replyToId != null) Text("Reply", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.82f), modifier = Modifier.padding(bottom = 5.dp))
                                 if (message.attachmentUri != null) {
                                     if (message.attachmentType == "audio") FynxRemoteAudio(message.attachmentUri, Modifier.fillMaxWidth())
                                     else FynxRemoteMedia(message.attachmentUri, message.attachmentType ?: "image", Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp))
@@ -280,20 +283,76 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             }
         }
         if (showEmojiPanel && canSendMessages) { FynxChatEmojiPanel(onEmojiSelected = { emoji -> text += emoji; showEmojiPanel = false }) }
-        Surface(color = Color(0xFF1E1E1E), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.navigationBarsPadding().imePadding()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
-                IconButton(enabled = canSendMessages, onClick = { showEmojiPanel = !showEmojiPanel }, modifier = Modifier.size(40.dp)) { Text("☺", style = MaterialTheme.typography.titleLarge) }
-                OutlinedTextField(value = text, onValueChange = { text = it }, enabled = canSendMessages, modifier = Modifier.weight(1f), placeholder = { Text(if (canSendMessages) "Message" else "Messaging is restricted") }, maxLines = 4, shape = RoundedCornerShape(22.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Default))
-                IconButton(enabled = canSendMessages && canSendMedia, onClick = { showTools = true }, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.AttachFile, "Attach", Modifier.size(24.dp)) }
-                IconButton(enabled = canSendMessages, onClick = { syncMessage = "Voice messages use the existing FYNX group media path." }, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.Mic, "Voice note", Modifier.size(24.dp)) }
-                if (text.isNotBlank()) {
-                    IconButton(enabled = canSendMessages && !sending && selectedGroup != null, onClick = {
-                        val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
-                        messages = messages + optimistic; FynxChatStore.save(context, "group_$groupId", messages); text = ""; replyToId = null; sending = true
-                        scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, optimistic).onSuccess { remote ->
-                            val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context)); messages = messages.map { if (it.id == optimistic.id) serverMessage else it }; FynxChatStore.save(context, "group_$groupId", messages); syncMessage = null
-                        }.onFailure { error -> messages = messages.filterNot { it.id == optimistic.id }; FynxChatStore.save(context, "group_$groupId", messages); syncMessage = error.message ?: "Message could not be sent." }; sending = false }
-                    }, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.Send, "Send", Modifier.size(24.dp)) }
+        Surface(color = Color(0xFF1E1E1E), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(enabled = canSendMessages, onClick = { showEmojiPanel = !showEmojiPanel }, modifier = Modifier.size(40.dp)) {
+                    Text("☺", style = MaterialTheme.typography.titleLarge)
+                }
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    enabled = canSendMessages,
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text(if (canSendMessages) "Message..." else "Messaging is restricted") },
+                    maxLines = 1,
+                    singleLine = true,
+                    shape = RoundedCornerShape(22.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = {
+                        if (text.isNotBlank() && !sending && selectedGroup != null) {
+                            val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
+                            messages = messages + optimistic
+                            FynxChatStore.save(context, "group_$groupId", messages)
+                            text = ""; replyToId = null; sending = true
+                            scope.launch {
+                                FynxGroupRemoteClient.sendMessage(context, groupId, optimistic)
+                                    .onSuccess { remote ->
+                                        val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
+                                        messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
+                                        FynxChatStore.save(context, "group_$groupId", messages)
+                                        syncMessage = null
+                                    }
+                                    .onFailure { error ->
+                                        messages = messages.filterNot { it.id == optimistic.id }
+                                        FynxChatStore.save(context, "group_$groupId", messages)
+                                        syncMessage = error.message ?: "Message could not be sent."
+                                    }
+                                sending = false
+                            }
+                        }
+                    })
+                )
+                IconButton(
+                    enabled = canSendMessages,
+                    onClick = {
+                        if (text.isNotBlank() && !sending && selectedGroup != null) {
+                            val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
+                            messages = messages + optimistic
+                            FynxChatStore.save(context, "group_$groupId", messages)
+                            text = ""; replyToId = null; sending = true
+                            scope.launch {
+                                FynxGroupRemoteClient.sendMessage(context, groupId, optimistic)
+                                    .onSuccess { remote ->
+                                        val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
+                                        messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
+                                        FynxChatStore.save(context, "group_$groupId", messages)
+                                        syncMessage = null
+                                    }
+                                    .onFailure { error ->
+                                        messages = messages.filterNot { it.id == optimistic.id }
+                                        FynxChatStore.save(context, "group_$groupId", messages)
+                                        syncMessage = error.message ?: "Message could not be sent."
+                                    }
+                                sending = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(Icons.Default.Mic, "Microphone", Modifier.size(24.dp))
                 }
             }
         }
