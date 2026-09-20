@@ -23,6 +23,32 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
     return { mode, bps, fixed, buyerShare, version };
   };
 
+  const publicCheckoutOrder = (row) => ({
+    id: String(row.id),
+    buyerId: String(row.buyer_id),
+    sellerId: String(row.seller_id),
+    listingId: String(row.listing_id),
+    quantity: Number(row.quantity),
+    unitPrice: Number(row.unit_price),
+    deliveryFee: Number(row.delivery_fee),
+    productSubtotal: Number(row.product_subtotal),
+    marketplaceFee: Number(row.marketplace_fee),
+    marketplaceFeeBuyer: Number(row.marketplace_fee_buyer),
+    marketplaceFeeSeller: Number(row.marketplace_fee_seller),
+    discountAmount: Number(row.discount_amount),
+    buyerTotal: Number(row.buyer_total),
+    totalAmount: Number(row.total_amount),
+    currency: row.currency,
+    product: row.product_snapshot,
+    status: row.status,
+    fulfillmentMethod: row.fulfillment_method,
+    shippingAddress: row.shipping_address,
+    buyerNote: row.buyer_note,
+    shippingProvider: row.shipping_method,
+    shippingNote: row.shipping_note,
+    shippingFeePolicy: row.shipping_fee_policy
+  });
+
   app.post('/api/marketplace/checkout/order', auth, async (req, res) => {
     const listingId = positiveInt(req.body?.listingId); const quantity = positiveInt(req.body?.quantity); const orderId = uuid(req.body?.orderId) || crypto.randomUUID();
     const method = clean(req.body?.fulfillmentMethod, 20).toUpperCase(); const buyerNote = clean(req.body?.buyerNote, 1000);
@@ -37,7 +63,27 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
       if (String(safety.account_status) === 'LOCKED') { await client.query('ROLLBACK'); return res.status(403).json({ error: 'account is locked', code: 'ACCOUNT_LOCKED' }); }
       if (String(safety.account_status) === 'LIMITED') { await client.query('ROLLBACK'); return res.status(403).json({ error: 'account is temporarily limited from marketplace purchases', code: 'ACCOUNT_LIMITED' }); }
       const existing = (await client.query(`SELECT * FROM marketplace_orders WHERE id=$1 AND buyer_id=$2 LIMIT 1`, [orderId, req.user.sub])).rows[0];
-      if (existing) { await client.query('ROLLBACK'); return res.status(200).json({ order: { id: String(existing.id), status: existing.status }, idempotent: true }); }
+      if (existing) {
+        const sameCoreRequest =
+          String(existing.listing_id) === String(listingId) &&
+          Number(existing.quantity) === Number(quantity) &&
+          String(existing.fulfillment_method).toUpperCase() === method;
+        const existingAddress = existing.shipping_address || {};
+        const sameDeliveryAddress = method !== 'DELIVERY' || (
+          String(existingAddress.name || '') === address.name &&
+          String(existingAddress.phone || '') === address.phone &&
+          String(existingAddress.address || '') === address.address &&
+          String(existingAddress.city || '') === address.city &&
+          String(existingAddress.state || '') === address.state &&
+          String(existingAddress.country || '') === address.country
+        );
+        if (!sameCoreRequest || !sameDeliveryAddress) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'order id is already bound to a different checkout request', code: 'ORDER_ID_REUSE_CONFLICT' });
+        }
+        await client.query('ROLLBACK');
+        return res.status(200).json({ order: publicCheckoutOrder(existing), idempotent: true });
+      }
       const listing = (await client.query(`SELECT l.*,u.username AS seller_username,u.display_name AS seller_display_name FROM marketplace_listings l JOIN users u ON u.id=l.seller_id WHERE l.id=$1 AND l.active=TRUE FOR UPDATE`, [listingId])).rows[0];
       if (!listing) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'listing not found or no longer available' }); }
       if (String(listing.seller_id) === String(req.user.sub)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'you cannot purchase your own listing' }); }
@@ -65,7 +111,7 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
       await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'CHECKOUT_CONFIRMED',NULL,'PAYMENT_PENDING',$3::jsonb)`, [orderId, req.user.sub, JSON.stringify({ quantity, fulfillmentMethod: method, shippingProvider: shipping.provider, shippingFeePolicy: shipping.feePolicy, protected: true, buyerTotal, currency })]);
       await client.query('COMMIT');
       const row = inserted.rows[0];
-      return res.status(201).json({ order: { id: String(row.id), buyerId: String(row.buyer_id), sellerId: String(row.seller_id), listingId: String(row.listing_id), quantity: Number(row.quantity), unitPrice: Number(row.unit_price), deliveryFee: Number(row.delivery_fee), productSubtotal: Number(row.product_subtotal), marketplaceFee: Number(row.marketplace_fee), marketplaceFeeBuyer: Number(row.marketplace_fee_buyer), marketplaceFeeSeller: Number(row.marketplace_fee_seller), discountAmount: Number(row.discount_amount), buyerTotal: Number(row.buyer_total), totalAmount: Number(row.total_amount), currency: row.currency, product: row.product_snapshot, status: row.status, fulfillmentMethod: row.fulfillment_method, shippingAddress: row.shipping_address, buyerNote: row.buyer_note, shippingProvider: row.shipping_method, shippingNote: row.shipping_note, shippingFeePolicy: row.shipping_fee_policy } });
+      return res.status(201).json({ order: publicCheckoutOrder(row) });
     } catch (error) { await client.query('ROLLBACK').catch(() => {}); console.error('[marketplace-checkout-order]', error); return res.status(500).json({ error: 'could not create protected checkout order' }); }
     finally { client.release(); }
   });

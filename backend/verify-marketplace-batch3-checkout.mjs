@@ -17,6 +17,8 @@ const checks = [
   ['protected checkout order route exists', order.includes("app.post('/api/marketplace/checkout/order'")],
   ['order creation is authenticated', order.includes("checkout/order', auth")],
   ['order creation is idempotent by order id', order.includes('WHERE id=$1 AND buyer_id=$2') && order.includes('idempotent: true')],
+  ['order id reuse is bound to the original checkout request', order.includes('ORDER_ID_REUSE_CONFLICT') && order.includes('sameCoreRequest') && order.includes('sameDeliveryAddress')],
+  ['idempotent checkout returns the complete authoritative order', order.includes('publicCheckoutOrder(existing)')],
   ['order rechecks the listing under lock', order.includes('FOR UPDATE') && order.includes('active=TRUE')],
   ['order reserves inventory atomically', order.includes('reserved_quantity=reserved_quantity+$1')],
   ['order snapshots fulfillment and address', order.includes('fulfillmentMethod: method') && order.includes('shippingAddress')],
