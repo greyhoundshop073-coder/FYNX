@@ -174,6 +174,13 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
         PRIMARY KEY (post_id, user_id)
       );
       CREATE INDEX IF NOT EXISTS social_saved_posts_user_idx ON social_saved_posts(user_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS social_post_audience (
+        post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (post_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS social_post_audience_user_idx ON social_post_audience(user_id, created_at DESC);
       CREATE TABLE IF NOT EXISTS social_post_reposts (
         post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE,
         user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -186,6 +193,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
   };
 
   const visiblePost = async (postId, userId) => {
+    await ensureSchema();
     const result = await pool.query(`
       SELECT 1 FROM social_posts p
        WHERE p.id=$1
