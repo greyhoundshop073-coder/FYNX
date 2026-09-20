@@ -46,9 +46,9 @@ export async function installSocialMultiMedia() {
     const multiLocationNeedle = "const backgroundKey = typeof req.body?.textBackground === 'string' ? req.body.textBackground.trim().toUpperCase() : '';
       const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : null;
       const musicMediaId = req.body?.musicMediaId == null ? null : Number(req.body.musicMediaId);
-      const musicTitle = typeof req.body?.musicTitle === 'string' ? req.body.musicTitle.trim().slice(0, 120) : null;
-      const musicArtist = typeof req.body?.musicArtist === 'string' ? req.body.musicArtist.trim().slice(0, 120) : null;
-      const musicDurationMs = req.body?.musicDurationMs == null ? 0 : Math.max(0, Math.min(Number(req.body.musicDurationMs) || 0, 86400000));
+      let musicTitle = typeof req.body?.musicTitle === 'string' ? req.body.musicTitle.trim().slice(0, 120) : null;
+      let musicArtist = typeof req.body?.musicArtist === 'string' ? req.body.musicArtist.trim().slice(0, 120) : null;
+      let musicDurationMs = req.body?.musicDurationMs == null ? 0 : Math.max(0, Math.min(Number(req.body.musicDurationMs) || 0, 86400000));
       const feelingActivityType = typeof req.body?.feelingActivityType === 'string' ? req.body.feelingActivityType.trim().toUpperCase() : null;
       const feelingActivity = typeof req.body?.feelingActivity === 'string' ? req.body.feelingActivity.trim().slice(0, 80) : null;
       const allowedFeelingActivityTypes = ['FEELING','ACTIVITY'];
