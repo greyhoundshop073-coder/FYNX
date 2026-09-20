@@ -141,9 +141,13 @@ object FynxBackendClient {
     /** INTERNET means a usable transport may exist while Android is still validating it. Let the request itself prove reachability. */
     private fun hasNetwork(context: Context): Boolean {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
-        val networks = manager.allNetworks
-        if (networks.isEmpty()) return false
-        return networks.any { network ->
+        val active = manager.activeNetwork
+        if (active != null) {
+            val capabilities = manager.getNetworkCapabilities(active)
+            if (capabilities != null && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return true
+        }
+        return manager.allNetworks.any { network ->
+            if (network == active) return@any false
             val capabilities = manager.getNetworkCapabilities(network) ?: return@any false
             capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
         }
