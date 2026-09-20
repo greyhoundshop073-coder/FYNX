@@ -192,9 +192,22 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 categories.forEach { item -> FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item) }) }
             }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) }
+            if (loading && listings.isNotEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
             when {
                 loading && listings.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                listings.isEmpty() -> Box(Modifier.fillMaxSize().padding(24.dp), Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(52.dp)); Spacer(Modifier.height(10.dp)); Text("No products yet", style = MaterialTheme.typography.titleLarge); Text("Be the first seller on FYNX", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+                listings.isEmpty() -> Box(Modifier.fillMaxSize().padding(24.dp), Alignment.Center) {
+                    val filtered = query.isNotBlank() || category != "All" || nearbyMode
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(52.dp))
+                        Spacer(Modifier.height(10.dp))
+                        Text(if (filtered) "No matching products" else "No products yet", style = MaterialTheme.typography.titleLarge)
+                        Text(if (filtered) "Try another search or clear the current filters." else "Be the first seller on FYNX", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (filtered) {
+                            Spacer(Modifier.height(8.dp))
+                            TextButton(onClick = { query = ""; category = "All"; if (nearbyMode) toggleNearby() }) { Text("Clear filters") }
+                        }
+                    }
+                }
                 else -> LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 132.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) { if (visibleSellerListings.isNotEmpty()) { item(span = { GridItemSpan(maxLineSpan) }) { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { Text("Top Sellers (Highest Sales)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("Highest successful sales from sellers currently represented here", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }; item(span = { GridItemSpan(maxLineSpan) }) { LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(start = 0.dp, end = 16.dp)) { items(visibleSellerListings, key = { it.sellerUsername.removePrefix("@").trim().lowercase() }) { seller -> MarketplaceSellerCard(seller, sellerReputations[seller.sellerUsername.removePrefix("@").trim().lowercase()]!!, sellerPhotoIds[seller.sellerUsername.removePrefix("@").trim().lowercase()], { onOpenProfile(seller.sellerUsername) }) } } }; item(span = { GridItemSpan(maxLineSpan) }) { Text("Products", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp)) } }; gridItems(listings, key = { it.id }) { listing -> MarketplaceCard(l = listing, onProfile = { onOpenProfile(listing.sellerUsername) }, onContact = { contactSeller(listing.sellerUsername) }, onOpen = { selected = listing }) } }
             }
         }
