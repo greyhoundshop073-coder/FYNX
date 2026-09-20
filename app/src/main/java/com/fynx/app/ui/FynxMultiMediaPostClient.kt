@@ -39,15 +39,8 @@ object FynxMultiMediaPostClient {
             throw IllegalArgumentException("Add a caption or at least one media item.")
         }
 
-        require(music == null || catalogueMusic == null) { "Choose either a FYNX catalogue track or a local music file." }
-        var musicMediaId: Long? = catalogueMusic?.mediaId
-        if (music != null) {
-            val mime = detectMimeType(context, music.uri)
-            require(mime.startsWith("audio/")) { "The selected music track is not a valid audio file." }
-            val size = runCatching { context.contentResolver.openAssetFileDescriptor(music.uri, "r")?.use { it.length } ?: -1L }.getOrDefault(-1L)
-            require(size != 0L && size <= MAX_SINGLE_MEDIA_BYTES) { "The music file must be 12 MB or smaller." }
-            musicMediaId = FynxProductionMessaging.uploadMedia(context, music.uri, mime).getOrThrow().id.toLong()
-        }
+        require(music == null) { "Local music uploads are disabled. Choose a track from the FYNX music catalogue." }
+        val musicMediaId: Long? = catalogueMusic?.mediaId
 
         val postId = if (selected.isEmpty()) {
             val raw = FynxBackendClient.postJson(
