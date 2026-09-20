@@ -370,6 +370,30 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     }
   });
 
+  app.get('/api/social/music/media/:id', auth, async (req, res) => {
+    try {
+      await ensureSocialSchema();
+      const mediaId = Number(req.params.id);
+      if (!Number.isSafeInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: 'invalid music media' });
+      const result = await pool.query(
+        `SELECT mm.mime_type,mm.data
+           FROM fynx_music_catalogue c
+           JOIN message_media mm ON mm.id=c.media_id
+          WHERE c.media_id=$1 AND c.active=TRUE`,
+        [mediaId]
+      );
+      if (!result.rows[0] || !String(result.rows[0].mime_type || '').toLowerCase().startsWith('audio/')) {
+        return res.status(404).json({ error: 'music track not found' });
+      }
+      res.set('Cache-Control', 'private, max-age=3600');
+      res.type(result.rows[0].mime_type);
+      return res.send(result.rows[0].data);
+    } catch (error) {
+      console.error('music catalogue media by id', error);
+      return res.status(500).json({ error: 'music preview failed' });
+    }
+  });
+
   app.get('/api/social/music/catalogue/:id/media', auth, async (req, res) => {
     try {
       await ensureSocialSchema();
