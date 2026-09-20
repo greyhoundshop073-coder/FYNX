@@ -51,6 +51,7 @@ object FynxStatusClient {
             put("privateStatus", status.audience != FynxStatusAudience.EVERYONE)
             put("audience", status.audience.name)
             put("voiceDurationMs", status.voiceDurationMs)
+            put("musicCatalogueId", status.musicCatalogueId ?: JSONObject.NULL)
         }.toString()
         FynxBackendClient.postJson(context, "/api/statuses", body).getOrThrow()
     }
@@ -66,12 +67,14 @@ object FynxStatusClient {
                 val audience = runCatching { FynxStatusAudience.valueOf(o.optString("audience", if (o.optBoolean("privateStatus")) "FRIENDS" else "EVERYONE")) }.getOrDefault(FynxStatusAudience.EVERYONE)
                 val mediaId = o.optString("mediaId").ifBlank { o.optString("media_id") }.ifBlank { null }
                 val mediaUrl = o.optString("mediaUrl").ifBlank { o.optString("media_url") }.ifBlank { mediaId?.let { "/api/media/$it" } }
+                val musicCatalogueId = o.optLong("musicCatalogueId", 0L).takeIf { it > 0L }
                 add(FynxStatus(
                     id=o.getString("id"), ownerUsername=o.getString("ownerUsername"), ownerDisplayName=o.optString("ownerDisplayName"),
                     type=type, contentUri=mediaUrl, text=o.optString("text").ifBlank { null },
                     createdAtMillis=o.optLong("createdAtMillis"), expiresAtMillis=o.optLong("expiresAtMillis"),
                     textStyle=FynxStatusTextStyle(o.optLong("backgroundColor",0xFF111111),o.optLong("foregroundColor",0xFFFFFFFF),font,o.optInt("alignment",1)),
-                    privateStatus=o.optBoolean("privateStatus"), voiceDurationMs=o.optLong("voiceDurationMs",0L), audience=audience
+                    privateStatus=o.optBoolean("privateStatus"), voiceDurationMs=o.optLong("voiceDurationMs",0L), audience=audience,
+                    musicCatalogueId=musicCatalogueId, musicTitle=o.optString("musicTitle").ifBlank { null }, musicArtist=o.optString("musicArtist").ifBlank { null }, musicDurationMs=o.optLong("musicDurationMs",0L).coerceAtLeast(0L)
                 ))
             }
         }
