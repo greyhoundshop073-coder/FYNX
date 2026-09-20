@@ -332,7 +332,7 @@ fun FynxHomeSocialHubPanel(
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false, dismissOnBackPress = !posting, dismissOnClickOutside = !posting)
         ) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).imePadding()) {
+                Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { clearComposer() }, enabled = !posting && !false) { Icon(Icons.Default.Close, "Close") }
                         Text("New post", style = MaterialTheme.typography.titleLarge)
@@ -476,7 +476,7 @@ fun FynxHomeSocialHubPanel(
                         }
 
                         Row(
-                            Modifier.fillMaxWidth().padding(top = 6.dp),
+                            Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(top = 6.dp),
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -629,7 +629,7 @@ fun FynxHomeSocialHubPanel(
                             showCamera = false
                             showComposer = true
                         },
-                        onDismiss = { showCamera = false; showComposer = true }
+                        onDismiss = { showCamera = false }
                     )
                 }
             }
