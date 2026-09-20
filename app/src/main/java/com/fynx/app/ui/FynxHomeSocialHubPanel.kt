@@ -221,7 +221,7 @@ fun FynxHomeSocialHubPanel(
                                             Text(track.title.ifBlank { "Untitled" }, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                                             Text(track.artist.ifBlank { "FYNX" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                                         }
-                                        Text(formatMusicDuration(track.durationMs), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("${track.durationMs.coerceAtLeast(0L) / 60000}:${((track.durationMs.coerceAtLeast(0L) / 1000L) % 60).toString().padStart(2, '0')}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
                             }
