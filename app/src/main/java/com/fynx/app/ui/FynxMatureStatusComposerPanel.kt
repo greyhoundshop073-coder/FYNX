@@ -59,15 +59,19 @@ private val MATURE_STATUS_BACKGROUNDS = listOf(0xFF111111, 0xFF4527A0, 0xFF1565C
 private val MATURE_STATUS_TEXT_COLORS = listOf(0xFFFFFFFF, 0xFF000000, 0xFFFFEB3B, 0xFFFFCDD2, 0xFFB3E5FC)
 
 @Composable
-fun FynxMatureStatusComposerPanel(onClose: () -> Unit = {}) {
+fun FynxMatureStatusComposerPanel(
+    initialMediaUri: Uri? = null,
+    initialType: FynxStatusType? = null,
+    onClose: () -> Unit = {}
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val auth = remember(context) { FynxAuthStore.load(context) }
     val username = auth.username?.removePrefix("@").orEmpty().ifBlank { "preview" }
     val displayName = username.ifBlank { "You" }
-    var type by remember { mutableStateOf(FynxStatusType.TEXT) }
+    var type by remember(initialType) { mutableStateOf(initialType ?: FynxStatusType.TEXT) }
     var text by remember { mutableStateOf("") }
-    var mediaUri by remember { mutableStateOf<Uri?>(null) }
+    var mediaUri by remember(initialMediaUri) { mutableStateOf(initialMediaUri) }
     var background by remember { mutableLongStateOf(MATURE_STATUS_BACKGROUNDS.first()) }
     var foreground by remember { mutableLongStateOf(0xFFFFFFFF) }
     var font by remember { mutableStateOf(FynxStatusTextFont.CLASSIC) }
