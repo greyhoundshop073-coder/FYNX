@@ -48,11 +48,7 @@ fun FynxStatusHubPanel() {
     LaunchedEffect(composing, cameraOpen) { if (!composing && !cameraOpen) timelineRefreshKey++ }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize()) {
-            if (composing) FynxMatureStatusComposerPanel(onClose = { composing = false }) else key(timelineRefreshKey) { FynxStatusTimelinePanel() }
-            if (!composing) Row(modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end = 18.dp, bottom = 26.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                SmallFloatingActionButton(onClick = { if (!publishingCameraStatus) { cameraError = null; cameraOpen = true } }) { Icon(Icons.Default.PhotoCamera, contentDescription = "Open Status camera") }
-                FloatingActionButton(onClick = { composing = true }) { Icon(Icons.Default.Add, contentDescription = "Create Status") }
-            }
+            if (composing) FynxMatureStatusComposerPanel(onClose = { composing = false }) else key(timelineRefreshKey) { FynxStatusTimelinePanel(onCameraClick = { if (!publishingCameraStatus) { cameraError = null; cameraOpen = true } }, onCreateClick = { composing = true }) }
             cameraError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 102.dp, start = 18.dp, end = 18.dp)) }
         }
     }
