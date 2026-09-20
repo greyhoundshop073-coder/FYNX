@@ -366,6 +366,10 @@ const statusSchema = async () => {
     private_status BOOLEAN NOT NULL DEFAULT FALSE,
     audience TEXT NOT NULL DEFAULT 'EVERYONE' CHECK (audience IN ('EVERYONE','FRIENDS','ONLY_ME')),
     voice_duration_ms BIGINT NOT NULL DEFAULT 0,
+    music_catalogue_id BIGINT,
+    music_title TEXT,
+    music_artist TEXT,
+    music_duration_ms BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     expires_at TIMESTAMPTZ NOT NULL
   );
@@ -379,6 +383,10 @@ const statusSchema = async () => {
       ALTER TABLE statuses ADD CONSTRAINT statuses_audience_check CHECK (audience IN ('EVERYONE','FRIENDS','ONLY_ME'));
     END IF;
   END $$;`);
+  await pool.query("ALTER TABLE statuses ADD COLUMN IF NOT EXISTS music_catalogue_id BIGINT");
+  await pool.query("ALTER TABLE statuses ADD COLUMN IF NOT EXISTS music_title TEXT");
+  await pool.query("ALTER TABLE statuses ADD COLUMN IF NOT EXISTS music_artist TEXT");
+  await pool.query("ALTER TABLE statuses ADD COLUMN IF NOT EXISTS music_duration_ms BIGINT NOT NULL DEFAULT 0");
   await pool.query("CREATE INDEX IF NOT EXISTS statuses_owner_idx ON statuses(owner_id,created_at DESC)");
   await pool.query("CREATE INDEX IF NOT EXISTS statuses_expiry_idx ON statuses(expires_at)");
 };
@@ -386,13 +394,13 @@ const statusSchema = async () => {
 app.get("/api/statuses", auth, async (req, res) => {
   try {
     await statusSchema();
-    const result = await pool.query(`SELECT s.id,s.owner_id,u.username,u.display_name,s.type,s.text,s.media_id,s.background_color,s.foreground_color,s.font,s.alignment,s.private_status,s.audience,s.voice_duration_ms,EXTRACT(EPOCH FROM s.created_at)*1000 AS created_at,EXTRACT(EPOCH FROM s.expires_at)*1000 AS expires_at
+    const result = await pool.query(`SELECT s.id,s.owner_id,u.username,u.display_name,s.type,s.text,s.media_id,s.background_color,s.foreground_color,s.font,s.alignment,s.private_status,s.audience,s.voice_duration_ms,s.music_catalogue_id,s.music_title,s.music_artist,s.music_duration_ms,EXTRACT(EPOCH FROM s.created_at)*1000 AS created_at,EXTRACT(EPOCH FROM s.expires_at)*1000 AS expires_at
       FROM statuses s JOIN users u ON u.id=s.owner_id
       WHERE s.expires_at > NOW() AND (s.owner_id=$1 OR s.audience='EVERYONE' OR (s.audience='FRIENDS' AND EXISTS(
         SELECT 1 FROM friendships f WHERE ((f.user_id=s.owner_id AND f.friend_id=$1) OR (f.user_id=$1 AND f.friend_id=s.owner_id)) AND f.status='accepted'
       ))) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=s.owner_id) OR (b.blocker_id=s.owner_id AND b.blocked_id=$1))
       ORDER BY s.created_at DESC LIMIT 200`, [req.user.sub]);
-    return res.json({ statuses: result.rows.map(row => ({ id:String(row.id), ownerUsername:row.username, ownerDisplayName:row.display_name, type:row.type, text:row.text || null, mediaId:row.media_id == null ? null : String(row.media_id), mediaUrl:row.media_id == null ? null : `/api/media/${row.media_id}`, backgroundColor:Number(row.background_color), foregroundColor:Number(row.foreground_color), font:row.font, alignment:Number(row.alignment), privateStatus:Boolean(row.private_status), audience:row.audience || (row.private_status ? 'FRIENDS' : 'EVERYONE'), voiceDurationMs:Number(row.voice_duration_ms), createdAtMillis:Number(row.created_at), expiresAtMillis:Number(row.expires_at) })) });
+    return res.json({ statuses: result.rows.map(row => ({ id:String(row.id), ownerUsername:row.username, ownerDisplayName:row.display_name, type:row.type, text:row.text || null, mediaId:row.media_id == null ? null : String(row.media_id), mediaUrl:row.media_id == null ? null : `/api/media/${row.media_id}`, backgroundColor:Number(row.background_color), foregroundColor:Number(row.foreground_color), font:row.font, alignment:Number(row.alignment), privateStatus:Boolean(row.private_status), audience:row.audience || (row.private_status ? 'FRIENDS' : 'EVERYONE'), voiceDurationMs:Number(row.voice_duration_ms), musicCatalogueId:row.music_catalogue_id == null ? null : Number(row.music_catalogue_id), musicTitle:row.music_title || null, musicArtist:row.music_artist || null, musicDurationMs:Number(row.music_duration_ms || 0), createdAtMillis:Number(row.created_at), expiresAtMillis:Number(row.expires_at) })) });
   } catch (error) { console.error("statuses", error); return res.status(500).json({ error:"status lookup failed" }); }
 });
 
@@ -410,10 +418,22 @@ app.post("/api/statuses", auth, async (req, res) => {
     const audience = typeof req.body?.audience === "string" ? req.body.audience.trim().toUpperCase() : (Boolean(req.body?.privateStatus) ? "FRIENDS" : "EVERYONE");
     const privateStatus = audience !== "EVERYONE";
     const voiceDurationMs = Number(req.body?.voiceDurationMs ?? 0);
+    const musicCatalogueId = req.body?.musicCatalogueId == null ? null : Number(req.body.musicCatalogueId);
+    let musicTitle = null;
+    let musicArtist = null;
+    let musicDurationMs = 0;
+    if (musicCatalogueId != null) {
+      if (!Number.isInteger(musicCatalogueId) || musicCatalogueId < 1) return res.status(400).json({error:"invalid music selection"});
+      const music = await pool.query("SELECT c.id,c.title,c.artist,c.duration_ms,mm.mime_type FROM fynx_music_catalogue c JOIN message_media mm ON mm.id=c.media_id WHERE c.id=$1 AND c.active=TRUE LIMIT 1", [musicCatalogueId]);
+      if (!music.rows[0] || !String(music.rows[0].mime_type || "").toLowerCase().startsWith("audio/")) return res.status(403).json({error:"music selection is not published in the FYNX catalogue"});
+      musicTitle = music.rows[0].title;
+      musicArtist = music.rows[0].artist;
+      musicDurationMs = Math.max(0, Math.min(Number(music.rows[0].duration_ms) || 0, 30000));
+    }
     if (!id || !/^[0-9a-f-]{36}$/i.test(id) || !["TEXT","PHOTO","VIDEO","VOICE"].includes(type) || (type==="TEXT" && !text) || !Number.isFinite(backgroundColor) || !Number.isFinite(foregroundColor) || !Number.isInteger(alignment) || alignment<0 || alignment>2 || !["EVERYONE","FRIENDS","ONLY_ME"].includes(audience) || !Number.isFinite(voiceDurationMs) || voiceDurationMs<0 || voiceDurationMs>30000) return res.status(400).json({error:"invalid status"});
     if (type !== "TEXT" && (!Number.isInteger(mediaId) || mediaId < 1)) return res.status(400).json({error:"media is required"});
     if (mediaId != null) { const media=await pool.query("SELECT id FROM message_media WHERE id=$1 AND owner_id=$2",[mediaId,req.user.sub]); if(!media.rows[0]) return res.status(403).json({error:"media is not owned by this account"}); }
-    const result=await pool.query("INSERT INTO statuses (id,owner_id,type,text,media_id,background_color,foreground_color,font,alignment,private_status,audience,voice_duration_ms,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW()+INTERVAL '24 hours') RETURNING id,created_at,expires_at",[id,req.user.sub,type,text,mediaId,backgroundColor,foregroundColor,font,alignment,privateStatus,audience,voiceDurationMs]);
+    const result=await pool.query("INSERT INTO statuses (id,owner_id,type,text,media_id,background_color,foreground_color,font,alignment,private_status,audience,voice_duration_ms,music_catalogue_id,music_title,music_artist,music_duration_ms,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW()+INTERVAL '24 hours') RETURNING id,created_at,expires_at",[id,req.user.sub,type,text,mediaId,backgroundColor,foregroundColor,font,alignment,privateStatus,audience,voiceDurationMs,musicCatalogueId,musicTitle,musicArtist,musicDurationMs]);
     return res.status(201).json({status:{id:String(result.rows[0].id),createdAtMillis:new Date(result.rows[0].created_at).getTime(),expiresAtMillis:new Date(result.rows[0].expires_at).getTime()}});
   } catch (error) { if(error?.code==="23505") return res.status(409).json({error:"status already exists"}); console.error("status create",error); return res.status(500).json({error:"status creation failed"}); }
 });
