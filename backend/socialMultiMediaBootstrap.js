@@ -182,9 +182,15 @@ export async function installSocialMultiMedia() {
       }
       if (!text && mediaIds.length === 0 && musicMediaId == null) return res.status(400).json({ error: 'add a caption or media' });
       if (musicMediaId != null) {
-        if (!Number.isSafeInteger(musicMediaId) || musicMediaId < 1) return res.status(400).json({ error: 'invalid music media' });
-        const musicResult = await client.query('SELECT id,mime_type,owner_id FROM message_media WHERE id=$1', [musicMediaId]);
-        if (!musicResult.rows[0] || String(musicResult.rows[0].owner_id) !== String(req.user.sub) || !String(musicResult.rows[0].mime_type || '').toLowerCase().startsWith('audio/')) return res.status(403).json({ error: 'music media ownership check failed' });
+        if (!Number.isSafeInteger(musicMediaId) || musicMediaId < 1) return res.status(400).json({ error: 'invalid music selection' });
+        const musicResult = await client.query(
+          'SELECT c.id,c.media_id,c.title,c.artist,c.duration_ms,mm.mime_type FROM fynx_music_catalogue c JOIN message_media mm ON mm.id=c.media_id WHERE c.media_id=$1 AND c.active=TRUE',
+          [musicMediaId]
+        );
+        if (!musicResult.rows[0] || !String(musicResult.rows[0].mime_type || '').toLowerCase().startsWith('audio/')) return res.status(403).json({ error: 'music selection is not published in the FYNX catalogue' });
+        musicTitle = musicResult.rows[0].title;
+        musicArtist = musicResult.rows[0].artist;
+        musicDurationMs = Number(musicResult.rows[0].duration_ms || 0);
       }
       if (visibility === 'SELECTED_PEOPLE') {
         const friends = await client.query(`SELECT CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END AS id FROM friendships f WHERE (f.user_id=$1 OR f.friend_id=$1) AND f.status='accepted' AND CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END = ANY($2::bigint[])`, [req.user.sub, audienceUserIds]);
