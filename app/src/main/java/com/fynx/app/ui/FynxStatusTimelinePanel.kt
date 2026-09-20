@@ -511,7 +511,7 @@ private fun FynxStatusStoryViewer(
                                         Text(status.musicTitle?.ifBlank { "FYNX Music" } ?: "FYNX Music", color = Color.White, maxLines = 1)
                                         Text(status.musicArtist?.ifBlank { "FYNX" } ?: "FYNX", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
                                     }
-                                    FynxRemoteAudio("/api/social/music/catalogue/" + musicId + "/media", Modifier.width(120.dp), status.musicDurationMs.coerceIn(1_000L, 30_000L))
+                                    FynxRemoteAudio("/api/social/music/catalogue/" + musicId + "/media", Modifier.width(120.dp), status.musicDurationMs.coerceAtLeast(1_000L))
                                 }
                             }
                         }
