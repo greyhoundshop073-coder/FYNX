@@ -140,8 +140,9 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
       const orderResult = await client.query(`SELECT id,buyer_id,total_amount,currency,status,payment_reference FROM marketplace_orders WHERE payment_reference=$1`, [reference]);
       const order = orderResult.rows[0];
       if (!order) { await client.query('ROLLBACK'); return res.status(200).json({ received: true, matched: false }); }
+      const metadataBuyerId = String(transaction.metadata?.buyerId || transaction.metadata?.buyer_id || '');
       const orderExpectedAmount = amountSubunit(order.total_amount, order.currency);
-      if (metadataOrderId !== String(order.id) || String(transaction.reference) !== String(order.payment_reference) || orderExpectedAmount !== paidAmount || paidCurrency !== String(order.currency).toUpperCase()) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'payment data does not match order' }); }
+      if (metadataOrderId !== String(order.id) || metadataBuyerId !== String(order.buyer_id) || String(transaction.reference) !== String(order.payment_reference) || orderExpectedAmount !== paidAmount || paidCurrency !== String(order.currency).toUpperCase()) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'payment data does not match order' }); }
       const result = await confirmMarketplacePayment(client, { orderId: order.id, reference, paidAmount, paidCurrency, providerFee: transaction.fees, source: 'webhook' });
       await client.query('COMMIT');
       return res.status(200).json({ received: true, matched: true, status: result.status, idempotent: result.idempotent });

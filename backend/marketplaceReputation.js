@@ -128,8 +128,13 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
       const reference = `FYNX-${existing.id}`, payload = { email, amount: String(amount), currency: String(existing.currency).toUpperCase(), reference, metadata: { orderId: String(existing.id), buyerId: String(existing.buyer_id), purpose: 'FYNX_MARKETPLACE_ORDER' } };
       if (process.env.PAYSTACK_CALLBACK_URL) payload.callback_url = process.env.PAYSTACK_CALLBACK_URL;
       const data = await paystackRequest('/transaction/initialize', { method: 'POST', body: JSON.stringify(payload) });
+      const providerReference = String(data.data?.reference || '').trim();
+      const providerAmount = Number(data.data?.amount);
+      const providerCurrency = String(data.data?.currency || '').trim().toUpperCase();
       const authorizationUrl = data.data?.authorization_url || '', accessCode = data.data?.access_code || null;
-      if (!authorizationUrl) return res.status(502).json({ error: 'payment provider returned no authorization url' });
+      if (!authorizationUrl || providerReference !== reference || providerAmount !== amount || providerCurrency !== String(existing.currency).toUpperCase()) {
+        return res.status(502).json({ error: 'payment provider returned data that does not match the protected order' });
+      }
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
@@ -161,8 +166,8 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
       if (!order) return res.status(404).json({ error: 'payment order not found' });
       if (String(order.buyer_id) !== String(req.user.sub)) return res.status(403).json({ error: 'payment unavailable' });
       const data = await paystackRequest(`/transaction/verify/${encodeURIComponent(reference)}`), transaction = data.data || {};
-      const expectedAmount = amountSubunit(order.total_amount, order.currency), paidAmount = Number(transaction.amount), paidCurrency = String(transaction.currency || '').toUpperCase(), metadataOrderId = String(transaction.metadata?.orderId || transaction.metadata?.order_id || '');
-      const valid = transaction.status === 'success' && expectedAmount === paidAmount && paidCurrency === String(order.currency).toUpperCase() && metadataOrderId === String(order.id);
+      const expectedAmount = amountSubunit(order.total_amount, order.currency), paidAmount = Number(transaction.amount), paidCurrency = String(transaction.currency || '').toUpperCase(), metadataOrderId = String(transaction.metadata?.orderId || transaction.metadata?.order_id || ''), metadataBuyerId = String(transaction.metadata?.buyerId || transaction.metadata?.buyer_id || ''), providerReference = String(transaction.reference || '').trim();
+      const valid = transaction.status === 'success' && providerReference === reference && expectedAmount === paidAmount && paidCurrency === String(order.currency).toUpperCase() && metadataOrderId === String(order.id) && metadataBuyerId === String(order.buyer_id);
       if (!valid) return res.status(409).json({ error: 'payment could not be verified', status: transaction.status || 'unknown' });
       const client = await pool.connect();
       try {
