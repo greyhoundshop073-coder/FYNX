@@ -64,7 +64,7 @@ fun FynxAdminControlCenterPanel() {
             Text("Role: ${d.role}", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Users", d.users); StatCard("Reports", d.openReports) }; Spacer(Modifier.height(8.dp)); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Appeals", d.openAppeals); StatCard("Safety / 24h", d.safetyEvents24h) }
 
-            Spacer(Modifier.height(20.dp)); FynxMusicAdminPanel(); Spacer(Modifier.height(20.dp)); Text("Marketplace protection cases", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review open buyer/seller disputes before money is released or refunded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (d.role == "OWNER") { Spacer(Modifier.height(20.dp)); FynxMusicAdminPanel(); Spacer(Modifier.height(20.dp)) }; Text("Marketplace protection cases", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review open buyer/seller disputes before money is released or refunded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
             if (protectionLoading) CircularProgressIndicator() else if (protectionError != null) {
                 Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) { Text(protectionError!!, color = MaterialTheme.colorScheme.error); TextButton(onClick = { refreshProtection++ }) { Text("Retry") } } }
