@@ -150,7 +150,7 @@ fun FynxRemoteProfileAvatar(mediaId: String?, contentDescription: String?, modif
 private sealed interface MediaLoadResult { data class Image(val bitmap: android.graphics.Bitmap) : MediaLoadResult; data class Video(val file: File) : MediaLoadResult }
 
 @Composable
-fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier) {
+fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier, maxDurationMs: Long? = null) {
     val context = LocalContext.current
     val resolvedUrl = remember(mediaUrl) { resolveFynxMediaUrl(context, mediaUrl) }
     val scope = rememberCoroutineScope()
@@ -161,6 +161,15 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier) {
     var error by remember(resolvedUrl) { mutableStateOf<String?>(null) }
 
     DisposableEffect(resolvedUrl) { onDispose { player?.release(); player = null; localFile = null } }
+
+    LaunchedEffect(playing, maxDurationMs, resolvedUrl) {
+        val limit = maxDurationMs?.coerceAtLeast(0L) ?: 0L
+        if (playing && limit > 0L) {
+            kotlinx.coroutines.delay(limit)
+            player?.let { runCatching { it.pause(); it.seekTo(0) } }
+            playing = false
+        }
+    }
 
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         IconButton(enabled = !loading, onClick = {
