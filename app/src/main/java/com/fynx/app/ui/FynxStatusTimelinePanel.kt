@@ -149,19 +149,38 @@ fun FynxStatusTimelinePanel(
 }
 
 @Composable
-private fun StatusAvatar(ownerUsername: String, ownerDisplayName: String, showAdd: Boolean = false) {
+private fun StatusAvatar(
+    ownerUsername: String,
+    ownerDisplayName: String,
+    showAdd: Boolean = false,
+    status: FynxStatus? = null
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val cachedPhotoId = remember(ownerUsername) { FynxProfileRemoteClient.cachedProfilePhotoId(context, ownerUsername) }
-    var profilePhotoMediaId by remember(ownerUsername) { mutableStateOf(cachedPhotoId) }
-    LaunchedEffect(ownerUsername) {
-        FynxProfileRemoteClient.get(context, ownerUsername)
-            .onSuccess { profilePhotoMediaId = it.profilePhotoMediaId }
-            .onFailure { profilePhotoMediaId = cachedPhotoId }
+    val cachedPhotoId = remember(ownerUsername) {
+        if (status != null) {
+            FynxProfileRemoteClient.cachedProfilePhotoId(context, status.ownerUsername)
+        } else {
+            FynxProfileRemoteClient.cachedProfilePhotoId(context, ownerUsername)
+        }
     }
+    var profilePhotoMediaId by remember(ownerUsername) { mutableStateOf(cachedPhotoId) }
+    var remoteProfileLoaded by remember(ownerUsername) { mutableStateOf(false) }
+    LaunchedEffect(ownerUsername) {
+        remoteProfileLoaded = false
+        FynxProfileRemoteClient.get(context, ownerUsername)
+            .onSuccess {
+                profilePhotoMediaId = it.profilePhotoMediaId
+                remoteProfileLoaded = true
+            }
+            .onFailure {
+                remoteProfileLoaded = false
+            }
+    }
+    val avatarId = if (remoteProfileLoaded) profilePhotoMediaId else cachedPhotoId
     Box(Modifier.size(58.dp)) {
         Box(Modifier.fillMaxSize().border(2.dp, MaterialTheme.colorScheme.primary, CircleShape).padding(3.dp)) {
-            if (!profilePhotoMediaId.isNullOrBlank()) {
-                FynxRemoteProfileAvatar(profilePhotoMediaId, ownerDisplayName, Modifier.fillMaxSize().clip(CircleShape))
+            if (!avatarId.isNullOrBlank()) {
+                FynxRemoteProfileAvatar(avatarId, ownerDisplayName, Modifier.fillMaxSize().clip(CircleShape))
             } else {
                 Box(Modifier.fillMaxSize().clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
                     Text(ownerDisplayName.take(1).uppercase(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -186,7 +205,7 @@ private fun StatusHomeRow(
     showAdd: Boolean = false
 ) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-        StatusAvatar(ownerUsername, ownerDisplayName, showAdd)
+        StatusAvatar(ownerUsername, ownerDisplayName, showAdd, status)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(if (isMe) "My status" else ownerDisplayName, fontWeight = FontWeight.SemiBold, maxLines = 1)
