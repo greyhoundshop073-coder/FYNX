@@ -10,16 +10,14 @@ object FynxNetworkQuality {
 
     fun current(context: Context): Level {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return Level.OFFLINE
-        var sawValidatedNetwork = false
+        var sawInternetNetwork = false
         var sawUnknownBandwidth = false
         var bestDownstreamKbps = 0
 
         manager.allNetworks.forEach { network ->
             val capabilities = manager.getNetworkCapabilities(network) ?: return@forEach
             if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return@forEach
-            if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return@forEach
-
-            sawValidatedNetwork = true
+            sawInternetNetwork = true
             val downstream = capabilities.linkDownstreamBandwidthKbps
             if (downstream <= 0) {
                 sawUnknownBandwidth = true
@@ -28,7 +26,7 @@ object FynxNetworkQuality {
             }
         }
 
-        if (!sawValidatedNetwork) return Level.OFFLINE
+        if (!sawInternetNetwork) return Level.OFFLINE
         // Unknown bandwidth must not be treated as a fast connection. Using the
         // weak-network path is safer because it gives requests longer timeouts
         // and tighter concurrency while the real link quality is uncertain.

@@ -13,9 +13,8 @@ def check(name, condition):
     checks.append((name, bool(condition)))
 
 check("backend transport requires HTTPS", 'startsWith("https://")' in client)
-# Production HTTP must not block on Android's VALIDATED bit; INTERNET is the transport gate,
-# while the request itself proves reachability. Currency conversion intentionally keeps its
-# stricter validation because it is an external utility path.
+# Production HTTP uses the shared INTERNET transport gate; the request itself proves reachability.
+# Utility paths must use the same central backend transport instead of inventing a second gate.
 check("backend transport uses INTERNET-based network gate", "hasNetwork(context)" in client and "NET_CAPABILITY_INTERNET" in client and "allNetworks" in client and "NET_CAPABILITY_VALIDATED" not in client.split("private fun hasNetwork", 1)[-1].split("private fun isRetryableFailure", 1)[0])
 check("idempotent backend requests have bounded retries", "MAX_IDEMPOTENT_RETRIES = 2" in client and "attempt >= MAX_IDEMPOTENT_RETRIES" in client)
 check("non-idempotent POST/PATCH are not automatically retried", 'val retryable = method == "GET" || method == "DELETE"' in client)
@@ -26,7 +25,7 @@ check("media downloads use the central backend transport", "FynxBackendClient.do
 check("media downloads require HTTPS and same trusted host", 'target.protocol.equals("https", true)' in client and 'target.host.equals(configured.host, true)' in client)
 check("media downloads have bounded bytes and partial-file protection", "maxBytes: Long" in client and ".part" in client and "temporary.renameTo(destination)" in client)
 check("media downloads cancel the underlying connection", "invokeOnCompletion" in client and "connection.disconnect()" in client)
-check("currency conversion has validated-network protection", "ConnectivityManager" in currency and "awaitValidatedNetwork(context)" in currency and "NET_CAPABILITY_INTERNET" in currency and "NET_CAPABILITY_VALIDATED" in currency)
+check("currency conversion uses the shared FYNX network gate", "FynxBackendClient.get(context, path)" in currency and "awaitValidatedNetwork(context)" not in currency and "NET_CAPABILITY_VALIDATED" not in currency)
 check("currency converter rate function declaration is syntactically intact", "Result<Map<String, Double>> = withContext(Dispatchers.IO)" in currency and "Doubprivate suspend fun fetchOpenRates" not in currency)
 check("CI contains the complete R2 sequence", all(x in workflow for x in ["verify_r2c_realtime.py", "verify_r2d_recovery.py", "verify_r2e_final.py"]))
 check("R2-E runs before production certification", workflow.index("verify_r2e_final.py") < workflow.index("verify_fynx_production.py"))

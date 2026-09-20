@@ -18,13 +18,7 @@ export async function installSocialMultiMedia() {
   if (!source.includes(locationMarker)) {
     const schemaMarker = "CREATE INDEX IF NOT EXISTS social_posts_created_idx ON social_posts(created_at DESC);";
     if (!source.includes(schemaMarker)) throw new Error("FYNX location bootstrap could not locate social post schema marker");
-    source = source.replace(schemaMarker, schemaMarker + "\n      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS location TEXT;
-      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL;
-      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_title TEXT;
-      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_artist TEXT;
-      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_duration_ms BIGINT;
-      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS feeling_activity_type TEXT;
-      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS feeling_activity TEXT;");
+    source = source.replace(schemaMarker, schemaMarker + "\n      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS location TEXT;\n      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL;\n      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_title TEXT;\n      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_artist TEXT;\n      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS music_duration_ms BIGINT;\n      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS feeling_activity_type TEXT;\n      ALTER TABLE social_posts ADD COLUMN IF NOT EXISTS feeling_activity TEXT;");
 
     if (source.includes("p.media_type,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp")) {
       source = source.replace("p.media_type,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp", "p.media_type,p.location,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp");
@@ -157,6 +151,7 @@ export async function installSocialMultiMedia() {
       const text = typeof req.body?.text === 'string' ? req.body.text.trim().slice(0, 4000) : '';
       const visibility = ['PUBLIC','FRIENDS_ONLY','SELECTED_PEOPLE','ONLY_ME'].includes(String(req.body?.visibility || '').toUpperCase()) ? String(req.body.visibility).toUpperCase() : 'PUBLIC';
       const backgroundKey = typeof req.body?.textBackground === 'string' ? req.body.textBackground.trim().toUpperCase() : '';
+      const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : null;
       const backgroundStyles = { OCEAN: [0xFF1565C0,0xFFFFFFFF], VIOLET: [0xFF6A1B9A,0xFFFFFFFF], EMERALD: [0xFF00695C,0xFFFFFFFF], SUNSET: [0xFFE65100,0xFFFFFFFF], CHARCOAL: [0xFF263238,0xFFFFFFFF] };
       const backgroundStyle = backgroundKey && backgroundStyles[backgroundKey] ? backgroundStyles[backgroundKey] : null;
       const audienceUserIds = Array.isArray(req.body?.audienceUserIds) ? req.body.audienceUserIds.map(String).map(value => value.trim()).filter(Boolean).slice(0, 100) : [];

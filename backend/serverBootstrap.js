@@ -86,7 +86,7 @@ if (!social.includes("/api/social/posts/multi")) {
 }
 
 if (!social.includes("/api/social/posts/:id/media")) {
-  const mediaRoute = `  app.get('/api/social/posts/:id/media',auth,async(req,res)=>{try{await ensureSocialSchema();const id=Number(req.params.id);if(!Number.isInteger(id)||!(await visibleSocialPost(id,req.user.sub)))return res.status(404).json({error:'post not found'});const r=await pool.query('SELECT spm.media_id,spm.media_type,spm.position FROM social_post_media spm WHERE spm.post_id=$1 ORDER BY spm.position ASC',[id]);res.json({media:r.rows.map(x=>({mediaId:String(x.media_id),mediaType:x.media_type,position:Number(x.position),mediaUrl:`/api/social/media/${x.media_id}`}))})}catch(e){res.status(500).json({error:'post media lookup failed'})}});\n`;
+  const mediaRoute = `  app.get('/api/social/posts/:id/media',auth,async(req,res)=>{try{await ensureSocialSchema();const id=Number(req.params.id);if(!Number.isInteger(id)||!(await visibleSocialPost(id,req.user.sub)))return res.status(404).json({error:'post not found'});const r=await pool.query('SELECT spm.media_id,spm.media_type,spm.position FROM social_post_media spm WHERE spm.post_id=$1 ORDER BY spm.position ASC',[id]);res.json({media:r.rows.map(x=>({mediaId:String(x.media_id),mediaType:x.media_type,position:Number(x.position),mediaUrl:\`/api/social/media/\${x.media_id}\`}))})}catch(e){res.status(500).json({error:'post media lookup failed'})}});\n`;
   const finalMarker = "\n}\n";
   const idx = social.lastIndexOf(finalMarker);
   if (idx < 0) throw new Error("FYNX bootstrap could not locate social route closing marker");

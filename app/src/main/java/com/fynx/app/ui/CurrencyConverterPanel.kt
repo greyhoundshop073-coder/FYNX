@@ -1,8 +1,6 @@
 package com.fynx.app.ui
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -90,7 +88,6 @@ private suspend fun fetchOpenRates(context: Context, base: String): Result<Map<S
     var lastError: Throwable? = null
     repeat(RATE_RETRIES + 1) { attempt ->
         try {
-            awaitValidatedNetwork(context)
             val path = "/api/money-planner/rates?base=" + base.uppercase(Locale.US)
             val result = FynxBackendClient.get(context, path).mapCatching { raw ->
                 val json = JSONObject(raw)
@@ -109,15 +106,4 @@ private suspend fun fetchOpenRates(context: Context, base: String): Result<Map<S
         if (attempt < RATE_RETRIES) delay(750L * (attempt + 1))
     }
     Result.failure(lastError ?: IOException("Rate service unavailable"))
-}
-
-private fun awaitValidatedNetwork(context: Context) {
-    val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-        ?: throw IOException("Network service unavailable")
-    val valid = manager.allNetworks.any { network ->
-        val capabilities = manager.getNetworkCapabilities(network)
-        capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-    }
-    if (!valid) throw IOException("Network connection is unavailable")
 }

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "prestart": "node phase1FoundationBootstrap.js && node notificationBootstrap.js && node -e \"import('./socialMultiMediaBootstrap.js').then(({installSocialMultiMedia}) => installSocialMultiMedia())\"",
-    "start": "node renderStartupSourceGuard.js && node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js"
+    "start": "node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
