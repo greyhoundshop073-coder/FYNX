@@ -227,7 +227,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         }
                         Column(horizontalAlignment = if (message.fromMe) Alignment.End else Alignment.Start) {
                             if (!message.fromMe && !message.senderUsername.isNullOrBlank()) {
-                                Text(message.senderUsername!!, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.72f), modifier = Modifier.padding(bottom = 2.dp))
+                                Text(message.senderUsername!!, style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = Color.White.copy(alpha = 0.72f), modifier = Modifier.padding(bottom = 2.dp))
                             }
                             Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primary else Color(0xFF303030), contentColor = Color.White, shape = RoundedCornerShape(18.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { replyToId = message.id }, onLongClick = { reactionMessageId = message.id })) {
                                 Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
