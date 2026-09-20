@@ -9,6 +9,12 @@ import android.net.Uri
 import android.view.ViewGroup
 import android.widget.MediaController
 import android.widget.VideoView
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -39,6 +45,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -419,20 +426,48 @@ private fun AudioPostPlayer(file: File) {
             Spacer(Modifier.width(4.dp))
 
             val waveformHeights = listOf(12, 18, 24, 15, 28, 20, 32, 17, 25, 13, 22, 30, 18, 26, 15, 23, 12, 20)
+            var playbackProgress by remember(file) { mutableFloatStateOf(0f) }
+            val waveTransition = rememberInfiniteTransition(label = "voice_wave")
+            val wavePhase by waveTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = waveformHeights.size.toFloat(),
+                animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart),
+                label = "voice_wave_phase"
+            )
+            LaunchedEffect(playing, player) {
+                while (playing) {
+                    playbackProgress = if (player.duration > 0) {
+                        (player.currentPosition.toFloat() / player.duration.toFloat()).coerceIn(0f, 1f)
+                    } else 0f
+                    delay(50L)
+                }
+                playbackProgress = if (player.duration > 0) {
+                    (player.currentPosition.toFloat() / player.duration.toFloat()).coerceIn(0f, 1f)
+                } else 0f
+            }
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .height(34.dp),
+                    .height(38.dp),
                 horizontalArrangement = Arrangement.spacedBy(3.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                waveformHeights.forEach { height ->
+                waveformHeights.forEachIndexed { index, baseHeight ->
+                    val distance = kotlin.math.abs(index - wavePhase)
+                    val pulse = if (playing) (kotlin.math.sin((index + wavePhase) * 0.72f) + 1f) * 0.18f else 0f
+                    val height = (baseHeight * (0.82f + pulse)).coerceIn(7f, 34f)
+                    val passed = index < playbackProgress * waveformHeights.size
                     Box(
                         modifier = Modifier
                             .width(3.dp)
                             .height(height.dp)
                             .clip(MaterialTheme.shapes.small)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.72f))
+                            .background(
+                                if (passed || (playing && distance < 0.9f))
+                                    MaterialTheme.colorScheme.primary
+                                else
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
+                            )
                     )
                 }
             }
