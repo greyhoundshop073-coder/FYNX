@@ -57,7 +57,9 @@ fun FynxRemoteMedia(
     type: String,
     modifier: Modifier = Modifier,
     loopVideo: Boolean = true,
-    onVideoCompleted: (() -> Unit)? = null
+    onVideoCompleted: (() -> Unit)? = null,
+    contentScale: ContentScale = ContentScale.Crop,
+    rounded: Boolean = true
 ) {
     val context = LocalContext.current
     val resolvedUrl = remember(mediaUrl) { resolveFynxMediaUrl(context, mediaUrl) }
@@ -96,9 +98,13 @@ fun FynxRemoteMedia(
     }
     DisposableEffect(resolvedUrl, type) { onDispose { videoView?.stopPlayback(); videoView = null } }
     when (kind) {
-        "image" -> bitmap?.let { Image(it.asImageBitmap(), "Media", modifier.clip(RoundedCornerShape(14.dp)), contentScale = ContentScale.Crop) }
+        "image" -> bitmap?.let {
+            val imageModifier = if (rounded) modifier.clip(RoundedCornerShape(14.dp)) else modifier
+            Image(it.asImageBitmap(), "Media", imageModifier, contentScale = contentScale)
+        }
         "video" -> localFile?.let { file ->
-            Box(modifier.clip(RoundedCornerShape(14.dp))) {
+            val videoModifier = if (rounded) modifier.clip(RoundedCornerShape(14.dp)) else modifier
+            Box(videoModifier) {
                 AndroidView(
                     factory = { ctx ->
                         FynxPassiveVideoView(ctx).apply {
