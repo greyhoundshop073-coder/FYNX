@@ -30,6 +30,7 @@ object FynxMultiMediaPostClient {
         textBackground: FynxPostTextBackground? = null,
         location: String? = null,
         music: FynxSelectedMusic? = null,
+        catalogueMusic: FynxMusicCatalogueTrack? = null,
         feelingActivity: FynxFeelingActivityOption? = null
     ): Result<String> = runCatching {
         val selected = uris.distinct().take(MAX_MEDIA)
@@ -38,7 +39,8 @@ object FynxMultiMediaPostClient {
             throw IllegalArgumentException("Add a caption or at least one media item.")
         }
 
-        var musicMediaId: Long? = null
+        require(music == null || catalogueMusic == null) { "Choose either a FYNX catalogue track or a local music file." }
+        var musicMediaId: Long? = catalogueMusic?.mediaId
         if (music != null) {
             val mime = detectMimeType(context, music.uri)
             require(mime.startsWith("audio/")) { "The selected music track is not a valid audio file." }
