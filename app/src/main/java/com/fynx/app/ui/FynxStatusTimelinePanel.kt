@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.focus.onFocusChanged
@@ -378,9 +380,9 @@ private fun FynxStatusStoryViewer(
 
                     // Tap zones for previous/next status without adding visible controls.
                     Row(Modifier.fillMaxSize()) {
-                        Box(Modifier.weight(0.30f).fillMaxHeight().clickable { movePrevious() })
+                        Box(Modifier.weight(0.30f).fillMaxHeight().clickable(enabled = index > 0) { if (index > 0) index-- })
                         Spacer(Modifier.weight(0.40f).fillMaxHeight())
-                        Box(Modifier.weight(0.30f).fillMaxHeight().clickable { moveNext() })
+                        Box(Modifier.weight(0.30f).fillMaxHeight().clickable(enabled = index < statuses.lastIndex) { if (index < statuses.lastIndex) index++ })
                     }
                 }
 
@@ -503,7 +505,7 @@ private fun FynxStatusStoryViewer(
                                 enabled = !replying,
                                 singleLine = true,
                                 shape = RoundedCornerShape(50),
-                                placeholder = { Text("Reply…", color = Color.White.copy(alpha = 0.72f)) },
+                                placeholder = { Text("Reply to this Status…", color = Color.White.copy(alpha = 0.72f)) },
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = Color.White,
                                     unfocusedTextColor = Color.White,
@@ -522,6 +524,22 @@ private fun FynxStatusStoryViewer(
                                     }
                                 }
                             )
+                            IconButton(
+                                onClick = {
+                                    scope.launch {
+                                        FynxStatusClient.toggleLike(context, status.id)
+                                            .onSuccess { refreshInteractions() }
+                                            .onFailure { interactionError = it.message }
+                                    }
+                                },
+                                enabled = !replying
+                            ) {
+                                Icon(
+                                    if (interactions.likedByMe) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                    "Like Status (${interactions.likeCount})",
+                                    tint = if (interactions.likedByMe) Color.Red else Color.White
+                                )
+                            }
                             IconButton(onClick = { showReactionPicker = true }, enabled = !replying) {
                                 Icon(Icons.Default.EmojiEmotions, "React", tint = Color.White)
                             }
