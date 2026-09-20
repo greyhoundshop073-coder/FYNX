@@ -167,14 +167,25 @@ private fun StatusAvatar(
     var remoteProfileLoaded by remember(ownerUsername) { mutableStateOf(false) }
     LaunchedEffect(ownerUsername) {
         remoteProfileLoaded = false
-        FynxProfileRemoteClient.get(context, ownerUsername)
-            .onSuccess {
-                profilePhotoMediaId = it.profilePhotoMediaId
-                remoteProfileLoaded = true
-            }
-            .onFailure {
-                remoteProfileLoaded = false
-            }
+        if (status != null) {
+            FynxProfileRemoteClient.get(context, status.ownerUsername)
+                .onSuccess {
+                    profilePhotoMediaId = it.profilePhotoMediaId
+                    remoteProfileLoaded = true
+                }
+                .onFailure {
+                    remoteProfileLoaded = false
+                }
+        } else {
+            FynxProfileRemoteClient.get(context, ownerUsername)
+                .onSuccess {
+                    profilePhotoMediaId = it.profilePhotoMediaId
+                    remoteProfileLoaded = true
+                }
+                .onFailure {
+                    remoteProfileLoaded = false
+                }
+        }
     }
     val avatarId = if (remoteProfileLoaded) profilePhotoMediaId else cachedPhotoId
     Box(Modifier.size(58.dp)) {
