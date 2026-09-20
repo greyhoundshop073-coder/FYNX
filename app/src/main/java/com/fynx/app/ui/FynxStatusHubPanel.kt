@@ -49,7 +49,8 @@ import java.util.UUID
 
 private data class FynxRecentMedia(
     val uri: Uri,
-    val isVideo: Boolean
+    val isVideo: Boolean,
+    val dateAddedSeconds: Long
 )
 
 /** Single Status/Stories surface. */
@@ -63,6 +64,7 @@ fun FynxStatusHubPanel() {
     var publishingCameraStatus by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
     var timelineRefreshKey by remember { mutableIntStateOf(0) }
+    var selectedInitialMedia by remember { mutableStateOf<FynxRecentMedia?>(null) }
 
     fun publishCapturedStatus(uri: Uri, type: String) {
         if (publishingCameraStatus) return
@@ -116,7 +118,11 @@ fun FynxStatusHubPanel() {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize()) {
             when {
-                composing -> FynxMatureStatusComposerPanel(onClose = { composing = false })
+                composing -> FynxMatureStatusComposerPanel(
+                    initialMediaUri = selectedInitialMedia?.uri,
+                    initialType = selectedInitialMedia?.let { if (it.isVideo) FynxStatusType.VIDEO else FynxStatusType.PHOTO },
+                    onClose = { selectedInitialMedia = null; composing = false }
+                )
                 addStatusOpen -> FynxAddStatusPanel(
                     onClose = { addStatusOpen = false },
                     onCamera = {
@@ -125,10 +131,15 @@ fun FynxStatusHubPanel() {
                             cameraOpen = true
                         }
                     },
-                    onText = { composing = true; addStatusOpen = false },
-                    onVoice = { composing = true; addStatusOpen = false },
+                    onText = { selectedInitialMedia = null; composing = true; addStatusOpen = false },
+                    onVoice = { selectedInitialMedia = null; composing = true; addStatusOpen = false },
                     onMusic = { },
-                    onLayout = { }
+                    onLayout = { },
+                    onMediaSelected = { media ->
+                        selectedInitialMedia = media
+                        composing = true
+                        addStatusOpen = false
+                    }
                 )
                 else -> key(timelineRefreshKey) {
                     // FynxStatusTimelinePanel() remains the single backend Status hub surface.
@@ -180,7 +191,8 @@ private fun FynxAddStatusPanel(
     onText: () -> Unit,
     onVoice: () -> Unit,
     onMusic: () -> Unit,
-    onLayout: () -> Unit
+    onLayout: () -> Unit,
+    onMediaSelected: (FynxRecentMedia) -> Unit
 ) {
     val context = LocalContext.current
     var mediaPermissionGranted by remember {
@@ -296,7 +308,7 @@ private fun FynxAddStatusPanel(
                     FynxCameraGridCell(onClick = onCamera)
                 }
                 items(recentMedia, key = { it.uri.toString() }) { media ->
-                    FynxRecentMediaCell(media)
+                    FynxRecentMediaCell(media, onClick = { onMediaSelected(media) })
                 }
             }
         }
@@ -353,7 +365,7 @@ private fun FynxCameraGridCell(onClick: () -> Unit) {
 }
 
 @Composable
-private fun FynxRecentMediaCell(media: FynxRecentMedia) {
+private fun FynxRecentMediaCell(media: FynxRecentMedia, onClick: () -> Unit) {
     val context = LocalContext.current
     var bitmap by remember(media.uri) { mutableStateOf<android.graphics.Bitmap?>(null) }
 
@@ -371,7 +383,8 @@ private fun FynxRecentMediaCell(media: FynxRecentMedia) {
         modifier = Modifier
             .aspectRatio(1f)
             .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         bitmap?.let {
@@ -442,7 +455,8 @@ private fun loadFynxRecentMedia(context: android.content.Context): List<FynxRece
             val id = cursor.getLong(idIndex)
             result += FynxRecentMedia(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI.buildUpon().appendPath(id.toString()).build(),
-                false
+                false,
+                cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED))
             )
         }
     }
@@ -461,10 +475,14 @@ private fun loadFynxRecentMedia(context: android.content.Context): List<FynxRece
             val id = cursor.getLong(idIndex)
             videos += FynxRecentMedia(
                 MediaStore.Video.Media.EXTERNAL_CONTENT_URI.buildUpon().appendPath(id.toString()).build(),
-                true
+                true,
+                cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED))
             )
         }
     }
 
-    return (result + videos).distinctBy { it.uri.toString() }.take(60)
+    return (result + videos)
+        .distinctBy { it.uri.toString() }
+        .sortedByDescending { it.dateAddedSeconds }
+        .take(60)
 }
