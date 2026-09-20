@@ -144,6 +144,15 @@ export async function installSocialMultiMedia() {
       const visibility = ['PUBLIC','FRIENDS_ONLY','SELECTED_PEOPLE','ONLY_ME'].includes(String(req.body?.visibility || '').toUpperCase()) ? String(req.body.visibility).toUpperCase() : 'PUBLIC';
       const backgroundKey = typeof req.body?.textBackground === 'string' ? req.body.textBackground.trim().toUpperCase() : '';
       const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : null;
+      const musicMediaId = req.body?.musicMediaId == null ? null : Number(req.body.musicMediaId);
+      let musicTitle = typeof req.body?.musicTitle === 'string' ? req.body.musicTitle.trim().slice(0, 120) : null;
+      let musicArtist = typeof req.body?.musicArtist === 'string' ? req.body.musicArtist.trim().slice(0, 120) : null;
+      let musicDurationMs = req.body?.musicDurationMs == null ? 0 : Math.max(0, Math.min(Number(req.body.musicDurationMs) || 0, 86400000));
+      const feelingActivityType = typeof req.body?.feelingActivityType === 'string' ? req.body.feelingActivityType.trim().toUpperCase() : null;
+      const feelingActivity = typeof req.body?.feelingActivity === 'string' ? req.body.feelingActivity.trim().slice(0, 80) : null;
+      const allowedFeelingActivityTypes = ['FEELING','ACTIVITY'];
+      if (feelingActivityType != null && !allowedFeelingActivityTypes.includes(feelingActivityType)) return res.status(400).json({ error: 'invalid feeling or activity type' });
+      if (feelingActivityType != null && !feelingActivity) return res.status(400).json({ error: 'feeling or activity label is required' });
       const backgroundStyles = { OCEAN: [0xFF1565C0,0xFFFFFFFF], VIOLET: [0xFF6A1B9A,0xFFFFFFFF], EMERALD: [0xFF00695C,0xFFFFFFFF], SUNSET: [0xFFE65100,0xFFFFFFFF], CHARCOAL: [0xFF263238,0xFFFFFFFF] };
       const backgroundStyle = backgroundKey && backgroundStyles[backgroundKey] ? backgroundStyles[backgroundKey] : null;
       const audienceUserIds = Array.isArray(req.body?.audienceUserIds) ? req.body.audienceUserIds.map(String).map(value => value.trim()).filter(Boolean).slice(0, 100) : [];
