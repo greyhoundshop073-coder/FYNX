@@ -235,6 +235,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     Text(formatMessageClock(message.timestamp), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.62f))
                                     if (message.fromMe) { Spacer(Modifier.width(4.dp)); Text(if (message.read) "✓✓" else if (message.delivered) "✓✓" else "✓", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.68f)) }
                                 }
+                                }
                             }
                         }
                     }
