@@ -258,6 +258,91 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       res.json({ posts: rows.map(x=>({id:String(x.id),authorId:String(x.author_id),authorUsername:x.author_username,authorDisplayName:x.author_display_name,text:x.text,visibility:x.visibility,mediaId:x.media_id==null?null:String(x.media_id),mediaType:x.media_type||null,mediaUrl:x.media_id==null?null:`/api/social/media/${x.media_id}`,textBackground:x.text_background||null,textBackgroundColor:x.text_background_color==null?null:Number(x.text_background_color),textForegroundColor:x.text_foreground_color==null?null:Number(x.text_foreground_color),location:x.location||null,musicMediaId:x.music_media_id==null?null:String(x.music_media_id),musicTitle:x.music_title||null,musicArtist:x.music_artist||null,musicDurationMs:x.music_duration_ms==null?0:Number(x.music_duration_ms),feelingActivityType:x.feeling_activity_type||null,feelingActivity:x.feeling_activity||null,timestamp:Number(x.timestamp),likeCount:Number(x.like_count),commentCount:Number(x.comment_count),likedByCurrentUser:Boolean(x.liked_by_current_user),followedByCurrentUser:Boolean(x.followed_by_current_user)})), hasMore });
     } catch(e) { console.error('social feed',e); res.status(500).json({error:'social feed failed'}); }
   });
+  // FYNX Music Library management is restricted to the existing OWNER/ADMIN role system.
+  async function fynxMusicAdminRole(userId) {
+    const first = (await pool.query("SELECT id FROM users ORDER BY id ASC LIMIT 1")).rows[0];
+    if (first && String(first.id) === String(userId)) return "OWNER";
+    const result = await pool.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 LIMIT 1", [userId]);
+    return result.rowCount ? "ADMIN" : null;
+  }
+
+  app.post('/api/admin/social/music/catalogue', auth, async (req, res) => {
+    try {
+      const role = await fynxMusicAdminRole(req.user.sub);
+      if (!role) return res.status(403).json({ error: 'FYNX admin access required' });
+      await ensureSocialSchema();
+      const mediaId = Number(req.body?.mediaId);
+      const title = typeof req.body?.title === 'string' ? req.body.title.trim().slice(0, 120) : '';
+      const artist = typeof req.body?.artist === 'string' ? req.body.artist.trim().slice(0, 120) : '';
+      const durationMs = Math.max(0, Math.min(Number(req.body?.durationMs) || 0, 86400000));
+      const category = typeof req.body?.category === 'string' ? req.body.category.trim().slice(0, 60) || 'FYNX' : 'FYNX';
+      if (!Number.isSafeInteger(mediaId) || mediaId < 1 || !title) return res.status(400).json({ error: 'audio media, title and artist are required' });
+      const media = await pool.query('SELECT id,mime_type,owner_id FROM message_media WHERE id=$1', [mediaId]);
+      if (!media.rows[0] || String(media.rows[0].owner_id) !== String(req.user.sub) || !String(media.rows[0].mime_type || '').toLowerCase().startsWith('audio/')) {
+        return res.status(403).json({ error: 'music media must be an audio file owned by the authorized admin' });
+      }
+      const result = await pool.query(
+        `INSERT INTO fynx_music_catalogue(media_id,title,artist,duration_ms,category,created_by)
+         VALUES($1,$2,$3,$4,$5,$6)
+         ON CONFLICT (media_id) DO UPDATE SET title=EXCLUDED.title,artist=EXCLUDED.artist,duration_ms=EXCLUDED.duration_ms,category=EXCLUDED.category,active=TRUE
+         RETURNING id,media_id,title,artist,duration_ms,category,active`,
+        [mediaId, title, artist, durationMs, category, req.user.sub]
+      );
+      return res.status(201).json({
+        track: {
+          id: String(result.rows[0].id),
+          mediaId: String(result.rows[0].media_id),
+          title: result.rows[0].title,
+          artist: result.rows[0].artist,
+          durationMs: Number(result.rows[0].duration_ms || 0),
+          category: result.rows[0].category,
+          active: Boolean(result.rows[0].active)
+        }
+      });
+    } catch (error) {
+      console.error('admin add music', error);
+      return res.status(500).json({ error: 'music catalogue update failed' });
+    }
+  });
+
+  app.get('/api/admin/social/music/catalogue', auth, async (req, res) => {
+    try {
+      const role = await fynxMusicAdminRole(req.user.sub);
+      if (!role) return res.status(403).json({ error: 'FYNX admin access required' });
+      await ensureSocialSchema();
+      const result = await pool.query(`SELECT c.id,c.media_id,c.title,c.artist,c.duration_ms,c.category,c.active,c.created_at FROM fynx_music_catalogue c ORDER BY c.created_at DESC`);
+      return res.json({ tracks: result.rows.map((row) => ({
+        id: String(row.id),
+        mediaId: String(row.media_id),
+        title: row.title,
+        artist: row.artist,
+        durationMs: Number(row.duration_ms || 0),
+        category: row.category,
+        active: Boolean(row.active),
+        createdAt: row.created_at
+      })) });
+    } catch (error) {
+      console.error('admin music catalogue', error);
+      return res.status(500).json({ error: 'music catalogue lookup failed' });
+    }
+  });
+
+  app.delete('/api/admin/social/music/catalogue/:id', auth, async (req, res) => {
+    try {
+      const role = await fynxMusicAdminRole(req.user.sub);
+      if (!role) return res.status(403).json({ error: 'FYNX admin access required' });
+      await ensureSocialSchema();
+      const id = Number(req.params.id);
+      if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: 'invalid music track' });
+      const result = await pool.query('UPDATE fynx_music_catalogue SET active=FALSE WHERE id=$1 RETURNING id', [id]);
+      if (!result.rows[0]) return res.status(404).json({ error: 'music track not found' });
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error('admin remove music', error);
+      return res.status(500).json({ error: 'music track removal failed' });
+    }
+  });
+
   // Controlled FYNX music catalogue: ordinary users can read published tracks only.
   app.get('/api/social/music/catalogue', auth, async (req, res) => {
     try {
