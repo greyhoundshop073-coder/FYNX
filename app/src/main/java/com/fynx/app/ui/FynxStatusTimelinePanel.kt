@@ -195,7 +195,7 @@ private fun StatusAvatar(
         }
     }
     val avatarId = if (remoteProfileLoaded) profilePhotoMediaId else cachedPhotoId
-    Box(modifier.size(58.dp))
+    Box(modifier.size(58.dp)) {
         Box(Modifier.fillMaxSize().border(2.dp, MaterialTheme.colorScheme.primary, CircleShape).padding(3.dp)) {
             if (!avatarId.isNullOrBlank()) {
                 FynxRemoteProfileAvatar(avatarId, ownerDisplayName, Modifier.fillMaxSize().clip(CircleShape))
