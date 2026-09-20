@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
 
@@ -157,7 +159,8 @@ private fun StatusAvatar(
     ownerUsername: String,
     ownerDisplayName: String,
     showAdd: Boolean = false,
-    status: FynxStatus? = null
+    status: FynxStatus? = null,
+    modifier: Modifier = Modifier
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val cachedPhotoId = remember(ownerUsername) {
@@ -192,7 +195,7 @@ private fun StatusAvatar(
         }
     }
     val avatarId = if (remoteProfileLoaded) profilePhotoMediaId else cachedPhotoId
-    Box(Modifier.size(58.dp)) {
+    Box(modifier.size(58.dp))
         Box(Modifier.fillMaxSize().border(2.dp, MaterialTheme.colorScheme.primary, CircleShape).padding(3.dp)) {
             if (!avatarId.isNullOrBlank()) {
                 FynxRemoteProfileAvatar(avatarId, ownerDisplayName, Modifier.fillMaxSize().clip(CircleShape))
