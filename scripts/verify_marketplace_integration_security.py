@@ -19,7 +19,7 @@ transactions = (ROOT / "backend/marketplaceTransactions.js").read_text()
 
 checks = [
     ("Marketplace uses backend-driven listings", "FynxRemoteSocialClient.listings" in panel),
-    ("Marketplace keeps stable listing IDs in UI keys", "items(listings, key = { it.id })" in panel),
+    ("Marketplace keeps stable listing IDs in UI keys", ("items(listings, key = { it.id })" in panel or "gridItems(listings, key = { it.id })" in panel)),
     ("Marketplace seller profile opens through the existing profile callback", "onProfile = { onOpenProfile(listing.sellerUsername) }" in panel),
     ("Marketplace contact seller uses the existing chat deep link", "FynxDeepLinkParser.chatAppLink" in panel and "Intent.ACTION_VIEW" in panel),
     ("Marketplace discovery has a dedicated backend route", "/api/marketplace/discovery" in discovery),
