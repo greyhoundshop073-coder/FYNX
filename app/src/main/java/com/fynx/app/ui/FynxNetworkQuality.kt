@@ -13,8 +13,13 @@ object FynxNetworkQuality {
         var sawInternetNetwork = false
         var sawUnknownBandwidth = false
         var bestDownstreamKbps = 0
+        val active = manager.activeNetwork
+        val orderedNetworks = buildList {
+            if (active != null) add(active)
+            manager.allNetworks.filter { it != active }.forEach(::add)
+        }
 
-        manager.allNetworks.forEach { network ->
+        orderedNetworks.forEach { network ->
             val capabilities = manager.getNetworkCapabilities(network) ?: return@forEach
             if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return@forEach
             sawInternetNetwork = true
