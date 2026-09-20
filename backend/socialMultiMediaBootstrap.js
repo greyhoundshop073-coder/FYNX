@@ -180,7 +180,7 @@ export async function installSocialMultiMedia() {
         musicDurationMs = Number(musicResult.rows[0].duration_ms || 0);
       }
       if (visibility === 'SELECTED_PEOPLE') {
-        const friends = await client.query(`SELECT CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END AS id FROM friendships f WHERE (f.user_id=$1 OR f.friend_id=$1) AND f.status='accepted' AND CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END = ANY($2::bigint[])`, [req.user.sub, audienceUserIds]);
+        const friends = await client.query(\`SELECT CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END AS id FROM friendships f WHERE (f.user_id=$1 OR f.friend_id=$1) AND f.status='accepted' AND CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END = ANY($2::bigint[])\`, [req.user.sub, audienceUserIds]);
         if (friends.rows.length !== audienceUserIds.length) return res.status(403).json({ error: 'selected audience must contain your accepted friends' });
       }
 
