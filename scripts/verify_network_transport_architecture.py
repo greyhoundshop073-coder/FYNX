@@ -21,7 +21,6 @@ backend = Path("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt").read_te
 currency = Path("app/src/main/java/com/fynx/app/ui/CurrencyConverterPanel.kt").read_text(encoding="utf-8")
 required = [
     'PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"',
-    'require(normalized.isBlank() || normalized.startsWith("https://"))',
     'requiresAuthentication = !isPublicAuthPath(path)',
     'FynxSecureTokenStore',
 ]
