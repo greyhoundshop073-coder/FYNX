@@ -28,7 +28,11 @@ data class FynxStatus(
     val privateStatus: Boolean = false,
     val voiceDurationMs: Long = 0L,
     val muted: Boolean = false,
-    val audience: FynxStatusAudience = if (privateStatus) FynxStatusAudience.FRIENDS else FynxStatusAudience.EVERYONE
+    val audience: FynxStatusAudience = if (privateStatus) FynxStatusAudience.FRIENDS else FynxStatusAudience.EVERYONE,
+    val musicCatalogueId: Long? = null,
+    val musicTitle: String? = null,
+    val musicArtist: String? = null,
+    val musicDurationMs: Long = 0L
 ) {
     fun isExpired(nowMillis: Long = System.currentTimeMillis()): Boolean = nowMillis >= expiresAtMillis
 }
@@ -61,7 +65,9 @@ object FynxStatusStore {
                         o.optString("contentUri").ifBlank { null }, o.optString("text").ifBlank { null },
                         o.optLong("createdAtMillis"), o.optLong("expiresAtMillis"),
                         FynxStatusTextStyle(o.optLong("backgroundColor", 0xFF111111), o.optLong("foregroundColor", 0xFFFFFFFF), font, o.optInt("alignment", 1)),
-                        o.optBoolean("privateStatus"), o.optLong("voiceDurationMs", 0L), o.optBoolean("muted"), audience
+                        o.optBoolean("privateStatus"), o.optLong("voiceDurationMs", 0L), o.optBoolean("muted"), audience,
+                        o.optLong("musicCatalogueId", 0L).takeIf { it > 0L },
+                        o.optString("musicTitle").ifBlank { null }, o.optString("musicArtist").ifBlank { null }, o.optLong("musicDurationMs", 0L).coerceAtLeast(0L)
                     )
                     if (status.id.isNotBlank() && status.ownerUsername.isNotBlank() && !status.isExpired()) add(status)
                 }
@@ -121,6 +127,7 @@ object FynxStatusStore {
         put("contentUri", status.contentUri ?: ""); put("text", status.text ?: ""); put("createdAtMillis", status.createdAtMillis); put("expiresAtMillis", status.expiresAtMillis)
         put("backgroundColor", status.textStyle.backgroundColor); put("foregroundColor", status.textStyle.foregroundColor); put("font", status.textStyle.font.name); put("alignment", status.textStyle.alignment)
         put("privateStatus", status.privateStatus); put("voiceDurationMs", status.voiceDurationMs); put("muted", status.muted); put("audience", status.audience.name)
+        put("musicCatalogueId", status.musicCatalogueId ?: JSONObject.NULL); put("musicTitle", status.musicTitle ?: JSONObject.NULL); put("musicArtist", status.musicArtist ?: JSONObject.NULL); put("musicDurationMs", status.musicDurationMs)
     }
 
     private fun storageKey(value: String): String = value.map { character -> if (character.isLetterOrDigit()) character else '_' }.joinToString("").take(80).ifBlank { "account" }
