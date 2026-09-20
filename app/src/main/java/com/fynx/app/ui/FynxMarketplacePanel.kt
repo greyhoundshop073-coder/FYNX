@@ -245,8 +245,8 @@ private fun RemoteMarketMedia(context: android.content.Context, mediaId: String,
 @Composable
 private fun MarketplaceDetails(l: FynxRemoteSocialClient.MarketplaceListing, onProfile: () -> Unit, onContact: () -> Unit, onBuyNow: () -> Unit, onAddToCart: () -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
-    AlertDialog(onDismissRequest = onClose, title = { Text(l.title) }, text = { Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-        if (l.mediaIds.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(l.mediaIds.take(12)) { mediaId -> RemoteMarketMedia(LocalContext.current, mediaId, Modifier.width(280.dp).height(210.dp).clip(RoundedCornerShape(12.dp))) } }
+    AlertDialog(onDismissRequest = onClose, title = { Text(l.title, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, text = { Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding(), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        if (l.mediaIds.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(l.mediaIds.take(12)) { mediaId -> RemoteMarketMedia(LocalContext.current, mediaId, Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(12.dp))) } }
         Text("${l.currency} ${String.format(Locale.US, "%,.2f", l.price)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
         if (l.description.isNotBlank()) Text(l.description)
         Text("Seller: ${l.sellerDisplayName.ifBlank { l.sellerUsername }}")
