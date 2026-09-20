@@ -204,12 +204,13 @@ private fun FynxAddStatusPanel(
         if (mediaPermissionGranted) refreshMedia()
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
+        Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -351,14 +352,15 @@ private fun FynxCameraGridCell(onClick: () -> Unit) {
 
 @Composable
 private fun FynxRecentMediaCell(media: FynxRecentMedia) {
+    val context = LocalContext.current
     var bitmap by remember(media.uri) { mutableStateOf<android.graphics.Bitmap?>(null) }
 
-    LaunchedEffect(media.uri) {
+    LaunchedEffect(media.uri, context) {
         bitmap = runCatching {
             if (media.isVideo) {
-                contextLoadThumbnail(LocalContext.current, media.uri)
+                contextLoadThumbnail(context, media.uri)
             } else {
-                LocalContext.current.contentResolver.loadThumbnail(media.uri, Size(360, 360), null)
+                context.contentResolver.loadThumbnail(media.uri, Size(360, 360), null)
             }
         }.getOrNull()
     }
