@@ -62,9 +62,9 @@ require('Status backend caps music clip','musicDurationMs = Math.max(0, Math.min
 require('Add Status Music opens catalogue','onMusic = { showStatusMusicPicker = true }' in hub and 'FynxMusicCatalogueClient.listPublished(context, statusMusicSearch)' in hub)
 require('Add Status selected music reaches composer','selectedStatusMusic' in hub and 'initialMusic = selectedStatusMusic' in hub)
 require('Status composer carries selected music','selectedMusic?.id' in mature and 'musicCatalogueId = selectedMusic?.id' in mature)
-require('Status composer previews selected music','FynxRemoteAudio("/api/social/music/catalogue/" in mature and 'Remove music' in mature)
+require('Status composer previews selected music','FynxRemoteAudio("/api/social/music/catalogue/" in mature and "Remove music" in mature)
 require('Status viewer renders attached music','status.musicCatalogueId' in timeline and 'FynxRemoteAudio("/api/social/music/catalogue/" in timeline)
-require('Status viewer respects music duration','musicDurationMs.coerceIn(1_000L, 30_000L)' in timeline and 'kotlin.math.max' in timeline)
+require('Status viewer uses catalogue music duration','musicDurationMs.coerceAtLeast(1_000L)' in timeline and 'kotlin.math.max' in timeline)
 
 require('Status media upload uses authenticated backend client','FynxBackendClient.postJson(context, "/api/media", body)' in client)
 require('Status media upload rejects unsupported types','Unsupported Status media type.' in client)
