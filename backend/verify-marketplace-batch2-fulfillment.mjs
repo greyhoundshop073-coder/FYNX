@@ -30,7 +30,7 @@ const checks = [
   ['inspection expiry blocks active disputes/protection cases', expiry.includes("d.status IN ('OPEN','UNDER_REVIEW')") && expiry.includes("c.status IN ('OPEN','UNDER_REVIEW')")],
   ['settlement remains completion/escrow gated', settlement.includes("order.status !== 'COMPLETED'") && settlement.includes("escrow.status !== 'RELEASE_ELIGIBLE'")],
   ['seller Android uses shipping and pickup-handover APIs', sellerUi.includes('/api/marketplace/orders/${order.id}/ship') && sellerUi.includes('/api/marketplace/orders/${order.id}/pickup-handover')],
-  ['buyer Android requires product/quantity confirmation before completion', buyerClient.includes('receivedItemMatchesOrder') && buyerClient.includes('quantityMatchesOrder') && buyerUi.includes('confirmOrderMatch') && buyerUi.includes('Confirm the received item and quantity match my order.')],
+  ['buyer Android requires product/quantity confirmation before completion', buyerClient.includes('receivedItemMatchesOrder') && buyerClient.includes('quantityMatchesOrder') && buyerUi.includes('confirmOrderMatch') && buyerUi.includes('I confirm the received item and quantity match my order.')],
   ['buyer Android keeps completion server-authoritative', buyerClient.includes('/api/marketplace/orders/$id/complete')],
   ['shipping timeline remains integrated with marketplace completion', completion.includes('registerMarketplaceShippingTimeline({ app, pool, auth });') && shipping.includes('/api/marketplace')],
 ];
