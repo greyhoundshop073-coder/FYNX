@@ -41,7 +41,7 @@ const usesScalabilityGuard = startScript === 'node --import ./scalability.js ser
   || startScript === 'node serverBootstrap.js'
   || startScript === 'node realtimeIsolationBootstrap.js'
   || startScript === 'node --import ./scalability.js realtimeIsolationBootstrap.js'
-  || (startScript === 'node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js' && read('backend/renderScalabilityPreload.js').includes('import \\"./scalability.js\\"'));
+  || (startScript === 'node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js' && read('backend/renderScalabilityPreload.js').includes('import "./scalability.js"'));
 if (!usesScalabilityGuard) failures.push('Backend start script is not using the Stage 14 scalability guard');
 if (startScript === 'node serverBootstrap.js') {
   const bootstrap = read('backend/serverBootstrap.js');
