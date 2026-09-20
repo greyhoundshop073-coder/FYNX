@@ -260,9 +260,13 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   });
   // FYNX Music Library management is restricted to the existing OWNER/ADMIN role system.
   async function fynxMusicAdminRole(userId) {
+    // Music routes must be safe on a fresh deployment even if no other /api/admin
+    // endpoint has been called yet. The existing adminRoutes module owns this schema,
+    // but this route is independently callable during the same cold start.
+    await pool.query("CREATE TABLE IF NOT EXISTS fynx_admin_roles (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('ADMIN')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
     const first = (await pool.query("SELECT id FROM users ORDER BY id ASC LIMIT 1")).rows[0];
     if (first && String(first.id) === String(userId)) return "OWNER";
-    const result = await pool.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 LIMIT 1", [userId]);
+    const result = await pool.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role='ADMIN' LIMIT 1", [userId]);
     return result.rowCount ? "ADMIN" : null;
   }
 
