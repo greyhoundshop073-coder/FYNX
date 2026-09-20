@@ -100,7 +100,7 @@ fun FynxStatusTimelinePanel(
             item {
                 StatusHomeRow(
                     ownerUsername = username,
-                    ownerDisplayName = auth.displayName?.ifBlank { username } ?: username,
+                    ownerDisplayName = username,
                     status = myStatus,
                     isMe = true,
                     onClick = { if (myStatus != null) selected = myStatus else onCreateClick() },
