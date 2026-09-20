@@ -242,17 +242,46 @@ private fun FynxAddStatusPanel(
             Spacer(Modifier.width(48.dp))
         }
 
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            FynxStatusToolPill(Icons.Default.Notes, "Text", onText)
-            FynxStatusToolPill(Icons.Default.MusicNote, "Music", onMusic)
-            FynxStatusToolPill(Icons.Default.GridView, "Layout", onLayout)
-            FynxStatusToolPill(Icons.Default.Mic, "Voice", onVoice)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FynxStatusToolPill(
+                    icon = Icons.Default.Notes,
+                    label = "Text",
+                    onClick = onText,
+                    modifier = Modifier.weight(1f)
+                )
+                FynxStatusToolPill(
+                    icon = Icons.Default.MusicNote,
+                    label = "Music",
+                    onClick = onMusic,
+                    modifier = Modifier.weight(1f)
+                )
+                FynxStatusToolPill(
+                    icon = Icons.Default.GridView,
+                    label = "Layout",
+                    onClick = onLayout,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                FynxStatusToolPill(
+                    icon = Icons.Default.Mic,
+                    label = "Voice",
+                    onClick = onVoice,
+                    modifier = Modifier.widthIn(min = 120.dp, max = 180.dp)
+                )
+            }
         }
 
         Row(
@@ -332,13 +361,14 @@ private fun FynxAddStatusPanel(
 private fun FynxStatusToolPill(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     FilledTonalButton(
         onClick = onClick,
         shape = RoundedCornerShape(50),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-        modifier = Modifier.height(42.dp)
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+        modifier = modifier.height(42.dp)
     ) {
         Icon(icon, contentDescription = label, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(6.dp))
