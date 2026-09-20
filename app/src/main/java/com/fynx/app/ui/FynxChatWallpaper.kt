@@ -39,7 +39,7 @@ fun FynxChatDoodlePattern() {
         val cellW = 190.dp.toPx()
         val cellH = 165.dp.toPx()
         fun line(a: androidx.compose.ui.geometry.Offset, b: androidx.compose.ui.geometry.Offset) = drawLine(ink, a, b, sw)
-        fun circle(x: Float, y: Float, r: Float) = drawCircle(ink, r, androidx.compose.ui.geometry.Offset(x, y), androidx.compose.ui.graphics.drawscope.Stroke(width = sw))
+        fun circle(x: Float, y: Float, r: Float) = drawCircle(color = ink, radius = r, center = androidx.compose.ui.geometry.Offset(x, y), style = androidx.compose.ui.graphics.drawscope.Stroke(width = sw))
         fun bubble(x: Float, y: Float, s: Float) {
             drawRoundRect(ink, androidx.compose.ui.geometry.Offset(x,y), androidx.compose.ui.geometry.Size(54*s,36*s), androidx.compose.ui.geometry.CornerRadius(11*s,11*s), style=androidx.compose.ui.graphics.drawscope.Stroke(width=sw))
             line(androidx.compose.ui.geometry.Offset(x+12*s,y+36*s), androidx.compose.ui.geometry.Offset(x+7*s,y+46*s))
