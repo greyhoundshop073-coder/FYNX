@@ -402,6 +402,26 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             }
                         }
                     }
+                    if (menuMessageId == message.id) {
+                        DropdownMenu(expanded = true, onDismissRequest = { menuMessageId = null }) {
+                            DropdownMenuItem(text = { Text("Reply") }, onClick = { replyToId = message.id; menuMessageId = null }, leadingIcon = { Icon(Icons.Default.Reply, null) })
+                            DropdownMenuItem(text = { Text("React to message") }, onClick = { reactionMessageId = message.id; menuMessageId = null }, leadingIcon = { Icon(Icons.Default.EmojiEmotions, null) })
+                        }
+                    }
+                    if (reactionMessageId == message.id) {
+                        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) {
+                            listOf("❤️","😂","👍","🙏","🔥","😮","😢","👏").forEach { emoji ->
+                                TextButton(onClick = {
+                                    reactionMessageId = null
+                                    scope.launch {
+                                        FynxProductionMessaging.reactToMessage(context, message.id, if (message.reaction == emoji) null else emoji)
+                                            .onSuccess { remote -> currentUserId?.let { myId -> messages = messages.map { existing -> if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing } } }
+                                            .onFailure { networkError = it.message ?: "Reaction could not be saved" }
+                                    }
+                                }) { Text(emoji, style = MaterialTheme.typography.titleMedium) }
+                            }
+                        }
+                    }
                 }
             }
         }
