@@ -329,7 +329,7 @@ private fun relative(timestamp: Long): String { val minutes = TimeUnit.MILLISECO
 private fun MusicPostPlayer(mediaId: String, title: String, artist: String, durationMs: Long) {
     val context = LocalContext.current
     var file by remember(mediaId) { mutableStateOf<File?>(null) }
-    LaunchedEffect(mediaId) { file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, "/api/social/media/" + mediaId, "audio") } }
+    LaunchedEffect(mediaId) { file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, "/api/social/music/media/" + mediaId, "audio") } }
     if (file != null) {
         val player = remember(file) { MediaPlayer().apply { setDataSource(file!!.absolutePath); prepare() } }
         var playing by remember(file) { mutableStateOf(false) }
