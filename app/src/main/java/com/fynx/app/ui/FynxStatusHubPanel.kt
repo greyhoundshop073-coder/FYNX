@@ -65,6 +65,11 @@ fun FynxStatusHubPanel() {
     var cameraError by remember { mutableStateOf<String?>(null) }
     var timelineRefreshKey by remember { mutableIntStateOf(0) }
     var selectedInitialMedia by remember { mutableStateOf<FynxRecentMedia?>(null) }
+    var selectedStatusMusic by remember { mutableStateOf<FynxMusicCatalogueTrack?>(null) }
+    var showStatusMusicPicker by remember { mutableStateOf(false) }
+    var statusMusicSearch by remember { mutableStateOf("") }
+    var statusMusicCatalogue by remember { mutableStateOf<List<FynxMusicCatalogueTrack>>(emptyList()) }
+    var statusMusicLoading by remember { mutableStateOf(false) }
 
     fun publishCapturedStatus(uri: Uri, type: String) {
         if (publishingCameraStatus) return
@@ -109,6 +114,16 @@ fun FynxStatusHubPanel() {
         }
     }
 
+    LaunchedEffect(showStatusMusicPicker, statusMusicSearch) {
+        if (showStatusMusicPicker) {
+            statusMusicLoading = true
+            FynxMusicCatalogueClient.listPublished(context, statusMusicSearch)
+                .onSuccess { statusMusicCatalogue = it }
+                .onFailure { cameraError = it.message ?: "Music catalogue could not be loaded." }
+            statusMusicLoading = false
+        }
+    }
+
     LaunchedEffect(composing, cameraOpen, addStatusOpen) {
         if (!composing && !cameraOpen && !addStatusOpen) timelineRefreshKey++
     }
@@ -121,7 +136,8 @@ fun FynxStatusHubPanel() {
                 composing -> FynxMatureStatusComposerPanel(
                     initialMediaUri = selectedInitialMedia?.uri,
                     initialType = selectedInitialMedia?.let { if (it.isVideo) FynxStatusType.VIDEO else FynxStatusType.PHOTO },
-                    onClose = { selectedInitialMedia = null; composing = false }
+                    initialMusic = selectedStatusMusic,
+                    onClose = { selectedInitialMedia = null; selectedStatusMusic = null; composing = false }
                 )
                 addStatusOpen -> FynxAddStatusPanel(
                     onClose = { addStatusOpen = false },
@@ -133,7 +149,7 @@ fun FynxStatusHubPanel() {
                     },
                     onText = { selectedInitialMedia = null; composing = true; addStatusOpen = false },
                     onVoice = { selectedInitialMedia = null; composing = true; addStatusOpen = false },
-                    onMusic = { },
+                    onMusic = { showStatusMusicPicker = true },
                     onLayout = { },
                     onMediaSelected = { media ->
                         selectedInitialMedia = media
@@ -154,6 +170,60 @@ fun FynxStatusHubPanel() {
                     )
                 }
             }
+            if (showStatusMusicPicker) {
+                AlertDialog(
+                    onDismissRequest = { showStatusMusicPicker = false; statusMusicSearch = "" },
+                    title = { Text("FYNX Music") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedTextField(
+                                value = statusMusicSearch,
+                                onValueChange = { statusMusicSearch = it.take(80) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                label = { Text("Search music") },
+                                placeholder = { Text("Song or artist") }
+                            )
+                            Column(
+                                Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                if (statusMusicLoading) {
+                                    Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                                } else if (statusMusicCatalogue.isEmpty()) {
+                                    Text("No FYNX music is published yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                } else {
+                                    statusMusicCatalogue.forEach { track ->
+                                        TextButton(
+                                            onClick = {
+                                                selectedStatusMusic = track
+                                                showStatusMusicPicker = false
+                                                statusMusicSearch = ""
+                                                addStatusOpen = false
+                                                composing = true
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                                Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary)
+                                                Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
+                                                    Text(track.title.ifBlank { "Untitled" }, maxLines = 1)
+                                                    Text(track.artist.ifBlank { "FYNX" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                                }
+                                                Text(track.durationMs.div(60000).toString() + ":" + ((track.durationMs.div(1000) % 60).toString().padStart(2, '0')), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showStatusMusicPicker = false; statusMusicSearch = "" }) { Text("Close") }
+                    }
+                )
+            }
+
             cameraError?.let {
                 Text(
                     it,
