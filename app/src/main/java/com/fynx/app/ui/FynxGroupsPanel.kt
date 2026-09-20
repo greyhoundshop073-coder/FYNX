@@ -289,14 +289,15 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             }
         }
         if (showEmojiPanel && canSendMessages) { FynxChatEmojiPanel(onEmojiSelected = { emoji -> text += emoji; showEmojiPanel = false }) }
-        Surface(color = Color(0xFF1E1E1E), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
+        Surface(color = Color(0xFF1E1E1E), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().height(64.dp).navigationBarsPadding().imePadding()) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(enabled = canSendMessages, onClick = { showEmojiPanel = !showEmojiPanel }, modifier = Modifier.size(40.dp)) {
-                    Text("☺", style = MaterialTheme.typography.titleLarge)
+                    Icon(Icons.Default.EmojiEmotions, "Emoji", Modifier.size(24.dp))
                 }
+                Spacer(Modifier.width(8.dp))
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
@@ -331,6 +332,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         }
                     })
                 )
+                Spacer(Modifier.width(8.dp))
                 IconButton(
                     enabled = canSendMessages,
                     onClick = {
