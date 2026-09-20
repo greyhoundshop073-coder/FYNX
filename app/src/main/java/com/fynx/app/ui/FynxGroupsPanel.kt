@@ -213,7 +213,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             } else {
                 items(visibleMessages, key = { it.id }) { message ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 1.dp), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) {
-                        Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primary else Color(0xFF303030), contentColor = Color.White, shape = RoundedCornerShape(18.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 320.dp).combinedClickable(onClick = {}, onLongClick = { reactionMessageId = message.id })) {
+                        Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primary else Color(0xFF303030), contentColor = Color.White, shape = RoundedCornerShape(18.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 320.dp).combinedClickable(onClick = { replyToId = message.id }, onLongClick = { reactionMessageId = message.id })) {
                             Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
                                 if (!message.fromMe && !message.senderUsername.isNullOrBlank()) Text(message.senderUsername!!, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.72f))
                                 if (message.replyToId != null) Surface(color = Color.Black.copy(alpha = 0.20f), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 5.dp)) { Text("Reply", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.82f), modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) }
