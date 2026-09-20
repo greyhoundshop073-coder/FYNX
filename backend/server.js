@@ -368,7 +368,7 @@ const statusSchema = async () => {
     voice_duration_ms BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     expires_at TIMESTAMPTZ NOT NULL
-  );
+  );`);
   await pool.query("ALTER TABLE statuses ADD COLUMN IF NOT EXISTS audience TEXT");
   await pool.query("UPDATE statuses SET audience = CASE WHEN private_status THEN 'FRIENDS' ELSE 'EVERYONE' END WHERE audience IS NULL");
   await pool.query("ALTER TABLE statuses ALTER COLUMN audience SET DEFAULT 'EVERYONE'");
