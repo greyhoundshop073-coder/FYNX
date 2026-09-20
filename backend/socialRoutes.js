@@ -254,7 +254,13 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     { title: "FYNX Vibe", artist: "FYNX", category: "SOCIAL", bpm: 105, notes: [196.00, 246.94, 293.66, 392.00] },
     { title: "FYNX Night", artist: "FYNX", category: "AMBIENT", bpm: 80, notes: [174.61, 220.00, 261.63, 329.63] },
     { title: "FYNX Motion", artist: "FYNX", category: "MOTION", bpm: 118, notes: [146.83, 196.00, 246.94, 293.66] },
-    { title: "FYNX Love", artist: "FYNX", category: "WARM", bpm: 88, notes: [220.00, 277.18, 329.63, 440.00] }
+    { title: "FYNX Love", artist: "FYNX", category: "WARM", bpm: 88, notes: [220.00, 277.18, 329.63, 440.00] },
+    { title: "FYNX Pulse", artist: "FYNX", category: "ENERGETIC", bpm: 124, notes: [164.81, 207.65, 246.94, 329.63] },
+    { title: "FYNX Breeze", artist: "FYNX", category: "CHILL", bpm: 92, notes: [196.00, 233.08, 293.66, 349.23] },
+    { title: "FYNX Spark", artist: "FYNX", category: "SOCIAL", bpm: 112, notes: [220.00, 261.63, 311.13, 369.99] },
+    { title: "FYNX Horizon", artist: "FYNX", category: "AMBIENT", bpm: 76, notes: [185.00, 220.00, 277.18, 329.63] },
+    { title: "FYNX Drive", artist: "FYNX", category: "MOTION", bpm: 120, notes: [174.61, 220.00, 261.63, 329.63] },
+    { title: "FYNX Heartbeat", artist: "FYNX", category: "WARM", bpm: 84, notes: [207.65, 261.63, 311.13, 415.30] }
   ];
   const FYNX_MUSIC_SAMPLE_RATE = 11025;
   const FYNX_MUSIC_DURATION_SECONDS = 45;
