@@ -325,7 +325,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         }
                     )
                 }
-            ) {
+            ) { when (selected) {
             "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it })
             "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" })
             "Friends" -> FriendsPanel(onOpenProfile = { profileUser = it })
