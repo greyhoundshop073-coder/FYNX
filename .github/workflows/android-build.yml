@@ -77,6 +77,8 @@ jobs:
         run: |
           echo "Running FYNX network certification on ${GITHUB_SHA}"
           python3 scripts/verify_network_transport_architecture.py
+      - name: Verify live production backend reachability
+        run: node scripts/verify_production_backend_reachability.mjs
       - name: Verify consolidated FCM notification phase
         run: python3 scripts/verify_fcm_notifications.py
       - name: Verify notifications and settings integration
