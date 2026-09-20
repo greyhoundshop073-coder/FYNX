@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Public
@@ -62,6 +63,7 @@ private val MATURE_STATUS_TEXT_COLORS = listOf(0xFFFFFFFF, 0xFF000000, 0xFFFFEB3
 fun FynxMatureStatusComposerPanel(
     initialMediaUri: Uri? = null,
     initialType: FynxStatusType? = null,
+    initialMusic: FynxMusicCatalogueTrack? = null,
     onClose: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -72,6 +74,7 @@ fun FynxMatureStatusComposerPanel(
     var type by remember(initialType) { mutableStateOf(initialType ?: FynxStatusType.TEXT) }
     var text by remember { mutableStateOf("") }
     var mediaUri by remember(initialMediaUri) { mutableStateOf(initialMediaUri) }
+    var selectedMusic by remember(initialMusic) { mutableStateOf(initialMusic) }
     var background by remember { mutableLongStateOf(MATURE_STATUS_BACKGROUNDS.first()) }
     var foreground by remember { mutableLongStateOf(0xFFFFFFFF) }
     var font by remember { mutableStateOf(FynxStatusTextFont.CLASSIC) }
@@ -102,7 +105,7 @@ fun FynxMatureStatusComposerPanel(
     }
     DisposableEffect(Unit) { onDispose { recorder?.let { runCatching { it.stop() }; runCatching { it.release() } }; recordingFile?.let { if (it.exists()) runCatching { it.delete() } } } }
 
-    fun clearDraft() { if (publishing || recording) return; mediaUri = null; text = ""; type = FynxStatusType.TEXT; background = MATURE_STATUS_BACKGROUNDS.first(); foreground = 0xFFFFFFFF; font = FynxStatusTextFont.CLASSIC; alignment = 1; showColors = false; showTools = false; error = null }
+    fun clearDraft() { if (publishing || recording) return; mediaUri = null; selectedMusic = null; text = ""; type = FynxStatusType.TEXT; background = MATURE_STATUS_BACKGROUNDS.first(); foreground = 0xFFFFFFFF; font = FynxStatusTextFont.CLASSIC; alignment = 1; showColors = false; showTools = false; error = null }
     fun publish() {
         if (publishing || recording) return
         if (type == FynxStatusType.TEXT && text.isBlank()) { error = "Write something first."; return }
@@ -116,7 +119,7 @@ fun FynxMatureStatusComposerPanel(
                     FynxStatusClient.uploadMedia(context, source, mime).getOrElse { error = it.message ?: "Media upload failed."; return@launch }
                 }
                 val now = System.currentTimeMillis()
-                val status = FynxStatus(id = UUID.randomUUID().toString(), ownerUsername = username, ownerDisplayName = displayName, type = type, contentUri = mediaId?.let { "/api/media/$it" }, text = text.trim().ifBlank { null }, createdAtMillis = now, expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS, textStyle = FynxStatusTextStyle(background, foreground, font, alignment), privateStatus = audience != FynxStatusAudience.EVERYONE, voiceDurationMs = if (type == FynxStatusType.VOICE) elapsed else 0L, audience = audience)
+                val status = FynxStatus(id = UUID.randomUUID().toString(), ownerUsername = username, ownerDisplayName = displayName, type = type, contentUri = mediaId?.let { "/api/media/$it" }, text = text.trim().ifBlank { null }, createdAtMillis = now, expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS, textStyle = FynxStatusTextStyle(background, foreground, font, alignment), privateStatus = audience != FynxStatusAudience.EVERYONE, voiceDurationMs = if (type == FynxStatusType.VOICE) elapsed else 0L, audience = audience, musicCatalogueId = selectedMusic?.id, musicTitle = selectedMusic?.title, musicArtist = selectedMusic?.artist, musicDurationMs = selectedMusic?.durationMs ?: 0L)
                 FynxStatusClient.create(context, status, mediaId).getOrElse { error = it.message ?: "Status publishing failed."; return@launch }
                 FynxStatusStore.save(context, status)
                 onClose()
@@ -163,6 +166,21 @@ fun FynxMatureStatusComposerPanel(
                                     IconButton(onClick = { alignment = 2 }, enabled = !recording && !publishing) { Icon(Icons.Default.FormatAlignRight, "Align right", tint = if (alignment == 2) Color.White else Color.White.copy(alpha = .5f)) }
                                 }
                                 TextButton(onClick = { showColors = false }) { Text("Done", color = Color.White) }
+                            }
+                        }
+                    }
+                    selectedMusic?.let { music ->
+                        Surface(color = Color.Black.copy(alpha = .32f), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.MusicNote, "Music", tint = Color.White)
+                                Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                                    Text(music.title.ifBlank { "FYNX Music" }, color = Color.White, maxLines = 1)
+                                    Text(music.artist.ifBlank { "FYNX" }, color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                }
+                                FynxRemoteAudio("/api/social/music/catalogue/" + music.id + "/media", Modifier.width(120.dp))
+                                IconButton(onClick = { selectedMusic = null }, enabled = !recording && !publishing) {
+                                    Icon(Icons.Default.Close, "Remove music", tint = Color.White)
+                                }
                             }
                         }
                     }
