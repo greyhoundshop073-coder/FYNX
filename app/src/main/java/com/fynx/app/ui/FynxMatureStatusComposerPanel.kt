@@ -178,7 +178,7 @@ fun FynxMatureStatusComposerPanel(
                                     Text(music.title.ifBlank { "FYNX Music" }, color = Color.White, maxLines = 1)
                                     Text(music.artist.ifBlank { "FYNX" }, color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
                                 }
-                                FynxRemoteAudio("/api/social/music/catalogue/" + music.id + "/media", Modifier.width(120.dp))
+                                FynxRemoteAudio("/api/social/music/catalogue/" + music.id + "/media", Modifier.width(120.dp), music.durationMs.coerceIn(1_000L, 30_000L))
                                 IconButton(onClick = { selectedMusic = null }, enabled = !recording && !publishing) {
                                     Icon(Icons.Default.Close, "Remove music", tint = Color.White)
                                 }
