@@ -127,7 +127,11 @@ fun FynxMatureStatusComposerPanel(onClose: () -> Unit = {}) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onClose, enabled = !publishing && !recording) { Icon(Icons.Default.ArrowBack, "Back", tint = Color.White) }
-                Text("Create Status", color = Color.White, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    FynxProfileImage(username, FynxPreferencesStore.loadProfilePhoto(context), Modifier.size(36.dp).clip(CircleShape))
+                    Spacer(Modifier.width(10.dp))
+                    Text(displayName, color = Color.White, style = MaterialTheme.typography.titleLarge)
+                }
                 Box {
                     IconButton(onClick = { showTools = !showTools; showColors = false }, enabled = !recording && !publishing) { Icon(Icons.Default.MoreVert, "Status tools", tint = Color.White) }
                     DropdownMenu(expanded = showTools, onDismissRequest = { showTools = false }) {
@@ -257,17 +261,27 @@ fun FynxMatureStatusComposerPanel(onClose: () -> Unit = {}) {
     }
 
     if (cameraOpen) {
-        Surface(Modifier.fillMaxSize(), color = Color.Black) {
-            Box(Modifier.fillMaxSize().safeDrawingPadding()) {
-                FynxCameraCapturePanel(
-                    onCaptured = { uri, capturedType ->
-                        mediaUri = uri
-                        type = if (capturedType == "video") FynxStatusType.VIDEO else FynxStatusType.PHOTO
-                        cameraOpen = false
-                        error = null
-                    },
-                    onDismiss = { if (!publishing && !recording) cameraOpen = false }
-                )
+        Dialog(
+            onDismissRequest = { if (!publishing && !recording) cameraOpen = false },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false,
+                dismissOnBackPress = !publishing && !recording,
+                dismissOnClickOutside = false
+            )
+        ) {
+            Surface(Modifier.fillMaxSize(), color = Color.Black) {
+                Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+                    FynxCameraCapturePanel(
+                        onCaptured = { uri, capturedType ->
+                            mediaUri = uri
+                            type = if (capturedType == "video") FynxStatusType.VIDEO else FynxStatusType.PHOTO
+                            cameraOpen = false
+                            error = null
+                        },
+                        onDismiss = { if (!publishing && !recording) cameraOpen = false }
+                    )
+                }
             }
         }
     }
