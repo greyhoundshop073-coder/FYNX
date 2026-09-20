@@ -10,6 +10,12 @@ feed = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt")
 routes = (ROOT / "backend/socialRoutes.js").read_text(encoding="utf-8")
 
 checks = [
+    ("Backend seeds six original FYNX catalogue tracks through real message_media rows", all(x in routes for x in [
+        "FYNX_BUILTIN_MUSIC", "createFynxBuiltinWav", "message_media", "audio/wav",
+        "fynx_music_catalogue", "FYNX_MUSIC_DURATION_SECONDS"
+    ])),
+    ("Built-in FYNX music is 45 seconds per track", "FYNX_MUSIC_DURATION_SECONDS = 45" in routes and "FYNX_MUSIC_DURATION_SECONDS * 1000" in routes),
+    ("Built-in catalogue seed is idempotent", "SELECT id FROM fynx_music_catalogue WHERE title=$1 AND artist=$2" in routes and "if (existing.rows[0]) continue" in routes),
     ("Create Post Music control opens the FYNX catalogue", 'ComposerQuickChip("Music", Icons.Default.MusicNote' in composer and 'showMusicPicker = true' in composer),
     ("Normal users no longer get an audio document picker", 'ActivityResultContracts.OpenDocument()' not in composer and 'musicPicker.launch' not in composer),
     ("Catalogue client reads only published FYNX tracks", "FynxMusicCatalogueClient" in composer and "/api/social/music/catalogue" in catalogue and "listPublished" in catalogue),

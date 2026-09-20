@@ -1,3 +1,5 @@
+import { Buffer } from "node:buffer";
+
 export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   let marketplaceSchemaPromise;
   const ensureMarketplaceSchema = async () => {
@@ -242,8 +244,109 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       CREATE TABLE IF NOT EXISTS social_follows (follower_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, followed_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(follower_id,followed_id), CHECK(follower_id<>followed_id));
       CREATE INDEX IF NOT EXISTS social_follows_followed_idx ON social_follows(followed_id,created_at DESC);
     `).catch(e=>{socialSchemaPromise=undefined;throw e});
+    await socialSchemaPromise;
+    await seedFynxBuiltinMusic();
     return socialSchemaPromise;
   };
+  const FYNX_BUILTIN_MUSIC = [
+    { title: "FYNX Rise", artist: "FYNX", category: "ENERGETIC", bpm: 110, notes: [261.63, 329.63, 392.00, 523.25] },
+    { title: "FYNX Flow", artist: "FYNX", category: "CHILL", bpm: 95, notes: [220.00, 261.63, 329.63, 392.00] },
+    { title: "FYNX Vibe", artist: "FYNX", category: "SOCIAL", bpm: 105, notes: [196.00, 246.94, 293.66, 392.00] },
+    { title: "FYNX Night", artist: "FYNX", category: "AMBIENT", bpm: 80, notes: [174.61, 220.00, 261.63, 329.63] },
+    { title: "FYNX Motion", artist: "FYNX", category: "MOTION", bpm: 118, notes: [146.83, 196.00, 246.94, 293.66] },
+    { title: "FYNX Love", artist: "FYNX", category: "WARM", bpm: 88, notes: [220.00, 277.18, 329.63, 440.00] }
+  ];
+  const FYNX_MUSIC_SAMPLE_RATE = 11025;
+  const FYNX_MUSIC_DURATION_SECONDS = 45;
+
+  function createFynxBuiltinWav(track) {
+    const sampleRate = FYNX_MUSIC_SAMPLE_RATE;
+    const samples = sampleRate * FYNX_MUSIC_DURATION_SECONDS;
+    const bytes = 44 + samples * 2;
+    const data = Buffer.alloc(bytes);
+    data.write("RIFF", 0);
+    data.writeUInt32LE(36 + samples * 2, 4);
+    data.write("WAVE", 8);
+    data.write("fmt ", 12);
+    data.writeUInt32LE(16, 16);
+    data.writeUInt16LE(1, 20);
+    data.writeUInt16LE(1, 22);
+    data.writeUInt32LE(sampleRate, 24);
+    data.writeUInt32LE(sampleRate * 2, 28);
+    data.writeUInt16LE(2, 32);
+    data.writeUInt16LE(16, 34);
+    data.write("data", 36);
+    data.writeUInt32LE(samples * 2, 40);
+
+    const beat = 60 / track.bpm;
+    const chordLength = beat * 4;
+    const noteLength = beat / 2;
+    const warm = track.category === "CHILL" || track.category === "AMBIENT" || track.category === "WARM";
+    const energetic = !warm;
+    for (let i = 0; i < samples; i += 1) {
+      const t = i / sampleRate;
+      const chordIndex = Math.floor(t / chordLength) % track.notes.length;
+      const root = track.notes[chordIndex];
+      const chordTime = t % chordLength;
+      const fadeIn = Math.min(1, t / 0.8);
+      const fadeOut = Math.min(1, (FYNX_MUSIC_DURATION_SECONDS - t) / 0.8);
+      const padEnv = Math.max(0, Math.min(fadeIn, fadeOut));
+      const chordThird = warm ? 2 ** (3 / 12) : 2 ** (4 / 12);
+      const chordFifth = 2 ** (7 / 12);
+      let sample = 0.10 * padEnv * Math.sin(2 * Math.PI * root * chordTime);
+      sample += 0.07 * padEnv * Math.sin(2 * Math.PI * root * chordThird * chordTime);
+      sample += 0.06 * padEnv * Math.sin(2 * Math.PI * root * chordFifth * chordTime);
+
+      const noteIndex = Math.floor(t / noteLength);
+      const melodyRoot = track.notes[noteIndex % track.notes.length] * 2;
+      const noteTime = t % noteLength;
+      const melodyEnv = Math.exp(-4 * noteTime / noteLength) * 0.12;
+      sample += melodyEnv * Math.sin(2 * Math.PI * melodyRoot * noteTime);
+      if (energetic) sample += melodyEnv * 0.25 * Math.sin(2 * Math.PI * melodyRoot * 2 * noteTime);
+
+      const pulsePeriod = warm ? beat * 2 : beat;
+      const pulseTime = t % pulsePeriod;
+      if (pulseTime < 0.10) {
+        const pulseEnv = Math.exp(-30 * pulseTime);
+        sample += (energetic ? 0.07 : 0.045) * pulseEnv * Math.sin(2 * Math.PI * (energetic ? 70 : 55) * pulseTime);
+      }
+
+      const limiter = Math.max(-0.82, Math.min(0.82, sample));
+      data.writeInt16LE(Math.round(limiter * 32767), 44 + i * 2);
+    }
+    return data;
+  }
+
+  let fynxBuiltinMusicSeedPromise;
+  const seedFynxBuiltinMusic = async () => {
+    if (!fynxBuiltinMusicSeedPromise) {
+      fynxBuiltinMusicSeedPromise = (async () => {
+        const owner = (await pool.query("SELECT id FROM users ORDER BY id ASC LIMIT 1")).rows[0];
+        if (!owner) return;
+        for (const track of FYNX_BUILTIN_MUSIC) {
+          const existing = await pool.query(
+            "SELECT id FROM fynx_music_catalogue WHERE title=$1 AND artist=$2 LIMIT 1",
+            [track.title, track.artist]
+          );
+          if (existing.rows[0]) continue;
+          const audio = createFynxBuiltinWav(track);
+          const media = await pool.query(
+            "INSERT INTO message_media (owner_id,mime_type,data,byte_size) VALUES ($1,'audio/wav',$2,$3) RETURNING id",
+            [owner.id, audio, audio.length]
+          );
+          await pool.query(
+            "INSERT INTO fynx_music_catalogue (media_id,title,artist,duration_ms,category,created_by) VALUES ($1,$2,$3,$4,$5,$6)",
+            [media.rows[0].id, track.title, track.artist, FYNX_MUSIC_DURATION_SECONDS * 1000, track.category, owner.id]
+          );
+        }
+      })().catch((error) => {
+        fynxBuiltinMusicSeedPromise = undefined;
+        throw error;
+      });
+    }
+    return fynxBuiltinMusicSeedPromise;
+  };
+
   const visibleSocialPost = async (id,userId) => { const r=await pool.query(`SELECT 1 FROM social_posts p WHERE p.id=$1 AND (p.author_id=$2 OR p.visibility='PUBLIC' OR (p.visibility='ONLY_ME' AND p.author_id=$2) OR (p.visibility='FRIENDS_ONLY' AND EXISTS(SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted')) OR (p.visibility='SELECTED_PEOPLE' AND EXISTS(SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$2))) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$2))`,[id,userId]); return Boolean(r.rowCount); };
 
   app.get('/api/social/feed',auth,async(req,res)=>{
