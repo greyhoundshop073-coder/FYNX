@@ -38,6 +38,12 @@ checks = [
     ("marketplace top sellers are derived from real successful sales", "successfulSales" in marketplace and "Top Sellers (Highest Sales)" in marketplace),
     ("marketplace filtered empty state can clear filters", "No matching products" in marketplace and "Clear filters" in marketplace),
     ("active marketplace retains order protection", "MarketplaceProtectedOrderDialog" in marketplace),
+    ("marketplace cart opens from the real cart button", "showCart = true" in marketplace and "Icons.Default.ShoppingCart" in marketplace),
+    ("marketplace cart prevents duplicate listing entries", "cart.none { it.id == listing.id }" in marketplace),
+    ("marketplace cart checkout uses the selected real listing", "onCheckout = { listing -> showCart = false; checkoutListing = listing }" in marketplace),
+    ("marketplace Buy now is disabled when the real listing is out of stock", "onBuyNow" in marketplace and "enabled = l.quantity > 0" in marketplace),
+    ("marketplace checkout initializes payment against the protected order", "initializeMarketplacePayment(context, order.id, email)" in marketplace),
+    ("marketplace checkout requires payment verification before protection confirmation", "verifyMarketplacePayment(context, payment?.reference.orEmpty())" in marketplace),
 ]
 
 failed = [name for name, ok in checks if not ok]
