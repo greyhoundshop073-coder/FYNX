@@ -404,26 +404,40 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         }
                     }
                     if (menuMessageId == message.id) {
-                        DropdownMenu(expanded = true, onDismissRequest = { menuMessageId = null }) {
-                            DropdownMenuItem(text = { Text("Reply") }, onClick = { replyToId = message.id; menuMessageId = null }, leadingIcon = { Icon(Icons.Default.Reply, null) })
-                            DropdownMenuItem(text = { Text("React to message") }, onClick = { reactionMessageId = message.id; menuMessageId = null }, leadingIcon = { Icon(Icons.Default.EmojiEmotions, null) })
-                        }
-                    }
-                    if (reactionMessageId == message.id) {
-                        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start) {
-                            listOf("❤️","😂","👍","🙏","🔥","😮","😢","👏").forEach { emoji ->
-                                TextButton(onClick = {
-                                    reactionMessageId = null
-                                    scope.launch {
-                                        FynxProductionMessaging.reactToMessage(context, message.id, if (message.reaction == emoji) null else emoji)
-                                            .onSuccess { remote -> currentUserId?.let { myId -> messages = messages.map { existing -> if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing } } }
-                                            .onFailure { networkError = it.message ?: "Reaction could not be saved" }
+                        Surface(color = Color(0xFF2A2A2A), contentColor = Color.White, shape = RoundedCornerShape(18.dp), tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                            Column(Modifier.padding(6.dp)) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    listOf("❤️","😂","👍","🙏","🔥","😮","😢","👏").forEach { emoji ->
+                                        TextButton(onClick = {
+                                            menuMessageId = null
+                                            scope.launch {
+                                                FynxProductionMessaging.reactToMessage(context, message.id, if (message.reaction == emoji) null else emoji)
+                                                    .onSuccess { remote -> currentUserId?.let { myId -> messages = messages.map { existing -> if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing } } }
+                                                    .onFailure { networkError = it.message ?: "Reaction could not be saved" }
+                                            }
+                                        }, modifier = Modifier.size(38.dp), contentPadding = PaddingValues(0.dp)) { Text(emoji, style = MaterialTheme.typography.titleMedium) }
                                     }
-                                }) { Text(emoji, style = MaterialTheme.typography.titleMedium) }
+                                }
+                                HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    TextButton(onClick = { replyToId = message.id; menuMessageId = null }, modifier = Modifier.weight(1f)) { Text("Reply") }
+                                    TextButton(onClick = { clipboardManager.setText(AnnotatedString(message.text)); menuMessageId = null }, modifier = Modifier.weight(1f), enabled = message.text.isNotBlank()) { Text("Copy") }
+                                    TextButton(onClick = { menuMessageId = null }, modifier = Modifier.weight(1f), enabled = false) { Text("Forward") }
+                                    TextButton(onClick = { menuMessageId = null }, modifier = Modifier.weight(1f), enabled = false) { Text("Pin") }
+                                    TextButton(onClick = {
+                                        scope.launch {
+                                            FynxProductionMessaging.deleteMessage(context, message.id)
+                                                .onSuccess {
+                                                    messages = messages.map { existing -> if (existing.id == message.id) existing.copy(text = "Message deleted", attachmentUri = null, attachmentType = null, voiceUri = null, mediaId = null) else existing }
+                                                    menuMessageId = null
+                                                }
+                                                .onFailure { networkError = it.message ?: "Message could not be deleted" }
+                                        }
+                                    }, modifier = Modifier.weight(1f)) { Text("Delete") }
+                                }
                             }
                         }
-                    }
-                }
+                    }                }
             }
         }
 
