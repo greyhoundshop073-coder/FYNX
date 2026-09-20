@@ -144,7 +144,7 @@ fun FynxMatureStatusComposerPanel(onClose: () -> Unit = {}) {
                 }
             }
             Spacer(Modifier.weight(1f))
-            Surface(color = Color.Black.copy(alpha = .86f), modifier = Modifier.fillMaxWidth()) {
+            Surface(color = Color(0xFF1E1E1E), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (showColors && type == FynxStatusType.TEXT) {
                         Surface(color = Color.Black.copy(alpha = .55f), modifier = Modifier.fillMaxWidth()) {
