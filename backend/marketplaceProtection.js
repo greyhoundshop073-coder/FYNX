@@ -177,6 +177,11 @@ async function createCase(req, res, caseType) {
         await client.query('ROLLBACK');
         return res.json({ case: existing, idempotent: true });
       }
+      const activeCase = (await client.query("SELECT id,case_type,status FROM marketplace_protection_cases WHERE order_id=$1 AND status IN ('OPEN','UNDER_REVIEW') ORDER BY created_at DESC LIMIT 1", [orderId])).rows[0];
+      if (activeCase) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'this order already has an active protection case', caseId: String(activeCase.id), caseType: activeCase.case_type, status: activeCase.status });
+      }
 
       const caseId = crypto.randomUUID();
       const role = isBuyer ? 'BUYER' : 'SELLER';

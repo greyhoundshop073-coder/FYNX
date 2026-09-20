@@ -62,6 +62,7 @@ jobs:
           node --check verify-marketplace-ad-creative-identity.mjs
           node --check verify-marketplace-fulfillment-integrity.mjs
           node --check verify-marketplace-batch2.mjs
+          node --check verify-marketplace-batch3-security.mjs
           node --check verify-marketplace-batch4-shipping.mjs
           node --check verify-marketplace-shipping-timeline.mjs
           node --check scalability.js
@@ -173,6 +174,9 @@ jobs:
 
       - name: Run Batch 2 fulfillment and buyer-match verification
         run: node verify-marketplace-batch2-fulfillment.mjs
+
+      - name: Run Batch 3 disputes refunds and security verification
+        run: node verify-marketplace-batch3-security.mjs
 
       - name: Run R6-G advertising canonical creative verification
         run: node verify-marketplace-ad-creative-identity.mjs

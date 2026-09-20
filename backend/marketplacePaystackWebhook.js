@@ -47,7 +47,7 @@ async function reconcileRefundEvent(client, eventName, refund) {
   const metadata = { ...(operation.metadata || {}), refundEvent: eventName, refundStatus: status, transactionReference, refundReference: providerReference, providerAmount, providerCurrency };
   if (eventName === 'refund.processed') {
     await client.query(`UPDATE marketplace_financial_operations SET status='SUCCEEDED',provider_reference=COALESCE($1,provider_reference),failure_reason=NULL,metadata=$2::jsonb,updated_at=NOW() WHERE id=$3 AND status IN ('PENDING','FAILED')`, [providerReference ? String(providerReference) : null, JSON.stringify(metadata), operation.id]);
-    await client.query(`UPDATE marketplace_orders SET status='REFUNDED',updated_at=NOW() WHERE id=$1 AND status NOT IN ('COMPLETED','REFUNDED')`, [operation.order_id]);
+    await client.query(`UPDATE marketplace_orders SET status='REFUNDED',updated_at=NOW() WHERE id=$1 AND status <> 'REFUNDED'`, [operation.order_id]);
     const caseId = metadata.caseId ? String(metadata.caseId) : null;
     if (caseId) await client.query(`UPDATE marketplace_protection_cases SET status='REFUNDED',updated_at=NOW() WHERE id=$1 AND status IN ('OPEN','UNDER_REVIEW')`, [caseId]);
     await client.query(`UPDATE marketplace_escrows SET status='REFUNDED',refunded_at=COALESCE(refunded_at,NOW()),updated_at=NOW() WHERE order_id=$1 AND status IN ('REFUND_PENDING','DISPUTED')`, [operation.order_id]);

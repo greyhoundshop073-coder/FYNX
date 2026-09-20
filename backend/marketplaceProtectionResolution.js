@@ -139,6 +139,13 @@ export function registerMarketplaceProtectionResolutionRoutes({ app }) {
         if (!row) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'protection case not found' }); }
         if (!['OPEN','UNDER_REVIEW'].includes(row.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'protection case is already resolved' }); }
         if (!row.escrow_id) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order escrow is not initialized' }); }
+        const escrowRow = (await client.query('SELECT amount,currency,status FROM marketplace_escrows WHERE id=$1 FOR UPDATE', [row.escrow_id])).rows[0];
+        const escrowAmount = Number(escrowRow?.amount);
+        const escrowCurrency = String(escrowRow?.currency || '').toUpperCase();
+        if (!Number.isFinite(escrowAmount) || escrowAmount <= 0 || escrowCurrency !== String(row.currency || '').toUpperCase() || Math.round(escrowAmount * 100) !== Math.round(Number(row.total_amount) * 100)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'order and protected escrow accounting do not reconcile' });
+        }
 
         const payoutConflict = (await client.query(`SELECT status FROM marketplace_financial_operations WHERE order_id=$1 AND operation_type='PAYOUT_RELEASE' AND status IN ('PENDING','SUCCEEDED') LIMIT 1 FOR UPDATE`, [row.order_id])).rows[0];
         const refundConflict = (await client.query(`SELECT status FROM marketplace_financial_operations WHERE order_id=$1 AND operation_type='REFUND' AND status IN ('PENDING','SUCCEEDED') LIMIT 1 FOR UPDATE`, [row.order_id])).rows[0];
@@ -166,7 +173,9 @@ export function registerMarketplaceProtectionResolutionRoutes({ app }) {
           if (row.dispute_id) await client.query(`UPDATE marketplace_order_disputes SET status=$1,resolution_notes=$2,updated_at=NOW() WHERE id=$3`, [resolution === 'SELLER' ? 'RESOLVED_SELLER' : 'CANCELLED', note, row.dispute_id]);
           if (resolution === 'SELLER') {
             await client.query(`UPDATE marketplace_orders SET status='COMPLETED',completed_at=COALESCE(completed_at,NOW()),updated_at=NOW() WHERE id=$1 AND status='DISPUTED'`, [row.order_id]);
-            await client.query(`UPDATE marketplace_listings SET quantity=GREATEST(0,quantity-$1),reserved_quantity=GREATEST(0,reserved_quantity-$1),active=CASE WHEN quantity-$1 <= 0 THEN FALSE ELSE active END,updated_at=NOW() WHERE id=$2`, [row.quantity,row.listing_id]);
+            if (String(row.previous_order_status) !== 'COMPLETED') {
+              await client.query(`UPDATE marketplace_listings SET quantity=GREATEST(0,quantity-$1),reserved_quantity=GREATEST(0,reserved_quantity-$1),active=CASE WHEN quantity-$1 <= 0 THEN FALSE ELSE active END,updated_at=NOW() WHERE id=$2`, [row.quantity,row.listing_id]);
+            }
           } else {
             const restoreOrderStatus = ['PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED'].includes(String(row.previous_order_status)) ? String(row.previous_order_status) : 'PAID';
             await client.query(`UPDATE marketplace_orders SET status=$1,updated_at=NOW() WHERE id=$2 AND status='DISPUTED'`, [restoreOrderStatus, row.order_id]);
