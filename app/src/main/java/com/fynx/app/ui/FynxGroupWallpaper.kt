@@ -55,84 +55,58 @@ fun FynxGroupWallpaperBackground(groupId:String,modifier:Modifier=Modifier,conte
 @Composable
 private fun FynxGroupDoodlePattern(){
     Canvas(Modifier.fillMaxSize()){
-        val ink=Color.White.copy(alpha=0.052f)
-        val sw=1.1.dp.toPx()
-        val w=210.dp.toPx()
-        val h=175.dp.toPx()
-
+        val ink=Color.White.copy(alpha=0.035f)
+        val sw=1.15.dp.toPx()
+        val cellW=190.dp.toPx()
+        val cellH=165.dp.toPx()
         fun line(a:Offset,b:Offset)=drawLine(ink,a,b,sw)
         fun circle(x:Float,y:Float,r:Float)=drawCircle(color=ink,radius=r,center=Offset(x,y),style=Stroke(width=sw))
-        fun person(x:Float,y:Float,s:Float){
-            circle(x,y,7*s)
-            line(Offset(x,y+7*s),Offset(x,y+27*s))
-            line(Offset(x,y+13*s),Offset(x-10*s,y+21*s))
-            line(Offset(x,y+13*s),Offset(x+10*s,y+21*s))
-            line(Offset(x,y+27*s),Offset(x-8*s,y+38*s))
-            line(Offset(x,y+27*s),Offset(x+8*s,y+38*s))
-        }
-        fun peopleTogether(x:Float,y:Float,s:Float){
-            person(x,y,s)
-            person(x+28*s,y+5*s,s*.92f)
-            person(x+55*s,y+1*s,s*.88f)
-            line(Offset(x+10*s,y+21*s),Offset(x+20*s,y+24*s))
-            line(Offset(x+36*s,y+24*s),Offset(x+47*s,y+21*s))
+        fun people(x:Float,y:Float,s:Float){
+            circle(x,y,9*s); circle(x+28*s,y+3*s,8*s)
+            line(Offset(x,y+9*s),Offset(x,y+30*s)); line(Offset(x+28*s,y+11*s),Offset(x+28*s,y+30*s))
+            line(Offset(x,y+16*s),Offset(x-13*s,y+25*s)); line(Offset(x,y+16*s),Offset(x+13*s,y+25*s))
+            line(Offset(x+28*s,y+17*s),Offset(x+17*s,y+24*s)); line(Offset(x+28*s,y+17*s),Offset(x+39*s,y+24*s))
+            line(Offset(x,y+30*s),Offset(x-9*s,y+43*s)); line(Offset(x,y+30*s),Offset(x+9*s,y+43*s))
+            line(Offset(x+28*s,y+30*s),Offset(x+20*s,y+43*s)); line(Offset(x+28*s,y+30*s),Offset(x+36*s,y+43*s))
         }
         fun bubble(x:Float,y:Float,s:Float){
-            drawRoundRect(color=ink,topLeft=Offset(x,y),size=Size(42*s,28*s),cornerRadius=CornerRadius(9*s,9*s),style=Stroke(width=sw))
-            line(Offset(x+8*s,y+28*s),Offset(x+5*s,y+36*s))
+            drawRoundRect(color=ink,topLeft=Offset(x,y),size=Size(54*s,36*s),cornerRadius=CornerRadius(11*s,11*s),style=Stroke(width=sw))
+            line(Offset(x+12*s,y+36*s),Offset(x+7*s,y+46*s)); line(Offset(x+20*s,y+13*s),Offset(x+35*s,y+13*s))
         }
-        fun link(x:Float,y:Float,s:Float){
-            circle(x,y,7*s);circle(x+28*s,y+18*s,7*s)
-            line(Offset(x+5*s,y+5*s),Offset(x+23*s,y+13*s))
-        }
+        fun link(x:Float,y:Float,s:Float){ circle(x,y,9*s); circle(x+31*s,y+20*s,9*s); line(Offset(x+7*s,y+7*s),Offset(x+24*s,y+13*s)) }
         fun handshake(x:Float,y:Float,s:Float){
-            line(Offset(x,y+10*s),Offset(x+15*s,y))
-            line(Offset(x+15*s,y),Offset(x+30*s,y+10*s))
-            line(Offset(x+8*s,y+13*s),Offset(x+18*s,y+23*s))
-            line(Offset(x+18*s,y+23*s),Offset(x+28*s,y+13*s))
-            line(Offset(x+18*s,y+23*s),Offset(x+24*s,y+29*s))
+            line(Offset(x,y+14*s),Offset(x+17*s,y)); line(Offset(x+17*s,y),Offset(x+34*s,y+14*s))
+            line(Offset(x+9*s,y+18*s),Offset(x+20*s,y+29*s)); line(Offset(x+20*s,y+29*s),Offset(x+31*s,y+18*s)); line(Offset(x+20*s,y+29*s),Offset(x+27*s,y+36*s))
         }
         fun camera(x:Float,y:Float,s:Float){
-            drawRect(color=ink,topLeft=Offset(x,y),size=Size(42*s,30*s),style=Stroke(width=sw))
-            circle(x+21*s,y+15*s,7*s)
-            line(Offset(x+8*s,y),Offset(x+14*s,y-6*s))
+            drawRoundRect(color=ink,topLeft=Offset(x,y),size=Size(54*s,38*s),cornerRadius=CornerRadius(7*s,7*s),style=Stroke(width=sw))
+            circle(x+27*s,y+19*s,10*s); line(Offset(x+11*s,y),Offset(x+19*s,y-8*s))
         }
         fun house(x:Float,y:Float,s:Float){
-            line(Offset(x,y+18*s),Offset(x+21*s,y))
-            line(Offset(x+21*s,y),Offset(x+42*s,y+18*s))
-            line(Offset(x,y+18*s),Offset(x,y+43*s))
-            line(Offset(x+42*s,y+18*s),Offset(x+42*s,y+43*s))
-            line(Offset(x,y+43*s),Offset(x+42*s,y+43*s))
+            line(Offset(x,y+22*s),Offset(x+27*s,y)); line(Offset(x+27*s,y),Offset(x+54*s,y+22*s))
+            line(Offset(x+5*s,y+19*s),Offset(x+5*s,y+52*s)); line(Offset(x+49*s,y+19*s),Offset(x+49*s,y+52*s)); line(Offset(x+5*s,y+52*s),Offset(x+49*s,y+52*s))
+            drawRoundRect(color=ink,topLeft=Offset(x+22*s,y+35*s),size=Size(10*s,17*s),cornerRadius=CornerRadius(2*s,2*s),style=Stroke(width=sw))
         }
         fun groupCircle(x:Float,y:Float,s:Float){
-            circle(x,y,20*s)
-            circle(x-8*s,y-4*s,4*s);circle(x+8*s,y-4*s,4*s);circle(x,y+7*s,4*s)
-            line(Offset(x-4*s,y-1*s),Offset(x-1*s,y+3*s))
-            line(Offset(x+4*s,y-1*s),Offset(x+1*s,y+3*s))
+            circle(x,y,25*s); circle(x-10*s,y-5*s,5*s); circle(x+10*s,y-5*s,5*s); circle(x,y+9*s,5*s)
+            line(Offset(x-5*s,y-1*s),Offset(x-1*s,y+4*s)); line(Offset(x+5*s,y-1*s),Offset(x+1*s,y+4*s))
         }
-
-        var row=0
-        var y=-30f
-        while(y<size.height+h){
-            var col=0
-            var x=if(row%2==0)-45f else -145f
-            while(x<size.width+w){
-                when((row*7+col)%9){
-                    0->peopleTogether(x,y+30,.52f)
-                    1->bubble(x+18,y+50,.72f)
-                    2->link(x+20,y+35,.8f)
-                    3->handshake(x+18,y+35,.72f)
-                    4->groupCircle(x+38,y+50,.78f)
-                    5->camera(x+24,y+18,.68f)
-                    6->house(x+10,y+22,.68f)
-                    7->{ person(x+34,y+35,.62f); bubble(x+52,y+18,.55f) }
-                    else->{ peopleTogether(x+4,y+25,.44f); line(Offset(x+20,y+58),Offset(x+52,y+38)) }
-                }
-                x+=w
-                col++
-            }
-            y+=h
-            row++
+        fun coffee(x:Float,y:Float,s:Float){
+            drawRoundRect(color=ink,topLeft=Offset(x,y),size=Size(40*s,34*s),cornerRadius=CornerRadius(5*s,5*s),style=Stroke(width=sw))
+            drawArc(color=ink,startAngle=-90f,sweepAngle=180f,useCenter=false,topLeft=Offset(x+34*s,y+8*s),size=Size(16*s,17*s),style=Stroke(width=sw))
+            line(Offset(x+9*s,y-7*s),Offset(x+6*s,y-13*s)); line(Offset(x+20*s,y-7*s),Offset(x+23*s,y-13*s))
+        }
+        fun soccer(x:Float,y:Float,s:Float){
+            circle(x+25*s,y+25*s,24*s)
+            line(Offset(x+25*s,y+10*s),Offset(x+14*s,y+18*s)); line(Offset(x+25*s,y+10*s),Offset(x+36*s,y+18*s))
+            line(Offset(x+14*s,y+18*s),Offset(x+18*s,y+31*s)); line(Offset(x+36*s,y+18*s),Offset(x+32*s,y+31*s)); line(Offset(x+18*s,y+31*s),Offset(x+32*s,y+31*s))
+        }
+        val icons=listOf<(Float,Float)->Unit>({x,y->people(x,y,.85f)},{x,y->bubble(x,y,.82f)},{x,y->link(x,y,.9f)},{x,y->handshake(x,y,.82f)},{x,y->groupCircle(x,y,.82f)},{x,y->camera(x,y,.88f)},{x,y->house(x,y,.86f)},{x,y->coffee(x,y,.92f)},{x,y->soccer(x,y,.82f)})
+        var row=0; var y=-55f
+        while(y<size.height+cellH){
+            var col=0; var x=if(row%2==0)-38f else -133f
+            while(x<size.width+cellW){ icons[(row*3+col*5)%icons.size](x+(col%3)*9f,y+(row%2)*7f); x+=cellW; col++ }
+            y+=cellH; row++
         }
     }
 }
