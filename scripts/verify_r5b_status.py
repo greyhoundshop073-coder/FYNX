@@ -58,7 +58,7 @@ require('Status client sends catalogue music','put("musicCatalogueId", status.mu
 require('Status client parses catalogue music','musicCatalogueId=musicCatalogueId' in client and 'musicTitle=' in client and 'musicArtist=' in client)
 require('Status backend stores catalogue music','music_catalogue_id BIGINT' in server and 'music_title TEXT' in server and 'music_duration_ms BIGINT' in server)
 require('Status backend validates published music','fynx_music_catalogue' in server and 'c.active=TRUE' in server and 'music selection is not published in the FYNX catalogue' in server)
-require('Status backend caps music clip','musicDurationMs = Math.max(0, Math.min(Number(music.rows[0].duration_ms) || 0, 30000))' in server)
+require('Status backend preserves catalogue music duration','musicDurationMs = Math.max(0, Number(music.rows[0].duration_ms) || 0)' in server)
 require('Add Status Music opens catalogue','onMusic = { showStatusMusicPicker = true }' in hub and 'FynxMusicCatalogueClient.listPublished(context, statusMusicSearch)' in hub)
 require('Add Status selected music reaches composer','selectedStatusMusic' in hub and 'initialMusic = selectedStatusMusic' in hub)
 require('Status composer carries selected music','selectedMusic?.id' in mature and 'musicCatalogueId = selectedMusic?.id' in mature)
