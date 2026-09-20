@@ -20,6 +20,11 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Reply
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Forward
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Send
