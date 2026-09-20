@@ -154,6 +154,11 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
       if (!isBuyer(order, req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the buyer can choose fulfillment' }); }
       if (!['PAYMENT_PENDING','PAID'].includes(order.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'fulfillment can only be selected before shipping' }); }
+      const storedMethod = String(order.fulfillment_method || '').trim().toUpperCase();
+      if (storedMethod && storedMethod !== method) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'the protected checkout fulfillment method cannot be changed after order creation', code: 'FULFILLMENT_METHOD_LOCKED' });
+      }
       const snapshot = order.product_snapshot && typeof order.product_snapshot === 'object' ? order.product_snapshot : {};
       if (method === 'DELIVERY' && !Boolean(snapshot.deliveryAvailable)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery is not available for this listing' }); }
       if (method === 'PICKUP' && !Boolean(snapshot.pickupAvailable)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'pickup is not available for this listing' }); }

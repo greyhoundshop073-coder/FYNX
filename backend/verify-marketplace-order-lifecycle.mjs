@@ -22,6 +22,7 @@ const checks = [
   ['seller pickup UI uses dedicated handover route', seller.includes('/api/marketplace/orders/${order.id}/pickup-handover') && seller.includes('Confirm pickup handover')],
   ['buyer lifecycle UI exposes fulfillment', lifecycle.includes('Choose fulfillment')],
   ['buyer lifecycle UI validates fulfillment choice', lifecycle.includes('Choose delivery or pickup before continuing.')],
+  ['protected checkout locks the fulfillment method', completion.includes('FULFILLMENT_METHOD_LOCKED') && completion.includes('storedMethod') && completion.includes('storedMethod !== method')],
   ['buyer delivery UI validates required contact and address fields', lifecycle.includes('Complete all delivery address and contact fields.')],
   ['buyer lifecycle UI limits buyer note length', lifecycle.includes('note.trim().take(500)')],
   ['buyer lifecycle UI exposes delivery confirmation', lifecycle.includes('Confirm received')],
