@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Call
@@ -146,7 +147,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     val group = remember(groupId) { FynxGroupsStore.load(context).firstOrNull { it.id == groupId } }
     var currentGroup by remember(groupId) { mutableStateOf(group) }
     val groupTitle = currentGroup?.name ?: "Group"
-    var messages by remember(groupId) { mutableStateOf(FynxChatStore.load(context, "group_$groupId", emptyList())) }
+    var messages by remember(groupId) { mutableStateOf(FynxChatStore.load(context, "group_$groupId", null)) }
     var showMembers by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showTools by remember { mutableStateOf(false) }
@@ -175,7 +176,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }.onFailure { if (FynxBackendClient.hasAccessToken(context)) syncMessage = it.message ?: "Unable to sync group messages." }
     }
     if (showSettings && selectedGroup != null) { FynxGroupSettingsPanel(groupId = selectedGroup.id, groupName = selectedGroup.name, isAdmin = isAdmin, onBack = { showSettings = false }); return }
-    FynxChatWallpaperBackground(modifier = Modifier.fillMaxSize(), wallpaperOverride = FynxConversationPreferences.groupWallpaper(context, groupId)) {
+    FynxChatWallpaperBackground(modifier = Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         Surface(color = Color(0xFF1E1E1E), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth().statusBarsPadding().height(56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
