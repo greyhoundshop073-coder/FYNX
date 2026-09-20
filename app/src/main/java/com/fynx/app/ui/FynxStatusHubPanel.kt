@@ -14,7 +14,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
-import java.util.UUID
 
 /** Single Status/Stories surface. The old local-only Stories panel is no longer rendered beside the backend feed. */
 @Composable
@@ -23,42 +22,25 @@ fun FynxStatusHubPanel() {
     val scope = rememberCoroutineScope()
     var composing by remember { mutableStateOf(false) }
     var cameraOpen by remember { mutableStateOf(false) }
-    var publishingCameraStatus by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
+    var capturedUri by remember { mutableStateOf<Uri?>(null) }
+    var capturedType by remember { mutableStateOf<FynxStatusType?>(null) }
     var timelineRefreshKey by remember { mutableIntStateOf(0) }
 
-    fun publishCapturedStatus(uri: Uri, type: String) {
-        if (publishingCameraStatus) return
-        publishingCameraStatus = true; cameraError = null
-        scope.launch {
-            try {
-                val auth = FynxAuthStore.load(context)
-                val username = auth.username?.removePrefix("@").orEmpty().ifBlank { "preview" }
-                val mime = context.contentResolver.getType(uri) ?: if (type == "video") "video/mp4" else "image/jpeg"
-                val mediaId = FynxStatusClient.uploadMedia(context, uri, mime).getOrElse { cameraError = it.message ?: "Status media upload failed."; return@launch }
-                val statusType = if (type == "video") FynxStatusType.VIDEO else FynxStatusType.PHOTO
-                val now = System.currentTimeMillis()
-                val status = FynxStatus(id = UUID.randomUUID().toString(), ownerUsername = username, ownerDisplayName = username, type = statusType, text = null, createdAtMillis = now, expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS, textStyle = FynxStatusTextStyle(0xFF111111, 0xFFFFFFFF, FynxStatusTextFont.CLASSIC, 1), privateStatus = true, voiceDurationMs = 0L, audience = FynxStatusAudience.FRIENDS)
-                FynxStatusClient.create(context, status, mediaId).getOrElse { cameraError = it.message ?: "Status publishing failed."; return@launch }
-                FynxStatusStore.save(context, status.copy(contentUri = "/api/media/$mediaId"))
-                cameraOpen = false; timelineRefreshKey++
-            } finally { publishingCameraStatus = false }
-        }
-    }
     LaunchedEffect(composing, cameraOpen) { if (!composing && !cameraOpen) timelineRefreshKey++ }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize()) {
-            if (composing) FynxMatureStatusComposerPanel(onClose = { composing = false }) else key(timelineRefreshKey) { FynxStatusTimelinePanel() }
+            if (composing) FynxMatureStatusComposerPanel(initialMediaUri = capturedUri, initialType = capturedType, onClose = { capturedUri = null; capturedType = null; composing = false }) else key(timelineRefreshKey) { FynxStatusTimelinePanel() }
             if (!composing) Row(modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end = 18.dp, bottom = 26.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                SmallFloatingActionButton(onClick = { if (!publishingCameraStatus) { cameraError = null; cameraOpen = true } }) { Icon(Icons.Default.PhotoCamera, contentDescription = "Open Status camera") }
+                SmallFloatingActionButton(onClick = { cameraError = null; cameraOpen = true }) { Icon(Icons.Default.PhotoCamera, contentDescription = "Open Status camera") }
                 FloatingActionButton(onClick = { composing = true }) { Icon(Icons.Default.Add, contentDescription = "Create Status") }
             }
             cameraError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 102.dp, start = 18.dp, end = 18.dp)) }
         }
     }
-    if (cameraOpen) Dialog(onDismissRequest = { if (!publishingCameraStatus) cameraOpen = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+    if (cameraOpen) Dialog(onDismissRequest = { cameraOpen = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(onCaptured = { uri, type -> publishCapturedStatus(uri, type) }, onDismiss = { if (!publishingCameraStatus) cameraOpen = false }) }
+            Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(onCaptured = { uri, type -> capturedUri = uri; capturedType = if (type == "video") FynxStatusType.VIDEO else FynxStatusType.PHOTO; cameraOpen = false; composing = true }, onDismiss = { cameraOpen = false }) }
         }
     }
 }

@@ -92,7 +92,7 @@ require('mature publish validation','Write something first.' in mature and 'Add 
 
 require('single backend Status hub','FynxStatusTimelinePanel()' in hub and 'StoriesPanel()' not in hub)
 require('hub mature + creation route','FynxMatureStatusComposerPanel' in hub and 'composing = true' in hub)
-require('hub camera route remains real','FynxCameraCapturePanel' in hub and 'publishCapturedStatus' in hub)
+require('hub camera route remains real','FynxCameraCapturePanel' in hub and 'capturedUri = uri' in hub and 'composing = true' in hub)
 require('legacy Stories wrapper','FynxStatusTimelinePanel()' in stories and 'SharedPreferences' not in stories)
 require('timeline backend list','FynxStatusClient.list(context)' in timeline)
 require('timeline filters expired statuses','filterNot(FynxStatus::isExpired)' in timeline)

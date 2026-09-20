@@ -368,7 +368,7 @@ const statusSchema = async () => {
     voice_duration_ms BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     expires_at TIMESTAMPTZ NOT NULL
-  );
+  );`);
   await pool.query("ALTER TABLE statuses ADD COLUMN IF NOT EXISTS audience TEXT");
   await pool.query("UPDATE statuses SET audience = CASE WHEN private_status THEN 'FRIENDS' ELSE 'EVERYONE' END WHERE audience IS NULL");
   await pool.query("ALTER TABLE statuses ALTER COLUMN audience SET DEFAULT 'EVERYONE'");
@@ -379,7 +379,7 @@ const statusSchema = async () => {
     END IF;
   END $;`);
   await pool.query("CREATE INDEX IF NOT EXISTS statuses_owner_idx ON statuses(owner_id,created_at DESC)");
-  await pool.query("CREATE INDEX IF NOT EXISTS statuses_expiry_idx ON statuses(expires_at)");`);
+  await pool.query("CREATE INDEX IF NOT EXISTS statuses_expiry_idx ON statuses(expires_at)");
 };
 
 app.get("/api/statuses", auth, async (req, res) => {
