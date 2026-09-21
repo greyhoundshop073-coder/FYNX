@@ -127,7 +127,8 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
 
     val surface = MaterialTheme.colorScheme.surface
     val outline = MaterialTheme.colorScheme.outline.copy(alpha = .45f)
-    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = { settingsOpen = true }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Settings, contentDescription = "Settings") } }\n    LazyColumn(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = { settingsOpen = true }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Settings, contentDescription = "Settings") } }
+    LazyColumn(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(surface), border = BorderStroke(1.dp, outline)) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 20.dp)) {
@@ -320,7 +321,16 @@ fun SettingsPanel(
             if (visible("FYNX AI", "assistant search recommendations translation media ai")) {
                 item { SettingsActionCard("FYNX AI", "Assistant, search, recommendations and AI tools") { onOpenSettingsDestination("AI") } }
             }
-            if (visible("Professional & Creator", "business creator advertising seller tools")) {\n                item { SettingsSectionTitle("Professional") }\n                item { SettingsActionCard("Business & Creator", "Manage your professional FYNX profile and tools") { onOpenSettingsDestination("Business Account") } }\n                item { SettingsActionCard("Advertising", "Campaigns and advertising tools") { onOpenSettingsDestination("Advertising") } }\n            }\n            if (visible("Saved Posts", "saved bookmarks posts")) {\n                item { SettingsSectionTitle("Content") }\n                item { SettingsActionCard("Saved Posts", "Open your saved FYNX posts") { onOpenSettingsDestination("Saved Posts") } }\n            }\n            if (visible("Search", "search history suggestions discovery")) {
+            if (visible("Professional & Creator", "business creator advertising seller tools")) {
+                item { SettingsSectionTitle("Professional") }
+                item { SettingsActionCard("Business & Creator", "Manage your professional FYNX profile and tools") { onOpenSettingsDestination("Business Account") } }
+                item { SettingsActionCard("Advertising", "Campaigns and advertising tools") { onOpenSettingsDestination("Advertising") } }
+            }
+            if (visible("Saved Posts", "saved bookmarks posts")) {
+                item { SettingsSectionTitle("Content") }
+                item { SettingsActionCard("Saved Posts", "Open your saved FYNX posts") { onOpenSettingsDestination("Saved Posts") } }
+            }
+            if (visible("Search", "search history suggestions discovery")) {
                 item { SettingsActionCard("Search", "Search and discovery preferences") { showSimpleInfo = "Search" } }
             }
             if (visible("Appearance", "light dark system theme colors accent")) {
