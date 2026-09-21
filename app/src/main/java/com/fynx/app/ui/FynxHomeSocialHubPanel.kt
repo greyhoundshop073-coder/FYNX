@@ -111,8 +111,9 @@ fun FynxHomeSocialHubPanel(
         if (uris.isNotEmpty()) {
             uris.take(4).forEach { uri -> runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
             val selected = uris.distinct().take(4)
-            capturedUris = (capturedUris.filterNot { it in selected } + selected).take(12)
-            capturedTypes = capturedUris.map { uri -> FynxMultiMediaPostClient.mediaKind(context, uri) }
+            val nextUris = (capturedUris.filterNot { it in selected } + selected).take(4)
+            capturedUris = nextUris
+            capturedTypes = nextUris.map { uri -> FynxMultiMediaPostClient.mediaKind(context, uri) }
             selectedVisualIndex = 0
             showComposer = true
         }
@@ -360,8 +361,14 @@ fun FynxHomeSocialHubPanel(
     }
 
 
-    fun recomputeTypes() {
-        capturedTypes = capturedUris.map { item -> when { context.contentResolver.getType(item)?.startsWith("video/") == true -> "video"; context.contentResolver.getType(item)?.startsWith("audio/") == true -> "audio"; else -> "image" } }
+    fun recomputeTypes(nextUris: List<Uri> = capturedUris) {
+        capturedTypes = nextUris.map { item ->
+            when {
+                context.contentResolver.getType(item)?.startsWith("video/") == true -> "video"
+                context.contentResolver.getType(item)?.startsWith("audio/") == true -> "audio"
+                else -> "image"
+            }
+        }
         val visualCount = capturedTypes.count { it == "image" || it == "video" }
         selectedVisualIndex = selectedVisualIndex.coerceIn(0, (visualCount - 1).coerceAtLeast(0))
     }
@@ -721,8 +728,9 @@ fun FynxHomeSocialHubPanel(
                 Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                     FynxCameraCapturePanel(
                         onCaptured = { uri, type ->
-                            capturedUris = (capturedUris + uri).take(12)
-                            recomputeTypes()
+                            val nextUris = (capturedUris + uri).distinct().take(4)
+                            capturedUris = nextUris
+                            recomputeTypes(nextUris)
                             selectedVisualIndex = 0
                             showCamera = false
                             showComposer = true
