@@ -204,7 +204,6 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         IconButton(onClick = { homeCameraRequest++ }) {
                             Icon(Icons.Default.CameraAlt, "Open FYNX camera")
                         }
-                        IconButton(onClick = { selected = "Profile"; openProfileSettings = true }) { Icon(Icons.Default.Settings, "Settings") }
                         BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
                             IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
                         }
