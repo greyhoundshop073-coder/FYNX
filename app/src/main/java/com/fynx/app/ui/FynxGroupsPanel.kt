@@ -33,7 +33,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
@@ -198,13 +197,13 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     if (showSettings && selectedGroup != null) { FynxGroupSettingsPanel(groupId = selectedGroup.id, groupName = selectedGroup.name, isAdmin = isAdmin, onBack = { showSettings = false }); return }
     FynxChatWallpaperBackground(modifier = Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
-        Surface(color = Color(0xFF1E1E1E), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth()) {
+        Surface(color = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth().statusBarsPadding().height(52.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.ArrowBack, "Back", modifier = Modifier.size(24.dp)) }
                 Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Icon(Icons.Default.Group, "Group", tint = MaterialTheme.colorScheme.primary) }
                 Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                    Text(groupTitle, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = Color.White, maxLines = 1)
-                    Text("${selectedGroup?.members?.size ?: 0} members", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.62f), maxLines = 1)
+                    Text(groupTitle, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                    Text("${selectedGroup?.members?.size ?: 0} members", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
                 IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, modifier = Modifier.size(40.dp)) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search", Modifier.size(24.dp)) }
                 Box {
@@ -225,13 +224,13 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             if (visibleMessages.isEmpty() && searchQuery.isBlank()) {
                 item(key = "fynx-empty-group") {
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Surface(color = Color(0xFF242424).copy(alpha = 0.94f), shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth().widthIn(max = 340.dp)) {
+                        Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f), contentColor = MaterialTheme.colorScheme.onSurface, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth().widthIn(max = 340.dp)) {
                             Column(Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Box(Modifier.size(64.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Icon(Icons.Default.Group, "Group", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp)) }
                                 Spacer(Modifier.height(14.dp))
-                                Text("No messages here yet…", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                                Text("No messages here yet…", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                                 Spacer(Modifier.height(5.dp))
-                                Text("Start the conversation in " + groupTitle + ".", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.68f))
+                                Text("Start the conversation in " + groupTitle + ".", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -245,20 +244,20 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         }
                         Column(horizontalAlignment = if (message.fromMe) Alignment.End else Alignment.Start) {
                             if (!message.fromMe && !message.senderUsername.isNullOrBlank()) {
-                                Text(message.senderUsername!!, style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = Color.White.copy(alpha = 0.72f), modifier = Modifier.padding(bottom = 2.dp))
+                                Text(message.senderUsername!!, style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 2.dp))
                             }
                             Box {
-                            Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primary else Color(0xFF303030), contentColor = Color.White, shape = RoundedCornerShape(18.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { reactionMessageId = message.id }, onLongClick = { reactionMessageId = message.id })) {
+                            Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primary else Color(0xFF303030), contentColor = if (message.fromMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, shape = RoundedCornerShape(18.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { reactionMessageId = message.id }, onLongClick = { reactionMessageId = message.id })) {
                                 Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
-                                    if (message.replyToId != null) Text("Reply", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.82f), modifier = Modifier.padding(bottom = 5.dp))
+                                    if (message.replyToId != null) Text("Reply", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 5.dp))
                                 if (message.attachmentUri != null) {
                                     if (message.attachmentType == "audio") FynxRemoteAudio(message.attachmentUri, Modifier.fillMaxWidth())
                                     else FynxRemoteMedia(message.attachmentUri, message.attachmentType ?: "image", Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp))
                                 }
-                                if (message.text.isNotBlank() && message.attachmentType != "audio") Text(message.text, color = Color.White)
+                                if (message.text.isNotBlank() && message.attachmentType != "audio") Text(message.text, color = if (message.fromMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                                    Text(formatMessageClock(message.timestamp), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.62f))
-                                    if (message.fromMe) { Spacer(Modifier.width(4.dp)); Text(if (message.read) "✓✓" else if (message.delivered) "✓✓" else "✓", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.68f)) }
+                                    Text(formatMessageClock(message.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (message.fromMe) { Spacer(Modifier.width(4.dp)); Text(if (message.read) "✓✓" else if (message.delivered) "✓✓" else "✓", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                 }
                                 }
                             }
