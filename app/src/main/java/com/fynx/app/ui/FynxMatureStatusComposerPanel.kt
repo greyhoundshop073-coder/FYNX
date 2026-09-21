@@ -130,19 +130,22 @@ fun FynxMatureStatusComposerPanel(
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when (type) {
-            FynxStatusType.TEXT -> Box(Modifier.fillMaxSize().background(Color(background)), contentAlignment = Alignment.Center) {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) },
-                    placeholder = { Text("Type a Status", color = Color(foreground).copy(alpha = .6f), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
-                    textStyle = LocalTextStyle.current.copy(
-                        color = Color(foreground),
-                        textAlign = TextAlign.Center,
-                        fontFamily = matureStatusFont(font),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 34.sp,
-                        lineHeight = 42.sp
-                    ),
+            FynxStatusType.TEXT -> {
+                val editorTextAlign = when (alignment) { 0 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
+                val editorWeight = if (font == FynxStatusTextFont.BOLD) FontWeight.Bold else FontWeight.Normal
+                Box(Modifier.fillMaxSize().background(Color(background)), contentAlignment = Alignment.Center) {
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) },
+                        placeholder = { Text("Type a Status", color = Color(foreground).copy(alpha = .6f), textAlign = editorTextAlign, modifier = Modifier.fillMaxWidth()) },
+                        textStyle = LocalTextStyle.current.copy(
+                            color = Color(foreground),
+                            textAlign = editorTextAlign,
+                            fontFamily = matureStatusFont(font),
+                            fontWeight = editorWeight,
+                            fontSize = 34.sp,
+                            lineHeight = 42.sp
+                        ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color.Transparent,
                         unfocusedBorderColor = Color.Transparent,
@@ -156,8 +159,9 @@ fun FynxMatureStatusComposerPanel(
                         .padding(top = 76.dp, bottom = 220.dp)
                         .imePadding(),
                     minLines = 2,
-                    maxLines = 10
-                )
+                        maxLines = 10
+                    )
+                }
             }
             FynxStatusType.PHOTO -> mediaUri?.let { MatureStatusMedia(it, false, Modifier.fillMaxSize().padding(top = 64.dp, bottom = 176.dp)) }
             FynxStatusType.VIDEO -> mediaUri?.let { MatureStatusMedia(it, true, Modifier.fillMaxSize().padding(top = 64.dp, bottom = 176.dp)) }
