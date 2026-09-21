@@ -243,9 +243,12 @@ fun SettingsPanel(
     val context = LocalContext.current
     var appearance by remember { mutableStateOf(FynxPreferencesStore.loadAppearance(context)) }
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
+    var language by remember { mutableStateOf(FynxPreferencesStore.loadLanguage(context)) }
     var showAppearance by remember { mutableStateOf(false) }
     var showColors by remember { mutableStateOf(false) }
     var showChatPersonalization by remember { mutableStateOf(false) }
+    var showLanguage by remember { mutableStateOf(false) }
+    var showSimpleInfo by remember { mutableStateOf<String?>(null) }
     var search by remember { mutableStateOf("") }
 
     val query = search.trim().lowercase()
@@ -255,81 +258,174 @@ fun SettingsPanel(
     Column(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 12.dp)
-            .widthIn(max = 720.dp)
+            .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TextButton(onClick = onBack) { Text("‹ Back") }
             Spacer(Modifier.width(4.dp))
             Text(
-                "Settings & privacy",
+                "Settings",
                 style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
             )
         }
+
         OutlinedTextField(
             value = search,
             onValueChange = { search = it },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
             singleLine = true,
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search settings") },
             placeholder = { Text("Search settings") },
             shape = RoundedCornerShape(16.dp)
         )
+
         HorizontalDivider()
+
         LazyColumn(
-            Modifier.weight(1f),
-            contentPadding = PaddingValues(vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            if (visible("Account", "Username bio profile account")) {
+            if (visible("Account", "username bio profile account phone email password")) {
                 item { SettingsSectionTitle("Account") }
-                item { SettingsActionCard("Account & profile", "Username, bio and profile information") { onBack(); onSettingsChange(settings) } }
+                item { SettingsActionCard("Account", "Profile, username, bio and account information") { showSimpleInfo = "Account" } }
             }
-            if (visible("Privacy & Safety", "Profile online posts Status photo visibility")) {
+            if (visible("Privacy & Security", "privacy safety last seen online posts status profile photo messages blocking security")) {
                 item { SettingsSectionTitle("Privacy & Security") }
-                item { SettingsActionCard("Privacy & Safety", "Profile, online, posts, Status and photo visibility") { onOpenPrivacy() } }
+                item { SettingsActionCard("Privacy & Security", "Visibility, blocking, messages and account privacy") { onOpenPrivacy() } }
             }
-            if (visible("Notifications", "Sounds calls badges message alerts")) {
-                item { SettingsSectionTitle("Notifications") }
-                item { SettingsActionCard("Notifications", "Message alerts, sounds and notification controls") { onOpenNotifications() } }
+            if (visible("Notifications", "notifications sounds calls badges messages stories groups marketplace money")) {
+                item { SettingsSectionTitle("Notifications & Sounds") }
+                item { SettingsActionCard("Notifications", "Messages, calls, groups, Stories, Marketplace and Money alerts") { onOpenNotifications() } }
             }
-            if (visible("Chat & personalization", "Wallpapers night mode animations stickers emoji read receipts")) {
+            if (visible("Chat Settings", "chat wallpaper night mode animations stickers emoji read receipts")) {
                 item { SettingsSectionTitle("Chat Settings") }
-                item { SettingsActionCard("Chat & personalization", "Wallpapers, night mode, animations, stickers and emoji") { showChatPersonalization = true } }
-                item { SettingsActionCard("Read receipts", if (settings.readReceipts) "On • managed in Chat settings" else "Off • managed in Chat settings") { showChatPersonalization = true } }
-                item { SettingsActionCard("Story replies", if (settings.storyReplies) "On • managed in Privacy & Safety" else "Off • managed in Privacy & Safety") { onOpenPrivacy() } }
+                item { SettingsActionCard("Chat & personalization", "Wallpaper, night mode, animations, stickers and emoji") { showChatPersonalization = true } }
+                item { SettingsActionCard("Read receipts", if (settings.readReceipts) "On" else "Off") { showChatPersonalization = true } }
             }
-            if (visible("Appearance", "Light dark system theme")) {
+            if (visible("Calls", "voice video calls ringtone data privacy")) {
+                item { SettingsSectionTitle("Calls") }
+                item { SettingsActionCard("Calls", "Voice and video call preferences") { showSimpleInfo = "Calls" } }
+            }
+            if (visible("Friends & Groups", "friends groups requests invitations permissions")) {
+                item { SettingsSectionTitle("Social") }
+                item { SettingsActionCard("Friends & Groups", "Friend requests, group invitations and social controls") { showSimpleInfo = "Friends & Groups" } }
+            }
+            if (visible("Stories & Status", "stories status audience replies sharing")) {
+                item { SettingsActionCard("Stories & Status", "Audience, replies and sharing controls") { onOpenPrivacy() } }
+            }
+            if (visible("Camera & Media", "camera photos videos uploads downloads quality")) {
+                item { SettingsSectionTitle("Camera & Media") }
+                item { SettingsActionCard("Camera & Media", "Camera, photos, videos and media handling") { showSimpleInfo = "Camera & Media" } }
+            }
+            if (visible("Marketplace", "marketplace buying selling orders shipping returns disputes")) {
+                item { SettingsSectionTitle("FYNX Features") }
+                item { SettingsActionCard("Marketplace", "Buying, selling, orders, shipping, returns and disputes") { showSimpleInfo = "Marketplace" } }
+            }
+            if (visible("Payments & Money", "money wallet payments transactions alerts")) {
+                item { SettingsActionCard("Payments & Money", "Wallet, payments, transactions and money alerts") { showSimpleInfo = "Payments & Money" } }
+            }
+            if (visible("FYNX AI", "assistant search recommendations translation media ai")) {
+                item { SettingsActionCard("FYNX AI", "Assistant, search, recommendations and AI tools") { showSimpleInfo = "FYNX AI" } }
+            }
+            if (visible("Search", "search history suggestions discovery")) {
+                item { SettingsActionCard("Search", "Search and discovery preferences") { showSimpleInfo = "Search" } }
+            }
+            if (visible("Appearance", "light dark system theme colors accent")) {
                 item { SettingsSectionTitle("Appearance") }
                 item { SettingsActionCard("Appearance", appearance) { showAppearance = true } }
                 item { SettingsActionCard("Colors & accent", accent.name) { showColors = true } }
             }
-            if (visible("Language", "App language English")) {
-                item { SettingsSectionTitle("General") }
-                item { SettingsActionCard("Language", "English") { } }
+            if (visible("Data & Storage", "storage cache downloads mobile data wifi")) {
+                item { SettingsSectionTitle("Data & Storage") }
+                item { SettingsActionCard("Data & Storage", "Downloads, storage and media usage") { showSimpleInfo = "Data & Storage" } }
             }
-            if (query.isNotBlank() && !listOf("Account","Privacy & Safety","Notifications","Chat & personalization","Appearance","Language").any { visible(it, "") }) {
+            if (visible("Language", "app language translation")) {
+                item { SettingsSectionTitle("General") }
+                item { SettingsActionCard("Language", language) { showLanguage = true } }
+            }
+            if (visible("Accessibility", "text size contrast motion accessibility")) {
+                item { SettingsActionCard("Accessibility", "Text, contrast, motion and accessibility preferences") { showSimpleInfo = "Accessibility" } }
+            }
+            if (visible("Devices & Sessions", "devices sessions logins connected devices")) {
+                item { SettingsSectionTitle("Security") }
+                item { SettingsActionCard("Devices & Sessions", "Manage where your FYNX account is signed in") { showSimpleInfo = "Devices & Sessions" } }
+            }
+            if (visible("Connected Accounts", "google connected accounts integrations")) {
+                item { SettingsActionCard("Connected Accounts", "Manage accounts and integrations connected to FYNX") { showSimpleInfo = "Connected Accounts" } }
+            }
+            if (visible("Help & Support", "help support report problem")) {
+                item { SettingsSectionTitle("Support") }
+                item { SettingsActionCard("Help & Support", "Get help or report a problem") { showSimpleInfo = "Help & Support" } }
+            }
+            if (visible("About FYNX", "version terms privacy")) {
+                item { SettingsActionCard("About FYNX", "Version, terms and privacy information") { showSimpleInfo = "About FYNX" } }
+            }
+            if (query.isNotBlank() && !listOf("Account", "Privacy & Security", "Notifications", "Chat Settings", "Calls", "Friends & Groups", "Stories & Status", "Camera & Media", "Marketplace", "Payments & Money", "FYNX AI", "Search", "Appearance", "Data & Storage", "Language", "Accessibility", "Devices & Sessions", "Connected Accounts", "Help & Support", "About FYNX").any { visible(it, "") }) {
                 item {
-                    Text(
-                        "No matching settings",
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text("No matching settings", modifier = Modifier.fillMaxWidth().padding(24.dp), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
     }
+
     if (showAppearance) AppearanceDialog(appearance, { appearance = it; FynxPreferencesStore.saveAppearance(context, it); onAppearanceChanged(it); showAppearance = false }, { showAppearance = false })
     if (showColors) AccentDialog(accent, { accent = it; FynxPreferencesStore.saveAccent(context, it); onAccentChanged(it); showColors = false }, { showColors = false })
-    if (showChatPersonalization) ChatPersonalizationDialog(settings, onSettingsChange, { showChatPersonalization = false })
+    if (showChatPersonalization) ChatPersonalizationDialog(settings, onSettingsChange) { showChatPersonalization = false }
+    if (showLanguage) LanguageDialog(language, { language = it; FynxPreferencesStore.saveLanguage(context, it); showLanguage = false }, { showLanguage = false })
+    showSimpleInfo?.let { SettingsInfoDialog(it) { showSimpleInfo = null } }
+}
+
+@Composable
+private fun LanguageDialog(current: String, onSelect: (String) -> Unit, onDismiss: () -> Unit) {
+    val options = listOf("Device default", "English")
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Language") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                options.forEach { option ->
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = current == option, onClick = { onSelect(option) })
+                        Text(option)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
+    )
+}
+
+@Composable
+private fun SettingsInfoDialog(title: String, onDismiss: () -> Unit) {
+    val description = when (title) {
+        "Account" -> "Account controls are kept with your FYNX profile identity. Use Edit profile for profile details."
+        "Calls" -> "Call controls belong to the Calls system. Privacy and notification controls remain available from Privacy & Security and Notifications."
+        "Friends & Groups" -> "Friend and group privacy controls are account-scoped and are kept with Privacy & Security and Notifications."
+        "Camera & Media" -> "Camera and media access follows Android's permission model. FYNX requests sensitive camera or microphone access only when the related feature needs it."
+        "Marketplace" -> "Marketplace controls cover buying, selling, orders, shipping, returns and disputes. Transaction authorization remains server-side."
+        "Payments & Money" -> "Money controls cover wallet, payments, transactions and alerts. Financial actions remain server-authoritative."
+        "FYNX AI" -> "FYNX AI controls cover the Assistant, search, recommendations, translation and AI media tools. Provider credentials stay off the Android client."
+        "Search" -> "Search preferences cover discovery behavior and search history."
+        "Data & Storage" -> "Data and storage controls cover media downloads, cache and network usage."
+        "Accessibility" -> "Accessibility controls are grouped here so they can be applied consistently across FYNX."
+        "Devices & Sessions" -> "Device and session management is reserved for authenticated server-backed session controls."
+        "Connected Accounts" -> "Connected-account controls belong here when an account integration is enabled."
+        "Help & Support" -> "Help, support and problem reporting are available from one central place."
+        else -> "FYNX keeps this area in the central Settings surface so related controls have one predictable home."
+    }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(title) }, text = { Text(description) }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
 }
 
 @Composable private fun SettingsSectionTitle(title: String) { Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp)) }
