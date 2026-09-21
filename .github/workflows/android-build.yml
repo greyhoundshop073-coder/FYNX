@@ -195,6 +195,14 @@ jobs:
           name: FYNX-debug-apk-${{ github.sha }}
           path: fynx-apk-artifact/
           if-no-files-found: error
+      - name: Upload latest debug APK alias
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: FYNX-latest-debug-apk
+          path: fynx-apk-artifact/
+          if-no-files-found: error
+          overwrite: true
       - name: Upload instrumentation test APK
         uses: actions/upload-artifact@v4
         if: always()
