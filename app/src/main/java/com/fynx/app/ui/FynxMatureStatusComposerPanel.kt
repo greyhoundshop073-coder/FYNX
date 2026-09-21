@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Mic
@@ -289,11 +290,38 @@ fun FynxMatureStatusComposerPanel(
                             enabled = !recording && !publishing,
                             modifier = Modifier.size(44.dp)
                         ) {
-                            Icon(
-                                if (showMediaTools) Icons.Default.Close else Icons.Default.MoreVert,
-                                contentDescription = if (showMediaTools) "Hide status media tools" else "Show status media tools",
-                                tint = Color.White
-                            )
+                            if (showMediaTools) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Hide status media tools",
+                                    tint = Color.White
+                                )
+                            } else {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.AddAPhoto,
+                                        contentDescription = "Show status media tools",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(25.dp)
+                                    )
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = Color.White,
+                                        modifier = Modifier
+                                            .size(11.dp)
+                                            .align(Alignment.BottomEnd)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Add,
+                                            contentDescription = null,
+                                            tint = Color.Black,
+                                            modifier = Modifier
+                                                .padding(1.dp)
+                                                .size(9.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                                         if (type == FynxStatusType.VOICE) {
