@@ -25,19 +25,19 @@ async function ensureSchema() {
       await pool.query(`
         CREATE TABLE IF NOT EXISTS status_views (
           status_id UUID NOT NULL REFERENCES statuses(id) ON DELETE CASCADE,
-          viewer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          viewer_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           viewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           PRIMARY KEY (status_id, viewer_id)
         );
         CREATE TABLE IF NOT EXISTS status_likes (
           status_id UUID NOT NULL REFERENCES statuses(id) ON DELETE CASCADE,
-          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           PRIMARY KEY (status_id, user_id)
         );
         CREATE TABLE IF NOT EXISTS status_reactions (
           status_id UUID NOT NULL REFERENCES statuses(id) ON DELETE CASCADE,
-          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           reaction TEXT NOT NULL CHECK (char_length(reaction) BETWEEN 1 AND 32),
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           PRIMARY KEY (status_id, user_id)
@@ -45,7 +45,7 @@ async function ensureSchema() {
         CREATE TABLE IF NOT EXISTS status_replies (
           id UUID PRIMARY KEY,
           status_id UUID NOT NULL REFERENCES statuses(id) ON DELETE CASCADE,
-          sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          sender_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           body TEXT NOT NULL CHECK (char_length(body) BETWEEN 1 AND 1000),
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
