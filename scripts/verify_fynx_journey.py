@@ -18,6 +18,7 @@ privacy = read("app/src/main/java/com/fynx/app/ui/FynxPrivacySettings.kt")
 profile_backend = read("backend/profileRoutes.js")
 profile_client = read("app/src/main/java/com/fynx/app/ui/FynxProfileRemoteClient.kt")
 profile_panel = read("app/src/main/java/com/fynx/app/ui/ProfilePanel.kt")
+profile_content = read("app/src/main/java/com/fynx/app/ui/FynxProfileContent.kt")
 other_profile_panel = read("app/src/main/java/com/fynx/app/ui/OtherUserProfilePanel.kt")
 deep_link = read("app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt")
 share = read("app/src/main/java/com/fynx/app/ui/FynxShare.kt")
@@ -35,6 +36,7 @@ required_files = [
     "app/src/main/java/com/fynx/app/ui/FynxNotificationRemoteClient.kt",
     "app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt",
     "app/src/main/java/com/fynx/app/ui/FynxPrivacySettings.kt",
+    "app/src/main/java/com/fynx/app/ui/FynxProfileContent.kt",
     "app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt",
     "app/src/main/java/com/fynx/app/ui/FynxShare.kt",
     "backend/adminRoutes.js",
@@ -76,21 +78,19 @@ check(
     and '"@${person.username' in other_profile_panel
 )
 check(
-    "other-user profile preserves the four-column real-post grid and viewer",
-    "GridCells.Fixed(4)" in other_profile_panel
-    and "ProfilePostGrid" in other_profile_panel
-    and "ProfilePostSwipeViewer" in other_profile_panel
-    and "post.id" in other_profile_panel
-    and "post.mediaId" in other_profile_panel
+    "other-user profile uses the shared clean profile content hub",
+    "FynxProfileContentSection(username = person.username" in other_profile_panel
+    and "person.profilePhotoMediaId" in other_profile_panel
+    and "person.displayName" in other_profile_panel
+    and "person.username.removePrefix" in other_profile_panel
 )
 check(
-    "profile Marketplace tab is backed by real seller-owned listings",
-    "FynxMarketplaceClient.listings(context, loaded.username, \"\")" in other_profile_panel
-    and "sellerUsername.equals(loaded.username, ignoreCase = true)" in other_profile_panel
-    and "if (marketplace.isNotEmpty())" in other_profile_panel
-    and "selectedTab == \"Marketplace\"" in other_profile_panel
-    and "ProfileMarketplaceGrid" in other_profile_panel
-    and "ProfileMarketplaceDetails" in other_profile_panel
+    "profile content hub exposes real All, Videos, Photos, Audio and Marketplace tabs",
+    all(x in profile_content for x in ['"All"', '"Videos"', '"Photos"', '"Audio"', '"Marketplace"'])
+    and "FynxProfileRemoteClient.posts(context, username)" in profile_content
+    and "FynxMarketplaceClient.listings(context, username, \"\")" in profile_content
+    and "sellerUsername.equals(username, ignoreCase = true)" in profile_content
+    and "GridCells.Fixed(3)" in profile_content
 )
 check(
     "profile has no fabricated Business content or repost/likes tabs",
@@ -100,9 +100,11 @@ check(
 )
 check(
     "profile post and marketplace taps stay on real content paths",
-    "onOpenPost = { selectedPostIndex = it }" in other_profile_panel
-    and "onOpen = { selectedListing = it }" in other_profile_panel
-    and "FynxMarketplaceClient.mediaUrl" in other_profile_panel
+    "FynxProfilePostViewer" in profile_content
+    and "FynxProfileMarketplaceDetails" in profile_content
+    and "FynxMarketplaceClient.mediaUrl" in profile_content
+    and "selectedPost = item.post" in profile_content
+    and "selectedListing = item.listing" in profile_content
 )
 
 # Home Create is an entry menu, not a direct camera shortcut. Keep the exact three
