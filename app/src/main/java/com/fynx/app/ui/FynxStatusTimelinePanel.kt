@@ -391,6 +391,27 @@ private fun FynxStatusStoryViewer(
                     }
                 }
 
+                if (status.type != FynxStatusType.TEXT && !status.text.isNullOrBlank()) {
+                    Surface(
+                        color = Color.Black.copy(alpha = 0.62f),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(start = 18.dp, end = 18.dp, bottom = 154.dp)
+                    ) {
+                        Text(
+                            status.text.orEmpty(),
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 4,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+
                 // Top overlay stays readable over every status type.
                 Column(
                     Modifier
