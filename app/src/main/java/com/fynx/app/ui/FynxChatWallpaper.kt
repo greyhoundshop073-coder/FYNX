@@ -215,9 +215,9 @@ fun FynxChatPersonalizationDialog(onDismiss: () -> Unit) {
 
 @Composable
 fun AppearanceDialog(current: String, onSelected: (String) -> Unit, onDismiss: () -> Unit) {
-    val options = listOf("System", "Light", "Dark")
+    val options = listOf("System", "Light", "Charcoal Black", "Dark")
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Appearance") }, text = {
-        Column { options.forEach { option -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(option); RadioButton(selected = current == option, onClick = { onSelected(option) }) } } }
+        Column { options.forEach { option -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Column(Modifier.weight(1f)) { Text(option); if (option == "Charcoal Black") Text("Mature charcoal surfaces with soft contrast", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }; RadioButton(selected = current == option, onClick = { onSelected(option) }) } } }
     }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
 }
 
