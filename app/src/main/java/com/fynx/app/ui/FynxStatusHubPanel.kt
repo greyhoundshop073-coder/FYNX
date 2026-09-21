@@ -119,7 +119,6 @@ fun FynxStatusHubPanel() {
                     onText = { selectedInitialMedia = null; composing = true; addStatusOpen = false },
                     onVoice = { selectedInitialMedia = null; composing = true; addStatusOpen = false },
                     onMusic = { showStatusMusicPicker = true },
-                    onLayout = { layoutMode = true; selectionMode = true; selectedMediaUris = emptySet() },
                     onMediaSelected = { media ->
                         selectedInitialMedia = media
                         composing = true
@@ -230,7 +229,6 @@ private fun FynxAddStatusPanel(
     onText: () -> Unit,
     onVoice: () -> Unit,
     onMusic: () -> Unit,
-    onLayout: () -> Unit,
     onMediaSelected: (FynxRecentMedia) -> Unit
 ) {
     val context = LocalContext.current
@@ -321,7 +319,7 @@ private fun FynxAddStatusPanel(
                 FynxStatusToolPill(
                     icon = Icons.Default.GridView,
                     label = "Layout",
-                    onClick = onLayout,
+                    onClick = { layoutMode = true; selectionMode = true; selectedMediaUris = emptySet() },
                     modifier = Modifier.weight(1f)
                 )
             }
