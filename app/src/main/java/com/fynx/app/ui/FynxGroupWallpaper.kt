@@ -55,7 +55,7 @@ fun FynxGroupWallpaperBackground(groupId:String,modifier:Modifier=Modifier,conte
 @Composable
 private fun FynxGroupDoodlePattern(){
     Canvas(Modifier.fillMaxSize()){
-        val ink=Color.White.copy(alpha=0.035f)
+        val ink=MaterialTheme.colorScheme.onSurface.copy(alpha=0.035f)
         val sw=1.15.dp.toPx()
         val cellW=190.dp.toPx()
         val cellH=165.dp.toPx()
