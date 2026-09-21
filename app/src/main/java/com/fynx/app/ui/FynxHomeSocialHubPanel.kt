@@ -629,7 +629,7 @@ fun FynxHomeSocialHubPanel(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(FynxPostAudience.EVERYONE, FynxPostAudience.FRIENDS, FynxPostAudience.SELECTED, FynxPostAudience.ONLY_ME).forEach { option ->
-                        val allowed = option != FynxPostAudience.EVERYONE || configuredPostVisibility == "Everyone"
+                        val allowed = true
                         Row(
                             Modifier.fillMaxWidth().clickable(enabled = !audienceLoading && allowed) {
                                 audience = option
@@ -646,7 +646,7 @@ fun FynxHomeSocialHubPanel(
                             Spacer(Modifier.width(8.dp))
                             Column {
                                 Text(option.label)
-                                if (!allowed) Text("Your Posts privacy setting does not allow Everyone.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                                if (option == FynxPostAudience.SELECTED) Text("Choose specific accepted friends.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
