@@ -46,8 +46,8 @@ check("reverse friend requests are additionally hardened before route", "reverse
 # Other-user profiles may show real follower/following COUNTS. The private connection MEMBER LISTS remain self-only.
 check(
     "other-user profile exposes counts but not connection member lists",
-    "ProfileCount(label = \"Followers\"" in other_profile
-    and "ProfileCount(label = \"Following\"" in other_profile
+    "ProfileCount(\"Followers\"" in other_profile
+    and "ProfileCount(\"Following\"" in other_profile
     and "followerCount" in other_profile
     and "followingCount" in other_profile
     and not any(token in other_profile.lower() for token in [
