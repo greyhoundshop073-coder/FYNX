@@ -130,11 +130,28 @@ fun FynxHomeSocialHubPanel(
 
     LaunchedEffect(cameraRequest) {
         if (cameraRequest > 0) {
-            // This is a one-shot UI event. The parent clears the request after
-            // it has been consumed so returning to Home cannot reopen Camera.
+            // Home camera is a fresh "What's on your mind?" entry point.
+            // Clear any abandoned composer state before opening it so a previous
+            // draft/media selection can never leak into a new camera session.
+            if (!posting) {
+                capturedUris = emptyList()
+                capturedTypes = emptyList()
+                selectedVisualIndex = 0
+                text = ""
+                textBackground = null
+                postLocation = null
+                selectedCatalogueMusic = null
+                musicPlaying = false
+                selectedFeelingActivity = null
+                feelingActivitySearch = ""
+                showFeelingActivityPicker = false
+                selectedAudienceIds = emptySet()
+                audience = if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS
+                visibility = defaultPostVisibility
+                notice = null
+            }
             showComposer = true
             showCamera = false
-            notice = null
             onCameraRequestConsumed()
         }
     }
