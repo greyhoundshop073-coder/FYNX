@@ -150,7 +150,7 @@ fun FynxProfileContentSection(
                         }
                     }) { index ->
                         when (val item = gridItems[index]) {
-                            is FynxProfileGridItem.PostItem -> FynxProfilePostTile(item.post) { selectedPost = item.post }
+                            is FynxProfileGridItem.PostItem -> FynxProfilePostTile(item.post, username) { selectedPost = item.post }
                             is FynxProfileGridItem.MarketItem -> FynxProfileMarketplaceTile(item.listing) { selectedListing = item.listing }
                         }
                     }
@@ -173,7 +173,7 @@ private sealed class FynxProfileGridItem {
 }
 
 @Composable
-private fun FynxProfilePostTile(post: FynxProfileRemoteClient.ProfilePost, onOpen: () -> Unit) {
+private fun FynxProfilePostTile(post: FynxProfileRemoteClient.ProfilePost, username: String, onOpen: () -> Unit) {
     val mediaUrl = post.mediaUrl ?: post.mediaId?.let { "/api/social/media/" + it }
     val type = post.mediaType?.lowercase().orEmpty()
     Card(
@@ -188,12 +188,12 @@ private fun FynxProfilePostTile(post: FynxProfileRemoteClient.ProfilePost, onOpe
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 FynxAvatar(
-                    post.authorDisplayName.ifBlank { post.authorUsername },
+                    username,
                     Modifier.size(20.dp).clip(CircleShape)
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(
-                    post.authorDisplayName.ifBlank { post.authorUsername }.ifBlank { "FYNX User" },
+                    "@" + username.removePrefix("@"),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
