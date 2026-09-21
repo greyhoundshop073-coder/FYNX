@@ -625,7 +625,7 @@ fun FynxHomeSocialHubPanel(
                                                             AndroidView(factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.CENTER_CROP } }, update = { view -> view.setImageURI(uri) }, modifier = Modifier.fillMaxSize())
                                                         }
                                                     }
-                                                    IconButton(onClick = { removeCapturedUri(uri) }, enabled = !posting && !false, modifier = Modifier.align(Alignment.TopEnd).size(30.dp)) { Icon(Icons.Default.Close, "Remove media") }
+                                                    IconButton(onClick = { removeCapturedUri(uri) }, enabled = !posting && !false, modifier = Modifier.align(Alignment.TopEnd).size(48.dp)) { Icon(Icons.Default.Close, "Remove media") }
                                                 }
                                             }
                                         }
@@ -765,7 +765,7 @@ private fun ComposerAction(
     TextButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.height(if (compact) 62.dp else 76.dp),
+        modifier = modifier.height(if (compact) 68.dp else 76.dp).minimumInteractiveComponentSize(),
         contentPadding = PaddingValues(horizontal = 2.dp, vertical = 6.dp)
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
