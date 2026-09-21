@@ -239,7 +239,7 @@ private fun FynxAddStatusPanel(
     var loadingMedia by remember { mutableStateOf(false) }
     var selectionMode by remember { mutableStateOf(false) }
     var selectedMediaUris by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var layoutMode by remember { mutableStateOf(false) }
+    var layoutMode by remember { mutableStateOf(false) }\n    var recentFilter by remember { mutableStateOf("Recents") }\n    var recentFilterMenu by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
@@ -388,7 +388,7 @@ private fun FynxAddStatusPanel(
                 item(span = { GridItemSpan(1) }) {
                     FynxCameraGridCell(onClick = { if (!selectionMode) onCamera() })
                 }
-                items(recentMedia, key = { it.uri.toString() }) { media ->
+                items(recentMedia.filter { recentFilter == "Recents" || (recentFilter == "Videos" && it.isVideo) || (recentFilter == "Photos" && !it.isVideo) }, key = { it.uri.toString() }) { media ->
                     val selected = media.uri.toString() in selectedMediaUris
                     FynxRecentMediaCell(media, selected = selected, selectionMode = selectionMode, onClick = { if (selectionMode) toggleSelected(media) else onMediaSelected(media) })
                 }
