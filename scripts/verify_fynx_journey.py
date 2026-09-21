@@ -90,7 +90,8 @@ check(
     and "FynxProfileRemoteClient.posts(context, username)" in profile_content
     and "FynxMarketplaceClient.listings(context, username, \"\")" in profile_content
     and "sellerUsername.equals(username, ignoreCase = true)" in profile_content
-    and "GridCells.Fixed(3)" in profile_content
+    and "GridCells.Fixed(columns)" in profile_content
+    and "val columns = if (LocalContext.current.resources.configuration.screenWidthDp < 360) 2 else 3" in profile_content
 )
 check(
     "profile has no fabricated Business content or repost/likes tabs",
