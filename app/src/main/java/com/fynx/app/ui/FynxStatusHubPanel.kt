@@ -270,6 +270,8 @@ private fun FynxAddStatusPanel(
     }
     var recentMedia by remember { mutableStateOf<List<FynxRecentMedia>>(emptyList()) }
     var loadingMedia by remember { mutableStateOf(false) }
+    var selectionMode by remember { mutableStateOf(false) }
+    var selectedMediaUris by remember { mutableStateOf<Set<String>>(emptySet()) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
@@ -282,6 +284,9 @@ private fun FynxAddStatusPanel(
         recentMedia = loadFynxRecentMedia(context)
         loadingMedia = false
     }
+
+    fun toggleSelected(media: FynxRecentMedia) { val key = media.uri.toString(); selectedMediaUris = if (key in selectedMediaUris) selectedMediaUris - key else selectedMediaUris + key }
+    fun finishSelection() { val selected = recentMedia.filter { it.uri.toString() in selectedMediaUris }; if (selected.isNotEmpty()) { onMediaSelected(selected.first()); selectedMediaUris = emptySet(); selectionMode = false } }
 
     LaunchedEffect(mediaPermissionGranted) {
         if (mediaPermissionGranted) refreshMedia()
@@ -404,17 +409,18 @@ private fun FynxAddStatusPanel(
                 verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 item(span = { GridItemSpan(1) }) {
-                    FynxCameraGridCell(onClick = onCamera)
+                    FynxCameraGridCell(onClick = { if (!selectionMode) onCamera() })
                 }
                 items(recentMedia, key = { it.uri.toString() }) { media ->
-                    FynxRecentMediaCell(media, onClick = { onMediaSelected(media) })
+                    val selected = media.uri.toString() in selectedMediaUris
+                    FynxRecentMediaCell(media, selected = selected, selectionMode = selectionMode, onClick = { if (selectionMode) toggleSelected(media) else onMediaSelected(media) })
                 }
             }
         }
     }
 
     FloatingActionButton(
-        onClick = { },
+        onClick = { selectionMode = !selectionMode; if (!selectionMode) selectedMediaUris = emptySet() },
         modifier = Modifier
             .align(Alignment.BottomEnd)
             .navigationBarsPadding()
@@ -422,9 +428,10 @@ private fun FynxAddStatusPanel(
             .size(48.dp),
         containerColor = MaterialTheme.colorScheme.primary
     ) {
-        Icon(Icons.Default.SelectAll, contentDescription = "Select multiple media")
+        Icon(Icons.Default.SelectAll, contentDescription = if (selectionMode) "Cancel media selection" else "Select multiple media")
     }
     }
+    if (selectionMode) { Surface(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding(), tonalElevation = 6.dp, color = MaterialTheme.colorScheme.surface) { Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) { Text("${selectedMediaUris.size} selected", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge); TextButton(onClick = { selectedMediaUris = emptySet(); selectionMode = false }) { Text("Cancel") }; Button(onClick = ::finishSelection, enabled = selectedMediaUris.isNotEmpty()) { Text("Next") } } } }
 }
 
 @Composable
@@ -465,7 +472,7 @@ private fun FynxCameraGridCell(onClick: () -> Unit) {
 }
 
 @Composable
-private fun FynxRecentMediaCell(media: FynxRecentMedia, onClick: () -> Unit) {
+private fun FynxRecentMediaCell(media: FynxRecentMedia, selected: Boolean, selectionMode: Boolean, onClick: () -> Unit) {
     val context = LocalContext.current
     var bitmap by remember(media.uri) { mutableStateOf<android.graphics.Bitmap?>(null) }
 
@@ -495,6 +502,7 @@ private fun FynxRecentMediaCell(media: FynxRecentMedia, onClick: () -> Unit) {
                 contentScale = ContentScale.Crop
             )
         }
+        if (selectionMode && selected) { Surface(Modifier.align(Alignment.TopEnd).padding(6.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary) { Text("✓", color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)) } }
         if (media.isVideo) {
             Surface(
                 modifier = Modifier
