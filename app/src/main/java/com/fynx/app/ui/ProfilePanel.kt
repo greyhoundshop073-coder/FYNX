@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 @Composable
-fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Boolean = false, onSettingsClosed: () -> Unit = {}, onSignOut: (() -> Unit)? = null, onAppearanceChanged: (String) -> Unit = {}, onAccentChanged: (FynxAccent) -> Unit = {}, onOpenPrivacy: () -> Unit = {}) {
+fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Boolean = false, onSettingsClosed: () -> Unit = {}, onSignOut: (() -> Unit)? = null, onAppearanceChanged: (String) -> Unit = {}, onAccentChanged: (FynxAccent) -> Unit = {}, onOpenPrivacy: () -> Unit = {}, onOpenNotifications: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf(false) }
@@ -120,7 +121,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
     }
 
     if (settingsOpen) {
-        SettingsPanel(settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy)
+        SettingsPanel(settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy, onOpenNotifications = onOpenNotifications)
         return
     }
 
@@ -210,26 +211,100 @@ private fun formatProfileCount(value: Int): String = when { value >= 1_000_000 -
 }
 
 @Composable
-fun SettingsPanel(settings: FynxSettings, onSettingsChange: (FynxSettings) -> Unit, onBack: () -> Unit, onAppearanceChanged: (String) -> Unit = {}, onAccentChanged: (FynxAccent) -> Unit = {}, onOpenPrivacy: () -> Unit = {}) {
+fun SettingsPanel(
+    settings: FynxSettings,
+    onSettingsChange: (FynxSettings) -> Unit,
+    onBack: () -> Unit,
+    onAppearanceChanged: (String) -> Unit = {},
+    onAccentChanged: (FynxAccent) -> Unit = {},
+    onOpenPrivacy: () -> Unit = {},
+    onOpenNotifications: () -> Unit = {}
+) {
     val context = LocalContext.current
     var appearance by remember { mutableStateOf(FynxPreferencesStore.loadAppearance(context)) }
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
     var showAppearance by remember { mutableStateOf(false) }
     var showColors by remember { mutableStateOf(false) }
     var showChatPersonalization by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp).widthIn(max = 720.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onBack) { Text("‹ Back") }; Spacer(Modifier.width(4.dp)); Text("Settings & privacy", style = MaterialTheme.typography.titleLarge) }
+    var search by remember { mutableStateOf("") }
+
+    val query = search.trim().lowercase()
+    fun visible(title: String, description: String): Boolean =
+        query.isBlank() || title.lowercase().contains(query) || description.lowercase().contains(query)
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(horizontal = 12.dp)
+            .widthIn(max = 720.dp)
+            .statusBarsPadding()
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onBack) { Text("‹ Back") }
+            Spacer(Modifier.width(4.dp))
+            Text(
+                "Settings & privacy",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        OutlinedTextField(
+            value = search,
+            onValueChange = { search = it },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search settings") },
+            placeholder = { Text("Search settings") },
+            shape = RoundedCornerShape(16.dp)
+        )
         HorizontalDivider()
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            item { SettingsSectionTitle("Account & privacy") }
-            item { SettingsActionCard("Privacy & Safety", "Profile, online, posts, Status and photo visibility") { onOpenPrivacy() } }
-            item { SettingsActionCard("Read receipts", if (settings.readReceipts) "On • managed in Chat settings" else "Off • managed in Chat settings") { showChatPersonalization = true } }
-            item { SettingsActionCard("Story replies", if (settings.storyReplies) "On • managed in Privacy & Safety" else "Off • managed in Privacy & Safety") { onOpenPrivacy() } }
-            item { SettingsSectionTitle("Look & feel") }
-            item { SettingsActionCard("Appearance", appearance) { showAppearance = true } }
-            item { SettingsActionCard("Colors & accent", accent.name) { showColors = true } }
-            item { SettingsSectionTitle("Chats & media") }
-            item { SettingsActionCard("Chat & personalization", "Wallpapers, night mode, chat list, stickers and emoji") { showChatPersonalization = true } }
+        LazyColumn(
+            Modifier.weight(1f),
+            contentPadding = PaddingValues(vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (visible("Account", "Username bio profile account")) {
+                item { SettingsSectionTitle("Account") }
+                item { SettingsActionCard("Account & profile", "Username, bio and profile information") { onBack(); onSettingsChange(settings) } }
+            }
+            if (visible("Privacy & Safety", "Profile online posts Status photo visibility")) {
+                item { SettingsSectionTitle("Privacy & Security") }
+                item { SettingsActionCard("Privacy & Safety", "Profile, online, posts, Status and photo visibility") { onOpenPrivacy() } }
+            }
+            if (visible("Notifications", "Sounds calls badges message alerts")) {
+                item { SettingsSectionTitle("Notifications") }
+                item { SettingsActionCard("Notifications", "Message alerts, sounds and notification controls") { onOpenNotifications() } }
+            }
+            if (visible("Chat & personalization", "Wallpapers night mode animations stickers emoji read receipts")) {
+                item { SettingsSectionTitle("Chat Settings") }
+                item { SettingsActionCard("Chat & personalization", "Wallpapers, night mode, animations, stickers and emoji") { showChatPersonalization = true } }
+                item { SettingsActionCard("Read receipts", if (settings.readReceipts) "On • managed in Chat settings" else "Off • managed in Chat settings") { showChatPersonalization = true } }
+                item { SettingsActionCard("Story replies", if (settings.storyReplies) "On • managed in Privacy & Safety" else "Off • managed in Privacy & Safety") { onOpenPrivacy() } }
+            }
+            if (visible("Appearance", "Light dark system theme")) {
+                item { SettingsSectionTitle("Appearance") }
+                item { SettingsActionCard("Appearance", appearance) { showAppearance = true } }
+                item { SettingsActionCard("Colors & accent", accent.name) { showColors = true } }
+            }
+            if (visible("Language", "App language English")) {
+                item { SettingsSectionTitle("General") }
+                item { SettingsActionCard("Language", "English") { } }
+            }
+            if (query.isNotBlank() && !listOf("Account","Privacy & Safety","Notifications","Chat & personalization","Appearance","Language").any { visible(it, "") }) {
+                item {
+                    Text(
+                        "No matching settings",
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
     if (showAppearance) AppearanceDialog(appearance, { appearance = it; FynxPreferencesStore.saveAppearance(context, it); onAppearanceChanged(it); showAppearance = false }, { showAppearance = false })
