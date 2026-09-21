@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -275,6 +276,7 @@ private fun FynxStatusStoryViewer(
     var showReplyEmojiPicker by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val status = statuses.getOrNull(index) ?: return
+    BackHandler(onBack = onDismiss)
     var statusProgress by remember(status.id) { mutableFloatStateOf(0f) }
 
     fun refreshInteractions() {
@@ -682,8 +684,22 @@ private fun StatusViewerText(status: FynxStatus) {
     }
     val weight = if (status.textStyle.font == FynxStatusTextFont.BOLD) FontWeight.Bold else FontWeight.Normal
     val textAlign = when (status.textStyle.alignment) { 0 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
-    Box(Modifier.fillMaxSize().background(Color(status.textStyle.backgroundColor)), contentAlignment = Alignment.Center) {
-        Text(status.text.orEmpty(), color = Color(status.textStyle.foregroundColor), fontFamily = family, fontWeight = weight, textAlign = textAlign, style = MaterialTheme.typography.headlineLarge.copy(fontSize = 34.sp, lineHeight = 42.sp), modifier = Modifier.fillMaxWidth().padding(horizontal = 30.dp, vertical = 20.dp))
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color(status.textStyle.backgroundColor)), contentAlignment = Alignment.Center) {
+        val baseSize = (maxWidth.value * 0.085f).coerceIn(24f, 42f)
+        val scale = when {
+            status.text.orEmpty().length > 420 -> 0.72f
+            status.text.orEmpty().length > 240 -> 0.84f
+            else -> 1f
+        }
+        Text(
+            status.text.orEmpty(),
+            color = Color(status.textStyle.foregroundColor),
+            fontFamily = family,
+            fontWeight = weight,
+            textAlign = textAlign,
+            style = MaterialTheme.typography.headlineLarge.copy(fontSize = (baseSize * scale).sp, lineHeight = (baseSize * 1.18f * scale).sp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 30.dp, vertical = 20.dp)
+        )
     }
 }
 
@@ -695,7 +711,7 @@ private fun statusViewerAutoAdvanceMs(status: FynxStatus): Long {
         FynxStatusType.VIDEO -> 0L
     }
     return if (status.musicCatalogueId != null && status.musicDurationMs > 0L) {
-        kotlin.math.max(base, status.musicDurationMs.coerceIn(1_000L, 30_000L))
+        kotlin.math.max(base, status.musicDurationMs.coerceAtLeast(1_000L))
     } else base
 }
 
