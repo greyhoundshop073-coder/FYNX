@@ -80,6 +80,7 @@ fun FynxTheme(
     val effectiveDarkMode = when (appearance) {
         "Light" -> false
         "Dark" -> true
+        "Charcoal Black" -> true
         "Black AMOLED" -> true
         "System" -> darkMode || scheduledNight
         else -> darkMode || scheduledNight
