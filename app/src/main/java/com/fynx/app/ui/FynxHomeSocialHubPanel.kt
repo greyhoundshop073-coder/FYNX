@@ -726,7 +726,7 @@ fun FynxHomeSocialHubPanel(
 
     if (showCamera) {
         Dialog(
-            onDismissRequest = { showCamera = false },
+            onDismissRequest = {\n                showCamera = false\n                if (cameraOpenedFromComposer && !posting) {\n                    showComposer = true\n                }\n                cameraOpenedFromComposer = false\n            },
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
         ) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
