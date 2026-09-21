@@ -406,7 +406,6 @@ fun FynxMatureStatusComposerPanel(
                 }
             }
         }
-    }
 }
 @Composable private fun MatureStatusModeButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) { Column(horizontalAlignment = Alignment.CenterHorizontally) { IconButton(onClick = onClick, enabled = enabled) { Icon(icon, label, tint = if (selected) Color.White else Color.White.copy(alpha = .65f), modifier = Modifier.size(28.dp)) }; Text(label, color = Color.White.copy(alpha = if (enabled && selected) 1f else .45f), style = MaterialTheme.typography.labelSmall) } }
 @Composable private fun MatureStatusMedia(uri: Uri, video: Boolean, modifier: Modifier) { AndroidView(modifier = modifier, factory = { context -> if (video) VideoView(context).apply { layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT); setVideoURI(uri); setOnPreparedListener { it.isLooping = true; it.start() } } else ImageView(context).apply { scaleType = ImageView.ScaleType.FIT_CENTER; setImageURI(uri) } }, update = { view -> if (view is VideoView) view.setVideoURI(uri) else (view as ImageView).setImageURI(uri) }) }
