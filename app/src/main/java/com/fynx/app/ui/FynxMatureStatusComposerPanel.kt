@@ -8,6 +8,7 @@ import android.net.Uri
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.VideoView
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -128,12 +129,14 @@ fun FynxMatureStatusComposerPanel(
         }
     }
 
+    BackHandler(enabled = !publishing && !recording) { onClose() }
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when (type) {
             FynxStatusType.TEXT -> {
                 val editorTextAlign = when (alignment) { 0 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
                 val editorWeight = if (font == FynxStatusTextFont.BOLD) FontWeight.Bold else FontWeight.Normal
-                Box(Modifier.fillMaxSize().background(Color(background)), contentAlignment = Alignment.Center) {
+                BoxWithConstraints(Modifier.fillMaxSize().background(Color(background)), contentAlignment = Alignment.Center) {
                     OutlinedTextField(
                         value = text,
                         onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) },
@@ -143,8 +146,20 @@ fun FynxMatureStatusComposerPanel(
                             textAlign = editorTextAlign,
                             fontFamily = matureStatusFont(font),
                             fontWeight = editorWeight,
-                            fontSize = 34.sp,
-                            lineHeight = 42.sp
+                            fontSize = (
+                                (maxWidth.value * 0.085f)
+                                    .coerceIn(24f, 42f)
+                                    .let { size ->
+                                        if (text.length > 420) size * 0.72f else if (text.length > 240) size * 0.84f else size
+                                    }
+                            ).sp,
+                            lineHeight = (
+                                (maxWidth.value * 0.105f)
+                                    .coerceIn(30f, 52f)
+                                    .let { size ->
+                                        if (text.length > 420) size * 0.72f else if (text.length > 240) size * 0.84f else size
+                                    }
+                            ).sp
                         ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color.Transparent,
@@ -272,10 +287,13 @@ fun FynxMatureStatusComposerPanel(
                                     Text("Stop • ${formatMatureTime(elapsed)}")
                                 }
                             } else if (mediaUri != null) {
-                                OutlinedButton(onClick = { mediaUri = null; elapsed = 0L; error = null }, enabled = !publishing) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    FynxRemoteAudio(mediaUri.toString(), Modifier.fillMaxWidth().padding(horizontal = 24.dp), elapsed.coerceAtLeast(1_000L))
+                                    OutlinedButton(onClick = { mediaUri = null; elapsed = 0L; error = null }, enabled = !publishing) {
                                     Icon(Icons.Default.Close, "Clear voice")
                                     Spacer(Modifier.width(6.dp))
                                     Text("Clear voice")
+                                    }
                                 }
                             } else {
                                 Text("Tap Voice to start recording", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.labelSmall)
