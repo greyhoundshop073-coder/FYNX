@@ -243,7 +243,7 @@ fun FynxStatusHubPanel() {
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
         ) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+                Box(Modifier.fillMaxSize()) {
                     FynxCameraCapturePanel(
                         onCaptured = { uri, type -> publishCapturedStatus(uri, type) },
                         onDismiss = { if (!publishingCameraStatus) cameraOpen = false }
