@@ -65,7 +65,14 @@ object FynxPreferencesStore {
     fun saveSettings(context: Context, settings: FynxSettings) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_NOTIFICATIONS, settings.notifications).putBoolean(KEY_PRIVATE_PROFILE, settings.privateProfile).putBoolean(KEY_READ_RECEIPTS, settings.readReceipts).putBoolean(KEY_STORY_REPLIES, settings.storyReplies).apply() }
     fun loadVisibility(context: Context, key: String, default: String = DEFAULT_VISIBILITY): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(key, default) ?: default
     fun saveVisibility(context: Context, key: String, value: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(key, value).apply() }
-    fun loadAccent(context: Context): FynxAccent { val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_ACCENT, FynxAccent.Blue.name); return runCatching { FynxAccent.valueOf(stored ?: FynxAccent.Blue.name) }.getOrDefault(FynxAccent.Blue) }
+    fun loadAccent(context: Context): FynxAccent {
+        val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_ACCENT, FynxAccent.Blue.name)
+        return when (stored) {
+            "Black" -> FynxAccent.Charcoal
+            "White" -> FynxAccent.Blue
+            else -> runCatching { FynxAccent.valueOf(stored ?: FynxAccent.Blue.name) }.getOrDefault(FynxAccent.Blue)
+        }
+    }
     fun saveAccent(context: Context, accent: FynxAccent) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_ACCENT, accent.name).apply() }
     fun loadProfilePhoto(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_PROFILE_PHOTO, null)
     fun saveProfilePhoto(context: Context, uri: String?) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply { if (uri.isNullOrBlank()) remove(KEY_PROFILE_PHOTO) else putString(KEY_PROFILE_PHOTO, uri) }.apply() }
