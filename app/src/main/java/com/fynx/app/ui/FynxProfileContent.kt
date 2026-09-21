@@ -138,7 +138,7 @@ fun FynxProfileContentSection(
                 val rows = (gridItems.size + 2) / 3
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
-                    modifier = Modifier.fillMaxWidth().height((rows * 154).dp),
+                    modifier = Modifier.fillMaxWidth().height((rows * 184).dp),
                     userScrollEnabled = false,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -177,12 +177,31 @@ private fun FynxProfilePostTile(post: FynxProfileRemoteClient.ProfilePost, onOpe
     val mediaUrl = post.mediaUrl ?: post.mediaId?.let { "/api/social/media/" + it }
     val type = post.mediaType?.lowercase().orEmpty()
     Card(
-        Modifier.fillMaxWidth().height(146.dp).clickable(onClick = onOpen),
+        Modifier.fillMaxWidth().height(184.dp).clickable(onClick = onOpen),
         shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .25f))
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .22f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            if (!mediaUrl.isNullOrBlank()) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FynxAvatar(
+                    post.authorDisplayName.ifBlank { post.authorUsername },
+                    Modifier.size(20.dp).clip(CircleShape)
+                )
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    post.authorDisplayName.ifBlank { post.authorUsername }.ifBlank { "FYNX User" },
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                if (!mediaUrl.isNullOrBlank()) {
                 FynxRemoteMedia(mediaUrl = mediaUrl, type = post.mediaType ?: "auto", modifier = Modifier.fillMaxSize())
             } else {
                 Text(post.text.ifBlank { "Post" }, Modifier.padding(10.dp),
@@ -214,15 +233,41 @@ private fun FynxProfilePostTile(post: FynxProfileRemoteClient.ProfilePost, onOpe
                 )
             }
         }
+        if (post.likeCount > 0 || post.commentCount > 0) {
+            Text(
+                post.likeCount.toString() + " likes • " + post.commentCount.toString() + " comments",
+                Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 5.dp),
+                style = MaterialTheme.typography.labelSmall, maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
 @Composable
 private fun FynxProfileMarketplaceTile(listing: FynxMarketplaceClient.Listing, onOpen: () -> Unit) {
-    Card(Modifier.fillMaxWidth().height(146.dp).clickable(onClick = onOpen),
+    Card(Modifier.fillMaxWidth().height(184.dp).clickable(onClick = onOpen),
         shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .25f))) {
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .22f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FynxAvatar(
+                    listing.sellerDisplayName.ifBlank { listing.sellerUsername },
+                    Modifier.size(20.dp).clip(CircleShape)
+                )
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    listing.sellerDisplayName.ifBlank { listing.sellerUsername }.ifBlank { "FYNX Seller" },
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             if (listing.mediaIds.isNotEmpty()) {
                 FynxRemoteMedia(
                     mediaUrl = FynxMarketplaceClient.mediaUrl(LocalContext.current, listing.mediaIds.first()),
