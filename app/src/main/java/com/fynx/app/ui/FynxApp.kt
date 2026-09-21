@@ -204,7 +204,6 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         IconButton(onClick = { homeCameraRequest++ }) {
                             Icon(Icons.Default.CameraAlt, "Open FYNX camera")
                         }
-                        IconButton(onClick = { selected = "Profile"; openProfileSettings = true }) { Icon(Icons.Default.Settings, "Settings") }
                         BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
                             IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
                         }
@@ -379,7 +378,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Advertising AI" -> { selected = "AI" }
             "Announcements" -> FynxAnnouncementsPanel()
             "Admin" -> if (adminRole != null) FynxAdminControlCenterPanel()
-            "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" }, onOpenNotifications = { openProfileSettings = false; selected = "Notifications" })
+            "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = false, onSettingsClosed = { profileVersion++ }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { selected = "Privacy" }, onOpenNotifications = { selected = "Notifications" }, onOpenSettingsDestination = { destination -> selected = destination })
             else -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview")
         } } }
     }
