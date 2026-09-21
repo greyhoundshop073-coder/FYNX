@@ -130,7 +130,35 @@ fun FynxMatureStatusComposerPanel(
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when (type) {
-            FynxStatusType.TEXT -> Box(Modifier.fillMaxSize().background(Color(background)), contentAlignment = Alignment.Center) { OutlinedTextField(value = text, onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) }, placeholder = { Text("Type a Status", color = Color(foreground).copy(alpha = .6f)) }, textStyle = LocalTextStyle.current.copy(color = Color(foreground), textAlign = TextAlign.Center, fontFamily = matureStatusFont(font), fontWeight = FontWeight.Bold, fontSize = 32.sp, lineHeight = 38.sp), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent, cursorColor = Color(foreground), focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent), modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(top = 96.dp, bottom = 360.dp).imePadding(), minLines = 1, maxLines = 8) }
+            FynxStatusType.TEXT -> Box(Modifier.fillMaxSize().background(Color(background)), contentAlignment = Alignment.Center) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) },
+                    placeholder = { Text("Type a Status", color = Color(foreground).copy(alpha = .6f), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                    textStyle = LocalTextStyle.current.copy(
+                        color = Color(foreground),
+                        textAlign = TextAlign.Center,
+                        fontFamily = matureStatusFont(font),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 34.sp,
+                        lineHeight = 42.sp
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        cursorColor = Color(foreground),
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                        .padding(top = 76.dp, bottom = 220.dp)
+                        .imePadding(),
+                    minLines = 2,
+                    maxLines = 10
+                )
+            }
             FynxStatusType.PHOTO -> mediaUri?.let { MatureStatusMedia(it, false, Modifier.fillMaxSize().padding(top = 64.dp, bottom = 176.dp)) }
             FynxStatusType.VIDEO -> mediaUri?.let { MatureStatusMedia(it, true, Modifier.fillMaxSize().padding(top = 64.dp, bottom = 176.dp)) }
             FynxStatusType.VOICE -> Box(Modifier.fillMaxSize().background(Color(background)).padding(top = 64.dp, bottom = 176.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) { Surface(shape = CircleShape, color = Color(foreground).copy(alpha = .14f), modifier = Modifier.size(112.dp)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Mic, null, tint = Color(foreground), modifier = Modifier.size(48.dp)) } }; Text(if (recording) formatMatureTime(elapsed) else if (mediaUri != null) "Voice Status ready" else "Press the microphone to record", color = Color(foreground), style = MaterialTheme.typography.titleMedium); if (recording) LinearProgressIndicator(progress = { (elapsed.toFloat() / FYNX_STATUS_MAX_VOICE_DURATION_MS).coerceIn(0f, 1f) }, modifier = Modifier.width(220.dp)) } }
