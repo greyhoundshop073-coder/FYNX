@@ -91,6 +91,7 @@ fun FynxMatureStatusComposerPanel(
     var recordingFile by remember { mutableStateOf<File?>(null) }
     var showColors by remember { mutableStateOf(false) }
     var showTools by remember { mutableStateOf(false) }
+    var showMediaTools by remember { mutableStateOf(false) }
     var cameraOpen by remember { mutableStateOf(false) }
 
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { mediaUri = it; type = FynxStatusType.PHOTO; showColors = false; showTools = false; error = null } }
@@ -107,12 +108,12 @@ fun FynxMatureStatusComposerPanel(
     }
     DisposableEffect(Unit) { onDispose { recorder?.let { runCatching { it.stop() }; runCatching { it.release() } }; recordingFile?.let { if (it.exists()) runCatching { it.delete() } } } }
 
-    fun clearDraft() { if (publishing || recording) return; mediaUri = null; selectedMusic = null; text = ""; type = FynxStatusType.TEXT; background = MATURE_STATUS_BACKGROUNDS.first(); foreground = 0xFFFFFFFF; font = FynxStatusTextFont.CLASSIC; alignment = 1; showColors = false; showTools = false; error = null }
+    fun clearDraft() { if (publishing || recording) return; mediaUri = null; selectedMusic = null; text = ""; type = FynxStatusType.TEXT; background = MATURE_STATUS_BACKGROUNDS.first(); foreground = 0xFFFFFFFF; font = FynxStatusTextFont.CLASSIC; alignment = 1; showColors = false; showTools = false; showMediaTools = false; error = null }
     fun publish() {
         if (publishing || recording) return
         if (type == FynxStatusType.TEXT && text.isBlank()) { error = "Write something first."; return }
         if (type != FynxStatusType.TEXT && mediaUri == null) { error = "Add your media first."; return }
-        publishing = true; error = null; showTools = false
+        publishing = true; error = null; showTools = false; showMediaTools = false
         scope.launch {
             try {
                 val source = mediaUri
@@ -199,8 +200,8 @@ fun FynxMatureStatusComposerPanel(
                 }
             }
             Spacer(Modifier.weight(1f))
-            Surface(color = Color(0xFF1E1E1E), modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (showMediaTools || showColors || selectedMusic != null || type == FynxStatusType.TEXT || type != FynxStatusType.TEXT) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (showColors && type == FynxStatusType.TEXT) {
                         Surface(color = Color.Black.copy(alpha = .55f), modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -267,18 +268,35 @@ fun FynxMatureStatusComposerPanel(
                             )
                         )
                     }
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(18.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp)
-                    ) {
-                        item { MatureStatusModeButton(Icons.Default.TextFields, "Text", type == FynxStatusType.TEXT, !recording && !publishing) { type = FynxStatusType.TEXT; mediaUri = null; showColors = false; error = null } }
-                        item { MatureStatusModeButton(Icons.Default.Photo, "Photo", type == FynxStatusType.PHOTO, !recording && !publishing) { pickImage.launch(arrayOf("image/*")) } }
-                        item { MatureStatusModeButton(Icons.Default.CameraAlt, "Camera", false, !recording && !publishing) { cameraOpen = true; showColors = false; showTools = false; error = null } }
-                        item { MatureStatusModeButton(Icons.Default.Videocam, "Video", type == FynxStatusType.VIDEO, !recording && !publishing) { pickVideo.launch(arrayOf("video/*")) } }
-                        item { MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording) { type = FynxStatusType.VOICE; showColors = false; error = null; if (mediaUri == null) if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true }, onError = { message -> error = message }) else micPermission.launch(Manifest.permission.RECORD_AUDIO) } }
+                    // Media creation tools stay hidden until the user explicitly opens them.
+                    if (showMediaTools) {
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(18.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            item { MatureStatusModeButton(Icons.Default.TextFields, "Text", type == FynxStatusType.TEXT, !recording && !publishing) { type = FynxStatusType.TEXT; mediaUri = null; showColors = false; error = null } }
+                            item { MatureStatusModeButton(Icons.Default.Photo, "Photo", type == FynxStatusType.PHOTO, !recording && !publishing) { pickImage.launch(arrayOf("image/*")) } }
+                            item { MatureStatusModeButton(Icons.Default.CameraAlt, "Camera", false, !recording && !publishing) { cameraOpen = true; showColors = false; showTools = false; error = null } }
+                            item { MatureStatusModeButton(Icons.Default.Videocam, "Video", type == FynxStatusType.VIDEO, !recording && !publishing) { pickVideo.launch(arrayOf("video/*")) } }
+                            item { MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording) { type = FynxStatusType.VOICE; showColors = false; error = null; if (mediaUri == null) if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true }, onError = { message -> error = message }) else micPermission.launch(Manifest.permission.RECORD_AUDIO) } }
+                        }
                     }
-                    if (type == FynxStatusType.VOICE) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Spacer(Modifier.weight(1f))
+                        IconButton(
+                            onClick = { showMediaTools = !showMediaTools },
+                            enabled = !recording && !publishing,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(
+                                if (showMediaTools) Icons.Default.Close else Icons.Default.MoreVert,
+                                contentDescription = if (showMediaTools) "Hide status media tools" else "Show status media tools",
+                                tint = Color.White
+                            )
+                        }
+                    }
+                                        if (type == FynxStatusType.VOICE) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                             if (recording) {
                                 FilledTonalButton(onClick = { stopMatureVoiceRecording(recorder, recordingFile) { uri, message -> if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."; recorder = null; recordingFile = null; recording = false } }) {
@@ -330,7 +348,7 @@ fun FynxMatureStatusComposerPanel(
                         }
                     }
                     if (publishing) LinearProgressIndicator(Modifier.fillMaxWidth())
-                    error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                    error?.let { Text(it, color = Color.White, style = MaterialTheme.typography.bodySmall) }
                 }
             }
         }
