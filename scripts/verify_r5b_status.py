@@ -97,7 +97,7 @@ require('mature visible Send action','Icons.Default.Send' in mature and 'Text(if
 require('mature Send is not a field trailing action','trailingIcon' not in mature)
 require('mature text style controls consume layout','Text(\"Text style\"' in mature and 'showColors && type == FynxStatusType.TEXT' in mature and 'FormatAlignCenter' in mature)
 require('mature text emoji control','EmojiEmotions' in mature and 'showStatusEmoji' in mature)
-require('mature text editor avoids bottom controls','bottom = 360.dp' in mature and '.imePadding()' in mature)
+require('mature text editor uses responsive full view','bottom = 220.dp' in mature and 'horizontal = 12.dp' in mature and '.imePadding()' in mature and 'fontSize = 34.sp' in mature)
 require('mature authenticated publish','FynxStatusClient.create(context, status, mediaId)' in mature and 'FynxStatusClient.uploadMedia(context, source, mime)' in mature)
 require('mature 24-hour expiry','expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS' in mature)
 require('mature publish validation','Write something first.' in mature and 'Add your media first.' in mature)
