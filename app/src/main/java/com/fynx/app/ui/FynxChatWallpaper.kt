@@ -255,7 +255,7 @@ fun AccentDialog(current: FynxAccent, onSelected: (FynxAccent) -> Unit, onDismis
                     }
                     RadioButton(selected = current == option, onClick = { onSelected(option) })
                 }
-            }        }
+            }
         }
     }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
 }
