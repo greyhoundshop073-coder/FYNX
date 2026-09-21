@@ -32,7 +32,6 @@ on:
 permissions:
   contents: read
   id-token: write
-  issues: write
 
 concurrency:
   group: fynx-android-${{ github.workflow }}-${{ github.sha }}
@@ -165,27 +164,6 @@ jobs:
         run: python3 scripts/verify_social_feed_production.py
       - name: Verify final FYNX production certification gate
         run: python3 scripts/verify_fynx_production.py
-      - name: Diagnostic Android Kotlin compile gate
-        run: |
-          set -o pipefail
-          set +e
-          ./gradlew :app:compileDebugKotlin --no-daemon --build-cache 2>&1 | tee /tmp/fynx-kotlin-compile.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ] && [ "${{ github.event_name }}" = "pull_request" ]; then
-            python3 - <<'PY'
-          import json, os, urllib.request
-          event=json.load(open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8"))
-          number=event.get("pull_request", {}).get("number")
-          if number:
-              log=open("/tmp/fynx-kotlin-compile.log", encoding="utf-8", errors="replace").read().splitlines()
-              tail="\n".join(log[-120:])
-              body="### FYNX diagnostic Kotlin compile output\n\n```text\n"+tail+"\n```"
-              url=f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/issues/{number}/comments"
-              req=urllib.request.Request(url, data=json.dumps({"body":body}).encode(), headers={"Authorization":"Bearer "+os.environ["GITHUB_TOKEN"],"Accept":"application/vnd.github+json","Content-Type":"application/json"}, method="POST")
-              urllib.request.urlopen(req, timeout=20).read()
-          PY
-          fi
-          exit "$status"
       - name: Build, test and lint
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
       - name: Enable KVM for Android emulator tests
