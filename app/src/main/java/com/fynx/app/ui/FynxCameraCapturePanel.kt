@@ -7,6 +7,7 @@ import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Matrix
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -60,6 +61,19 @@ fun FynxCameraCapturePanel(
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.COMPATIBLE; scaleType = PreviewView.ScaleType.FILL_CENTER } }
     val scope = rememberCoroutineScope()
+    var profilePhotoId by remember { mutableStateOf<String?>(null) }
+    var profileDisplayName by remember { mutableStateOf("") }
+    val session = FynxAuthStore.load(context)
+    LaunchedEffect(session.username) {
+        val username = session.username?.removePrefix("@").orEmpty()
+        if (username.isNotBlank()) {
+            FynxProfileRemoteClient.get(context, username).onSuccess { profile ->
+                profilePhotoId = profile.profilePhotoMediaId
+                profileDisplayName = profile.displayName.ifBlank { username }
+            }
+        }
+    }
+    BackHandler { if (recording == null) onDismiss() }
     var hasCamera by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     var hasAudio by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -136,6 +150,21 @@ fun FynxCameraCapturePanel(
     }
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).clickable { if (recording == null) showCaptureControls = true }){
         AndroidView(factory={previewView},modifier=Modifier.fillMaxSize())
+        if (pendingUri == null) {
+            Surface(
+                modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 8.dp),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)
+            ) {
+                Row(Modifier.padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                    profilePhotoId?.takeIf { it.isNotBlank() }?.let { photoId ->
+                        FynxRemoteMedia("/api/media/$photoId", "image", Modifier.size(34.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop, rounded = true)
+                    } ?: Surface(Modifier.size(34.dp), shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {}
+                    Spacer(Modifier.width(8.dp))
+                    Text(profileDisplayName.ifBlank { session.username?.removePrefix("@").orEmpty() }, maxLines = 1, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
         if (showCaptureControls && recording == null) {
             Surface(modifier=Modifier.align(Alignment.Center),shape=MaterialTheme.shapes.extraLarge,color=MaterialTheme.colorScheme.surface.copy(alpha=0.88f),tonalElevation=3.dp) {
                 Row(modifier=Modifier.padding(horizontal=6.dp,vertical=4.dp),horizontalArrangement=Arrangement.spacedBy(2.dp),verticalAlignment=Alignment.CenterVertically) {
