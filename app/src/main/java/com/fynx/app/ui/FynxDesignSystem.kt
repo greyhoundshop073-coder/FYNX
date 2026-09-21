@@ -23,8 +23,7 @@ enum class FynxAccent(val primary: Color, val secondary: Color) {
     Pink(Color(0xFFD13F91), Color(0xFFF276B7)),
     Orange(Color(0xFFE66A16), Color(0xFFF49A52)),
     Red(Color(0xFFD83A4A), Color(0xFFF16B78)),
-    Black(Color.Black, Color(0xFF303030)),
-    White(Color.White, Color(0xFFE0E0E0))
+    Charcoal(Color(0xFF263238), Color(0xFF607D8B))
 }
 
 object FynxDesign {
@@ -42,13 +41,13 @@ object FynxDesign {
     val LightTextSecondary = Color(0xFF5E6B78)
     val LightOutline = Color(0xFFD2DAE5)
     val LightSelectedContainer = Color(0xFFE4EFFC)
-    val AmoledBackground = Color.Black
-    val AmoledSurface = Color.Black
-    val AmoledSurfaceRaised = Color.Black
-    val AmoledTextPrimary = Color.White
-    val AmoledTextSecondary = Color(0xFFE0E0E0)
-    val AmoledOutline = Color(0xFF303030)
-    val AmoledSelectedContainer = Color(0xFF111111)
+    val CharcoalBackground = Color(0xFF1F2428)
+    val CharcoalSurface = Color(0xFF272D32)
+    val CharcoalSurfaceRaised = Color(0xFF31383E)
+    val CharcoalTextPrimary = Color(0xFFF2F5F7)
+    val CharcoalTextSecondary = Color(0xFFB8C1C8)
+    val CharcoalOutline = Color(0xFF465159)
+    val CharcoalSelectedContainer = Color(0xFF37434B)
     val CardShape = RoundedCornerShape(16.dp)
     val LargeCardShape = RoundedCornerShape(20.dp)
     val ControlShape = RoundedCornerShape(14.dp)
@@ -80,6 +79,7 @@ fun FynxTheme(
     val context = LocalContext.current
     val appearance = FynxPreferencesStore.loadAppearance(context)
     val effectiveAccent = accent ?: FynxPreferencesStore.loadAccent(context)
+    val charcoal = effectiveAccent == FynxAccent.Charcoal
     val amoled = appearance == "Black AMOLED"
     val scheduledNight = appearance == "System" && scheduledNightModeActive(context)
     val effectiveDarkMode = when (appearance) {
@@ -96,21 +96,21 @@ fun FynxTheme(
             onPrimary = onAccent,
             secondary = effectiveAccent.secondary,
             onSecondary = if (effectiveAccent.secondary.luminance() > 0.5f) Color.Black else Color.White,
-            background = if (amoled) FynxDesign.AmoledBackground else FynxDesign.Background,
-            onBackground = if (amoled) FynxDesign.AmoledTextPrimary else FynxDesign.TextPrimary,
-            surface = if (amoled) FynxDesign.AmoledSurface else FynxDesign.Surface,
-            onSurface = if (amoled) FynxDesign.AmoledTextPrimary else FynxDesign.TextPrimary,
-            surfaceVariant = if (amoled) FynxDesign.AmoledSurfaceRaised else FynxDesign.SurfaceRaised,
-            onSurfaceVariant = if (amoled) FynxDesign.AmoledTextSecondary else FynxDesign.TextSecondary,
-            outline = if (amoled) FynxDesign.AmoledOutline else FynxDesign.Outline,
-            surfaceContainerLowest = if (amoled) FynxDesign.AmoledBackground else FynxDesign.Background,
-            surfaceContainerLow = if (amoled) FynxDesign.AmoledSurface else FynxDesign.Surface,
-            surfaceContainer = if (amoled) FynxDesign.AmoledSurface else FynxDesign.Surface,
-            surfaceContainerHigh = if (amoled) FynxDesign.AmoledSurfaceRaised else FynxDesign.SurfaceRaised,
-            surfaceContainerHighest = if (amoled) FynxDesign.AmoledSurfaceRaised else FynxDesign.SurfaceRaised,
-            surfaceDim = if (amoled) FynxDesign.AmoledBackground else FynxDesign.Background,
-            surfaceBright = if (amoled) FynxDesign.AmoledSurfaceRaised else FynxDesign.SurfaceRaised,
-            surfaceTint = if (amoled) Color.Black else effectiveAccent.primary
+            background = when { amoled -> FynxDesign.CharcoalBackground; charcoal -> FynxDesign.CharcoalBackground; else -> FynxDesign.Background },
+            onBackground = if (charcoal || amoled) FynxDesign.CharcoalTextPrimary else FynxDesign.TextPrimary,
+            surface = when { amoled -> FynxDesign.CharcoalSurface; charcoal -> FynxDesign.CharcoalSurface; else -> FynxDesign.Surface },
+            onSurface = if (charcoal || amoled) FynxDesign.CharcoalTextPrimary else FynxDesign.TextPrimary,
+            surfaceVariant = if (charcoal || amoled) FynxDesign.CharcoalSurfaceRaised else FynxDesign.SurfaceRaised,
+            onSurfaceVariant = if (charcoal || amoled) FynxDesign.CharcoalTextSecondary else FynxDesign.TextSecondary,
+            outline = if (charcoal || amoled) FynxDesign.CharcoalOutline else FynxDesign.Outline,
+            surfaceContainerLowest = if (charcoal || amoled) FynxDesign.CharcoalBackground else FynxDesign.Background,
+            surfaceContainerLow = if (charcoal || amoled) FynxDesign.CharcoalSurface else FynxDesign.Surface,
+            surfaceContainer = if (charcoal || amoled) FynxDesign.CharcoalSurface else FynxDesign.Surface,
+            surfaceContainerHigh = if (charcoal || amoled) FynxDesign.CharcoalSurfaceRaised else FynxDesign.SurfaceRaised,
+            surfaceContainerHighest = if (charcoal || amoled) FynxDesign.CharcoalSurfaceRaised else FynxDesign.SurfaceRaised,
+            surfaceDim = if (charcoal || amoled) FynxDesign.CharcoalBackground else FynxDesign.Background,
+            surfaceBright = if (charcoal || amoled) FynxDesign.CharcoalSurfaceRaised else FynxDesign.SurfaceRaised,
+            surfaceTint = if (charcoal || amoled) effectiveAccent.primary else effectiveAccent.primary
         )
     } else {
         lightColorScheme(
@@ -118,20 +118,20 @@ fun FynxTheme(
             onPrimary = onAccent,
             secondary = effectiveAccent.secondary,
             onSecondary = if (effectiveAccent.secondary.luminance() > 0.5f) Color.Black else Color.White,
-            background = FynxDesign.LightBackground,
-            onBackground = FynxDesign.LightTextPrimary,
-            surface = FynxDesign.LightSurface,
-            onSurface = FynxDesign.LightTextPrimary,
-            surfaceVariant = FynxDesign.LightSurfaceRaised,
-            onSurfaceVariant = FynxDesign.LightTextSecondary,
-            outline = FynxDesign.LightOutline,
-            surfaceContainerLowest = FynxDesign.LightBackground,
-            surfaceContainerLow = FynxDesign.LightSurface,
-            surfaceContainer = FynxDesign.LightSurface,
-            surfaceContainerHigh = FynxDesign.LightSurfaceRaised,
-            surfaceContainerHighest = FynxDesign.LightSurfaceRaised,
-            surfaceDim = FynxDesign.LightBackground,
-            surfaceBright = FynxDesign.LightSurface
+            background = Color(0xFFF8F9FB),
+            onBackground = Color(0xFF11161B),
+            surface = Color.White,
+            onSurface = Color(0xFF11161B),
+            surfaceVariant = Color(0xFFF0F2F5),
+            onSurfaceVariant = Color(0xFF59636D),
+            outline = Color(0xFFD5DBE1),
+            surfaceContainerLowest = Color.White,
+            surfaceContainerLow = Color.White,
+            surfaceContainer = Color.White,
+            surfaceContainerHigh = Color(0xFFF0F2F5),
+            surfaceContainerHighest = Color(0xFFE7EBEF),
+            surfaceDim = Color(0xFFE1E5E9),
+            surfaceBright = Color.White
         )
     }
     MaterialTheme(
