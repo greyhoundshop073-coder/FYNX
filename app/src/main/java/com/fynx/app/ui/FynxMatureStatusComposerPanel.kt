@@ -134,7 +134,7 @@ fun FynxMatureStatusComposerPanel(
 
     BackHandler(enabled = !publishing && !recording) { onClose() }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier.fillMaxSize().background(Color(background))) {
         when (type) {
             FynxStatusType.TEXT -> {
                 val editorTextAlign = when (alignment) { 0 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
