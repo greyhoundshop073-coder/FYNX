@@ -265,6 +265,7 @@ private fun reactionEmoji(reaction: String): String = when (reaction.uppercase()
 @Composable
 private fun VideoDiscoveryDialog(context: Context, sourcePostId: String?, onDismiss: () -> Unit) {
     var videos by remember { mutableStateOf<List<FynxDiscoveryClient.TrendingPost>>(emptyList()) }
+    var selectedVideo by remember { mutableStateOf<FynxDiscoveryClient.TrendingPost?>(null) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
@@ -290,17 +291,41 @@ private fun VideoDiscoveryDialog(context: Context, sourcePostId: String?, onDism
                     videos.isEmpty() -> Box(Modifier.fillMaxSize().padding(20.dp), contentAlignment = Alignment.Center) { Text("No discoverable videos are available yet.") }
                     else -> LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
                         items(videos, key = { it.id }) { video ->
-                            VideoDiscoveryCard(video = video, isSource = video.id == sourcePostId)
+                            VideoDiscoveryCard(video = video, isSource = video.id == sourcePostId, onOpen = { selectedVideo = video })
                         }
                     }
                 }
             }
         }
     }
+    selectedVideo?.let { video ->
+        val viewerPost = FynxRemoteSocialClient.RemotePost(
+            id = video.id,
+            authorId = "",
+            authorUsername = video.authorUsername,
+            authorDisplayName = video.authorDisplayName,
+            text = video.text,
+            visibility = "PUBLIC",
+            mediaId = video.mediaId,
+            mediaType = video.mediaType,
+            mediaUrl = video.mediaId?.let { "/api/social/media/" + it },
+            timestamp = video.timestamp,
+            likeCount = video.likeCount,
+            commentCount = video.commentCount,
+            likedByCurrentUser = false,
+            followedByCurrentUser = false
+        )
+        FynxPostMediaViewer(
+            context = context,
+            post = viewerPost,
+            media = listOfNotNull(video.mediaId?.let { FynxPostViewerItem(it, "video", 0, "/api/social/media/" + it) }),
+            onDismiss = { selectedVideo = null }
+        )
+    }
 }
 
 @Composable
-private fun VideoDiscoveryCard(video: FynxDiscoveryClient.TrendingPost, isSource: Boolean) {
+private fun VideoDiscoveryCard(video: FynxDiscoveryClient.TrendingPost, isSource: Boolean, onOpen: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val mediaPath = video.mediaId?.let { "/api/social/media/$it" }
@@ -315,7 +340,7 @@ private fun VideoDiscoveryCard(video: FynxDiscoveryClient.TrendingPost, isSource
             }
             if (video.text.isNotBlank()) Text(video.text, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.bodyMedium, maxLines = 4)
             mediaPath?.let { path ->
-                RemoteSocialMedia(path, video.mediaType, onOpenMarketplace = null, onOpenMedia = { scope.launch { runCatching { FynxDiscoveryClient.recordView(context, video.id) } } })
+                RemoteSocialMedia(path, video.mediaType, onOpenMarketplace = null, onOpenMedia = { scope.launch { runCatching { FynxDiscoveryClient.recordView(context, video.id) } }; onOpen() })
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("${video.likeCount} likes", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
