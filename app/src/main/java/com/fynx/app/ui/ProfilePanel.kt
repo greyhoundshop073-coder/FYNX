@@ -129,27 +129,91 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
     val outline = MaterialTheme.colorScheme.outline.copy(alpha = .45f)
     LazyColumn(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(surface), border = BorderStroke(1.dp, outline)) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 20.dp)) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        if (remotePhotoId != null) FynxRemoteProfileAvatar(remotePhotoId, profile.displayName, Modifier.size(92.dp).clip(CircleShape)) else if (!remoteProfileLoaded) FynxProfileImage(profile.displayName, photo, Modifier.size(92.dp).clip(CircleShape)) else FynxAvatar(profile.displayName, Modifier.size(92.dp).clip(CircleShape))
-                        Spacer(Modifier.width(18.dp))
-                        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                            ProfileStat("Posts", formatProfileCount(postCount), Modifier.weight(1f))
-                            ProfileStat("Followers", formatProfileCount(followerCount ?: 0), Modifier.weight(1f)) { openConnections("Followers") }
-                            ProfileStat("Following", formatProfileCount(followingCount ?: 0), Modifier.weight(1f)) { openConnections("Following") }
-                        }
+            Card(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = surface),
+                border = BorderStroke(1.dp, outline)
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (remotePhotoId != null) {
+                        FynxRemoteProfileAvatar(remotePhotoId, profile.displayName, Modifier.size(80.dp).clip(CircleShape))
+                    } else if (!remoteProfileLoaded) {
+                        FynxProfileImage(profile.displayName, photo, Modifier.size(80.dp).clip(CircleShape))
+                    } else {
+                        FynxAvatar(profile.displayName, Modifier.size(80.dp).clip(CircleShape))
                     }
-                    Spacer(Modifier.height(16.dp))
-                    Text(profile.displayName.ifBlank { "FYNX User" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("@${profile.username.removePrefix("@")}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.height(8.dp))
-                    Text(profile.bio.ifBlank { "Welcome to FYNX" }, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth())
-                    if (description.isNotBlank()) { Spacer(Modifier.height(4.dp)); Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth()) }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        profile.displayName.ifBlank { "FYNX User" },
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        "@${profile.username.removePrefix("@")}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (profile.bio.isNotBlank()) {
+                        Spacer(Modifier.height(5.dp))
+                        Text(
+                            profile.bio,
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth(0.9f)
+                        )
+                    }
+                    if (description.isNotBlank()) {
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            description,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth(0.9f)
+                        )
+                    }
                     Spacer(Modifier.height(14.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { editing = true }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Edit profile") }
-                        OutlinedButton(onClick = { settingsOpen = true }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.Settings, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Settings") }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ProfileStat("Posts", formatProfileCount(postCount), Modifier.weight(1f))
+                        ProfileStat("Followers", formatProfileCount(followerCount ?: 0), Modifier.weight(1f)) { openConnections("Followers") }
+                        ProfileStat("Following", formatProfileCount(followingCount ?: 0), Modifier.weight(1f)) { openConnections("Following") }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { editing = true },
+                            modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Icon(Icons.Default.Edit, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Edit profile")
+                        }
+                        OutlinedButton(
+                            onClick = { settingsOpen = true },
+                            modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Icon(Icons.Default.Settings, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Settings")
+                        }
                     }
                 }
             }
