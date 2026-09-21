@@ -74,10 +74,7 @@ fun FynxStatusTimelinePanel(
 
     LaunchedEffect(refreshKey) { refresh() }
 
-    val visibleStatuses = statuses.filter { status ->
-        val owner = status.ownerUsername.removePrefix("@").trim().lowercase()
-        owner == username.removePrefix("@").trim().lowercase() || owner in followingUsernames
-    }
+    val visibleStatuses = statuses.filterNot(FynxStatus::isExpired)
     val latestByOwner = visibleStatuses.groupBy { it.ownerUsername }
         .mapNotNull { (_, values) -> values.maxByOrNull { it.createdAtMillis } }
         .sortedByDescending { it.createdAtMillis }
