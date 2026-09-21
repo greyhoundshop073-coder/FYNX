@@ -104,6 +104,10 @@ require('status viewer renders media captions','status.type != FynxStatusType.TE
 require('mature text emoji control','EmojiEmotions' in mature and 'showStatusEmoji' in mature)
 require('mature text editor uses responsive full view','bottom = 220.dp' in mature and 'horizontal = 12.dp' in mature and '.imePadding()' in mature and 'fontSize = 34.sp' in mature)
 require('mature authenticated publish','FynxStatusClient.create(context, status, mediaId)' in mature and 'FynxStatusClient.uploadMedia(context, source, mime)' in mature)
+require('status camera owns lifecycle and back navigation','BackHandler' in camera and 'BackHandler { if (recording == null) onDismiss() }' in camera and 'cameraProvider?.unbindAll()' in camera)
+require('status camera profile identity overlay','FynxProfileRemoteClient.get(context, username)' in camera and 'profilePhotoId' in camera and 'FynxRemoteMedia("/api/media/$photoId"' in camera)
+require('status camera dialog preserves full-screen surface','DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)' in hub and 'Box(Modifier.fillMaxSize())' in hub)
+require('add status media multi-select is functional','selectionMode' in hub and 'selectedMediaUris' in hub and 'toggleSelected' in hub and 'finishSelection' in hub and 'Select multiple media' in hub)
 require('mature 24-hour expiry','expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS' in mature)
 require('mature publish validation','Write something first.' in mature and 'Add your media first.' in mature)
 
