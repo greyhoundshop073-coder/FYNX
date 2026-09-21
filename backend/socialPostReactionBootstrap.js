@@ -49,6 +49,30 @@ export async function installSocialPostReactions() {
     }
   });
 
+  app.get('/api/social/posts/:id/reaction-users', auth, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || !(await visibleSocialPost(id, req.user.sub))) return res.status(404).json({ error: 'post not found' });
+      const type = typeof req.query?.type === 'string' ? req.query.type.trim().toUpperCase() : '';
+      const allowed = new Set(['LIKE','LOVE','LAUGH','WOW','SAD']);
+      if (type && !allowed.has(type)) return res.status(400).json({ error: 'invalid reaction type' });
+      const params = [id];
+      const where = ['r.post_id=$1'];
+      if (type) { params.push(type); where.push('r.reaction=$2'); }
+      const result = await pool.query(
+        `SELECT u.id,u.username,u.display_name,r.reaction,r.created_at
+           FROM social_post_reactions r JOIN users u ON u.id=r.user_id
+          WHERE ${where.join(' AND ')}
+          ORDER BY r.created_at DESC LIMIT 200`,
+        params
+      );
+      return res.json({ users: result.rows.map(x => ({ id: String(x.id), username: x.username, displayName: x.display_name, reaction: x.reaction })) });
+    } catch (error) {
+      console.error('reaction users', error);
+      return res.status(500).json({ error: 'reaction users lookup failed' });
+    }
+  });
+
   app.post('/api/social/posts/:id/reaction', auth, async (req, res) => {
     try {
       await ensureSocialSchema();
