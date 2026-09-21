@@ -132,8 +132,8 @@ fun FynxHomeSocialHubPanel(
         if (cameraRequest > 0) {
             // This is a one-shot UI event. The parent clears the request after
             // it has been consumed so returning to Home cannot reopen Camera.
-            showComposer = false
-            showCamera = true
+            showComposer = true
+            showCamera = false
             notice = null
             onCameraRequestConsumed()
         }
