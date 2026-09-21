@@ -121,7 +121,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
     }
 
     if (settingsOpen) {
-        SettingsPanel(settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy, onOpenNotifications = onOpenNotifications)
+        SettingsPanel(settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy, onOpenNotifications = onOpenNotifications, onOpenAccountProfile = { settingsOpen = false; editing = true })
         return
     }
 
@@ -290,7 +290,8 @@ fun SettingsPanel(
     onAppearanceChanged: (String) -> Unit = {},
     onAccentChanged: (FynxAccent) -> Unit = {},
     onOpenPrivacy: () -> Unit = {},
-    onOpenNotifications: () -> Unit = {}
+    onOpenNotifications: () -> Unit = {},
+    onOpenAccountProfile: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var appearance by remember { mutableStateOf(FynxPreferencesStore.loadAppearance(context)) }
@@ -299,6 +300,7 @@ fun SettingsPanel(
     var showColors by remember { mutableStateOf(false) }
     var showChatPersonalization by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
+    var showLanguage by remember { mutableStateOf(false) }
 
     val query = search.trim().lowercase()
     fun visible(title: String, description: String): Boolean =
@@ -342,7 +344,7 @@ fun SettingsPanel(
         ) {
             if (visible("Account", "Username bio profile account")) {
                 item { SettingsSectionTitle("Account") }
-                item { SettingsActionCard("Account & profile", "Username, bio and profile information") { onBack(); onSettingsChange(settings) } }
+                item { SettingsActionCard("Account & profile", "Username, bio and profile information") { onOpenAccountProfile() } }
             }
             if (visible("Privacy & Safety", "Profile online posts Status photo visibility")) {
                 item { SettingsSectionTitle("Privacy & Security") }
@@ -365,7 +367,7 @@ fun SettingsPanel(
             }
             if (visible("Language", "App language English")) {
                 item { SettingsSectionTitle("General") }
-                item { SettingsActionCard("Language", "English") { } }
+                item { SettingsActionCard("Language", "English • current language") { showLanguage = true } }
             }
             if (query.isNotBlank() && !listOf("Account","Privacy & Safety","Notifications","Chat & personalization","Appearance","Language").any { visible(it, "") }) {
                 item {
@@ -382,6 +384,7 @@ fun SettingsPanel(
     if (showAppearance) AppearanceDialog(appearance, { appearance = it; FynxPreferencesStore.saveAppearance(context, it); onAppearanceChanged(it); showAppearance = false }, { showAppearance = false })
     if (showColors) AccentDialog(accent, { accent = it; FynxPreferencesStore.saveAccent(context, it); onAccentChanged(it); showColors = false }, { showColors = false })
     if (showChatPersonalization) ChatPersonalizationDialog(settings, onSettingsChange, { showChatPersonalization = false })
+    if (showLanguage) AlertDialog(onDismissRequest = { showLanguage = false }, title = { Text("Language") }, text = { Text("English is currently the supported FYNX app language.") }, confirmButton = { TextButton(onClick = { showLanguage = false }) { Text("Done") } })
 }
 
 @Composable private fun SettingsSectionTitle(title: String) { Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp)) }
