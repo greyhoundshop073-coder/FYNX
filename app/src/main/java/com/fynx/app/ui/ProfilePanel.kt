@@ -121,7 +121,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
     }
 
     if (settingsOpen) {
-        SettingsPanel(settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy, onOpenNotifications = onOpenNotifications)
+        SettingsPanel(settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy, onOpenNotifications = onOpenNotifications, onOpenSettingsDestination = onOpenSettingsDestination)
         return
     }
 
@@ -238,7 +238,8 @@ fun SettingsPanel(
     onAppearanceChanged: (String) -> Unit = {},
     onAccentChanged: (FynxAccent) -> Unit = {},
     onOpenPrivacy: () -> Unit = {},
-    onOpenNotifications: () -> Unit = {}
+    onOpenNotifications: () -> Unit = {},
+    onOpenSettingsDestination: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     var appearance by remember { mutableStateOf(FynxPreferencesStore.loadAppearance(context)) }
@@ -299,7 +300,7 @@ fun SettingsPanel(
         ) {
             if (visible("Account", "username bio profile account phone email password")) {
                 item { SettingsSectionTitle("Account") }
-                item { SettingsActionCard("Account", "Profile, username, bio and account information") { showSimpleInfo = "Account" } }
+                item { SettingsActionCard("Account", "Profile, username, bio and account information") { onOpenSettingsDestination("Account") } }
             }
             if (visible("Privacy & Security", "privacy safety last seen online posts status profile photo messages blocking security")) {
                 item { SettingsSectionTitle("Privacy & Security") }
@@ -316,31 +317,31 @@ fun SettingsPanel(
             }
             if (visible("Calls", "voice video calls ringtone data privacy")) {
                 item { SettingsSectionTitle("Calls") }
-                item { SettingsActionCard("Calls", "Voice and video call preferences") { showSimpleInfo = "Calls" } }
+                item { SettingsActionCard("Calls", "Voice and video call preferences") { onOpenSettingsDestination("Calls") } }
             }
             if (visible("Friends & Groups", "friends groups requests invitations permissions")) {
                 item { SettingsSectionTitle("Social") }
-                item { SettingsActionCard("Friends & Groups", "Friend requests, group invitations and social controls") { showSimpleInfo = "Friends & Groups" } }
+                item { SettingsActionCard("Friends & Groups", "Friend requests, group invitations and social controls") { onOpenSettingsDestination("Groups") } }
             }
             if (visible("Stories & Status", "stories status audience replies sharing")) {
                 item { SettingsActionCard("Stories & Status", "Audience, replies and sharing controls") { onOpenPrivacy() } }
             }
             if (visible("Camera & Media", "camera photos videos uploads downloads quality")) {
                 item { SettingsSectionTitle("Camera & Media") }
-                item { SettingsActionCard("Camera & Media", "Camera, photos, videos and media handling") { showSimpleInfo = "Camera & Media" } }
+                item { SettingsActionCard("Camera & Media", "Camera, photos, videos and media handling") { onOpenSettingsDestination("Camera") } }
             }
             if (visible("Marketplace", "marketplace buying selling orders shipping returns disputes")) {
                 item { SettingsSectionTitle("FYNX Features") }
-                item { SettingsActionCard("Marketplace", "Buying, selling, orders, shipping, returns and disputes") { showSimpleInfo = "Marketplace" } }
+                item { SettingsActionCard("Marketplace", "Buying, selling, orders, shipping, returns and disputes") { onOpenSettingsDestination("Marketplace") } }
             }
             if (visible("Payments & Money", "money wallet payments transactions alerts")) {
-                item { SettingsActionCard("Payments & Money", "Wallet, payments, transactions and money alerts") { showSimpleInfo = "Payments & Money" } }
+                item { SettingsActionCard("Payments & Money", "Wallet, payments, transactions and money alerts") { onOpenSettingsDestination("Money Tools") } }
             }
             if (visible("FYNX AI", "assistant search recommendations translation media ai")) {
-                item { SettingsActionCard("FYNX AI", "Assistant, search, recommendations and AI tools") { showSimpleInfo = "FYNX AI" } }
+                item { SettingsActionCard("FYNX AI", "Assistant, search, recommendations and AI tools") { onOpenSettingsDestination("AI") } }
             }
             if (visible("Search", "search history suggestions discovery")) {
-                item { SettingsActionCard("Search", "Search and discovery preferences") { showSimpleInfo = "Search" } }
+                item { SettingsActionCard("Search", "Search and discovery preferences") { onOpenSettingsDestination("Search") } }
             }
             if (visible("Appearance", "light dark system theme colors accent")) {
                 item { SettingsSectionTitle("Appearance") }
@@ -349,28 +350,28 @@ fun SettingsPanel(
             }
             if (visible("Data & Storage", "storage cache downloads mobile data wifi")) {
                 item { SettingsSectionTitle("Data & Storage") }
-                item { SettingsActionCard("Data & Storage", "Downloads, storage and media usage") { showSimpleInfo = "Data & Storage" } }
+                item { SettingsActionCard("Data & Storage", "Downloads, storage and media usage") { onOpenSettingsDestination("Data & Storage") } }
             }
             if (visible("Language", "app language translation")) {
                 item { SettingsSectionTitle("General") }
                 item { SettingsActionCard("Language", language) { showLanguage = true } }
             }
             if (visible("Accessibility", "text size contrast motion accessibility")) {
-                item { SettingsActionCard("Accessibility", "Text, contrast, motion and accessibility preferences") { showSimpleInfo = "Accessibility" } }
+                item { SettingsActionCard("Accessibility", "Text, contrast, motion and accessibility preferences") { onOpenSettingsDestination("Accessibility") } }
             }
             if (visible("Devices & Sessions", "devices sessions logins connected devices")) {
                 item { SettingsSectionTitle("Security") }
-                item { SettingsActionCard("Devices & Sessions", "Manage where your FYNX account is signed in") { showSimpleInfo = "Devices & Sessions" } }
+                item { SettingsActionCard("Devices & Sessions", "Manage where your FYNX account is signed in") { onOpenSettingsDestination("Devices & Sessions") } }
             }
             if (visible("Connected Accounts", "google connected accounts integrations")) {
-                item { SettingsActionCard("Connected Accounts", "Manage accounts and integrations connected to FYNX") { showSimpleInfo = "Connected Accounts" } }
+                item { SettingsActionCard("Connected Accounts", "Manage accounts and integrations connected to FYNX") { onOpenSettingsDestination("Connected Accounts") } }
             }
             if (visible("Help & Support", "help support report problem")) {
                 item { SettingsSectionTitle("Support") }
-                item { SettingsActionCard("Help & Support", "Get help or report a problem") { showSimpleInfo = "Help & Support" } }
+                item { SettingsActionCard("Help & Support", "Get help or report a problem") { onOpenSettingsDestination("Help & Support") } }
             }
             if (visible("About FYNX", "version terms privacy")) {
-                item { SettingsActionCard("About FYNX", "Version, terms and privacy information") { showSimpleInfo = "About FYNX" } }
+                item { SettingsActionCard("About FYNX", "Version, terms and privacy information") { onOpenSettingsDestination("About FYNX") } }
             }
             if (query.isNotBlank() && !listOf("Account", "Privacy & Security", "Notifications", "Chat Settings", "Calls", "Friends & Groups", "Stories & Status", "Camera & Media", "Marketplace", "Payments & Money", "FYNX AI", "Search", "Appearance", "Data & Storage", "Language", "Accessibility", "Devices & Sessions", "Connected Accounts", "Help & Support", "About FYNX").any { visible(it, "") }) {
                 item {
