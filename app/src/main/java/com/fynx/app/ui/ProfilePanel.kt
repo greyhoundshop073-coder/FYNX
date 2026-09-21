@@ -155,6 +155,14 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
             }
         }
         item {
+            session.username?.takeIf { it.isNotBlank() }?.let { username ->
+                FynxProfileContentSection(
+                    username = username,
+                    onError = { if (it != null) syncError = it }
+                )
+            }
+        }
+        item {
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(surface), border = BorderStroke(1.dp, outline)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
