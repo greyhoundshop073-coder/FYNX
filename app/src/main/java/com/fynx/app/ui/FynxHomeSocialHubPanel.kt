@@ -57,6 +57,7 @@ fun FynxHomeSocialHubPanel(
     initialCaption: String? = null,
     onCaptionConsumed: () -> Unit = {},
     cameraRequest: Int = 0,
+    onCameraRequestConsumed: () -> Unit = {},
     onOpenChats: () -> Unit = {},
     onOpenStories: () -> Unit = {},
     onOpenProfile: () -> Unit = {},
@@ -129,11 +130,12 @@ fun FynxHomeSocialHubPanel(
 
     LaunchedEffect(cameraRequest) {
         if (cameraRequest > 0) {
-            // The Home header camera opens the same real capture panel used by
-            // New Post -> Video/Camera. Keep one camera implementation.
+            // This is a one-shot UI event. The parent clears the request after
+            // it has been consumed so returning to Home cannot reopen Camera.
             showComposer = false
             showCamera = true
             notice = null
+            onCameraRequestConsumed()
         }
     }
 
