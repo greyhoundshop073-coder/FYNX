@@ -6,6 +6,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -28,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -42,8 +47,6 @@ fun OtherUserProfilePanel(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var profile by remember(username) { mutableStateOf<FynxProfileRemoteClient.Profile?>(null) }
-    var posts by remember(username) { mutableStateOf<List<FynxProfileRemoteClient.ProfilePost>>(emptyList()) }
-    var marketplace by remember(username) { mutableStateOf<List<FynxMarketplaceClient.Listing>>(emptyList()) }
     var loading by remember(username) { mutableStateOf(true) }
     var error by remember(username) { mutableStateOf<String?>(null) }
     var following by remember(username) { mutableStateOf(false) }
@@ -52,33 +55,13 @@ fun OtherUserProfilePanel(
     var reportReason by remember(username) { mutableStateOf("Safety or spam") }
     var reportDetails by remember(username) { mutableStateOf("") }
     var reportMessage by remember(username) { mutableStateOf<String?>(null) }
-    var selectedPostIndex by remember(username) { mutableStateOf<Int?>(null) }
-    var selectedTab by remember(username) { mutableStateOf("Posts") }
-    var selectedListing by remember(username) { mutableStateOf<FynxMarketplaceClient.Listing?>(null) }
 
     fun loadProfile() {
         scope.launch {
             loading = true
             error = null
             FynxProfileRemoteClient.get(context, username)
-                .onSuccess { loaded ->
-                    profile = loaded
-                    following = loaded.followedByCurrentUser
-                    if (loaded.postCount > 0 || loaded.relationship == "friends" || loaded.relationship == "self") {
-                        FynxProfileRemoteClient.posts(context, loaded.username)
-                            .onSuccess { loadedPosts -> posts = loadedPosts }
-                            .onFailure { posts = emptyList() }
-                    } else posts = emptyList()
-                    // Marketplace is a distinct content type. The existing real Marketplace
-                    // discovery endpoint already returns seller identity, so filter by the
-                    // exact profile owner and never manufacture profile listings.
-                    FynxMarketplaceClient.listings(context, loaded.username, "")
-                        .onSuccess { listings ->
-                            marketplace = listings.filter { it.sellerUsername.equals(loaded.username, ignoreCase = true) }
-                            if (selectedTab == "Marketplace" && marketplace.isEmpty()) selectedTab = "Posts"
-                        }
-                        .onFailure { marketplace = emptyList() }
-                }
+                .onSuccess { loaded -> profile = loaded; following = loaded.followedByCurrentUser }
                 .onFailure { error = it.message ?: "Unable to load this profile." }
             loading = false
         }
@@ -86,107 +69,107 @@ fun OtherUserProfilePanel(
 
     LaunchedEffect(username) { loadProfile() }
 
-    if (selectedPostIndex != null && posts.isNotEmpty()) {
-        ProfilePostSwipeViewer(
-            posts = posts,
-            initialIndex = selectedPostIndex!!.coerceIn(0, posts.lastIndex),
-            onClose = { selectedPostIndex = null }
-        )
-        return
-    }
-
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Row(
+            Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") }
-            Text("Profile", style = MaterialTheme.typography.titleLarge)
+            Text("Profile", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            TextButton(enabled = !busy, onClick = { reportMessage = null; reportOpen = true }) { Text("⋮") }
         }
         when {
-            loading && profile == null -> Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            profile == null -> {
-                Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(error ?: "User not found", color = FynxDesign.TextSecondary)
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedButton(onClick = { loadProfile() }) { Text("Retry") }
-                }
+            loading && profile == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            profile == null -> Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Text(error ?: "User not found", color = FynxDesign.TextSecondary, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(onClick = { loadProfile() }) { Text("Retry") }
             }
             else -> {
                 val person = profile!!
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                LazyColumn(
+                    Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     item {
-                        RemoteProfilePhoto(person.profilePhotoMediaId, person.displayName, Modifier.size(104.dp))
-                        Spacer(Modifier.height(14.dp))
-                        Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().widthIn(max = 720.dp))
-                        Text("@${person.username.removePrefix("@").trim()}", color = FynxDesign.TextSecondary, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().widthIn(max = 720.dp))
-                        if (person.bio.isNotBlank()) { Spacer(Modifier.height(10.dp)); Text(person.bio, color = FynxDesign.TextSecondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().widthIn(max = 720.dp)) }
-                        if (person.country.isNotBlank()) Text(person.country, color = FynxDesign.TextSecondary, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().widthIn(max = 720.dp))
-                        Spacer(Modifier.height(12.dp))
-                        Row(Modifier.fillMaxWidth().widthIn(max = 520.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                            ProfileCount(label = "Posts", value = person.postCount)
-                            person.followerCount?.let { ProfileCount(label = "Followers", value = it) }
-                            person.followingCount?.let { ProfileCount(label = "Following", value = it) }
-                        }
-                        Spacer(Modifier.height(14.dp))
-                        Row(Modifier.fillMaxWidth().widthIn(max = 520.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Button(enabled = !busy, onClick = {
-                                scope.launch {
-                                    busy = true
-                                    val actionResult = when {
-                                        person.viewerReceivedRequest && person.pendingRequestId != null -> FynxSocialClient.acceptRequest(context, person.pendingRequestId)
-                                        person.viewerSentRequest && person.pendingRequestId != null -> FynxSocialClient.cancelRequest(context, person.pendingRequestId)
-                                        person.relationship == "none" -> FynxSocialClient.sendRequest(context, person.username)
-                                        else -> FynxRemoteSocialClient.follow(context, person.username, following)
+                        Card(
+                            Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .35f))
+                        ) {
+                            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                RemoteProfilePhoto(person.profilePhotoMediaId, person.displayName, Modifier.size(80.dp).clip(CircleShape))
+                                Spacer(Modifier.height(12.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    if (person.verified) {
+                                        Spacer(Modifier.width(5.dp))
+                                        Box(Modifier.size(16.dp).background(MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) {
+                                            Text("✓", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                        }
                                     }
-                                    actionResult.onSuccess { loadProfile() }.onFailure { error = it.message ?: "That action could not be completed." }
-                                    busy = false
                                 }
-                            }) {
-                                Text(when {
-                                    person.relationship == "friends" -> if (following) "Following" else "Follow"
-                                    person.viewerReceivedRequest -> "Accept request"
-                                    person.viewerSentRequest -> "Request sent"
-                                    else -> "Add friend"
-                                })
-                            }
-                            if (person.canMessage) {
-                                OutlinedButton(enabled = !busy, onClick = { onMessage(person.username) }) {
-                                    Icon(Icons.Default.Message, contentDescription = null)
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Message")
+                                Text("@${person.username.removePrefix("@").trim()}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                if (person.bio.isNotBlank()) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(person.bio, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().widthIn(max = 360.dp), maxLines = 3, overflow = TextOverflow.Ellipsis)
+                                }
+                                if (person.country.isNotBlank()) Text(person.country, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                                Spacer(Modifier.height(14.dp))
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                                    ProfileCount("Posts", person.postCount)
+                                    person.followerCount?.let { ProfileCount("Followers", it) }
+                                    person.followingCount?.let { ProfileCount("Following", it) }
+                                }
+                                Spacer(Modifier.height(16.dp))
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Button(
+                                        enabled = !busy,
+                                        onClick = {
+                                            scope.launch {
+                                                busy = true
+                                                val result = when {
+                                                    person.viewerReceivedRequest && person.pendingRequestId != null -> FynxSocialClient.acceptRequest(context, person.pendingRequestId)
+                                                    person.viewerSentRequest && person.pendingRequestId != null -> FynxSocialClient.cancelRequest(context, person.pendingRequestId)
+                                                    person.relationship == "none" -> FynxSocialClient.sendRequest(context, person.username)
+                                                    else -> FynxRemoteSocialClient.follow(context, person.username, following)
+                                                }
+                                                result.onSuccess { loadProfile() }.onFailure { error = it.message ?: "That action could not be completed." }
+                                                busy = false
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(22.dp)
+                                    ) {
+                                        Text(
+                                            when {
+                                                person.relationship == "friends" -> if (following) "Following" else "Follow"
+                                                person.viewerReceivedRequest -> "Accept request"
+                                                person.viewerSentRequest -> "Request sent"
+                                                else -> "Add friend"
+                                            }
+                                        )
+                                    }
+                                    if (person.canMessage) {
+                                        OutlinedButton(enabled = !busy, onClick = { onMessage(person.username) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp)) {
+                                            Icon(Icons.Default.Message, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Message")
+                                        }
+                                    }
                                 }
                             }
-                        }
-                        if (person.viewerSentRequest) Text("Friend request is pending.", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
-                        else if (person.viewerReceivedRequest) Text("This person sent you a friend request.", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
-                        TextButton(enabled = !busy, onClick = { reportMessage = null; reportOpen = true }) { Text("Report") }
-
-                        if (marketplace.isNotEmpty()) {
-                            Spacer(Modifier.height(10.dp))
-                            TabRow(selectedTabIndex = if (selectedTab == "Marketplace") 1 else 0, modifier = Modifier.fillMaxWidth()) {
-                                Tab(selected = selectedTab == "Posts", onClick = { selectedTab = "Posts" }, text = { Text("Posts") })
-                                Tab(selected = selectedTab == "Marketplace", onClick = { selectedTab = "Marketplace" }, text = { Text("Marketplace") })
-                            }
-                        } else {
-                            Spacer(Modifier.height(10.dp))
-                            Text("Posts", style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 8.dp))
                         }
                     }
-                    if (selectedTab == "Marketplace" && marketplace.isNotEmpty()) {
-                        item { ProfileMarketplaceGrid(listings = marketplace, onOpen = { selectedListing = it }) }
-                    } else if (posts.isEmpty()) {
-                        item { Text("No posts to show", Modifier.padding(top = 20.dp), color = FynxDesign.TextSecondary) }
-                    } else {
-                        item {
-                            if (marketplace.isNotEmpty()) Text("Posts", style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 8.dp))
-                            ProfilePostGrid(posts = posts, onOpenPost = { selectedPostIndex = it })
-                        }
+                    item {
+                        FynxProfileContentSection(username = person.username, onError = { error = it })
                     }
                 }
             }
         }
-    }
-
-    selectedListing?.let { listing ->
-        ProfileMarketplaceDetails(listing = listing, onClose = { selectedListing = null })
     }
 
     if (reportOpen && profile != null) {
@@ -195,21 +178,24 @@ fun OtherUserProfilePanel(
             title = { Text("Report profile") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = reportReason, onValueChange = { reportReason = it }, label = { Text("Reason") }, singleLine = true)
-                    OutlinedTextField(value = reportDetails, onValueChange = { reportDetails = it }, label = { Text("Details (optional)") }, minLines = 3)
-                    reportMessage?.let { message -> Text(message, color = FynxDesign.TextSecondary) }
+                    OutlinedTextField(reportReason, { reportReason = it }, label = { Text("Reason") }, singleLine = true)
+                    OutlinedTextField(reportDetails, { reportDetails = it }, label = { Text("Details (optional)") }, minLines = 3)
+                    reportMessage?.let { Text(it, color = FynxDesign.TextSecondary) }
                 }
             },
-            confirmButton = { TextButton(enabled = !busy, onClick = {
-                scope.launch {
-                    busy = true
-                    FynxProfileRemoteClient.report(context, profile!!.username, reportReason, reportDetails)
-                        .onSuccess { report -> reportMessage = "Report submitted (${report.status.lowercase()})." }
-                        .onFailure { failure -> reportMessage = failure.message ?: "Report failed. Try again." }
-                    busy = false
-                }
-            }) { Text("Submit") } },
-            dismissButton = { TextButton(enabled = !busy, onClick = { reportOpen = false }) { Text("Cancel") } }
+            confirmButton = {
+                TextButton(enabled = !busy, onClick = {
+                    scope.launch {
+                        busy = true
+                        FynxProfileRemoteClient.report(context, profile!!.username, reportReason, reportDetails)
+                            .onSuccess { reportMessage = "Report submitted (" + it.status.lowercase() + ")." }
+                            .onFailure { reportMessage = it.message ?: "Report failed. Try again." }
+                        busy = false
+                    }
+                }) { Text("Submit") }
+            },
+            dismissButton = { TextButton(enabled = !busy, onClick = { reportOpen = false }) { Text("Cancel") }
+            }
         )
     }
 }
