@@ -109,6 +109,7 @@ require('status camera profile identity overlay','FynxProfileRemoteClient.get(co
 require('status camera dialog preserves full-screen surface','DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)' in hub and 'Box(Modifier.fillMaxSize())' in hub)
 require('status camera returns to editable composer','fun openCapturedStatus(uri: Uri, type: String)' in hub and 'composing = true' in hub and 'initialMediaUri = selectedInitialMedia?.uri' in hub)
 require('add status media multi-select is functional','selectionMode' in hub and 'selectedMediaUris' in hub and 'toggleSelected' in hub and 'finishSelection' in hub and 'Select multiple media' in hub)
+require('add status Layout creates real collage media','layoutMode' in hub and 'createFynxLayoutCollage' in hub and 'Bitmap.createBitmap(1200, 1200' in hub and 'FynxStatusToolPill' in hub)
 require('mature 24-hour expiry','expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS' in mature)
 require('mature publish validation','Write something first.' in mature and 'Add your media first.' in mature)
 
