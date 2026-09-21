@@ -222,16 +222,6 @@ private fun FynxProfilePostTile(post: FynxProfileRemoteClient.ProfilePost, onOpe
                     Icon(Icons.Default.MusicNote, contentDescription = "Audio", tint = MaterialTheme.colorScheme.primary)
                 }
             }
-            if (post.likeCount > 0 || post.commentCount > 0) {
-                Text(
-                    post.likeCount.toString() + " likes • " + post.commentCount.toString() + " comments",
-                    Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = .86f))
-                        .padding(horizontal = 6.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelSmall, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center
-                )
-            }
         }
         if (post.likeCount > 0 || post.commentCount > 0) {
             Text(
