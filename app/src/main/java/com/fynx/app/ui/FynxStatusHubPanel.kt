@@ -61,7 +61,6 @@ fun FynxStatusHubPanel() {
     var addStatusOpen by remember { mutableStateOf(false) }
     var composing by remember { mutableStateOf(false) }
     var cameraOpen by remember { mutableStateOf(false) }
-    var publishingCameraStatus by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
     var timelineRefreshKey by remember { mutableIntStateOf(0) }
     var selectedInitialMedia by remember { mutableStateOf<FynxRecentMedia?>(null) }
@@ -71,47 +70,12 @@ fun FynxStatusHubPanel() {
     var statusMusicCatalogue by remember { mutableStateOf<List<FynxMusicCatalogueTrack>>(emptyList()) }
     var statusMusicLoading by remember { mutableStateOf(false) }
 
-    fun publishCapturedStatus(uri: Uri, type: String) {
-        if (publishingCameraStatus) return
-        publishingCameraStatus = true
+    fun openCapturedStatus(uri: Uri, type: String) {
+        selectedInitialMedia = FynxRecentMedia(uri = uri, isVideo = type == "video", dateAddedSeconds = System.currentTimeMillis() / 1000L)
         cameraError = null
-        scope.launch {
-            try {
-                val auth = FynxAuthStore.load(context)
-                val username = auth.username?.removePrefix("@").orEmpty().ifBlank { "preview" }
-                val mime = context.contentResolver.getType(uri) ?: if (type == "video") "video/mp4" else "image/jpeg"
-                val mediaId = FynxStatusClient.uploadMedia(context, uri, mime)
-                    .getOrElse {
-                        cameraError = it.message ?: "Status media upload failed."
-                        return@launch
-                    }
-                val statusType = if (type == "video") FynxStatusType.VIDEO else FynxStatusType.PHOTO
-                val now = System.currentTimeMillis()
-                val status = FynxStatus(
-                    id = UUID.randomUUID().toString(),
-                    ownerUsername = username,
-                    ownerDisplayName = username,
-                    type = statusType,
-                    text = null,
-                    createdAtMillis = now,
-                    expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS,
-                    textStyle = FynxStatusTextStyle(0xFF111111, 0xFFFFFFFF, FynxStatusTextFont.CLASSIC, 1),
-                    privateStatus = true,
-                    voiceDurationMs = 0L,
-                    audience = FynxStatusAudience.FRIENDS
-                )
-                FynxStatusClient.create(context, status, mediaId).getOrElse {
-                    cameraError = it.message ?: "Status publishing failed."
-                    return@launch
-                }
-                FynxStatusStore.save(context, status.copy(contentUri = "/api/media/$mediaId"))
-                cameraOpen = false
-                addStatusOpen = false
-                timelineRefreshKey++
-            } finally {
-                publishingCameraStatus = false
-            }
-        }
+        cameraOpen = false
+        addStatusOpen = false
+        composing = true
     }
 
     LaunchedEffect(showStatusMusicPicker, statusMusicSearch) {
@@ -142,7 +106,7 @@ fun FynxStatusHubPanel() {
                 addStatusOpen -> FynxAddStatusPanel(
                     onClose = { addStatusOpen = false },
                     onCamera = {
-                        if (!publishingCameraStatus) {
+                        if (!cameraOpen) {
                             cameraError = null
                             cameraOpen = true
                         }
@@ -245,8 +209,8 @@ fun FynxStatusHubPanel() {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Box(Modifier.fillMaxSize()) {
                     FynxCameraCapturePanel(
-                        onCaptured = { uri, type -> publishCapturedStatus(uri, type) },
-                        onDismiss = { if (!publishingCameraStatus) cameraOpen = false }
+                        onCaptured = { uri, type -> openCapturedStatus(uri, type) },
+                        onDismiss = { cameraOpen = false }
                     )
                 }
             }
