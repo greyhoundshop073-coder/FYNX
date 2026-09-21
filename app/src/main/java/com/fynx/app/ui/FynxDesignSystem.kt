@@ -74,7 +74,7 @@ fun FynxTheme(
     val context = LocalContext.current
     val appearance = FynxPreferencesStore.loadAppearance(context)
     val effectiveAccent = accent ?: FynxPreferencesStore.loadAccent(context)
-    val charcoal = effectiveAccent == FynxAccent.Charcoal
+    val charcoal = appearance == "Charcoal Black"
     val amoled = appearance == "Black AMOLED"
     val scheduledNight = appearance == "System" && scheduledNightModeActive(context)
     val effectiveDarkMode = when (appearance) {
@@ -91,9 +91,9 @@ fun FynxTheme(
             onPrimary = onAccent,
             secondary = effectiveAccent.secondary,
             onSecondary = if (effectiveAccent.secondary.luminance() > 0.5f) Color.Black else Color.White,
-            background = when { amoled -> FynxDesign.CharcoalBackground; charcoal -> FynxDesign.CharcoalBackground; else -> FynxDesign.Background },
+            background = when { charcoal || amoled -> FynxDesign.CharcoalBackground; else -> FynxDesign.Background },
             onBackground = if (charcoal || amoled) FynxDesign.CharcoalTextPrimary else FynxDesign.TextPrimary,
-            surface = when { amoled -> FynxDesign.CharcoalSurface; charcoal -> FynxDesign.CharcoalSurface; else -> FynxDesign.Surface },
+            surface = when { charcoal || amoled -> FynxDesign.CharcoalSurface; else -> FynxDesign.Surface },
             onSurface = if (charcoal || amoled) FynxDesign.CharcoalTextPrimary else FynxDesign.TextPrimary,
             surfaceVariant = if (charcoal || amoled) FynxDesign.CharcoalSurfaceRaised else FynxDesign.SurfaceRaised,
             onSurfaceVariant = if (charcoal || amoled) FynxDesign.CharcoalTextSecondary else FynxDesign.TextSecondary,
@@ -105,7 +105,7 @@ fun FynxTheme(
             surfaceContainerHighest = if (charcoal || amoled) FynxDesign.CharcoalSurfaceRaised else FynxDesign.SurfaceRaised,
             surfaceDim = if (charcoal || amoled) FynxDesign.CharcoalBackground else FynxDesign.Background,
             surfaceBright = if (charcoal || amoled) FynxDesign.CharcoalSurfaceRaised else FynxDesign.SurfaceRaised,
-            surfaceTint = if (charcoal || amoled) effectiveAccent.primary else effectiveAccent.primary
+            surfaceTint = effectiveAccent.primary
         )
     } else {
         lightColorScheme(
