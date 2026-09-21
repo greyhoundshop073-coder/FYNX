@@ -127,7 +127,25 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
 
     val surface = MaterialTheme.colorScheme.surface
     val outline = MaterialTheme.colorScheme.outline.copy(alpha = .45f)
-    LazyColumn(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+                .height(52.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = { settingsOpen = true }, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Default.Settings, contentDescription = "Settings", modifier = Modifier.size(24.dp))
+            }
+        }
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
         item {
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(surface), border = BorderStroke(1.dp, outline)) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 20.dp)) {
@@ -147,9 +165,10 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                     Text(profile.bio.ifBlank { "Welcome to FYNX" }, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.fillMaxWidth())
                     if (description.isNotBlank()) { Spacer(Modifier.height(4.dp)); Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth()) }
                     Spacer(Modifier.height(14.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { editing = true }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Edit profile") }
-                        OutlinedButton(onClick = { settingsOpen = true }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.Settings, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Settings") }
+                    Button(onClick = { editing = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+                        Icon(Icons.Default.Edit, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Edit profile")
                     }
                 }
             }
@@ -173,6 +192,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
             }
         }
         if (session.state == AuthState.SIGNED_IN) item { OutlinedButton(onClick = { if (onSignOut != null) onSignOut() else { FynxAuthStore.clear(context); (context as? Activity)?.recreate() } }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) { Text("Sign out") } }
+        }
     }
     connectionType?.let { type -> ProfileConnectionsDialog(type, connections, connectionsLoading, connectionsError) { connectionType = null } }
 }
