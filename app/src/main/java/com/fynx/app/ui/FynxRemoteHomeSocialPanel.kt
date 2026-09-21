@@ -23,6 +23,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -206,11 +208,10 @@ private fun ReactionUsersDialog(context: Context, postId: String, onDismiss: () 
                     loading -> Box(Modifier.fillMaxWidth().padding(28.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                     error != null -> Text(error ?: "Unable to load reactions.", Modifier.fillMaxWidth().padding(20.dp), color = MaterialTheme.colorScheme.error)
                     users.isEmpty() -> Text("No reactions are available.", Modifier.fillMaxWidth().padding(20.dp))
-                    else -> LazyColumn(
-                        Modifier.fillMaxWidth().heightIn(max = 420.dp),
-                        contentPadding = PaddingValues(bottom = 8.dp)
+                    else -> Column(
+                        Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState())
                     ) {
-                        items(users, key = { user -> "${user.id}-${user.reaction}" }) { user ->
+                        users.forEach { user ->
                             Row(
                                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
