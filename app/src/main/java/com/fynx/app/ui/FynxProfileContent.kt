@@ -138,7 +138,7 @@ fun FynxProfileContentSection(
                 val rows = (gridItems.size + 2) / 3
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
-                    modifier = Modifier.fillMaxWidth().height((rows * 184).dp),
+                    modifier = Modifier.fillMaxWidth().height((rows * 184 + (rows - 1) * 8).dp),
                     userScrollEnabled = false,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
