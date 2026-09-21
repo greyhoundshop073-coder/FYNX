@@ -79,10 +79,15 @@ export async function installSocialMultiMedia() {
             AND (
               p.author_id = $2
               OR p.visibility = 'PUBLIC'
+              OR (p.visibility = 'ONLY_ME' AND p.author_id = $2)
               OR (p.visibility = 'FRIENDS_ONLY' AND EXISTS (
                 SELECT 1 FROM friendships f
                  WHERE ((f.user_id = p.author_id AND f.friend_id = $2) OR (f.user_id = $2 AND f.friend_id = p.author_id))
                    AND f.status = 'accepted'
+              ))
+              OR (p.visibility = 'SELECTED_PEOPLE' AND EXISTS (
+                SELECT 1 FROM social_post_audience a
+                 WHERE a.post_id = p.id AND a.user_id = $2
               ))
             )
             AND NOT EXISTS (
