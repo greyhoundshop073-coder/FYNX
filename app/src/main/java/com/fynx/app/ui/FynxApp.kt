@@ -379,7 +379,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Advertising AI" -> { selected = "AI" }
             "Announcements" -> FynxAnnouncementsPanel()
             "Admin" -> if (adminRole != null) FynxAdminControlCenterPanel()
-            "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" })
+            "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" }, onOpenNotifications = { openProfileSettings = false; selected = "Notifications" })
             else -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview")
         } } }
     }
