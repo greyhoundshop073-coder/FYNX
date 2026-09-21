@@ -300,7 +300,7 @@ fun SettingsPanel(
         ) {
             if (visible("Account", "username bio profile account phone email password")) {
                 item { SettingsSectionTitle("Account") }
-                item { SettingsActionCard("Account", "Profile, username, bio and account information") { onOpenSettingsDestination("Account") } }
+                item { SettingsActionCard("Account", "Profile, username, bio and account information") { showSimpleInfo = "Account" } }
             }
             if (visible("Privacy & Security", "privacy safety last seen online posts status profile photo messages blocking security")) {
                 item { SettingsSectionTitle("Privacy & Security") }
@@ -328,7 +328,7 @@ fun SettingsPanel(
             }
             if (visible("Camera & Media", "camera photos videos uploads downloads quality")) {
                 item { SettingsSectionTitle("Camera & Media") }
-                item { SettingsActionCard("Camera & Media", "Camera, photos, videos and media handling") { onOpenSettingsDestination("Camera") } }
+                item { SettingsActionCard("Camera & Media", "Camera, photos, videos and media handling") { showSimpleInfo = "Camera & Media" } }
             }
             if (visible("Marketplace", "marketplace buying selling orders shipping returns disputes")) {
                 item { SettingsSectionTitle("FYNX Features") }
@@ -341,7 +341,7 @@ fun SettingsPanel(
                 item { SettingsActionCard("FYNX AI", "Assistant, search, recommendations and AI tools") { onOpenSettingsDestination("AI") } }
             }
             if (visible("Search", "search history suggestions discovery")) {
-                item { SettingsActionCard("Search", "Search and discovery preferences") { onOpenSettingsDestination("Search") } }
+                item { SettingsActionCard("Search", "Search and discovery preferences") { showSimpleInfo = "Search" } }
             }
             if (visible("Appearance", "light dark system theme colors accent")) {
                 item { SettingsSectionTitle("Appearance") }
@@ -350,28 +350,28 @@ fun SettingsPanel(
             }
             if (visible("Data & Storage", "storage cache downloads mobile data wifi")) {
                 item { SettingsSectionTitle("Data & Storage") }
-                item { SettingsActionCard("Data & Storage", "Downloads, storage and media usage") { onOpenSettingsDestination("Data & Storage") } }
+                item { SettingsActionCard("Data & Storage", "Downloads, storage and media usage") { showSimpleInfo = "Data & Storage" } }
             }
             if (visible("Language", "app language translation")) {
                 item { SettingsSectionTitle("General") }
                 item { SettingsActionCard("Language", language) { showLanguage = true } }
             }
             if (visible("Accessibility", "text size contrast motion accessibility")) {
-                item { SettingsActionCard("Accessibility", "Text, contrast, motion and accessibility preferences") { onOpenSettingsDestination("Accessibility") } }
+                item { SettingsActionCard("Accessibility", "Text, contrast, motion and accessibility preferences") { showSimpleInfo = "Accessibility" } }
             }
             if (visible("Devices & Sessions", "devices sessions logins connected devices")) {
                 item { SettingsSectionTitle("Security") }
-                item { SettingsActionCard("Devices & Sessions", "Manage where your FYNX account is signed in") { onOpenSettingsDestination("Devices & Sessions") } }
+                item { SettingsActionCard("Devices & Sessions", "Manage where your FYNX account is signed in") { showSimpleInfo = "Devices & Sessions" } }
             }
             if (visible("Connected Accounts", "google connected accounts integrations")) {
-                item { SettingsActionCard("Connected Accounts", "Manage accounts and integrations connected to FYNX") { onOpenSettingsDestination("Connected Accounts") } }
+                item { SettingsActionCard("Connected Accounts", "Manage accounts and integrations connected to FYNX") { showSimpleInfo = "Connected Accounts" } }
             }
             if (visible("Help & Support", "help support report problem")) {
                 item { SettingsSectionTitle("Support") }
-                item { SettingsActionCard("Help & Support", "Get help or report a problem") { onOpenSettingsDestination("Help & Support") } }
+                item { SettingsActionCard("Help & Support", "Get help or report a problem") { showSimpleInfo = "Help & Support" } }
             }
             if (visible("About FYNX", "version terms privacy")) {
-                item { SettingsActionCard("About FYNX", "Version, terms and privacy information") { onOpenSettingsDestination("About FYNX") } }
+                item { SettingsActionCard("About FYNX", "Version, terms and privacy information") { showSimpleInfo = "About FYNX" } }
             }
             if (query.isNotBlank() && !listOf("Account", "Privacy & Security", "Notifications", "Chat Settings", "Calls", "Friends & Groups", "Stories & Status", "Camera & Media", "Marketplace", "Payments & Money", "FYNX AI", "Search", "Appearance", "Data & Storage", "Language", "Accessibility", "Devices & Sessions", "Connected Accounts", "Help & Support", "About FYNX").any { visible(it, "") }) {
                 item {
