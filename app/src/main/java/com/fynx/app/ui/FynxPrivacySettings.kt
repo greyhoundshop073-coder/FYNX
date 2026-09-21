@@ -62,15 +62,6 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
     }
 
     fun saveSelection(key: String, option: String) {
-        val previous = when (key) {
-            KEY_PROFILE -> profile
-            KEY_ONLINE -> online
-            KEY_POSTS -> posts
-            KEY_STATUS -> status
-            KEY_PROFILE_PHOTO -> photo
-            KEY_MESSAGES -> messages
-            else -> option
-        }
         // Apply the user's choice locally first so a slow/offline backend cannot
         // make the Privacy & Safety screen disappear or reset the selection.
         when (key) {
@@ -85,35 +76,29 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
         savingKey = key
         notice = null
         scope.launch {
-            runCatching {
-                FynxPrivacyRemoteClient.update(context, key, option).getOrThrow()
-            }.onSuccess { remote ->
-                profile = remote[KEY_PROFILE]
-                online = remote[KEY_ONLINE]
-                posts = remote[KEY_POSTS]
-                status = remote[KEY_STATUS]
-                photo = remote[KEY_PROFILE_PHOTO]
-                messages = remote[KEY_MESSAGES]
-                FynxPreferencesStore.saveVisibility(context, key, remote[key])
-                openKey = null
-            }.onFailure { error ->
-                // Keep the local choice visible and persisted; report the remote
-                // failure without reverting the user's selection or leaving the screen.
-                when (key) {
-                    KEY_PROFILE -> profile = option
-                    KEY_ONLINE -> online = option
-                    KEY_POSTS -> posts = option
-                    KEY_STATUS -> status = option
-                    KEY_PROFILE_PHOTO -> photo = option
-                    KEY_MESSAGES -> messages = option
+            try {
+                FynxPrivacyRemoteClient.update(context, key, option).onSuccess { remote ->
+                    profile = remote[KEY_PROFILE]
+                    online = remote[KEY_ONLINE]
+                    posts = remote[KEY_POSTS]
+                    status = remote[KEY_STATUS]
+                    photo = remote[KEY_PROFILE_PHOTO]
+                    messages = remote[KEY_MESSAGES]
+                    FynxPreferencesStore.saveVisibility(context, key, remote[key])
+                    openKey = null
+                }.onFailure { error ->
+                    // Keep the local choice visible and persisted; report the remote
+                    // failure without reverting the user's selection or leaving the screen.
+                    FynxPreferencesStore.saveVisibility(context, key, option)
+                    notice = error.message ?: "Saved on this device, but the server could not be updated."
                 }
+            } catch (error: Exception) {
                 FynxPreferencesStore.saveVisibility(context, key, option)
                 notice = error.message ?: "Saved on this device, but the server could not be updated."
             }
             savingKey = null
         }
     }
-
     fun updateSafety(key: String, enabled: Boolean) {
         scope.launch {
             FynxSafetyRemoteClient.update(context, key, enabled).onSuccess { safety = it }.onFailure { error -> notice = error.message ?: "Could not save this safety control." }
