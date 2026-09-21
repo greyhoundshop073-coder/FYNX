@@ -130,7 +130,7 @@ fun FynxStatusHubPanel() {
                     // FynxStatusTimelinePanel() remains the single backend Status hub surface.
                     FynxStatusTimelinePanel(
                         onCameraClick = {
-                            if (!publishingCameraStatus) {
+                            if (!cameraOpen) {
                                 cameraError = null
                                 cameraOpen = true
                             }
@@ -208,7 +208,7 @@ fun FynxStatusHubPanel() {
 
     if (cameraOpen) {
         Dialog(
-            onDismissRequest = { if (!publishingCameraStatus) cameraOpen = false },
+            onDismissRequest = { cameraOpen = false },
             properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
         ) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
