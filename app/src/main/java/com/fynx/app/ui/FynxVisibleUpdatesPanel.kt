@@ -99,7 +99,7 @@ fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, 
                 item { val own = grouped.firstOrNull { it.first.ownerUsername.equals(currentUsername, true) }; FynxStatusPreviewCircle(own?.first, currentUsername.ifBlank { "You" }, "Your status", true, onOpenStories, own?.second ?: 0, ownerPhotoIds[current]) }
                 item {
                     Column(Modifier.width(82.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        IconButton(onClick = onCreateStatus, modifier = Modifier.size(70.dp)) { androidx.compose.foundation.layout.Box(Modifier.size(64.dp).background(FynxDesign.SurfaceRaised, CircleShape).border(3.dp, MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) { Icon(Icons.Default.Add, "Create status", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp)) } }
+                        IconButton(onClick = onCreateStatus, modifier = Modifier.size(70.dp)) { androidx.compose.foundation.layout.Box(Modifier.size(64.dp).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape).border(3.dp, MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) { Icon(Icons.Default.Add, "Create status", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp)) } }
                         Text("Create status", style = MaterialTheme.typography.labelSmall, maxLines = 1)
                     }
                 }
@@ -108,7 +108,7 @@ fun FynxVisibleUpdatesPanel(currentUsername: String, onOpenStories: () -> Unit, 
         }
     }
 
-    Card(modifier = Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.SurfaceRaised, contentColor = MaterialTheme.colorScheme.onSurface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.32f))) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.32f))) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 androidx.compose.foundation.layout.Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), CircleShape), contentAlignment = Alignment.Center) { Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) }
