@@ -54,7 +54,6 @@ fun FynxStatusTimelinePanel(
     val auth = remember(context) { FynxAuthStore.load(context) }
     val username = auth.username?.removePrefix("@").orEmpty()
     var statuses by remember { mutableStateOf<List<FynxStatus>>(emptyList()) }
-    var followingUsernames by remember { mutableStateOf<Set<String>>(emptySet()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<FynxStatus?>(null) }
@@ -66,10 +65,8 @@ fun FynxStatusTimelinePanel(
             loading = true
             error = null
             val statusResult = FynxStatusClient.list(context)
-            val followingResult = FynxProfileRemoteClient.following(context)
             statusResult.onSuccess { statuses = it.filterNot(FynxStatus::isExpired) }
-            followingResult.onSuccess { followingUsernames = it.map { user -> user.username.removePrefix("@").trim().lowercase() }.toSet() }
-            val failure = statusResult.exceptionOrNull() ?: followingResult.exceptionOrNull()
+            val failure = statusResult.exceptionOrNull()
             if (failure != null) error = failure.message ?: "Unable to load Status."
             loading = false
         }
