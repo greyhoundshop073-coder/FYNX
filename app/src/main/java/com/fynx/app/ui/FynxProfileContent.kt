@@ -233,6 +233,7 @@ private fun FynxProfilePostTile(post: FynxProfileRemoteClient.ProfilePost, usern
         }
     }
 }
+}
 
 @Composable
 private fun FynxProfileMarketplaceTile(listing: FynxMarketplaceClient.Listing, onOpen: () -> Unit) {
