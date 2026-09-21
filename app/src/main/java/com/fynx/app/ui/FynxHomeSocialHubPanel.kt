@@ -74,6 +74,10 @@ fun FynxHomeSocialHubPanel(
     val defaultPostVisibility = if (configuredPostVisibility == "Everyone") FynxPostVisibility.PUBLIC else FynxPostVisibility.FRIENDS_ONLY
     var showComposer by remember { mutableStateOf(false) }
     var showCamera by remember { mutableStateOf(false) }
+    // Tracks whether the camera was opened from an existing composer.
+    // Home's header camera starts a fresh camera session; the composer camera
+    // returns to the existing draft when dismissed without capturing media.
+    var cameraOpenedFromComposer by remember { mutableStateOf(false) }
     var showVoiceRecorder by remember { mutableStateOf(false) }
     var capturedUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var capturedTypes by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -151,8 +155,9 @@ fun FynxHomeSocialHubPanel(
                 visibility = defaultPostVisibility
                 notice = null
             }
-            showComposer = true
-            showCamera = false
+            cameraOpenedFromComposer = false
+            showComposer = false
+            showCamera = true
             onCameraRequestConsumed()
         }
     }
@@ -590,7 +595,7 @@ fun FynxHomeSocialHubPanel(
                                         ActivityResultContracts.PickVisualMedia.ImageAndVideo
                                     )
                                 ) }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
-                            ComposerAction("Video/Camera", Icons.Default.VideoLibrary, { showComposer = false; showCamera = true }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
+                            ComposerAction("Video/Camera", Icons.Default.VideoLibrary, { cameraOpenedFromComposer = true; showComposer = false; showCamera = true }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
                             ComposerAction("Voice", Icons.Default.Mic, { showComposer = false; showVoiceRecorder = true }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
                             ComposerAction("Marketplace", Icons.Default.Storefront, { showComposer = false; onOpenMarketplace() }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
                         }
@@ -735,7 +740,13 @@ fun FynxHomeSocialHubPanel(
                             showCamera = false
                             showComposer = true
                         },
-                        onDismiss = { showCamera = false }
+                        onDismiss = {
+                            showCamera = false
+                            if (cameraOpenedFromComposer && !posting) {
+                                showComposer = true
+                            }
+                            cameraOpenedFromComposer = false
+                        }
                     )
                 }
             }
