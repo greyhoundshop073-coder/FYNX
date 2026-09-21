@@ -4,6 +4,8 @@ import android.content.Context
 import org.json.JSONObject
 
 object FynxHomePostReactionsClient {
+    data class ReactionUser(val id: String, val username: String, val displayName: String, val reaction: String)
+
     data class ReactionState(
         val counts: Map<String, Int> = emptyMap(),
         val currentReaction: String? = null
@@ -36,6 +38,20 @@ object FynxHomePostReactionsClient {
         val safe = reaction.trim().uppercase().takeIf { it in setOf("LIKE", "LOVE", "LAUGH", "WOW", "SAD") }
             ?: return Result.failure(IllegalArgumentException("invalid reaction"))
         return FynxBackendClient.postJson(context, "/api/social/posts/$id/reaction", JSONObject().put("reaction", safe).toString()).mapCatching(::parse)
+    }
+
+    suspend fun users(context: Context, postId: String, reaction: String? = null): Result<List<ReactionUser>> {
+        val id = postId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        val suffix = reaction?.trim()?.uppercase()?.takeIf { it in setOf("LIKE","LOVE","LAUGH","WOW","SAD") }?.let { "?type=$it" } ?: ""
+        return FynxBackendClient.get(context, "/api/social/posts/$id/reaction-users$suffix").mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("users") ?: return@mapCatching emptyList()
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    add(ReactionUser(item.optString("id"), item.optString("username"), item.optString("displayName"), item.optString("reaction")))
+                }
+            }
+        }
     }
 
     suspend fun clear(context: Context, postId: String): Result<ReactionState> {
