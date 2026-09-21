@@ -27,7 +27,7 @@ client=read('app/src/main/java/com/fynx/app/ui/FynxStatusClient.kt'); foundation
 composer=read('app/src/main/java/com/fynx/app/ui/FynxStatusComposerPanel.kt'); mature=read('app/src/main/java/com/fynx/app/ui/FynxMatureStatusComposerPanel.kt')
 timeline=read('app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt'); hub=read('app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt'); stories=read('app/src/main/java/com/fynx/app/ui/StoriesPanel.kt')
 share=read('app/src/main/java/com/fynx/app/ui/FynxShare.kt'); deeplink=read('app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt'); marketplace=read('app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt')
-remote_media=read('app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt')
+remote_media=read('app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt'); camera=read('app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt')
 media_privacy=read('backend/mediaPrivacy.js')
 
 require('backend Status schema + expiry','CREATE TABLE IF NOT EXISTS statuses' in server and 'expires_at TIMESTAMPTZ NOT NULL' in server)
