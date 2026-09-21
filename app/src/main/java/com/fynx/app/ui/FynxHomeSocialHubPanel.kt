@@ -436,7 +436,7 @@ fun FynxHomeSocialHubPanel(
                     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { clearComposer() }, enabled = !posting && !false) { Icon(Icons.Default.Close, "Close") }
                         Text("New post", style = MaterialTheme.typography.titleLarge)
-                        Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (text.isNotBlank() || capturedUris.isNotEmpty() || selectedCatalogueMusic != null), onClick = {
+                        Button(enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (audience != FynxPostAudience.SELECTED || selectedAudienceIds.isNotEmpty()) && (text.isNotBlank() || capturedUris.isNotEmpty() || selectedCatalogueMusic != null), onClick = {
                             if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) { notice = "You are offline. Reconnect before publishing this post."; return@Button }
                             posting = true; notice = null
                             scope.launch { val result = withContext(Dispatchers.IO) { FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground, postLocation, null, selectedCatalogueMusic, selectedFeelingActivity) }; result.onSuccess { finishComposerAfterSuccess() }.onFailure { notice = it.message ?: "Post could not be published." }; posting = false }
@@ -593,8 +593,8 @@ fun FynxHomeSocialHubPanel(
                                         ActivityResultContracts.PickVisualMedia.ImageAndVideo
                                     )
                                 ) }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
-                            ComposerAction("Video/Camera", Icons.Default.VideoLibrary, { cameraOpenedFromComposer = true; showComposer = false; showCamera = true }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
-                            ComposerAction("Voice", Icons.Default.Mic, { showComposer = false; showVoiceRecorder = true }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
+                            ComposerAction("Video/Camera", Icons.Default.VideoLibrary, { cameraOpenedFromComposer = true; showComposer = false; showCamera = true }, !posting && postingAllowed && capturedUris.size < 4, Modifier.weight(1f), compact = true)
+                            ComposerAction("Voice", Icons.Default.Mic, { if (capturedUris.isNotEmpty()) notice = "Voice posts must contain only one audio recording. Remove the current media first." else { showComposer = false; showVoiceRecorder = true } }, !posting && postingAllowed && capturedUris.isEmpty(), Modifier.weight(1f), compact = true)
                             ComposerAction("Marketplace", Icons.Default.Storefront, { showComposer = false; onOpenMarketplace() }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
                         }
 
@@ -662,6 +662,7 @@ fun FynxHomeSocialHubPanel(
                         Row(
                             Modifier.fillMaxWidth().clickable(enabled = !audienceLoading && allowed) {
                                 audience = option
+                                if (option != FynxPostAudience.SELECTED) selectedAudienceIds = emptySet()
                                 visibility = when (option) {
                                     FynxPostAudience.EVERYONE -> FynxPostVisibility.PUBLIC
                                     FynxPostAudience.FRIENDS -> FynxPostVisibility.FRIENDS_ONLY
