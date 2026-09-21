@@ -124,6 +124,7 @@ require('hub camera route remains real','FynxCameraCapturePanel' in hub and 'ope
 require('legacy Stories wrapper','FynxStatusTimelinePanel()' in stories and 'SharedPreferences' not in stories)
 require('timeline backend list','FynxStatusClient.list(context)' in timeline)
 require('timeline trusts backend visibility','FynxStatusClient.list(context)' in timeline and 'FynxProfileRemoteClient.following(context)' not in timeline and 'followingUsernames' not in timeline)
+require('timeline keeps server audience semantics','val visibleStatuses = statuses.filter' in timeline and 'owner == username.removePrefix("@").trim().lowercase() || owner in followingUsernames' not in timeline)
 require('timeline filters expired statuses','filterNot(FynxStatus::isExpired)' in timeline)
 require('timeline latest-per-owner bubbles',('visibleStatuses.groupBy { it.ownerUsername }' in timeline or 'statuses.groupBy { it.ownerUsername }' in timeline) and 'maxByOrNull { it.createdAtMillis }' in timeline)
 require('timeline profile avatar lookup','FynxProfileRemoteClient.get(context, status.ownerUsername)' in timeline)
