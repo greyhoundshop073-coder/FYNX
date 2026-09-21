@@ -172,6 +172,81 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
 }
 
 @Composable
+private fun ReactionUsersDialog(context: Context, postId: String, onDismiss: () -> Unit) {
+    var users by remember(postId) { mutableStateOf<List<FynxHomePostReactionsClient.ReactionUser>>(emptyList()) }
+    var loading by remember(postId) { mutableStateOf(true) }
+    var error by remember(postId) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(postId) {
+        FynxHomePostReactionsClient.users(context, postId)
+            .onSuccess { users = it; error = null }
+            .onFailure { error = it.message ?: "Unable to load reaction users." }
+        loading = false
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(20.dp),
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Reactions", style = MaterialTheme.typography.titleLarge)
+                        Text("People who reacted to this post", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
+                    }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close reactions") }
+                }
+                when {
+                    loading -> Box(Modifier.fillMaxWidth().padding(28.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    error != null -> Text(error ?: "Unable to load reactions.", Modifier.fillMaxWidth().padding(20.dp), color = MaterialTheme.colorScheme.error)
+                    users.isEmpty() -> Text("No reactions are available.", Modifier.fillMaxWidth().padding(20.dp))
+                    else -> LazyColumn(
+                        Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                        contentPadding = PaddingValues(bottom = 8.dp)
+                    ) {
+                        items(users, key = { user -> "${user.id}-${user.reaction}" }) { user ->
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(40.dp),
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.secondaryContainer
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(reactionEmoji(user.reaction), style = MaterialTheme.typography.titleMedium)
+                                    }
+                                }
+                                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                                    Text(user.displayName.ifBlank { user.username }, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                                    Text("@${user.username.removePrefix("@")}", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary, maxLines = 1)
+                                }
+                                Text(reactionEmoji(user.reaction), style = MaterialTheme.typography.titleMedium)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun reactionEmoji(reaction: String): String = when (reaction.uppercase()) {
+    "LOVE" -> "❤️"
+    "LAUGH" -> "😂"
+    "WOW" -> "😮"
+    "SAD" -> "😢"
+    else -> "👍"
+}
+
+@Composable
 private fun VideoDiscoveryDialog(context: Context, sourcePostId: String?, onDismiss: () -> Unit) {
     var videos by remember { mutableStateOf<List<FynxDiscoveryClient.TrendingPost>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
