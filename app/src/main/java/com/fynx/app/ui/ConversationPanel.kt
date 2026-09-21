@@ -23,7 +23,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -390,17 +389,17 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                 }
                                 if (message.voiceUri != null) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(onClick = { playVoice(message) }, modifier = Modifier.size(36.dp)) { Text(if (playingVoiceId == message.id) "Ⅱ" else "▶", color = Color.White) }
+                                        IconButton(onClick = { playVoice(message) }, modifier = Modifier.size(36.dp)) { Icon(if (playingVoiceId == message.id) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (playingVoiceId == message.id) "Pause voice message" else "Play voice message", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                                         Text("Voice message", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 } else {
                                     if (message.attachmentUri != null) FynxRemoteMedia(mediaUrl = message.attachmentUri, type = message.attachmentType ?: "image", modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp))
-                                    if (message.text.isNotBlank()) SelectionContainer { Text(message.text, color = Color.White) }
+                                    if (message.text.isNotBlank()) SelectionContainer { Text(message.text, color = if (message.fromMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant) }
                                 }
-                                if (message.edited) Text("Edited", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.62f))
+                                if (message.edited) Text("Edited", style = MaterialTheme.typography.labelSmall, color = if (message.fromMe) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurfaceVariant)
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                                     Text(formatMessageClock(message.timestamp), style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.62f))
-                                    if (message.fromMe) { Spacer(Modifier.width(4.dp)); Text(if (message.read) "✓✓" else if (message.delivered) "✓✓" else "✓", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.68f)) }
+                                    if (message.fromMe) { Spacer(Modifier.width(4.dp)); Text(if (message.read) "✓✓" else if (message.delivered) "✓✓" else "✓", style = MaterialTheme.typography.labelSmall, color = if (message.fromMe) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f) else MaterialTheme.colorScheme.onSurfaceVariant) }
                                 }
                             }
                             }
@@ -417,12 +416,10 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                         }, modifier = Modifier.size(34.dp), contentPadding = PaddingValues(0.dp)) { Text(emoji, style = MaterialTheme.typography.titleMedium) }
                                     }
                                 }
-                                HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
                                 DropdownMenuItem(text = { Text("Reply") }, onClick = { replyToId = message.id; menuMessageId = null }, leadingIcon = { Icon(Icons.Default.Reply, null) })
                                 DropdownMenuItem(text = { Text("Copy") }, enabled = message.text.isNotBlank(), onClick = { clipboardManager.setText(AnnotatedString(message.text)); menuMessageId = null }, leadingIcon = { Icon(Icons.Default.ContentCopy, null) })
-                                DropdownMenuItem(text = { Text("Forward") }, enabled = false, onClick = {}, leadingIcon = { Icon(Icons.Default.Forward, null) })
-                                DropdownMenuItem(text = { Text("Pin") }, enabled = false, onClick = {}, leadingIcon = { Icon(Icons.Default.PushPin, null) })
-                                DropdownMenuItem(text = { Text("Delete") }, onClick = {
+                                                                                                DropdownMenuItem(text = { Text("Delete") }, onClick = {
                                     scope.launch {
                                         FynxProductionMessaging.deleteMessage(context, message.id)
                                             .onSuccess {
