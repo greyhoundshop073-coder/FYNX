@@ -290,9 +290,9 @@ fun GroupChatPanel(
                             }
                             IconButton(
                                 onClick = { actionMessage = message },
-                                modifier = Modifier.size(28.dp).align(if (message.fromMe) Alignment.TopEnd else Alignment.TopStart)
+                                modifier = Modifier.size(48.dp).align(if (message.fromMe) Alignment.TopEnd else Alignment.TopStart)
                             ) {
-                                Icon(Icons.Default.MoreVert, "Message actions", Modifier.size(18.dp))
+                                Icon(Icons.Default.MoreVert, "Message actions", Modifier.size(22.dp))
                             }
                         }
                     }
@@ -339,11 +339,11 @@ fun GroupChatPanel(
                         }
                     } else {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { picker.launch("image/* video/*") }) { Icon(Icons.Default.AttachFile, "Attach media") }
-                            IconButton(onClick = { showCamera = true }) { Icon(Icons.Default.PhotoCamera, "FYNX camera") }
-                            OutlinedTextField(text, { text = it.take(4000) }, Modifier.weight(1f), placeholder = { Text("Message group…") }, singleLine = true)
-                            IconButton(onClick = { micPermission.launch(Manifest.permission.RECORD_AUDIO) }) { Icon(Icons.Default.Mic, "Record voice") }
-                            IconButton(onClick = { send() }, enabled = text.isNotBlank() || attachment != null) { Icon(Icons.Default.Send, "Send") }
+                            IconButton(onClick = { picker.launch("image/* video/*") }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.AttachFile, "Attach media") }
+                            IconButton(onClick = { showCamera = true }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.PhotoCamera, "FYNX camera") }
+                            OutlinedTextField(text, { text = it.take(4000) }, Modifier.weight(1f).heightIn(min = 52.dp), placeholder = { Text("Message group…") }, singleLine = true)
+                            IconButton(onClick = { micPermission.launch(Manifest.permission.RECORD_AUDIO) }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Mic, "Record voice") }
+                            IconButton(onClick = { send() }, enabled = text.isNotBlank() || attachment != null, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Send, "Send") }
                         }
                     }
                 }
