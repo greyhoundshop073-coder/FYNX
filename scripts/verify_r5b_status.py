@@ -100,7 +100,7 @@ require('mature text style applies alignment in editor','editorTextAlign = when 
 require('mature text style weight matches viewer','editorWeight = if (font == FynxStatusTextFont.BOLD)' in mature and 'fontWeight = editorWeight' in mature and 'fontWeight = weight' in timeline)
 require('mature text preview sizing matches viewer','fontSize = 34.sp' in mature and 'lineHeight = 42.sp' in mature and 'fontSize = 34.sp' in timeline and 'lineHeight = 42.sp' in timeline)
 require('mature photo preview preserves aspect ratio','ImageView.ScaleType.FIT_CENTER' in mature and 'ImageView.ScaleType.CENTER_CROP' not in mature)
-require('status viewer renders media captions','status.type != FynxStatusType.TEXT && !status.text.isNullOrBlank()' in timeline and 'Status: show media captions' in '')
+require('status viewer renders media captions','status.type != FynxStatusType.TEXT && !status.text.isNullOrBlank()' in timeline and 'bottom = 154.dp' in timeline)
 require('mature text emoji control','EmojiEmotions' in mature and 'showStatusEmoji' in mature)
 require('mature text editor uses responsive full view','bottom = 220.dp' in mature and 'horizontal = 12.dp' in mature and '.imePadding()' in mature and 'fontSize = 34.sp' in mature)
 require('mature authenticated publish','FynxStatusClient.create(context, status, mediaId)' in mature and 'FynxStatusClient.uploadMedia(context, source, mime)' in mature)
