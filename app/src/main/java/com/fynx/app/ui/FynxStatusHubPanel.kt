@@ -5,6 +5,11 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.MediaStore
 import android.util.Size
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import java.io.File
+import java.io.FileOutputStream
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -114,7 +119,7 @@ fun FynxStatusHubPanel() {
                     onText = { selectedInitialMedia = null; composing = true; addStatusOpen = false },
                     onVoice = { selectedInitialMedia = null; composing = true; addStatusOpen = false },
                     onMusic = { showStatusMusicPicker = true },
-                    onLayout = { },
+                    onLayout = { layoutMode = true; selectionMode = true; selectedMediaUris = emptySet() },
                     onMediaSelected = { media ->
                         selectedInitialMedia = media
                         composing = true
@@ -236,6 +241,7 @@ private fun FynxAddStatusPanel(
     var loadingMedia by remember { mutableStateOf(false) }
     var selectionMode by remember { mutableStateOf(false) }
     var selectedMediaUris by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var layoutMode by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
@@ -250,7 +256,16 @@ private fun FynxAddStatusPanel(
     }
 
     fun toggleSelected(media: FynxRecentMedia) { val key = media.uri.toString(); selectedMediaUris = if (key in selectedMediaUris) selectedMediaUris - key else selectedMediaUris + key }
-    fun finishSelection() { val selected = recentMedia.filter { it.uri.toString() in selectedMediaUris }; if (selected.isNotEmpty()) { onMediaSelected(selected.first()); selectedMediaUris = emptySet(); selectionMode = false } }
+    fun finishSelection() {
+        val selected = recentMedia.filter { it.uri.toString() in selectedMediaUris }.take(4)
+        if (selected.isEmpty()) return
+        if (layoutMode && selected.size > 1) {
+            createFynxLayoutCollage(context, selected)?.let { onMediaSelected(FynxRecentMedia(it, false, System.currentTimeMillis() / 1000L)) }
+        } else onMediaSelected(selected.first())
+        selectedMediaUris = emptySet()
+        selectionMode = false
+        layoutMode = false
+    }
 
     LaunchedEffect(mediaPermissionGranted) {
         if (mediaPermissionGranted) refreshMedia()
@@ -384,7 +399,7 @@ private fun FynxAddStatusPanel(
     }
 
     FloatingActionButton(
-        onClick = { selectionMode = !selectionMode; if (!selectionMode) selectedMediaUris = emptySet() },
+        onClick = { selectionMode = !selectionMode; layoutMode = false; if (!selectionMode) selectedMediaUris = emptySet() },
         modifier = Modifier
             .align(Alignment.BottomEnd)
             .navigationBarsPadding()
@@ -395,7 +410,44 @@ private fun FynxAddStatusPanel(
         Icon(Icons.Default.SelectAll, contentDescription = if (selectionMode) "Cancel media selection" else "Select multiple media")
     }
     }
-    if (selectionMode) { Surface(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding(), tonalElevation = 6.dp, color = MaterialTheme.colorScheme.surface) { Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) { Text("${selectedMediaUris.size} selected", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge); TextButton(onClick = { selectedMediaUris = emptySet(); selectionMode = false }) { Text("Cancel") }; Button(onClick = ::finishSelection, enabled = selectedMediaUris.isNotEmpty()) { Text("Next") } } } }
+    if (selectionMode) { Surface(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding(), tonalElevation = 6.dp, color = MaterialTheme.colorScheme.surface) { Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) { Text("${selectedMediaUris.size} selected", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge); TextButton(onClick = { selectedMediaUris = emptySet(); selectionMode = false }) { Text("Cancel") }; Button(onClick = ::finishSelection, enabled = selectedMediaUris.isNotEmpty()) { Text(if (layoutMode) "Create layout" else "Next") } } } }
+}
+
+
+private fun createFynxLayoutCollage(context: android.content.Context, media: List<FynxRecentMedia>): Uri? {
+    if (media.isEmpty()) return null
+    val thumbs = media.take(4).mapNotNull { item ->
+        runCatching {
+            if (android.os.Build.VERSION.SDK_INT >= 29) context.contentResolver.loadThumbnail(item.uri, Size(600, 600), null)
+            else context.contentResolver.openInputStream(item.uri)?.use { android.graphics.BitmapFactory.decodeStream(it) }
+        }.getOrNull()
+    }
+    if (thumbs.isEmpty()) return null
+    val out = Bitmap.createBitmap(1200, 1200, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(out)
+    canvas.drawColor(android.graphics.Color.BLACK)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    val columns = if (thumbs.size == 1) 1 else 2
+    val rows = when (thumbs.size) { 1 -> 1; 2 -> 1; else -> 2 }
+    val cellW = 1200f / columns
+    val cellH = 1200f / rows
+    thumbs.forEachIndexed { index, bitmap ->
+        val left = (index % columns) * cellW
+        val top = (index / columns) * cellH
+        val scale = maxOf(cellW / bitmap.width, cellH / bitmap.height)
+        val srcW = (cellW / scale).toInt().coerceAtMost(bitmap.width)
+        val srcH = (cellH / scale).toInt().coerceAtMost(bitmap.height)
+        val srcLeft = ((bitmap.width - srcW) / 2).coerceAtLeast(0)
+        val srcTop = ((bitmap.height - srcH) / 2).coerceAtLeast(0)
+        canvas.drawBitmap(bitmap, android.graphics.Rect(srcLeft, srcTop, srcLeft + srcW, srcTop + srcH), android.graphics.RectF(left, top, left + cellW, top + cellH), paint)
+        bitmap.recycle()
+    }
+    return runCatching {
+        val file = File(context.cacheDir, "fynx_status_layout_${System.currentTimeMillis()}.jpg")
+        FileOutputStream(file).use { check(out.compress(Bitmap.CompressFormat.JPEG, 92, it)) }
+        out.recycle()
+        Uri.fromFile(file)
+    }.getOrElse { out.recycle(); null }
 }
 
 @Composable
