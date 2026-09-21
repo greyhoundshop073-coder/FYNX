@@ -226,8 +226,36 @@ fun AccentDialog(current: FynxAccent, onSelected: (FynxAccent) -> Unit, onDismis
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Colors & accent") }, text = {
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
             FynxAccent.entries.forEach { option ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(option.name); RadioButton(selected = current == option, onClick = { onSelected(option) }) }
-            }
+                val label = when (option) {
+                    FynxAccent.Charcoal -> "Charcoal Black"
+                    FynxAccent.Blue -> "FYNX Blue"
+                    FynxAccent.Purple -> "FYNX Purple"
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Row(
+                        Modifier.weight(1f),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        androidx.compose.foundation.layout.Box(
+                            Modifier.size(28.dp).background(option.primary, androidx.compose.foundation.shape.CircleShape)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text(label)
+                            Text(
+                                "Used across FYNX controls and highlights",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    RadioButton(selected = current == option, onClick = { onSelected(option) })
+                }
+            }        }
         }
     }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
 }
