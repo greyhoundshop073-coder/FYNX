@@ -466,7 +466,7 @@ private fun FynxRecentMediaCell(media: FynxRecentMedia, selected: Boolean, selec
                 contentScale = ContentScale.Crop
             )
         }
-        if (selectionMode && selected) { Surface(Modifier.align(Alignment.TopEnd).padding(6.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary) { Text("✓", color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)) } }
+        if (selectionMode && selected) { Box(Modifier.align(Alignment.TopEnd).padding(6.dp)) { Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary) { Text("✓", color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)) } } }
         if (media.isVideo) {
             Surface(
                 modifier = Modifier
