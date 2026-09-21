@@ -239,7 +239,9 @@ private fun FynxAddStatusPanel(
     var loadingMedia by remember { mutableStateOf(false) }
     var selectionMode by remember { mutableStateOf(false) }
     var selectedMediaUris by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var layoutMode by remember { mutableStateOf(false) }\n    var recentFilter by remember { mutableStateOf("Recents") }\n    var recentFilterMenu by remember { mutableStateOf(false) }
+    var layoutMode by remember { mutableStateOf(false) }
+    var recentFilter by remember { mutableStateOf("Recents") }
+    var recentFilterMenu by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
