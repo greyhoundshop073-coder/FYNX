@@ -332,8 +332,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             val screenContentModifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                // Individual screens own their intentional horizontal content spacing.
+                // Do not add a second global side gutter here: it was shrinking every
+                // screen and making phone controls/composers unnecessarily cramped.
+                .padding(vertical = 6.dp)
                 .then(if (selected == "Home") Modifier else Modifier.navigationBarsPadding())
             Box(
                 screenContentModifier.pointerInput(selected) {
