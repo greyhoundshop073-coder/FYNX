@@ -18,7 +18,7 @@ import java.time.LocalTime
 enum class FynxAccent(val primary: Color, val secondary: Color) {
     Blue(Color(0xFF2F8CFF), Color(0xFF22C7F2)),
     Purple(Color(0xFF7C5CFF), Color(0xFFB18CFF)),
-    Charcoal(Color(0xFF263238), Color(0xFF607D8B))
+    Charcoal(Color(0xFF37474F), Color(0xFF607D8B))
 }
 
 object FynxDesign {
