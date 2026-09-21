@@ -367,13 +367,11 @@ fun FynxHomeSocialHubPanel(
 
 
     fun recomputeTypes(nextUris: List<Uri> = capturedUris) {
-        capturedTypes = nextUris.map { item ->
-            when {
-                context.contentResolver.getType(item)?.startsWith("video/") == true -> "video"
-                context.contentResolver.getType(item)?.startsWith("audio/") == true -> "audio"
-                else -> "image"
-            }
-        }
+        // Use the same MIME/extension resolver as the real upload client.
+        // Camera and voice captures are file:// URIs, where ContentResolver.getType()
+        // may be null; falling back to "image" would make a captured video/audio
+        // appear as the wrong media type in the composer.
+        capturedTypes = nextUris.map { FynxMultiMediaPostClient.mediaKind(context, it) }
         val visualCount = capturedTypes.count { it == "image" || it == "video" }
         selectedVisualIndex = selectedVisualIndex.coerceIn(0, (visualCount - 1).coerceAtLeast(0))
     }
