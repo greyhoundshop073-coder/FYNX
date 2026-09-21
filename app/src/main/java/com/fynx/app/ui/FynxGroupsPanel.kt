@@ -248,7 +248,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 Text(message.senderUsername!!, style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 2.dp))
                             }
                             Box {
-                            Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primary else Color(0xFF303030), contentColor = if (message.fromMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, shape = RoundedCornerShape(18.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { reactionMessageId = message.id }, onLongClick = { reactionMessageId = message.id })) {
+                            Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant, contentColor = if (message.fromMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, shape = RoundedCornerShape(18.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { reactionMessageId = message.id }, onLongClick = { reactionMessageId = message.id })) {
                                 Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
                                     if (message.replyToId != null) Text("Reply", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 5.dp))
                                 if (message.attachmentUri != null) {
@@ -276,14 +276,14 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                         }, modifier = Modifier.size(34.dp), contentPadding = PaddingValues(0.dp)) { Text(emoji, style = MaterialTheme.typography.titleMedium) }
                                     }
                                 }
-                                HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
                                 DropdownMenuItem(text = { Text("Reply") }, onClick = { replyToId = message.id; reactionMessageId = null }, leadingIcon = { Icon(Icons.Default.Reply, null) })
                                 DropdownMenuItem(text = { Text("Copy") }, enabled = message.text.isNotBlank(), onClick = {
                                     val clip = android.content.ClipData.newPlainText("FYNX message", message.text)
                                     (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
                                     reactionMessageId = null
                                 }, leadingIcon = { Icon(Icons.Default.ContentCopy, null) })
-                                DropdownMenuItem(text = { Text("Forward") }, enabled = false, onClick = {}, leadingIcon = { Icon(Icons.Default.Forward, null) })
+                                
                                 DropdownMenuItem(text = { Text(if (message.pinned) "Unpin" else "Pin") }, onClick = {
                                     scope.launch {
                                         FynxGroupRemoteClient.setPinned(context, groupId, message.id, !message.pinned)
@@ -304,7 +304,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             }
         }
         if (showEmojiPanel && canSendMessages) { FynxChatEmojiPanel(onEmojiSelected = { emoji -> text += emoji; showEmojiPanel = false }) }
-        Surface(color = Color(0xFF1E1E1E), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().height(64.dp).navigationBarsPadding().imePadding()) {
+        Surface(color = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().height(64.dp).navigationBarsPadding().imePadding()) {
             Row(
                 Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
