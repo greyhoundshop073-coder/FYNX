@@ -71,28 +71,44 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
             KEY_MESSAGES -> messages
             else -> option
         }
+        // Apply the user's choice locally first so a slow/offline backend cannot
+        // make the Privacy & Safety screen disappear or reset the selection.
+        when (key) {
+            KEY_PROFILE -> profile = option
+            KEY_ONLINE -> online = option
+            KEY_POSTS -> posts = option
+            KEY_STATUS -> status = option
+            KEY_PROFILE_PHOTO -> photo = option
+            KEY_MESSAGES -> messages = option
+        }
+        FynxPreferencesStore.saveVisibility(context, key, option)
         savingKey = key
         notice = null
         scope.launch {
-            FynxPrivacyRemoteClient.update(context, key, option).onSuccess { remote ->
+            runCatching {
+                FynxPrivacyRemoteClient.update(context, key, option).getOrThrow()
+            }.onSuccess { remote ->
                 profile = remote[KEY_PROFILE]
                 online = remote[KEY_ONLINE]
                 posts = remote[KEY_POSTS]
                 status = remote[KEY_STATUS]
                 photo = remote[KEY_PROFILE_PHOTO]
                 messages = remote[KEY_MESSAGES]
-                FynxPreferencesStore.saveVisibility(context, key, option)
+                FynxPreferencesStore.saveVisibility(context, key, remote[key])
                 openKey = null
             }.onFailure { error ->
+                // Keep the local choice visible and persisted; report the remote
+                // failure without reverting the user's selection or leaving the screen.
                 when (key) {
-                    KEY_PROFILE -> profile = previous
-                    KEY_ONLINE -> online = previous
-                    KEY_POSTS -> posts = previous
-                    KEY_STATUS -> status = previous
-                    KEY_PROFILE_PHOTO -> photo = previous
-                    KEY_MESSAGES -> messages = previous
+                    KEY_PROFILE -> profile = option
+                    KEY_ONLINE -> online = option
+                    KEY_POSTS -> posts = option
+                    KEY_STATUS -> status = option
+                    KEY_PROFILE_PHOTO -> photo = option
+                    KEY_MESSAGES -> messages = option
                 }
-                notice = error.message ?: "Could not save this privacy setting."
+                FynxPreferencesStore.saveVisibility(context, key, option)
+                notice = error.message ?: "Saved on this device, but the server could not be updated."
             }
             savingKey = null
         }
