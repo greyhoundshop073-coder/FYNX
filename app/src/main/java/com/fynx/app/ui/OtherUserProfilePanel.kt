@@ -43,7 +43,8 @@ import java.util.Locale
 fun OtherUserProfilePanel(
     username: String,
     onBack: () -> Unit,
-    onMessage: (String) -> Unit
+    onMessage: (String) -> Unit,
+    onOpenStatus: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -51,6 +52,7 @@ fun OtherUserProfilePanel(
     var loading by remember(username) { mutableStateOf(true) }
     var error by remember(username) { mutableStateOf<String?>(null) }
     var following by remember(username) { mutableStateOf(false) }
+    var hasActiveStatus by remember(username) { mutableStateOf(false) }
     var busy by remember(username) { mutableStateOf(false) }
     var reportOpen by remember(username) { mutableStateOf(false) }
     var reportReason by remember(username) { mutableStateOf("Safety or spam") }
@@ -63,6 +65,7 @@ fun OtherUserProfilePanel(
             error = null
             FynxProfileRemoteClient.get(context, username)
                 .onSuccess { loaded -> profile = loaded; following = loaded.followedByCurrentUser }
+            FynxStatusClient.list(context).onSuccess { statuses -> hasActiveStatus = statuses.any { !it.isExpired() && it.ownerUsername.equals(username, true) } }
                 .onFailure { error = it.message ?: "Unable to load this profile." }
             loading = false
         }
@@ -127,6 +130,7 @@ fun OtherUserProfilePanel(
                                 }
                                 Spacer(Modifier.height(16.dp))
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    if (hasActiveStatus) OutlinedButton(enabled = !busy, onClick = { onOpenStatus(person.username) }, modifier = Modifier.weight(0.75f), shape = RoundedCornerShape(22.dp)) { Text("Status") }
                                     Button(
                                         enabled = !busy,
                                         onClick = {
