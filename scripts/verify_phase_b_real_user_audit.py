@@ -2,10 +2,7 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-checks = [    ("two-real-user status visibility path", "FynxStatusClient.list(context)" in timeline and "expires_at > NOW()" in status_routes),
-    ("two-real-user post visibility path", "FynxRemoteSocialClient.feedPage" in home and "visibility" in social_routes),
-    ("two-real-user block enforcement", "blocks" in social_routes and "blocks" in status_routes and "blocks" in messages),
-]
+checks = []
 
 def check(name, ok):
     checks.append((name, bool(ok)))
@@ -62,7 +59,15 @@ market_api = read("backend/marketplaceTransactions.js")
 notification_devices = read("backend/notificationDevices.js")
 notification_push = read("backend/notificationPush.js")
 notification_bootstrap = read("backend/notificationBootstrap.js")
+status_routes = read("backend/statusInteractionRoutes.js")
+social_routes = read("backend/socialRoutes.js")
+home = read("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt")
+timeline = read("app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt")
+messages = read("backend/messageRoutes.js")
 
+check("two-real-user status visibility path", "FynxStatusClient.list(context)" in timeline and "expires_at > NOW()" in status_routes)
+check("two-real-user post visibility path", "FynxRemoteSocialClient.feedPage" in home and "visibility" in social_routes)
+check("two-real-user block enforcement", "blocks" in social_routes and "blocks" in status_routes and "blocks" in messages)
 check("production app is not in preview mode", "FYNX_PREVIEW_MODE = false" in app)
 check("signed-in gate protects the production surface", "AuthState.SIGNED_IN" in app)
 check("backend client owns authenticated API access", "hasAccessToken" in client and "Authorization" in client)
