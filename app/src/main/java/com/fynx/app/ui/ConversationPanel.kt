@@ -329,18 +329,39 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         wallpaperOverride = FynxConversationPreferences.chatWallpaper(context, chat.username)
     ) {
     Column(Modifier.fillMaxSize()) {
-        Surface(color = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth()) {
-            Row(Modifier.fillMaxWidth().statusBarsPadding().height(52.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.ArrowBack, "Back", modifier = Modifier.size(24.dp)) }
-                IconButton(onClick = { onOpenProfile(chat.username) }, modifier = Modifier.size(48.dp)) { FynxAvatar(chat.name, resolvedAvatarUri, Modifier.size(40.dp)) }
-                Column(Modifier.weight(1f).padding(start = 6.dp).padding(end = 4.dp)) {
-                    Text(chat.name, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
-                    Text(when { otherIsTyping -> "typing…"; isOnline -> "online"; else -> "last seen recently" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+        ) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(58.dp)
+                    .background(Color(0xFF1F222B).copy(alpha = 0.97f), RoundedCornerShape(30.dp))
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.Default.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(24.dp))
                 }
-                IconButton(onClick = onVoiceCall, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Call, "Voice call", Modifier.size(24.dp)) }
-                IconButton(onClick = onVideoCall, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Videocam, "Video call", Modifier.size(24.dp)) }
+                IconButton(onClick = { onOpenProfile(chat.username) }, modifier = Modifier.size(48.dp)) {
+                    FynxAvatar(chat.name, resolvedAvatarUri, Modifier.size(40.dp))
+                }
+                Column(Modifier.weight(1f).padding(start = 4.dp).padding(end = 2.dp)) {
+                    Text(chat.name, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = Color.White, maxLines = 1)
+                    Text(
+                        when { otherIsTyping -> "typing…"; isOnline -> "online"; else -> "last seen recently" },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFB8BAC4),
+                        maxLines = 1
+                    )
+                }
+                IconButton(onClick = onVoiceCall, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.Call, "Voice call", tint = Color.White, modifier = Modifier.size(23.dp)) }
+                IconButton(onClick = onVideoCall, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.Videocam, "Video call", tint = Color.White, modifier = Modifier.size(23.dp)) }
                 Box {
-                    IconButton(onClick = { showChatMenu = true }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.MoreVert, "More", Modifier.size(24.dp)) }
+                    IconButton(onClick = { showChatMenu = true }, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.MoreVert, "More", tint = Color.White, modifier = Modifier.size(23.dp)) }
                     DropdownMenu(expanded = showChatMenu, onDismissRequest = { showChatMenu = false }) {
                         DropdownMenuItem(text = { Text("Chat settings") }, onClick = { showChatMenu = false; showChatSettings = true }, leadingIcon = { Icon(Icons.Default.Settings, null) })
                         DropdownMenuItem(text = { Text(if (searchOpen) "Close search" else "Search messages") }, onClick = { showChatMenu = false; searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, leadingIcon = { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, null) })
@@ -382,7 +403,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             Spacer(Modifier.width(6.dp))
                         }
                         Box {
-                            Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant, contentColor = if (message.fromMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, shape = RoundedCornerShape(18.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { menuMessageId = message.id }, onLongClick = { menuMessageId = message.id })) {
+                            Surface(color = if (message.fromMe) Color(0xFF7052C8) else Color(0xFF2A2C35), contentColor = Color.White, shape = RoundedCornerShape(18.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { menuMessageId = message.id }, onLongClick = { menuMessageId = message.id })) {
                             Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
                                 if (message.replyToId != null) {
                                     val replied = messages.firstOrNull { it.id == message.replyToId }
@@ -395,7 +416,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                     }
                                 } else {
                                     if (message.attachmentUri != null) FynxRemoteMedia(mediaUrl = message.attachmentUri, type = message.attachmentType ?: "image", modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp))
-                                    if (message.text.isNotBlank()) SelectionContainer { Text(message.text, color = if (message.fromMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant) }
+                                    if (message.text.isNotBlank()) SelectionContainer { Text(message.text, color = Color.White) }
                                 }
                                 if (message.edited) Text("Edited", style = MaterialTheme.typography.labelSmall, color = if (message.fromMe) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurfaceVariant)
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
@@ -443,7 +464,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             })
         }
 
-        Surface(color = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().height(64.dp).navigationBarsPadding().imePadding()) {
+        Surface(color = Color(0xFF17191F).copy(alpha = 0.98f), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().height(70.dp).navigationBarsPadding().imePadding()) {
             Row(
                 Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -456,7 +477,18 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     value = text,
                     onValueChange = { text = it },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color(0xFF282B34),
+                        unfocusedContainerColor = Color(0xFF282B34),
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        cursorColor = Color.White,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedPlaceholderColor = Color(0xFF9A9DA8),
+                        unfocusedPlaceholderColor = Color(0xFF9A9DA8)
+                    ),
                     placeholder = { Text(if (editingId == null) "Message..." else "Edit message...") },
                     maxLines = 1,
                     singleLine = true,
