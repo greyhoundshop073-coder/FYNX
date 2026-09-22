@@ -162,9 +162,7 @@ fun FynxVisibleUpdatesPanel(
                                     contentDescription = "Create your status",
                                     tint = MaterialTheme.colorScheme.onPrimary,
                                     modifier = Modifier.size(17.dp)
-                                )
-                            }
-                            }
+                                )                            }
                         }
                     }
                     items(
