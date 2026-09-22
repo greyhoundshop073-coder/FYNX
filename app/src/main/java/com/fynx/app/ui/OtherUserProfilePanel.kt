@@ -107,7 +107,7 @@ fun OtherUserProfilePanel(
                                     Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     if (person.verified) {
                                         Spacer(Modifier.width(5.dp))
-                                        Box(Modifier.size(16.dp).background(MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) {
+                                        Box(Modifier.size(16.dp).background(Color(0xFF1877F2), CircleShape), contentAlignment = Alignment.Center) {
                                             Text("✓", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                                         }
                                     }
