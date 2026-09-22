@@ -91,6 +91,7 @@ setInterval(() => { const now = Date.now(); for (const [key, value] of responseC
 
 async function initDatabase() {
   if (!pool) return;
+  const officialFynxUsername = (process.env.FYNX_OFFICIAL_USERNAME || "fynx").trim().toLowerCase();
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id BIGSERIAL PRIMARY KEY,
@@ -105,7 +106,7 @@ async function initDatabase() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
     UPDATE users SET verified = FALSE;
-    UPDATE users SET verified = TRUE WHERE id = (SELECT id FROM users ORDER BY id ASC LIMIT 1);
+    UPDATE users SET verified = TRUE WHERE lower(username) = $1;
     CREATE TABLE IF NOT EXISTS messages (
       id BIGSERIAL PRIMARY KEY,
       sender_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -156,7 +157,7 @@ async function initDatabase() {
     CREATE TABLE IF NOT EXISTS ai_pending_message_actions (id UUID PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, recipient_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, message_text TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending','sent','cancelled','expired')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '10 minutes'), sent_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL);
     CREATE INDEX IF NOT EXISTS ai_pending_message_actions_user_idx ON ai_pending_message_actions(user_id,status,created_at DESC);
     CREATE UNIQUE INDEX IF NOT EXISTS ai_pending_message_actions_one_pending_idx ON ai_pending_message_actions(user_id) WHERE status='pending';
-  `);
+  `, [officialFynxUsername]);
   await pool.query(`DO $$ BEGIN ALTER TABLE messages ADD CONSTRAINT messages_media_fk FOREIGN KEY (media_id) REFERENCES message_media(id) ON DELETE SET NULL; EXCEPTION WHEN duplicate_object THEN NULL; END $$;`);
 }
 
