@@ -34,10 +34,10 @@ check("Status block enforcement exists", "blocks" in status)
 
 # Push 6
 check("other-user profile loads remote identity", "FynxProfileRemoteClient.get" in other)
-check("other-user profile loads real posts", "FynxProfileRemoteClient.posts" in other or "profile.posts" in other)
+check("other-user profile renders real remote posts", "ProfilePostGrid" in other and "person.posts" in other)
 check("profile Status uses active non-expired Status", "FynxStatusClient.list(context)" in other and "isExpired" in other)
 check("profile -> chat callback is wired", "onMessage" in other)
-check("app contains profile/chat/Status routes", all(x in app for x in ["OtherUserProfilePanel", "ConversationPanel", "FynxStatusTimelinePanel"]))
+check("app routes profile -> chat and profile -> Status", all(x in app for x in ["OtherUserProfilePanel", "ConversationPanel", "selected = \"Stories\""]))
 
 # Push 7
 check("marketplace listings are remote", "FynxMarketplaceClient.listings" in market)
@@ -48,8 +48,8 @@ check("marketplace dispute path exists", "marketplace_order_disputes" in market_
 
 # Push 8
 check("verification is tied to real user data", "verified" in profile_api)
-check("official FYNX verification path exists", "official" in profile_api.lower() and "fynx" in profile_api.lower())
-check("badge rendering has explicit color support", "Color" in app and "verified" in app.lower())
+check("official FYNX verification is backend-enforced", "FYNX_OFFICIAL_USERNAME" in server and "UPDATE users SET verified = FALSE" in server and "verified = TRUE WHERE lower(username)" in server)
+check("badge rendering has explicit blue color support", "Color(0xFF1877F2)" in other)
 
 # Push 9 investigation: do not invent a feature if no production implementation exists.
 cover_sources = []
