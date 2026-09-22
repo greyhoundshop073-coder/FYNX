@@ -48,7 +48,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun FynxStatusTimelinePanel(
     onCameraClick: () -> Unit = {},
-    onCreateClick: () -> Unit = {}
+    onCreateClick: () -> Unit = {},
+    openOwnerUsername: String? = null
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val auth = remember(context) { FynxAuthStore.load(context) }
@@ -73,6 +74,15 @@ fun FynxStatusTimelinePanel(
     }
 
     LaunchedEffect(refreshKey) { refresh() }
+
+    LaunchedEffect(statuses, openOwnerUsername) {
+        val target = openOwnerUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        val targetStatus = statuses
+            .filterNot(FynxStatus::isExpired)
+            .filter { it.ownerUsername.equals(target, true) }
+            .maxByOrNull { it.createdAtMillis }
+        if (targetStatus != null) selected = targetStatus
+    }
 
     val visibleStatuses = statuses.filterNot(FynxStatus::isExpired)
     val latestByOwner = visibleStatuses.groupBy { it.ownerUsername }
