@@ -2,7 +2,10 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-checks = []
+checks = [    ("two-real-user status visibility path", "FynxStatusClient.list(context)" in timeline and "expires_at > NOW()" in status_routes),
+    ("two-real-user post visibility path", "FynxRemoteSocialClient.feedPage" in home and "visibility" in social_routes),
+    ("two-real-user block enforcement", "blocks" in social_routes and "blocks" in status_routes and "blocks" in messages),
+]
 
 def check(name, ok):
     checks.append((name, bool(ok)))
