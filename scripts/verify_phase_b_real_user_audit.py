@@ -63,7 +63,7 @@ status_routes = read("backend/statusInteractionRoutes.js")
 social_routes = read("backend/socialRoutes.js")
 home = read("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt")
 timeline = read("app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt")
-messages = read("backend/messageRoutes.js")
+messages = read("backend/server.js")
 
 check("two-real-user status visibility path", "FynxStatusClient.list(context)" in timeline and "expires_at > NOW()" in status_routes)
 check("two-real-user post visibility path", "FynxRemoteSocialClient.feedPage" in home and "visibility" in social_routes)
