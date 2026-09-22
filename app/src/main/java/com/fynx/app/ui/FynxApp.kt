@@ -197,7 +197,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         ) {
                             Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                             Spacer(Modifier.width(4.dp))
-                            Icon(Icons.Default.Verified, "Verified FYNX", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Verified, "Verified FYNX", tint = Color(0xFF1877F2), modifier = Modifier.size(18.dp))
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
