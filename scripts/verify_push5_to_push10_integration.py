@@ -54,7 +54,9 @@ check("marketplace dispute path exists", "marketplace_order_disputes" in market_
 # Push 8
 check("verification is tied to real user data", "verified" in profile_api)
 check("official FYNX verification is backend-enforced", "FYNX_OFFICIAL_USERNAME" in server and "UPDATE users SET verified = FALSE" in server and "verified = TRUE WHERE lower(username)" in server)
-check("badge rendering has explicit blue color support", "Color(0xFF1877F2)" in other)
+check("badge rendering has explicit blue color support", "Color(0xFF1877F2)" in app)
+check("verified badge is rendered only once in the app shell", app.count("Icons.Default.Verified") == 1)
+check("verified badge is attached to the FYNX brand label", "Text(\"FYNX\"" in app and "Verified FYNX" in app)
 
 # Push 9 investigation: do not invent a feature if no production implementation exists.
 cover_sources = []
