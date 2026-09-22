@@ -40,6 +40,7 @@ private data class FynxNavItem(val key: String, val label: String, val icon: Ima
 @Composable
 fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf("Home") }
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
     var openGroup by remember { mutableStateOf<String?>(null) }
@@ -360,18 +361,21 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 onOpenChat = { username ->
                     val normalized = username.removePrefix("@").trim()
                     if (normalized.isNotBlank()) {
-                        val local = FynxChatStore.loadPreviews(context).firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
-                        val remote = if (local == null) FynxSocialClient.searchUsers(context, normalized).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) } else null
-                        openChat = local ?: remote?.let { user ->
-                            ChatPreview(
-                                name = user.displayName.ifBlank { normalized },
-                                username = user.username.removePrefix("@").let { "@$it" },
-                                lastMessage = "Start a conversation",
-                                time = "Now",
-                                avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
-                            )
-                        } ?: ChatPreview(normalized, "@$normalized", "Start a conversation", "Now")
-                        FynxChatStore.savePreview(context, openChat!!)
+                        scope.launch {
+                            val local = FynxChatStore.loadPreviews(context).firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
+                            val remote = if (local == null) FynxSocialClient.searchUsers(context, normalized).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) } else null
+                            val chat = local ?: remote?.let { user ->
+                                ChatPreview(
+                                    name = user.displayName.ifBlank { normalized },
+                                    username = user.username.removePrefix("@").let { "@$it" },
+                                    lastMessage = "Start a conversation",
+                                    time = "Now",
+                                    avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
+                                )
+                            } ?: ChatPreview(normalized, "@$normalized", "Start a conversation", "Now")
+                            FynxChatStore.savePreview(context, chat)
+                            openChat = chat
+                        }
                     }
                 }
             )
