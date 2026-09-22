@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,7 +22,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 @Composable
-fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
+fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
@@ -125,26 +126,37 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
         if (loading) Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         else LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 10.dp)) {
             when (section) {
-                "Friends" -> { if (friends.isEmpty()) emptyState("No friends yet", "Accepted FYNX connections will appear here."); items(friends, key = { "friend_${it.username}" }) { p -> RemoteFriendRow(p, "Remove", busyUsername == p.username, onOpenProfile, onAction = { runAction(p.username) { FynxSocialClient.removeFriend(context, p.username) } }) } }
-                "Requests" -> { if (incoming.isEmpty()) emptyState("No incoming requests", "Friend requests from other FYNX accounts will appear here."); items(incoming, key = { "incoming_${it.id}" }) { r -> RemoteFriendRow(userFromRequest(r), "Confirm", busyUsername == r.username, onOpenProfile, secondaryAction = "Delete", onAction = { runAction(r.username) { FynxSocialClient.acceptRequest(context, r.id) } }, onSecondaryAction = { runAction(r.username) { FynxSocialClient.rejectRequest(context, r.id) } }) } }
-                "Sent" -> { if (outgoing.isEmpty()) emptyState("No sent requests", "Requests you send will appear here until they are accepted or rejected."); items(outgoing, key = { "outgoing_${it.id}" }) { r -> RemoteFriendRow(userFromRequest(r), "Cancel", busyUsername == r.username, onOpenProfile, onAction = { runAction(r.username) { FynxSocialClient.cancelRequest(context, r.id) } }) } }
-                "Discover" -> { if (searchMethod == FynxPeopleSearchMethod.PHONE && normalizedQuery.length < 7) emptyState("Phone discovery", "Enter a valid phone number with country code.") else if (searchMethod == FynxPeopleSearchMethod.USERNAME && normalizedQuery.length < 2) emptyState("Search for a FYNX user", "Type at least two characters of a username or display name.") else if (discover.isEmpty()) emptyState("No matching people", "No available FYNX account matched that search.") else items(discover, key = { "discover_${it.username}" }) { p -> RemoteFriendRow(p, "Add", busyUsername == p.username, onOpenProfile, onAction = { runAction(p.username) { FynxSocialClient.sendRequest(context, p.username) } }) } }
-                else -> { if (blocked.isEmpty()) emptyState("No blocked accounts", "Blocked accounts stay out of normal connection lists."); items(blocked, key = { "blocked_${it.username}" }) { p -> RemoteFriendRow(p, "Unblock", busyUsername == p.username, onOpenProfile, onAction = { runAction(p.username) { FynxSocialClient.unblock(context, p.username) } }) } }
+                "Friends" -> { if (friends.isEmpty()) emptyState("No friends yet", "Accepted FYNX connections will appear here."); items(friends, key = { "friend_${it.username}" }) { p -> RemoteFriendRow(p, "Remove", busyUsername == p.username, onOpenProfile, onOpenChat = onOpenChat, onAction = { runAction(p.username) { FynxSocialClient.removeFriend(context, p.username) } }) } }
+                "Requests" -> { if (incoming.isEmpty()) emptyState("No incoming requests", "Friend requests from other FYNX accounts will appear here."); items(incoming, key = { "incoming_${it.id}" }) { r -> RemoteFriendRow(userFromRequest(r), "Confirm", busyUsername == r.username, onOpenProfile, onOpenChat = onOpenChat, secondaryAction = "Delete", onAction = { runAction(r.username) { FynxSocialClient.acceptRequest(context, r.id) } }, onSecondaryAction = { runAction(r.username) { FynxSocialClient.rejectRequest(context, r.id) } }) } }
+                "Sent" -> { if (outgoing.isEmpty()) emptyState("No sent requests", "Requests you send will appear here until they are accepted or rejected."); items(outgoing, key = { "outgoing_${it.id}" }) { r -> RemoteFriendRow(userFromRequest(r), "Cancel", busyUsername == r.username, onOpenProfile, onOpenChat = onOpenChat, onAction = { runAction(r.username) { FynxSocialClient.cancelRequest(context, r.id) } }) } }
+                "Discover" -> { if (searchMethod == FynxPeopleSearchMethod.PHONE && normalizedQuery.length < 7) emptyState("Phone discovery", "Enter a valid phone number with country code.") else if (searchMethod == FynxPeopleSearchMethod.USERNAME && normalizedQuery.length < 2) emptyState("Search for a FYNX user", "Type at least two characters of a username or display name.") else if (discover.isEmpty()) emptyState("No matching people", "No available FYNX account matched that search.") else items(discover, key = { "discover_${it.username}" }) { p -> RemoteFriendRow(p, "Add", busyUsername == p.username, onOpenProfile, onOpenChat = onOpenChat, onAction = { runAction(p.username) { FynxSocialClient.sendRequest(context, p.username) } }) } }
+                else -> { if (blocked.isEmpty()) emptyState("No blocked accounts", "Blocked accounts stay out of normal connection lists."); items(blocked, key = { "blocked_${it.username}" }) { p -> RemoteFriendRow(p, "Unblock", busyUsername == p.username, onOpenProfile, onOpenChat = onOpenChat, onAction = { runAction(p.username) { FynxSocialClient.unblock(context, p.username) } }) } }
             }
         }
     }
 }
 
 @Composable
-private fun RemoteFriendRow(person: FynxSocialClient.User, actionText: String, busy: Boolean, onOpenProfile: (String) -> Unit, secondaryAction: String? = null, onAction: () -> Unit, onSecondaryAction: () -> Unit = {}) {
+private fun RemoteFriendRow(person: FynxSocialClient.User, actionText: String, busy: Boolean, onOpenProfile: (String) -> Unit, onOpenChat: (String) -> Unit = {}, secondaryAction: String? = null, onAction: () -> Unit, onSecondaryAction: () -> Unit = {}) {
     Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { onOpenProfile(person.username) }, modifier = Modifier.size(48.dp)) { FynxRemoteProfileAvatar(mediaId = person.profilePhotoMediaId, contentDescription = person.displayName.ifBlank { person.username }, modifier = Modifier.size(42.dp)) }
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) { Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.titleSmall, maxLines = 1); Text(if (person.username.startsWith("@")) person.username else "@${person.username}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1) }
             if (busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-            else if (secondaryAction == null) OutlinedButton(onClick = onAction, modifier = Modifier.heightIn(min = 40.dp), shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp)) { Text(actionText) }
-            else Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { Button(onClick = onAction, modifier = Modifier.heightIn(min = 40.dp), shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) { Text(actionText) }; OutlinedButton(onClick = onSecondaryAction, modifier = Modifier.heightIn(min = 40.dp), shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) { Text(secondaryAction) } }
+            else {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { onOpenChat(person.username) }, modifier = Modifier.size(42.dp)) {
+                        Icon(Icons.Default.ChatBubbleOutline, contentDescription = "Open chat")
+                    }
+                    if (secondaryAction == null) {
+                        OutlinedButton(onClick = onAction, modifier = Modifier.heightIn(min = 40.dp), shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) { Text(actionText) }
+                    } else {
+                        Button(onClick = onAction, modifier = Modifier.heightIn(min = 40.dp), shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 9.dp, vertical = 5.dp)) { Text(actionText) }
+                        OutlinedButton(onClick = onSecondaryAction, modifier = Modifier.heightIn(min = 40.dp), shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 9.dp, vertical = 5.dp)) { Text(secondaryAction) }
+                    }
+                }
+            }
         }
     }
 }

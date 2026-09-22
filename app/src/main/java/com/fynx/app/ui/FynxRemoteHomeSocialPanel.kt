@@ -596,7 +596,7 @@ private fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: ((
         LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }
         bitmap?.let { image ->
             Box(Modifier.fillMaxWidth().aspectRatio((image.width.toFloat() / image.height.toFloat()).coerceIn(0.62f, 1.9f)).clickable { when { onOpenMarketplace != null -> onOpenMarketplace(); onOpenMedia != null -> onOpenMedia(); else -> fullscreen = true } }) {
-                Image(image.asImageBitmap(), "Post media", Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                Image(image.asImageBitmap(), "Post media", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             }
         }
     }
@@ -608,7 +608,7 @@ private fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: ((
                 } else {
                     var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
                     LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }
-                    bitmap?.let { Image(it.asImageBitmap(), "Full screen post media", Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
+                    bitmap?.let { Image(it.asImageBitmap(), "Full screen post media", Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
                 }
                 IconButton(onClick = { fullscreen = false }, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) { Icon(Icons.Default.Close, "Close media viewer", tint = Color.White) }
             }

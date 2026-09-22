@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -99,7 +100,8 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             chat.lastMessage.contains(normalizedChatSearch, ignoreCase = true)
     }.sortedWith(compareByDescending<ChatPreview> { FynxPreferencesStore.isChatPinned(context, it.username) })
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
                 Text("Chats", style = MaterialTheme.typography.headlineSmall)
@@ -112,7 +114,6 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         Spacer(Modifier.height(12.dp))
         if (section == "Chats") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { username = ""; selectedUser = null; searchResults = emptyList(); searchError = null; showNewChat = true }, shape = FynxDesign.ControlShape, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) { Text("＋ New chat") }
                 TextButton(onClick = { showArchived = !showArchived }) { Text(if (showArchived) "All chats" else "Archived") }
             }
             Spacer(Modifier.height(10.dp))
@@ -263,6 +264,20 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                     }
                 }
             }
+        }
+        FloatingActionButton(
+            onClick = {
+                username = ""
+                selectedUser = null
+                searchResults = emptyList()
+                searchError = null
+                showNewChat = true
+            },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 22.dp),
+            containerColor = Color(0xFF25D366),
+            contentColor = Color.White
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "New chat and contacts")
         }
     }
     if (showNewChat) {

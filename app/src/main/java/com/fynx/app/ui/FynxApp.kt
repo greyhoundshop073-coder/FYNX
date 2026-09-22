@@ -205,7 +205,6 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         IconButton(onClick = { homeCameraRequest++ }) {
                             Icon(Icons.Default.CameraAlt, "Open FYNX camera")
                         }
-                        IconButton(onClick = { selected = "Profile"; openProfileSettings = true }) { Icon(Icons.Default.Settings, "Settings") }
                         BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
                             IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
                         }
@@ -356,7 +355,26 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             ) { when (selected) {
             "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it })
             "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" })
-            "Friends" -> FriendsPanel(onOpenProfile = { profileUser = it })
+            "Friends" -> FriendsPanel(
+                onOpenProfile = { profileUser = it },
+                onOpenChat = { username ->
+                    val normalized = username.removePrefix("@").trim()
+                    if (normalized.isNotBlank()) {
+                        val local = FynxChatStore.loadPreviews(context).firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
+                        val remote = if (local == null) FynxSocialClient.searchUsers(context, normalized).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) } else null
+                        openChat = local ?: remote?.let { user ->
+                            ChatPreview(
+                                name = user.displayName.ifBlank { normalized },
+                                username = user.username.removePrefix("@").let { "@$it" },
+                                lastMessage = "Start a conversation",
+                                time = "Now",
+                                avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
+                            )
+                        } ?: ChatPreview(normalized, "@$normalized", "Start a conversation", "Now")
+                        FynxChatStore.savePreview(context, openChat!!)
+                    }
+                }
+            )
             "Marketplace" -> FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, initialListingId = marketplaceListingId)
             "Money Tools" -> MoneyCenterPanel()
             "Business Account" -> FynxBusinessAccountPanel(onBack = { selected = "Features" }, onOpenAdvertising = { selected = "Advertising" }, onOpenDashboard = { selected = "Advertising Dashboard" })

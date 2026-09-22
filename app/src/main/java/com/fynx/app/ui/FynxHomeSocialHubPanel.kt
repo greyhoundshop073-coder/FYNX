@@ -423,7 +423,39 @@ fun FynxHomeSocialHubPanel(
     }
 
     Box(Modifier.fillMaxSize()) {
-        HomePanel(currentUsername = currentUsername, onOpenChats = onOpenChats, onOpenStories = onOpenStories, onOpenProfile = onOpenProfile, onOpenMarketplace = onOpenMarketplace, onOpenNotifications = onOpenNotifications, onOpenFindPeople = onOpenFindPeople, onOpenAi = onOpenAi, onCreatePost = { showComposer = true; notice = null }, onOpenAuthorProfile = onOpenAuthorProfile)
+        HomePanel(
+            currentUsername = currentUsername,
+            onOpenChats = onOpenChats,
+            onOpenStories = onOpenStories,
+            onOpenProfile = onOpenProfile,
+            onOpenMarketplace = onOpenMarketplace,
+            onOpenNotifications = onOpenNotifications,
+            onOpenFindPeople = onOpenFindPeople,
+            onOpenAi = onOpenAi,
+            onOpenCamera = {
+                if (!posting) {
+                    capturedUris = emptyList()
+                    capturedTypes = emptyList()
+                    selectedVisualIndex = 0
+                    text = ""
+                    textBackground = null
+                    postLocation = null
+                    selectedCatalogueMusic = null
+                    musicPlaying = false
+                    selectedFeelingActivity = null
+                    showFeelingActivityPicker = false
+                    selectedAudienceIds = emptySet()
+                    audience = if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS
+                    visibility = defaultPostVisibility
+                    notice = null
+                }
+                cameraOpenedFromComposer = false
+                showComposer = false
+                showCamera = true
+            },
+            onCreatePost = { showComposer = true; notice = null },
+            onOpenAuthorProfile = onOpenAuthorProfile
+        )
     }
 
     if (showComposer) {
