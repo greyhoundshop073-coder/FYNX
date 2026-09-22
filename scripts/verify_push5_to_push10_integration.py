@@ -14,6 +14,7 @@ def check(name, ok):
 home = read("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt")
 app = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
 profile = read("app/src/main/java/com/fynx/app/ui/ProfilePanel.kt")
+profile_content = read("app/src/main/java/com/fynx/app/ui/FynxProfileContent.kt")
 other = read("app/src/main/java/com/fynx/app/ui/OtherUserProfilePanel.kt")
 chat = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
 market = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt")
@@ -34,7 +35,7 @@ check("Status block enforcement exists", "blocks" in status)
 
 # Push 6
 check("other-user profile loads remote identity", "FynxProfileRemoteClient.get" in other)
-check("other-user profile renders real remote posts", "ProfilePostGrid" in other and "person.posts" in other)
+check("other-user profile renders real remote posts", "FynxProfileContentSection" in other and "FynxProfileRemoteClient.posts" in profile_content)
 check("profile Status uses active non-expired Status", "FynxStatusClient.list(context)" in other and "isExpired" in other)
 check("profile -> chat callback is wired", "onMessage" in other)
 check("app routes profile -> chat and profile -> Status", all(x in app for x in ["OtherUserProfilePanel", "ConversationPanel", "selected = \"Stories\""]))
