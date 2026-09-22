@@ -42,7 +42,7 @@ check("profile -> chat callback is wired", "onMessage" in other)
 check("app routes profile -> chat and profile -> Status", all(x in app for x in ["OtherUserProfilePanel", "ConversationPanel", "selected = \"Stories\""]))
 
 # Push 7
-check("marketplace listings are remote", "FynxMarketplaceClient.listings" in market)
+check("marketplace listings are remote", "FynxRemoteSocialClient.listings" in market)
 check("listing seller identity is available", "listing.sellerUsername" in market or "listing.sellerDisplayName" in market)
 check("active marketplace is the production routed panel", "FynxMarketplacePanel" in app)
 check("buyer protection lifecycle is actually used by the active marketplace", "FynxMarketplaceOrderLifecycle" in market)
