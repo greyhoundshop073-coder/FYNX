@@ -136,6 +136,16 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(rowSpacing), contentPadding = PaddingValues(bottom = 12.dp)) {
+                    if (visibleChats.isNotEmpty()) {
+                        item {
+                            Text(
+                                "Messages",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+                            )
+                        }
+                    }
                     items(visibleChats, key = { it.username }) { chat ->
                         val pinned = FynxPreferencesStore.isChatPinned(context, chat.username)
                         val muted = FynxPreferencesStore.isChatMuted(context, chat.username)
@@ -187,6 +197,46 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                                 },
                                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
                             )
+                        }
+                    }
+
+                    if (!showArchived && normalizedChatSearch.isBlank() && groups.isNotEmpty()) {
+                        item {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "Groups",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+                            )
+                        }
+                        items(groups, key = { "group:" + it.id }) { group ->
+                            Card(
+                                onClick = { onOpenGroup(group.id) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = FynxDesign.CardShape,
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                            ) {
+                                ListItem(
+                                    headlineContent = {
+                                        Text(group.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    },
+                                    leadingContent = {
+                                        FynxAvatar(group.name, modifier = Modifier.size(avatarSize))
+                                    },
+                                    supportingContent = {
+                                        Text(
+                                            "${group.members.size} members" +
+                                                (group.description.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    },
+                                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
+                                )
+                            }
                         }
                     }
                 }

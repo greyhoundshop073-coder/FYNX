@@ -175,8 +175,15 @@ private sealed class FynxProfileGridItem {
 
 @Composable
 private fun FynxProfilePostTile(post: FynxProfileRemoteClient.ProfilePost, username: String, onOpen: () -> Unit) {
+    val context = LocalContext.current
     val mediaUrl = post.mediaUrl ?: post.mediaId?.let { "/api/social/media/" + it }
     val type = post.mediaType?.lowercase().orEmpty()
+    var profilePhotoId by remember(username) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(username) {
+        FynxProfileRemoteClient.get(context, username)
+            .onSuccess { profilePhotoId = it.profilePhotoMediaId?.trim()?.takeIf { id -> id.isNotBlank() } }
+    }
     Card(
         Modifier.fillMaxWidth().height(184.dp).clickable(onClick = onOpen),
         shape = RoundedCornerShape(12.dp),
@@ -188,9 +195,10 @@ private fun FynxProfilePostTile(post: FynxProfileRemoteClient.ProfilePost, usern
                 Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                FynxAvatar(
-                    username,
-                    Modifier.size(20.dp).clip(CircleShape)
+                FynxRemoteProfileAvatar(
+                    mediaId = profilePhotoId,
+                    contentDescription = username,
+                    modifier = Modifier.size(20.dp).clip(CircleShape)
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(
