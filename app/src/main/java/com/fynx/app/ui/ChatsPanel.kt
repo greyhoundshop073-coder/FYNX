@@ -267,6 +267,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 }
             }
         }
+    }
         FloatingActionButton(
             onClick = {
                 username = ""
