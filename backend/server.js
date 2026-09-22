@@ -98,10 +98,14 @@ async function initDatabase() {
       password_hash TEXT NOT NULL,
       display_name TEXT NOT NULL DEFAULT '',
       phone TEXT NOT NULL DEFAULT '',
+      verified BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
+    UPDATE users SET verified = FALSE;
+    UPDATE users SET verified = TRUE WHERE id = (SELECT id FROM users ORDER BY id ASC LIMIT 1);
     CREATE TABLE IF NOT EXISTS messages (
       id BIGSERIAL PRIMARY KEY,
       sender_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
