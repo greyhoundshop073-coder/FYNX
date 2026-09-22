@@ -53,9 +53,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.TimeUnit
+import org.json.JSONObject
 
 private const val MARKETPLACE_AD_MARKER = "[FYNX_MARKETPLACE_AD]"
 private const val FEED_REFRESH_DEBOUNCE_MS = 1000L
+private data class HomePeopleRecommendation(val username: String, val displayName: String, val verified: Boolean, val mutualFriends: Int, val reason: String, val photoId: String?)
 
 @Composable
 fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}, header: (@Composable () -> Unit)? = null) {
@@ -72,6 +74,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var commentsPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
     var authorPhotos by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var activeStatusOwners by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var peopleRecommendations by remember { mutableStateOf<List<HomePeopleRecommendation>>(emptyList()) }
     var authorStatusViewer by remember { mutableStateOf<List<FynxStatus>?>(null) }
     var interactionStates by remember { mutableStateOf<Map<String, FynxRemoteSocialClient.SocialInteractionState>>(emptyMap()) }
     var reactionStates by remember { mutableStateOf<Map<String, FynxHomePostReactionsClient.ReactionState>>(emptyMap()) }
@@ -109,6 +112,27 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         scope.launch {
             val resolved = missing.map { username -> async(Dispatchers.IO) { username.lowercase() to (FynxSocialClient.searchUsers(context, username).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(username, true) }?.profilePhotoMediaId) } }.awaitAll().toMap()
             authorPhotos = authorPhotos + resolved
+        }
+    }
+    fun hydratePeopleRecommendations() {
+        scope.launch {
+            val body = JSONObject().apply { put("name", "get_people_recommendations"); put("arguments", JSONObject()) }.toString()
+            FynxBackendClient.postJson(context, "/api/assistant/tools", body).onSuccess { raw ->
+                val people = JSONObject(raw).optJSONObject("result")?.optJSONArray("people")
+                if (people != null) {
+                    val parsed = buildList {
+                        for (i in 0 until people.length()) {
+                            val p = people.optJSONObject(i) ?: continue
+                            val username = p.optString("username").trim()
+                            if (username.isBlank()) continue
+                            val photo = FynxProfileRemoteClient.cachedProfilePhotoId(context, username)
+                            add(HomePeopleRecommendation(username, p.optString("displayName").ifBlank { username }, p.optBoolean("verified"), p.optInt("mutualFriends"), p.optString("reason"), photo))
+                        }
+                    }
+                    peopleRecommendations = parsed
+                    parsed.forEach { person -> scope.launch { FynxProfileRemoteClient.get(context, person.username).onSuccess { profile -> peopleRecommendations = peopleRecommendations.map { if (it.username.equals(person.username, true)) it.copy(photoId = profile.profilePhotoMediaId) else it } } } }
+                }
+            }
         }
     }
     fun hydrateActiveStatuses() {
@@ -193,7 +217,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         videoDiscoveryOpen = true
         scope.launch { runCatching { FynxDiscoveryClient.recordView(context, postId) } }
     }
-    LaunchedEffect(Unit) { reload(); hydrateActiveStatuses() }
+    LaunchedEffect(Unit) { reload(); hydrateActiveStatuses(); hydratePeopleRecommendations() }
 
     LaunchedEffect(feedListState, posts.size, hasMore, loading, loadingMore, feedRequestInFlight) {
         snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }
@@ -208,6 +232,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                 IconButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Icon(Icons.Default.Refresh, "Refresh feed") }
             }
         }
+        if (peopleRecommendations.isNotEmpty()) item(key = "people_recommendations") { HomePeopleRecommendationsCard(peopleRecommendations, onOpenProfile = { onOpenAuthorProfile(it) }) }
         if (loading) item(key = "feed_loading") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         error?.let { message -> item(key = "feed_error") { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Text("Retry") } } } } }
         if (!loading && posts.isEmpty() && error == null) item(key = "feed_empty") { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Your feed is ready", style = MaterialTheme.typography.titleMedium); Text("There are no visible posts yet. Create a post or find real people to build your FYNX circle."); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = onCreatePost) { Text("Create Post") }; OutlinedButton(onClick = onOpenFindPeople) { Text("Find People") } } } } }
@@ -772,6 +797,28 @@ private fun HomeAuthorStatusDialog(statuses: List<FynxStatus>, onDismiss: () -> 
             Row(Modifier.align(Alignment.TopEnd).padding(12.dp)) { TextButton(onClick = onDismiss) { Text("Close") } }
             Row(Modifier.align(Alignment.CenterStart).padding(8.dp)) { IconButton(onClick = { if (index > 0) index-- }, enabled = index > 0) { Icon(Icons.Default.ArrowBack, "Previous Status") } }
             Row(Modifier.align(Alignment.CenterEnd).padding(8.dp)) { IconButton(onClick = { if (index < statuses.lastIndex) index++ }, enabled = index < statuses.lastIndex) { Icon(Icons.Default.ArrowForward, "Next Status") } }
+        }
+    }
+}
+
+
+@Composable
+private fun HomePeopleRecommendationsCard(items: List<HomePeopleRecommendation>, onOpenProfile: (String) -> Unit) {
+    Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp), shape = FynxDesign.LargeCardShape) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("People You May Know", style = MaterialTheme.typography.titleMedium)
+            Text("Real FYNX people based on your existing relationships.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
+            androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(items, key = { it.username }) { person ->
+                    Column(Modifier.width(132.dp).clickable { onOpenProfile(person.username) }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Box(Modifier.size(64.dp).clip(CircleShape)) { FynxRemoteProfileAvatar(person.photoId, person.displayName, Modifier.fillMaxSize()) }
+                        Text(person.displayName, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                        Text("@${person.username.removePrefix("@")}", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary, maxLines = 1)
+                        if (person.mutualFriends > 0) Text("${person.mutualFriends} mutual friend${if (person.mutualFriends == 1) "" else "s"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1)
+                        else Text(person.reason.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary, maxLines = 1)
+                    }
+                }
+            }
         }
     }
 }
