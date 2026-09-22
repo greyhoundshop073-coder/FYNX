@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -155,15 +156,20 @@ fun FynxVisibleUpdatesPanel(
                                 own?.second ?: 0,
                                 ownerPhotoIds[current]
                             )
-                            Surface(
-                                modifier = Modifier.align(Alignment.TopEnd).size(26.dp).clickable(onClick = onCreateStatus),
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            IconButton(
+                                onClick = onCreateStatus,
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .size(26.dp)
+                                    .background(MaterialTheme.colorScheme.primary, CircleShape)
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.Add, "Create your status", modifier = Modifier.size(17.dp))
-                                }
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = "Create your status",
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                            }
                             }
                         }
                     }
@@ -221,7 +227,7 @@ fun FynxVisibleUpdatesPanel(
                 TextButton(onClick = onOpenAi, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
                     Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(17.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Open AI")
+                    Text("Open FYNX AI")
                 }
             }
         }
