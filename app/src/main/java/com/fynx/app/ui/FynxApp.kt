@@ -2,8 +2,11 @@ package com.fynx.app.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
@@ -61,6 +64,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var remoteMyPhotoId: String? by remember(authSession.username, profileVersion) { mutableStateOf(FynxProfileRemoteClient.cachedProfilePhotoId(context, authSession.username ?: "")) }
     var aiCaptionDraft by remember { mutableStateOf<String?>(null) }
     var homeCameraRequest by remember { mutableIntStateOf(0) }
+    var navigationDirection by remember { mutableIntStateOf(1) }
 
     DisposableEffect(context) {
         val prefs = context.getSharedPreferences("fynx_preferences", android.content.Context.MODE_PRIVATE)
@@ -349,12 +353,25 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                             if (kotlin.math.abs(drag) >= 80f) {
                                 val next = if (drag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex)
                                 else (mainIndex - 1).coerceAtLeast(0)
-                                selected = mainNav[next].key
+                                if (next != mainIndex) {
+                                    navigationDirection = if (next > mainIndex) 1 else -1
+                                    selected = mainNav[next].key
+                                }
                             }
                         }
                     )
                 }
-            ) { when (selected) {
+            ) {
+                AnimatedContent(
+                    targetState = selected,
+                    transitionSpec = {
+                        val forward = navigationDirection > 0
+                        (slideInHorizontally(initialOffsetX = { width -> if (forward) width else -width }) + fadeIn()) togetherWith
+                            (slideOutHorizontally(targetOffsetX = { width -> if (forward) -width else width }) + fadeOut())
+                    },
+                    label = "FYNX page swipe"
+                ) { page ->
+                    when (page) {
             "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it })
             "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" })
             "Friends" -> FriendsPanel(
@@ -407,7 +424,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Admin" -> if (adminRole != null) FynxAdminControlCenterPanel()
             "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" }, onOpenNotifications = { openProfileSettings = false; selected = "Notifications" })
             else -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview")
-        } } }
+                    }
+                }
+            }
+        }
     }
 }
 
