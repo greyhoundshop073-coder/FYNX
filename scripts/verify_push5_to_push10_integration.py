@@ -66,7 +66,7 @@ check("Android CI builds APK", "assembleDebug" in workflow)
 check("Android CI uploads exact-commit APK", "FYNX-debug-" in workflow and "GITHUB_SHA" in workflow)
 check("Push 9 investigation is recorded without adding a duplicate feature", (ROOT / "docs/FYNX_PROFILE_COVER_TAKEOVER_INVESTIGATION.md").is_file() and not cover_sources)
 check("final integration sweep includes the active marketplace panel", "FynxMarketplacePanel" in app)
-check("final integration sweep includes the real Status deep-link parameter", "openOwnerUsername" in app)
+check("final integration sweep includes the real Status deep-link parameter", "statusOpenOwner" in app and "selected = \"Stories\"" in app)
 check("production app is not preview mode", "FYNX_PREVIEW_MODE = false" in app)
 check("no obvious fake production identity shortcut", not re.search(r"fakeUser|FakeUser|demoUser|DemoUser|mockUser|MockUser", home))
 
