@@ -503,9 +503,14 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             startRecording()
                         }
                     },
+                    enabled = !sending,
                     modifier = Modifier.size(48.dp)
                 ) {
-                    Icon(Icons.Default.Mic, "Microphone", Modifier.size(24.dp))
+                    Icon(
+                        if (text.isNotBlank() || attachment != null) Icons.Default.Send else Icons.Default.Mic,
+                        if (text.isNotBlank() || attachment != null) "Send message" else "Microphone",
+                        Modifier.size(24.dp)
+                    )
                 }
             }
         }
