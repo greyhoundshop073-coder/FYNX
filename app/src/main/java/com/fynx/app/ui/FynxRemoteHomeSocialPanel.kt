@@ -23,6 +23,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
@@ -81,6 +82,22 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var mediaViewerPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
     var mediaViewerItems by remember { mutableStateOf<List<FynxHomePostMediaClient.PostMediaItem>>(emptyList()) }
     var mediaViewerIndex by remember { mutableIntStateOf(0) }
+    val feedListState = rememberLazyListState()
+    val focusedVideoPostId by remember(posts) {
+        derivedStateOf {
+            val layout = feedListState.layoutInfo
+            val center = (layout.viewportStartOffset + layout.viewportEndOffset) / 2
+            val postIds = posts.map { it.id }.toSet()
+            layout.visibleItemsInfo.filter { info ->
+                val key = info.key?.toString() ?: return@filter false
+                if (key !in postIds) return@filter false
+                val visibleStart = maxOf(info.offset, layout.viewportStartOffset)
+                val visibleEnd = minOf(info.offset + info.size, layout.viewportEndOffset)
+                val fraction = (visibleEnd - visibleStart).coerceAtLeast(0).toFloat() / info.size.coerceAtLeast(1).toFloat()
+                fraction >= 0.60f
+            }.minByOrNull { info -> kotlin.math.abs((info.offset + info.size / 2) - center) }?.key?.toString()
+        }
+    }
 
     fun resolveAuthorPhotos(items: List<FynxRemoteSocialClient.RemotePost>) {
         val names = items.map { it.authorUsername.removePrefix("@").trim() }.filter { it.isNotBlank() }.distinct()
@@ -159,7 +176,12 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     }
     LaunchedEffect(Unit) { reload() }
 
-    LazyColumn(modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 120.dp)) {
+    LaunchedEffect(feedListState, posts.size, hasMore, loading, loadingMore, feedRequestInFlight) {
+        snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }
+            .collect { (lastVisibleIndex, totalItems) -> if (hasMore && !loading && !loadingMore && !feedRequestInFlight && lastVisibleIndex >= totalItems - 4) loadMore() }
+    }
+
+    LazyColumn(state = feedListState, modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 120.dp)) {
         header?.let { content -> item(key = "home_ai_status") { content() } }
         item(key = "feed_header") {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -172,7 +194,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         if (!loading && posts.isEmpty() && error == null) item(key = "feed_empty") { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Your feed is ready", style = MaterialTheme.typography.titleMedium); Text("There are no visible posts yet. Create a post or find real people to build your FYNX circle."); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = onCreatePost) { Text("Create Post") }; OutlinedButton(onClick = onOpenFindPeople) { Text("Find People") } } } } }
         items(items = posts, key = { it.id }) { post ->
             val photoId = authorPhotos[post.authorUsername.removePrefix("@").trim().lowercase()]; val state = interactionStates[post.id] ?: FynxRemoteSocialClient.SocialInteractionState(false, false, 0, 0); val reaction = reactionStates[post.id] ?: FynxHomePostReactionsClient.ReactionState(); val busy = post.id in interactionBusy || "follow:${post.authorUsername.removePrefix("@").trim().lowercase()}" in interactionBusy
-            RemotePostCard(post, currentUsername, photoId, state, reaction, busy, postMedia[post.id].orEmpty(), onOpenProfile = { onOpenAuthorProfile(post.authorUsername.removePrefix("@").trim()) }, onLike = { runLike(it) }, onComment = { commentsPost = post }, onFollow = { runFollow(post.authorUsername, it) }, onDelete = { deletePost = post }, onSave = { id, saved -> runInteraction(id, saved, { it.saved }, { it.savedCount }, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } }, onRepost = { id, reposted -> runInteraction(id, reposted, { it.reposted }, { it.repostCount }, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } }, onShare = { runShare(post) }, onOpenReactionPicker = { reactionPickerPostId = if (reactionPickerPostId == post.id) null else post.id }, onReact = { id, selected -> runReaction(id, selected) }, reactionPickerOpen = reactionPickerPostId == post.id, onOpenReactionUsers = { reactionUsersPostId = post.id }, onOpenMarketplace = onOpenMarketplace, onOpenVideoDiscovery = { openVideoDiscovery(post.id) }, onOpenMediaViewer = { items, index -> mediaViewerPost = post; mediaViewerItems = items; mediaViewerIndex = index })
+            RemotePostCard(post, currentUsername, photoId, state, reaction, busy, postMedia[post.id].orEmpty(), playbackActive = focusedVideoPostId == post.id, onOpenProfile = { onOpenAuthorProfile(post.authorUsername.removePrefix("@").trim()) }, onLike = { runLike(it) }, onComment = { commentsPost = post }, onFollow = { runFollow(post.authorUsername, it) }, onDelete = { deletePost = post }, onSave = { id, saved -> runInteraction(id, saved, { it.saved }, { it.savedCount }, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } }, onRepost = { id, reposted -> runInteraction(id, reposted, { it.reposted }, { it.repostCount }, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } }, onShare = { runShare(post) }, onOpenReactionPicker = { reactionPickerPostId = if (reactionPickerPostId == post.id) null else post.id }, onReact = { id, selected -> runReaction(id, selected) }, reactionPickerOpen = reactionPickerPostId == post.id, onOpenReactionUsers = { reactionUsersPostId = post.id }, onOpenMarketplace = onOpenMarketplace, onOpenVideoDiscovery = { openVideoDiscovery(post.id) }, onOpenMediaViewer = { items, index -> mediaViewerPost = post; mediaViewerItems = items; mediaViewerIndex = index })
         }
         if (!loading && hasMore) item(key = "feed_load_more") { OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore && !feedRequestInFlight, modifier = Modifier.fillMaxWidth()) { Text(if (loadingMore) "Loading more posts…" else "Load more posts") }
         }
@@ -352,7 +374,7 @@ private fun VideoDiscoveryCard(video: FynxDiscoveryClient.TrendingPost, isSource
 }
 
 @Composable
-private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsername: String, profilePhotoMediaId: String?, interactionState: FynxRemoteSocialClient.SocialInteractionState, reactionState: FynxHomePostReactionsClient.ReactionState, interactionBusy: Boolean, mediaItems: List<FynxHomePostMediaClient.PostMediaItem>, onOpenProfile: () -> Unit, onLike: (String) -> Unit, onComment: () -> Unit, onFollow: (Boolean) -> Unit, onDelete: () -> Unit, onSave: (String, Boolean) -> Unit, onRepost: (String, Boolean) -> Unit, onShare: () -> Unit, onOpenReactionPicker: () -> Unit, onReact: (String, String) -> Unit, reactionPickerOpen: Boolean, onOpenReactionUsers: () -> Unit, onOpenMarketplace: () -> Unit, onOpenVideoDiscovery: () -> Unit, onOpenMediaViewer: (List<FynxHomePostMediaClient.PostMediaItem>, Int) -> Unit) {
+private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsername: String, profilePhotoMediaId: String?, interactionState: FynxRemoteSocialClient.SocialInteractionState, reactionState: FynxHomePostReactionsClient.ReactionState, interactionBusy: Boolean, mediaItems: List<FynxHomePostMediaClient.PostMediaItem>, playbackActive: Boolean, onOpenProfile: () -> Unit, onLike: (String) -> Unit, onComment: () -> Unit, onFollow: (Boolean) -> Unit, onDelete: () -> Unit, onSave: (String, Boolean) -> Unit, onRepost: (String, Boolean) -> Unit, onShare: () -> Unit, onOpenReactionPicker: () -> Unit, onReact: (String, String) -> Unit, reactionPickerOpen: Boolean, onOpenReactionUsers: () -> Unit, onOpenMarketplace: () -> Unit, onOpenVideoDiscovery: () -> Unit, onOpenMediaViewer: (List<FynxHomePostMediaClient.PostMediaItem>, Int) -> Unit) {
     val context = LocalContext.current
     var menuOpen by remember(post.id) { mutableStateOf(false) }
     val marketplaceListingId = Regex("""(?m)^Listing ID:\s*(\d+)\s*$""").find(post.text)?.groupValues?.getOrNull(1)
@@ -405,9 +427,9 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
             }
         }
         if (mediaItems.isNotEmpty()) {
-            PostMediaGrid(mediaItems, onOpenMedia = { index -> onOpenMediaViewer(mediaItems, index) }, onOpenVideoDiscovery = onOpenVideoDiscovery.takeIf { mediaItems.size == 1 })
+            PostMediaGrid(mediaItems, playbackActive = playbackActive, onOpenMedia = { index -> onOpenMediaViewer(mediaItems, index) }, onOpenVideoDiscovery = onOpenVideoDiscovery.takeIf { mediaItems.size == 1 })
         } else {
-            post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType, openMarketplaceTarget, if (openMarketplaceTarget == null && post.mediaType.equals("video", true)) onOpenVideoDiscovery else null) }
+            post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType, openMarketplaceTarget, if (openMarketplaceTarget == null && post.mediaType.equals("video", true)) onOpenVideoDiscovery else null, playbackActive = playbackActive) }
         }
         if (!post.musicMediaId.isNullOrBlank()) MusicPostPlayer(post.musicMediaId!!, post.musicTitle.orEmpty(), post.musicArtist.orEmpty(), post.musicDurationMs)
         if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = { openMarketplaceTarget?.invoke() ?: onOpenMarketplace() }) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
@@ -425,12 +447,12 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
 }
 
 @Composable
-private fun PostMediaGrid(items: List<FynxHomePostMediaClient.PostMediaItem>, onOpenMedia: (Int) -> Unit, onOpenVideoDiscovery: (() -> Unit)?) {
+private fun PostMediaGrid(items: List<FynxHomePostMediaClient.PostMediaItem>, playbackActive: Boolean, onOpenMedia: (Int) -> Unit, onOpenVideoDiscovery: (() -> Unit)?) {
     val visual = items.filter { it.mediaType.equals("image", true) || it.mediaType.equals("video", true) }.take(4)
     if (visual.isEmpty()) return
     @Composable fun Cell(item: FynxHomePostMediaClient.PostMediaItem, index: Int) {
         Box(Modifier.clip(RoundedCornerShape(4.dp)).clickable { onOpenMedia(index) }) {
-            RemoteSocialMedia(item.mediaUrl, item.mediaType, onOpenMedia = { onOpenMedia(index) })
+            RemoteSocialMedia(item.mediaUrl, item.mediaType, onOpenMedia = { onOpenMedia(index) }, playbackActive = playbackActive && index == visual.indexOfFirst { it.mediaType.equals("video", true) })
         }
     }
     when (visual.size) {
@@ -459,18 +481,70 @@ private fun RowScope.FeedActionButton(onClick: () -> Unit, onLongClick: (() -> U
 private fun sharePost(context: Context, post: FynxRemoteSocialClient.RemotePost): Result<Unit> = runCatching { val text = if (post.text.startsWith(MARKETPLACE_AD_MARKER)) "${post.text.removePrefix(MARKETPLACE_AD_MARKER).trim()}\n\nSee this product on FYNX Marketplace." else "${post.authorDisplayName.ifBlank { post.authorUsername }} on FYNX:\n${post.text}".trim(); val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text); putExtra(Intent.EXTRA_TITLE, "Share from FYNX") }; context.startActivity(Intent.createChooser(intent, "Share with…")) }
 
 @Composable
-private fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (() -> Unit)? = null, onOpenMedia: (() -> Unit)? = null) {
-    val context = LocalContext.current; var file by remember(path) { mutableStateOf<File?>(null) }; var videoAspectRatio by remember(path) { mutableFloatStateOf(16f / 9f) }; var videoView by remember(path) { mutableStateOf<VideoView?>(null) }; var fullscreen by remember(path) { mutableStateOf(false) }
+private fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (() -> Unit)? = null, onOpenMedia: (() -> Unit)? = null, playbackActive: Boolean = true) {
+    val context = LocalContext.current
+    var file by remember(path) { mutableStateOf<File?>(null) }
+    var videoAspectRatio by remember(path) { mutableFloatStateOf(16f / 9f) }
+    var videoView by remember(path) { mutableStateOf<VideoView?>(null) }
+    var preparedPlayer by remember(path) { mutableStateOf<MediaPlayer?>(null) }
+    var playing by remember(path) { mutableStateOf(false) }
+    var muted by remember(path) { mutableStateOf(true) }
+    var fullscreen by remember(path) { mutableStateOf(false) }
     LaunchedEffect(path) { file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, path, type) } }
-    LaunchedEffect(file, type) { if (file != null && type == "video") videoAspectRatio = withContext(Dispatchers.IO) { runCatching { MediaMetadataRetriever().run { setDataSource(file!!.absolutePath); val width = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 16f; val height = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 9f; val rotation = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0; release(); if (rotation == 90 || rotation == 270) height / width else width / height }.coerceIn(0.56f, 1.91f) }.getOrDefault(16f / 9f) } }
-    DisposableEffect(videoView) { onDispose { videoView?.stopPlayback() } }
+    LaunchedEffect(file, type) {
+        if (file != null && type == "video") videoAspectRatio = withContext(Dispatchers.IO) {
+            runCatching {
+                MediaMetadataRetriever().run {
+                    setDataSource(file!!.absolutePath)
+                    val width = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 16f
+                    val height = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 9f
+                    val rotation = extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+                    release()
+                    if (rotation == 90 || rotation == 270) height / width else width / height
+                }.coerceIn(0.56f, 1.91f)
+            }.getOrDefault(16f / 9f)
+        }
+    }
+    LaunchedEffect(playbackActive, videoView) {
+        val view = videoView ?: return@LaunchedEffect
+        if (playbackActive) { if (!view.isPlaying) runCatching { view.start(); playing = true } }
+        else { if (view.isPlaying) runCatching { view.pause() }; playing = false }
+    }
+    DisposableEffect(videoView) { onDispose { videoView?.stopPlayback(); preparedPlayer = null } }
     if (file == null) Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     else if (type == "audio") AudioPostPlayer(file!!)
     else if (type == "video") {
-        Box(Modifier.fillMaxWidth().aspectRatio(videoAspectRatio).clickable { when { onOpenMarketplace != null -> onOpenMarketplace(); onOpenMedia != null -> onOpenMedia(); else -> fullscreen = true } }) {
-            AndroidView(factory = { ctx -> FynxPassiveVideoView(ctx).apply { videoView = this; layoutParams = ViewGroup.LayoutParams(-1, -1); setMediaController(MediaController(ctx)); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxSize())
-            if (onOpenMarketplace == null && onOpenMedia == null) Text("Tap to view full screen", Modifier.align(Alignment.BottomEnd).padding(10.dp), style = MaterialTheme.typography.labelSmall, color = Color.White)
-            else if (onOpenMedia != null) Text("Tap to discover videos", Modifier.align(Alignment.BottomEnd).padding(10.dp), style = MaterialTheme.typography.labelSmall, color = Color.White)
+        Box(Modifier.fillMaxWidth().aspectRatio(videoAspectRatio)) {
+            AndroidView(factory = { ctx ->
+                FynxPassiveVideoView(ctx).apply {
+                    videoView = this
+                    layoutParams = ViewGroup.LayoutParams(-1, -1)
+                    setMediaController(MediaController(ctx))
+                    setVideoPath(file!!.absolutePath)
+                    setOnPreparedListener { player ->
+                        preparedPlayer = player
+                        player.isLooping = true
+                        player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f)
+                        if (playbackActive) { start(); playing = true }
+                    }
+                    setOnCompletionListener { playing = false }
+                }
+            }, modifier = Modifier.fillMaxSize())
+            Box(Modifier.fillMaxSize().clickable {
+                when {
+                    onOpenMarketplace != null -> onOpenMarketplace()
+                    videoView?.isPlaying == true -> { videoView?.pause(); playing = false }
+                    playbackActive -> { videoView?.start(); playing = true }
+                    else -> fullscreen = true
+                }
+            })
+            Row(Modifier.align(Alignment.BottomEnd).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (onOpenMedia != null) IconButton(onClick = onOpenMedia) { Icon(Icons.Default.OpenInNew, "Open video discovery", tint = Color.White) }
+                IconButton(onClick = { muted = !muted; preparedPlayer?.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f) }) {
+                    Icon(if (muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp, if (muted) "Unmute video" else "Mute video", tint = Color.White)
+                }
+                Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause video" else "Play video", tint = Color.White)
+            }
         }
     } else {
         var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }

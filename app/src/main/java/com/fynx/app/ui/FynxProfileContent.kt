@@ -23,6 +23,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.geometry.boundsInWindow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -177,8 +180,15 @@ private sealed class FynxProfileGridItem {
 private fun FynxProfilePostTile(post: FynxProfileRemoteClient.ProfilePost, username: String, onOpen: () -> Unit) {
     val mediaUrl = post.mediaUrl ?: post.mediaId?.let { "/api/social/media/" + it }
     val type = post.mediaType?.lowercase().orEmpty()
+    val rootView = LocalView.current
+    var visibleFraction by remember(mediaUrl) { mutableFloatStateOf(0f) }
     Card(
-        Modifier.fillMaxWidth().height(184.dp).clickable(onClick = onOpen),
+        Modifier.fillMaxWidth().height(184.dp).clickable(onClick = onOpen).onGloballyPositioned { coordinates ->
+            val bounds = coordinates.boundsInWindow()
+            val top = maxOf(bounds.top, 0f)
+            val bottom = minOf(bounds.bottom, rootView.height.toFloat())
+            visibleFraction = ((bottom - top).coerceAtLeast(0f) / bounds.height.coerceAtLeast(1f)).coerceIn(0f, 1f)
+        },
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .22f)),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -203,7 +213,7 @@ private fun FynxProfilePostTile(post: FynxProfileRemoteClient.ProfilePost, usern
             }
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 if (!mediaUrl.isNullOrBlank()) {
-                FynxRemoteMedia(mediaUrl = mediaUrl, type = post.mediaType ?: "auto", modifier = Modifier.fillMaxSize())
+                FynxRemoteMedia(mediaUrl = mediaUrl, type = post.mediaType ?: "auto", modifier = Modifier.fillMaxSize(), autoPlay = type.contains("video"), playbackActive = visibleFraction >= 0.60f)
             } else {
                 Text(post.text.ifBlank { "Post" }, Modifier.padding(10.dp),
                     style = MaterialTheme.typography.labelMedium, maxLines = 6,

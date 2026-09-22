@@ -59,7 +59,9 @@ fun FynxRemoteMedia(
     loopVideo: Boolean = true,
     onVideoCompleted: (() -> Unit)? = null,
     contentScale: ContentScale = ContentScale.Crop,
-    rounded: Boolean = true
+    rounded: Boolean = true,
+    autoPlay: Boolean = true,
+    playbackActive: Boolean = true
 ) {
     val context = LocalContext.current
     val resolvedUrl = remember(mediaUrl) { resolveFynxMediaUrl(context, mediaUrl) }
@@ -68,6 +70,7 @@ fun FynxRemoteMedia(
     var localFile by remember(resolvedUrl, type) { mutableStateOf<File?>(null) }
     var reloadNonce by remember(resolvedUrl, type) { mutableIntStateOf(0) }
     var videoView by remember(resolvedUrl, type) { mutableStateOf<android.widget.VideoView?>(null) }
+    var preparedPlayer by remember(resolvedUrl, type) { mutableStateOf<android.media.MediaPlayer?>(null) }
     var videoPlaying by remember(resolvedUrl, type) { mutableStateOf(false) }
     LaunchedEffect(resolvedUrl, type, reloadNonce) {
         kind = "loading"; bitmap = null; localFile = null; videoView = null; videoPlaying = false
@@ -96,7 +99,13 @@ fun FynxRemoteMedia(
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Throwable) { kind = "error" }
     }
-    DisposableEffect(resolvedUrl, type) { onDispose { videoView?.stopPlayback(); videoView = null } }
+    LaunchedEffect(playbackActive, videoView, kind) {
+        val view = videoView ?: return@LaunchedEffect
+        if (kind != "video") return@LaunchedEffect
+        if (playbackActive && autoPlay) { if (!view.isPlaying) runCatching { view.start(); videoPlaying = true } }
+        else if (!playbackActive) { if (view.isPlaying) runCatching { view.pause() }; videoPlaying = false }
+    }
+    DisposableEffect(resolvedUrl, type) { onDispose { videoView?.stopPlayback(); preparedPlayer = null; videoView = null } }
     when (kind) {
         "image" -> bitmap?.let {
             val imageModifier = if (rounded) modifier.clip(RoundedCornerShape(14.dp)) else modifier
@@ -110,7 +119,7 @@ fun FynxRemoteMedia(
                         FynxPassiveVideoView(ctx).apply {
                             tag = file.absolutePath
                             setVideoPath(file.absolutePath)
-                            setOnPreparedListener { player -> player.isLooping = loopVideo; player.start(); videoPlaying = true }
+                            setOnPreparedListener { player -> preparedPlayer = player; player.isLooping = loopVideo; if (autoPlay && playbackActive) { player.start(); videoPlaying = true } }
                             setOnCompletionListener { videoPlaying = false; onVideoCompleted?.invoke() }
                             setOnErrorListener { _, _, _ -> videoPlaying = false; true }
                             videoView = this
