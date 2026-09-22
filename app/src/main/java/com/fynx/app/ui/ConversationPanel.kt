@@ -372,6 +372,49 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             }
         }
 
+        if (isNewConversation) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
+                color = Color(0xFF20232D).copy(alpha = 0.97f),
+                shape = RoundedCornerShape(14.dp),
+                tonalElevation = 0.dp
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().height(50.dp).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        enabled = !sending,
+                        onClick = {
+                            scope.launch {
+                                sending = true
+                                FynxSocialClient.sendRequest(context, chat.username.removePrefix("@"))
+                                    .onSuccess { networkError = "Contact request sent." }
+                                    .onFailure { networkError = it.message ?: "Contact request could not be sent." }
+                                sending = false
+                            }
+                        }
+                    ) { Text("Add Contact", color = Color(0xFFB8C9FF), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
+                    Spacer(Modifier.weight(1f))
+                    TextButton(
+                        enabled = !sending,
+                        onClick = {
+                            scope.launch {
+                                sending = true
+                                FynxSocialClient.block(context, chat.username.removePrefix("@"))
+                                    .onSuccess { networkError = "User blocked."; onBack() }
+                                    .onFailure { networkError = it.message ?: "User could not be blocked." }
+                                sending = false
+                            }
+                        }
+                    ) { Text("Block User", color = Color(0xFFFF8B98), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
+                    IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Default.Close, "Close", tint = Color(0xFF9FA3AF), modifier = Modifier.size(22.dp))
+                    }
+                }
+            }
+        }
+
         if (searchOpen) OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search messages…") })
         networkError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 3.dp)) }
 
