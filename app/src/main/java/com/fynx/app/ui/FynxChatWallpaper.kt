@@ -23,7 +23,7 @@ fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, wallpaperOverride
         "Sunrise" -> Color(0xFF211D21)
         "Ocean" -> Color(0xFF17242B)
         "Minimal" -> MaterialTheme.colorScheme.background
-        else -> Color(0xFF202326)
+        else -> Color(0xFF080A0E)
     }
     Box(modifier.background(base)) {
         if (wallpaper == "FYNX Default") FynxChatDoodlePattern()
@@ -34,10 +34,10 @@ fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, wallpaperOverride
 @Composable
 fun FynxChatDoodlePattern() {
     androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-        val ink = Color.White.copy(alpha = 0.035f)
-        val sw = 1.15.dp.toPx()
-        val cellW = 190.dp.toPx()
-        val cellH = 165.dp.toPx()
+        val ink = Color(0xFF8B7CFF).copy(alpha = 0.15f)
+        val sw = 0.9.dp.toPx()
+        val cellW = 125.dp.toPx()
+        val cellH = 112.dp.toPx()
         fun line(a: androidx.compose.ui.geometry.Offset, b: androidx.compose.ui.geometry.Offset) = drawLine(ink, a, b, sw)
         fun circle(x: Float, y: Float, r: Float) = drawCircle(color = ink, radius = r, center = androidx.compose.ui.geometry.Offset(x, y), style = androidx.compose.ui.graphics.drawscope.Stroke(width = sw))
         fun bubble(x: Float, y: Float, s: Float) {
