@@ -118,7 +118,7 @@ require('add status Layout creates real collage media','layoutMode' in hub and '
 require('mature 24-hour expiry','expiresAtMillis = now + FYNX_STATUS_EXPIRY_MS' in mature)
 require('mature publish validation','Write something first.' in mature and 'Add your media first.' in mature)
 
-require('single backend Status hub','FynxStatusTimelinePanel()' in hub and 'StoriesPanel()' not in hub)
+require('single backend Status hub','FynxStatusTimelinePanel(' in hub and 'StoriesPanel()' not in hub)
 require('hub mature + creation route','FynxMatureStatusComposerPanel' in hub and 'composing = true' in hub)
 require('hub camera route remains real','FynxCameraCapturePanel' in hub and 'openCapturedStatus' in hub)
 require('legacy Stories wrapper','FynxStatusTimelinePanel()' in stories and 'SharedPreferences' not in stories)
