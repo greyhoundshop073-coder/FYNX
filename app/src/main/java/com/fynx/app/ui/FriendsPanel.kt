@@ -84,7 +84,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
 
     if (showUniversalSearch) { FynxUniversalSearchPanel(onOpenProfile = onOpenProfile); return }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp, vertical = 10.dp)) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Find People", style = MaterialTheme.typography.headlineSmall)
@@ -119,7 +119,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}) {
             else Text("Exact phone matching only. Phone numbers are not returned in people results.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
         }
         message?.let { Text(it, color = if (it.contains("could not", true) || it.contains("failed", true) || it.contains("error", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp)) }
-        Spacer(Modifier.height(10.dp)); Text("Connections", style = MaterialTheme.typography.titleLarge); Spacer(Modifier.height(5.dp))
+        Spacer(Modifier.height(12.dp)); Text("Connections", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold); Spacer(Modifier.height(7.dp))
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) { listOf("Friends", "Requests", "Sent", "Discover", "Blocked").forEach { tab -> FilterChip(section == tab, { section = tab }, label = { Text(tab) }) } }
         Spacer(Modifier.height(6.dp))
         if (loading) Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -143,8 +143,8 @@ private fun RemoteFriendRow(person: FynxSocialClient.User, actionText: String, b
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) { Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.titleSmall, maxLines = 1); Text(if (person.username.startsWith("@")) person.username else "@${person.username}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1) }
             if (busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-            else if (secondaryAction == null) OutlinedButton(onClick = onAction, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 9.dp, vertical = 4.dp)) { Text(actionText) }
-            else Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { Button(onClick = onAction, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text(actionText) }; OutlinedButton(onClick = onSecondaryAction, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) { Text(secondaryAction) } }
+            else if (secondaryAction == null) OutlinedButton(onClick = onAction, modifier = Modifier.heightIn(min = 40.dp), shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp)) { Text(actionText) }
+            else Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { Button(onClick = onAction, modifier = Modifier.heightIn(min = 40.dp), shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) { Text(actionText) }; OutlinedButton(onClick = onSecondaryAction, modifier = Modifier.heightIn(min = 40.dp), shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) { Text(secondaryAction) } }
         }
     }
 }
