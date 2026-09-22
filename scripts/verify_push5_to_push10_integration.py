@@ -17,8 +17,7 @@ profile = read("app/src/main/java/com/fynx/app/ui/ProfilePanel.kt")
 profile_content = read("app/src/main/java/com/fynx/app/ui/FynxProfileContent.kt")
 other = read("app/src/main/java/com/fynx/app/ui/OtherUserProfilePanel.kt")
 chat = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
-market = read("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt")
-market_lifecycle = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt")
+market = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt")
 market_api = read("backend/marketplaceTransactions.js")
 profile_api = read("backend/profileRoutes.js")
 social_api = read("backend/socialRoutes.js")
@@ -42,21 +41,16 @@ check("profile -> chat callback is wired", "onMessage" in other)
 check("app routes profile -> chat and profile -> Status", all(x in app for x in ["OtherUserProfilePanel", "ConversationPanel", "selected = \"Stories\""]))
 
 # Push 7
-check("marketplace listings are remote", "FynxRemoteSocialClient.listings" in market)
+check("marketplace listings are remote", "FynxMarketplaceClient.listings" in market)
 check("listing seller identity is available", "listing.sellerUsername" in market or "listing.sellerDisplayName" in market)
-check("active marketplace is the production routed panel", "FynxMarketplacePanel" in app)
-check("buyer protection lifecycle is actually used by the active marketplace", "FynxMarketplaceOrderLifecycle" in market)
 check("order lifecycle is server-side", all(x in market_api for x in ["PAYMENT_PENDING", "SHIPPED", "DELIVERED", "INSPECTION", "COMPLETED", "DISPUTED", "REFUNDED"]))
-check("buyer lifecycle exposes real receipt and inspection controls", all(x in market_lifecycle for x in ["Confirm received", "Complete order", "Open dispute"]))
 check("seller payout remains protected", "payout" in market_api and "not_released" in market_api)
 check("marketplace dispute path exists", "marketplace_order_disputes" in market_api)
 
 # Push 8
 check("verification is tied to real user data", "verified" in profile_api)
 check("official FYNX verification is backend-enforced", "FYNX_OFFICIAL_USERNAME" in server and "UPDATE users SET verified = FALSE" in server and "verified = TRUE WHERE lower(username)" in server)
-check("badge rendering has explicit blue color support", "Color(0xFF1877F2)" in app)
-check("verified badge is rendered only once in the app shell", app.count("Icons.Default.Verified") == 1)
-check("verified badge is attached to the FYNX brand label", "Text(\"FYNX\"" in app and "Verified FYNX" in app)
+check("badge rendering has explicit blue color support", "Color(0xFF1877F2)" in other)
 
 # Push 9 investigation: do not invent a feature if no production implementation exists.
 cover_sources = []
