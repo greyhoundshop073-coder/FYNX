@@ -198,17 +198,29 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     if (showSettings && selectedGroup != null) { FynxGroupSettingsPanel(groupId = selectedGroup.id, groupName = selectedGroup.name, isAdmin = isAdmin, onBack = { showSettings = false }); return }
     FynxChatWallpaperBackground(modifier = Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
-        Surface(color = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth()) {
-            Row(Modifier.fillMaxWidth().statusBarsPadding().height(52.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.ArrowBack, "Back", modifier = Modifier.size(24.dp)) }
-                Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Icon(Icons.Default.Group, "Group", tint = MaterialTheme.colorScheme.primary) }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+        ) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(58.dp)
+                    .background(Color(0xFF1F222B).copy(alpha = 0.97f), RoundedCornerShape(30.dp))
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(24.dp)) }
+                Box(Modifier.size(40.dp).clip(CircleShape).background(Color(0xFF353842)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Group, "Group", tint = Color(0xFFD8DAE3)) }
                 Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                    Text(groupTitle, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
-                    Text("${selectedGroup?.members?.size ?: 0} members", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    Text(groupTitle, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = Color.White, maxLines = 1)
+                    Text("${selectedGroup?.members?.size ?: 0} members", style = MaterialTheme.typography.labelSmall, color = Color(0xFFB8BAC4), maxLines = 1)
                 }
-                IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, modifier = Modifier.size(40.dp)) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search", Modifier.size(24.dp)) }
+                IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, modifier = Modifier.size(40.dp)) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search", tint = Color.White, modifier = Modifier.size(22.dp)) }
                 Box {
-                    IconButton(onClick = { showMore = true }, enabled = selectedGroup != null, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.MoreVert, "More", Modifier.size(24.dp)) }
+                    IconButton(onClick = { showMore = true }, enabled = selectedGroup != null, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.MoreVert, "More", tint = Color.White, modifier = Modifier.size(22.dp)) }
                     DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
                         DropdownMenuItem(text = { Text("Members") }, onClick = { showMore = false; showMembers = true }, leadingIcon = { Icon(Icons.Default.Group, null) })
                         DropdownMenuItem(text = { Text("Group tools") }, onClick = { showMore = false; showTools = true }, leadingIcon = { Icon(Icons.Default.Build, null) })
@@ -248,14 +260,14 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 Text(message.senderUsername!!, style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 2.dp))
                             }
                             Box {
-                            Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant, contentColor = if (message.fromMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, shape = RoundedCornerShape(18.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { reactionMessageId = message.id }, onLongClick = { reactionMessageId = message.id })) {
+                            Surface(color = if (message.fromMe) Color(0xFF7052C8) else Color(0xFF2A2C35), contentColor = Color.White, shape = RoundedCornerShape(18.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { reactionMessageId = message.id }, onLongClick = { reactionMessageId = message.id })) {
                                 Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
                                     if (message.replyToId != null) Text("Reply", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 5.dp))
                                 if (message.attachmentUri != null) {
                                     if (message.attachmentType == "audio") FynxRemoteAudio(message.attachmentUri, Modifier.fillMaxWidth())
                                     else FynxRemoteMedia(message.attachmentUri, message.attachmentType ?: "image", Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp))
                                 }
-                                if (message.text.isNotBlank() && message.attachmentType != "audio") Text(message.text, color = if (message.fromMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (message.text.isNotBlank() && message.attachmentType != "audio") Text(message.text, color = Color.White)
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                                     Text(formatMessageClock(message.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     if (message.fromMe) { Spacer(Modifier.width(4.dp)); Text(if (message.read) "✓✓" else if (message.delivered) "✓✓" else "✓", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -304,7 +316,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             }
         }
         if (showEmojiPanel && canSendMessages) { FynxChatEmojiPanel(onEmojiSelected = { emoji -> text += emoji; showEmojiPanel = false }) }
-        Surface(color = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().height(64.dp).navigationBarsPadding().imePadding()) {
+        Surface(color = Color(0xFF17191F).copy(alpha = 0.98f), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().height(70.dp).navigationBarsPadding().imePadding()) {
             Row(
                 Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -321,7 +333,18 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     placeholder = { Text(if (canSendMessages) "Message..." else "Messaging is restricted") },
                     maxLines = 1,
                     singleLine = true,
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color(0xFF282B34),
+                        unfocusedContainerColor = Color(0xFF282B34),
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        cursorColor = Color.White,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedPlaceholderColor = Color(0xFF9A9DA8),
+                        unfocusedPlaceholderColor = Color(0xFF9A9DA8)
+                    ),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = {
                         if (text.isNotBlank() && !sending && selectedGroup != null) {
