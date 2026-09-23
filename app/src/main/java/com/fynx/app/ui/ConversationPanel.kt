@@ -365,7 +365,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     DropdownMenu(expanded = showChatMenu, onDismissRequest = { showChatMenu = false }) {
                         DropdownMenuItem(text = { Text("Chat settings") }, onClick = { showChatMenu = false; showChatSettings = true }, leadingIcon = { Icon(Icons.Default.Settings, null) })
                         DropdownMenuItem(text = { Text(if (searchOpen) "Close search" else "Search messages") }, onClick = { showChatMenu = false; searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, leadingIcon = { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, null) })
-                        DropdownMenuItem(text = { Text("Attach photo or video") }, onClick = { showChatMenu = false; mediaPicker.launch(arrayOf("image/*", "video/*")) }, leadingIcon = { Icon(Icons.Default.AttachFile, null) })
+                        DropdownMenuItem(text = { Text("Take photo or video") }, onClick = { showChatMenu = false; showCamera = true }, leadingIcon = { Icon(Icons.Default.CameraAlt, null) })
+                        DropdownMenuItem(text = { Text("Choose photo or video") }, onClick = { showChatMenu = false; mediaPicker.launch(arrayOf("image/*", "video/*")) }, leadingIcon = { Icon(Icons.Default.AttachFile, null) })
                         DropdownMenuItem(text = { Text("Send gift") }, onClick = { showChatMenu = false; showGifts = true }, leadingIcon = { Icon(Icons.Default.CardGiftcard, null) })
                     }
                 }
@@ -505,6 +506,38 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 text += emoji
                 showEmojiPanel = false
             })
+        }
+
+        if (replyToId != null || editingId != null || attachment != null) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            when {
+                                editingId != null -> "Editing message"
+                                attachment != null -> "Attachment ready to send"
+                                else -> "Replying to message"
+                            },
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                        if (replyToId != null) {
+                            val replied = messages.firstOrNull { it.id == replyToId }
+                            Text(
+                                replied?.text?.takeIf { it.isNotBlank() } ?: "Original message",
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    IconButton(onClick = { replyToId = null; editingId = null; attachment = null; attachmentType = null }) {
+                        Icon(Icons.Default.Close, "Cancel")
+                    }
+                }
+            }
         }
 
         Surface(color = Color(0xFF17191F).copy(alpha = 0.98f), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().height(70.dp).navigationBarsPadding().imePadding()) {
