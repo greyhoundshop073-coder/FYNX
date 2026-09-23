@@ -28,6 +28,7 @@ fun HomePanel(
     onOpenFindPeople: () -> Unit = {},
     onOpenAi: () -> Unit = {},
     onOpenCamera: () -> Unit = {},
+    onOpenFastCamera: () -> Unit = onOpenCamera,
     onOpenStatusOwner: (String) -> Unit = {},
     onCreatePost: () -> Unit = {},
     onOpenAuthorProfile: (String) -> Unit = {}
@@ -62,6 +63,7 @@ fun HomePanel(
                                 onOpenStories = onOpenStories,
                                 onOpenAi = onOpenAi,
                                 onOpenCamera = onOpenCamera,
+                                onOpenFastCamera = onOpenFastCamera,
                                 onCreateStatus = { showMatureStatusComposer = true },
                                 onOpenStatusOwner = onOpenStatusOwner
                             )
