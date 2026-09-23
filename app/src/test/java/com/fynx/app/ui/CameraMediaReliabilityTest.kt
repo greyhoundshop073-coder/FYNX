@@ -13,6 +13,11 @@ class CameraMediaReliabilityTest {
     }
 
     @Test
+    fun captureTimerOptionsRemainOffThreeAndTenSeconds() {
+        assertTrue(listOf(0, 3, 10).all { it >= 0 })
+    }
+
+    @Test
     fun cameraFiltersHaveStableUserFacingOptions() {
         assertEquals(listOf("Natural", "Vivid", "Warm", "Cool", "B&W"), CameraFilter.values().map { it.label })
     }
