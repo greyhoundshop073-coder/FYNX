@@ -246,6 +246,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         Text(
                             when (selected) {
                                 "Marketplace" -> "Marketplace"
+                                "Contacts" -> "Phone Contacts"
                                 "Money Tools" -> "Money Center"
                                 "Privacy" -> "Privacy & Safety"
                                 "Seller Center" -> "Seller Center"
@@ -374,7 +375,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 ) { page ->
                     when (page) {
             "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it })
-            "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" })
+            "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" }, onOpenContacts = { selected = "Contacts" })
             "Friends" -> FriendsPanel(
                 onOpenProfile = { profileUser = it },
                 onOpenChat = { username ->
@@ -398,6 +399,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     }
                 }
             )
+            "Contacts" -> FynxContactsPanel(onBack = { selected = "Chats" })
             "Marketplace" -> FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, initialListingId = marketplaceListingId)
             "Money Tools" -> MoneyCenterPanel()
             "Business Account" -> FynxBusinessAccountPanel(onBack = { selected = "Features" }, onOpenAdvertising = { selected = "Advertising" }, onOpenDashboard = { selected = "Advertising Dashboard" })
