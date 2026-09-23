@@ -757,10 +757,11 @@ fun FynxHomeSocialHubPanel(
         )
     }
 
-    if (showCamera) {
+    if (showCamera || showFastCamera) {
         Dialog(
             onDismissRequest = {
                 showCamera = false
+                showFastCamera = false
                 if (cameraOpenedFromComposer && !posting) {
                     showComposer = true
                 }
@@ -771,16 +772,19 @@ fun FynxHomeSocialHubPanel(
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                     FynxCameraCapturePanel(
+                        fastCapture = showFastCamera,
                         onCaptured = { uri, type ->
                             val nextUris = (capturedUris + uri).distinct().take(4)
                             capturedUris = nextUris
                             recomputeTypes(nextUris)
                             selectedVisualIndex = 0
                             showCamera = false
+                            showFastCamera = false
                             showComposer = true
                         },
                         onDismiss = {
                             showCamera = false
+                            showFastCamera = false
                             if (cameraOpenedFromComposer && !posting) {
                                 showComposer = true
                             }
