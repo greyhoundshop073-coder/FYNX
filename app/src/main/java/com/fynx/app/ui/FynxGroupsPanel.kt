@@ -5,6 +5,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -174,6 +175,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     val canSendMedia = isAdmin || prefs.getBoolean("send_media", true)
     val canAddMembers = isAdmin || prefs.getBoolean("add_members", true)
     val senderAvatarUris = remember(groupId) { mutableStateMapOf<String, String?>() }
+    val messageListState = rememberLazyListState()
     val senderUsernames = remember(messages) { messages.mapNotNull { it.senderUsername?.trim()?.takeIf { name -> name.isNotBlank() } }.distinct() }
     LaunchedEffect(groupId, senderUsernames) {
         senderUsernames.forEach { username ->
@@ -194,6 +196,17 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             FynxChatStore.save(context, "group_$groupId", messages)
             syncMessage = null
         }.onFailure { if (FynxBackendClient.hasAccessToken(context)) syncMessage = it.message ?: "Unable to sync group messages." }
+    }
+    LaunchedEffect(messages.size, searchQuery) {
+        if (messages.isEmpty()) return@LaunchedEffect
+        kotlinx.coroutines.delay(60L)
+        val lastIndex = messageListState.layoutInfo.totalItemsCount - 1
+        val lastVisible = messageListState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: -1
+        if (searchQuery.isNotBlank()) {
+            messageListState.scrollToItem(0)
+        } else if (lastIndex >= 0 && (lastVisible < 0 || lastVisible >= lastIndex - 2)) {
+            messageListState.animateScrollToItem(lastIndex)
+        }
     }
     if (showSettings && selectedGroup != null) { FynxGroupSettingsPanel(groupId = selectedGroup.id, groupName = selectedGroup.name, isAdmin = isAdmin, onBack = { showSettings = false }); return }
     FynxChatWallpaperBackground(modifier = Modifier.fillMaxSize()) {
@@ -233,7 +246,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         syncMessage?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         if (!canSendMessages) Text("Only admins can send messages in this group.", Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, true) }
-        LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
+        LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
             if (visibleMessages.isEmpty() && searchQuery.isBlank()) {
                 item(key = "fynx-empty-group") {
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
