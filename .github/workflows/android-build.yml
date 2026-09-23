@@ -137,7 +137,6 @@ jobs:
         run: python3 scripts/verify_r4_people_privacy.py
       - name: Verify Batch 4 Text background integrity
         run: python3 scripts/verify_batch4_text_backgrounds.py
-
       - name: Verify Batch 3 People audience integrity
         run: python3 scripts/verify_batch3_people_audience.py
       - name: Verify R5A groups security gate
@@ -160,6 +159,8 @@ jobs:
         run: python3 scripts/verify_home_post_reactions.py
       - name: Verify Home multi-media integrity
         run: python3 scripts/verify_home_multimedia_posts.py
+      - name: Verify Large Badge #2 — Real Social Creation & Connection
+        run: python3 scripts/verify_large_badge2_social_creation_connection.py
       - name: Verify Home 4F media and lifecycle audit
         run: python3 scripts/verify_home_4f_media_lifecycle.py
       - name: Verify production social feed wiring
@@ -184,7 +185,7 @@ jobs:
           arch: x86_64
           profile: pixel_2
           script: |
-            bash -c 'set +e; mkdir -p fynx-runtime-screenshots; TEST_STATUS=0; ./gradlew connectedDebugAndroidTest --no-daemon --build-cache; TEST_STATUS=$?; python3 scripts/verify_runtime_navigation.py; NAV_STATUS=$?; printf "Commit: %s\\nRun: %s\\nInstrumentation exit: %s\\nNavigation exit: %s\\n" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$TEST_STATUS" "$NAV_STATUS" > fynx-runtime-screenshots/README.txt; if [ "$TEST_STATUS" -ne 0 ]; then exit "$TEST_STATUS"; fi; exit "$NAV_STATUS"'
+            bash -c 'set +e; mkdir -p fynx-runtime-screenshots; TEST_STATUS=0; ./gradlew connectedDebugAndroidTest --no-daemon --build-cache; TEST_STATUS=$?; python3 scripts/verify_runtime_navigation.py; NAV_STATUS=$?; printf "Commit: %s\nRun: %s\nInstrumentation exit: %s\nNavigation exit: %s\n" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$TEST_STATUS" "$NAV_STATUS" > fynx-runtime-screenshots/README.txt; if [ "$TEST_STATUS" -ne 0 ]; then exit "$TEST_STATUS"; fi; exit "$NAV_STATUS"'
       - name: Upload FYNX runtime screenshots and UI hierarchies
         if: always()
         uses: actions/upload-artifact@v4
@@ -223,8 +224,8 @@ jobs:
           path: app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
           if-no-files-found: ignore
       - name: Upload lint report
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: FYNX-lint-report-${{ github.sha }}
           path: app/build/reports/lint-results-debug.html
