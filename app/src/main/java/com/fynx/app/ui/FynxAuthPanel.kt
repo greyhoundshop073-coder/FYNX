@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
@@ -26,6 +27,7 @@ import kotlinx.coroutines.launch
 
 enum class FynxAuthPage { WELCOME, REGISTER, VERIFY, LOGIN }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
     val context = LocalContext.current
