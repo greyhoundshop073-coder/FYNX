@@ -75,6 +75,7 @@ fun FynxHomeSocialHubPanel(
     val defaultPostVisibility = if (configuredPostVisibility == "Everyone") FynxPostVisibility.PUBLIC else FynxPostVisibility.FRIENDS_ONLY
     var showComposer by remember { mutableStateOf(false) }
     var showCamera by remember { mutableStateOf(false) }
+    var showFastCamera by remember { mutableStateOf(false) }
     // Tracks whether the camera was opened from an existing composer.
     // Home's header camera starts a fresh camera session; the composer camera
     // returns to the existing draft when dismissed without capturing media.
