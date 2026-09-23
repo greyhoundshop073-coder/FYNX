@@ -184,22 +184,7 @@ jobs:
           arch: x86_64
           profile: pixel_2
           script: |
-            set +e
-            mkdir -p fynx-runtime-screenshots
-            TEST_STATUS=0
-            ./gradlew connectedDebugAndroidTest --no-daemon --build-cache || TEST_STATUS=$?
-
-            adb shell am force-stop com.fynx.app
-            adb shell monkey -p com.fynx.app 1 >/dev/null 2>&1 || true
-            sleep 4
-            adb exec-out screencap -p > fynx-runtime-screenshots/00-launch.png
-            adb shell uiautomator dump /sdcard/fynx-launch.xml >/dev/null 2>&1 || true
-            adb pull /sdcard/fynx-launch.xml fynx-runtime-screenshots/00-launch.xml >/dev/null 2>&1 || true
-
-            for route in home profile chat group marketplace stories money; do adb shell am force-stop com.fynx.app; adb shell am start -W -a android.intent.action.VIEW -d "fynx://${route}" com.fynx.app >/dev/null 2>&1 || true; sleep 3; adb exec-out screencap -p > "fynx-runtime-screenshots/01-${route}.png"; adb shell uiautomator dump /sdcard/fynx-${route}.xml >/dev/null 2>&1 || true; adb pull /sdcard/fynx-${route}.xml "fynx-runtime-screenshots/01-${route}.xml" >/dev/null 2>&1 || true; done
-
-            printf 'Commit: %s\\nRun: %s\\nInstrumentation exit: %s\\n' "${GITHUB_SHA}" "${GITHUB_RUN_ID}" "${TEST_STATUS}" > fynx-runtime-screenshots/README.txt
-            exit "$TEST_STATUS"
+            bash -c 'set +e; mkdir -p fynx-runtime-screenshots; TEST_STATUS=0; ./gradlew connectedDebugAndroidTest --no-daemon --build-cache; TEST_STATUS=$?; adb shell am force-stop com.fynx.app; adb shell monkey -p com.fynx.app 1 >/dev/null 2>&1 || true; sleep 4; adb exec-out screencap -p > fynx-runtime-screenshots/00-launch.png; adb shell uiautomator dump /sdcard/fynx-launch.xml >/dev/null 2>&1 || true; adb pull /sdcard/fynx-launch.xml fynx-runtime-screenshots/00-launch.xml >/dev/null 2>&1 || true; for route in home profile chat group marketplace stories money; do adb shell am force-stop com.fynx.app; adb shell am start -W -a android.intent.action.VIEW -d "fynx://${route}" com.fynx.app >/dev/null 2>&1 || true; sleep 3; adb exec-out screencap -p > "fynx-runtime-screenshots/01-${route}.png"; adb shell uiautomator dump /sdcard/fynx-${route}.xml >/dev/null 2>&1 || true; adb pull /sdcard/fynx-${route}.xml "fynx-runtime-screenshots/01-${route}.xml" >/dev/null 2>&1 || true; done; printf "Commit: %s\\nRun: %s\\nInstrumentation exit: %s\\n" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$TEST_STATUS" > fynx-runtime-screenshots/README.txt; exit "$TEST_STATUS"'
       - name: Upload FYNX runtime screenshots and UI hierarchies
         if: always()
         uses: actions/upload-artifact@v4
