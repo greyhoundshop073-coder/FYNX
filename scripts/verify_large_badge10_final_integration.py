@@ -7,7 +7,7 @@ required_steps = ["Verify Large Badge #2","Verify Large Badge #3","Verify Large 
 check("all major certification gates remain in the release workflow", all(x in workflow for x in required_steps))
 check("Android release build runs lint, unit tests and APK assembly", "./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest" in workflow)
 check("real-device instrumentation remains part of release certification", "reactivecircus/android-emulator-runner@v2" in workflow and "connectedDebugAndroidTest" in workflow)
- runtime_navigation = (ROOT / "scripts/verify_runtime_navigation.py").read_text(encoding="utf-8")
+runtime_navigation = (ROOT / "scripts/verify_runtime_navigation.py").read_text(encoding="utf-8")
 check("runtime screenshots and UI hierarchy are captured", "screencap" in runtime_navigation and "uiautomator" in runtime_navigation and "verify_runtime_navigation.py" in workflow)
 check("exact-commit APK artifact is produced", "FYNX-debug-apk-${{ github.sha }}" in workflow and "FYNX-debug-${GITHUB_SHA}.apk" in workflow)
 check("production certification runs before Android build", workflow.index("Verify final FYNX production certification gate") < workflow.index("Build, test and lint"))
