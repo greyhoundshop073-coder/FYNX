@@ -12,11 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.testTagsAsResourceId
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -27,7 +22,6 @@ import kotlinx.coroutines.launch
 
 enum class FynxAuthPage { WELCOME, REGISTER, VERIFY, LOGIN }
 
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
     val context = LocalContext.current
@@ -65,7 +59,6 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
             .background(background)
             .imePadding()
             .padding(horizontal = 22.dp)
-            .semantics { testTagsAsResourceId = true }
     ) {
         Column(
             modifier = Modifier
@@ -202,9 +195,7 @@ private fun FynxAuthField(value: String, onValueChange: (String) -> Unit, label:
             { TextButton(onClick = { passwordVisible = !passwordVisible }) { Text(if (passwordVisible) "Hide" else "Show") } }
         } else null,
         modifier = Modifier
-            .fillMaxWidth()
-            .testTag(label.lowercase().replace(" ", "_"))
-            .semantics { contentDescription = label },
+            .fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = Color(0xFF238AF2),
