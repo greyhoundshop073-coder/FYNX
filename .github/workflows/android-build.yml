@@ -167,6 +167,8 @@ jobs:
         run: python3 scripts/verify_large_badge4_real_device_certification.py
       - name: Verify Large Badge #5 — Camera + Media Reliability & Full Media Display Certification
         run: python3 scripts/verify_large_badge5_media_reliability.py
+      - name: Verify Large Badge #6 — Marketplace Protected Transaction Full-Lifecycle Certification
+        run: python3 scripts/verify_large_badge6_marketplace_protected_transaction.py
       - name: Verify Home 4F media and lifecycle audit
         run: python3 scripts/verify_home_4f_media_lifecycle.py
       - name: Verify production social feed wiring

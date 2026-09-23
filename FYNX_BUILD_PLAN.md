@@ -76,3 +76,16 @@ Continue the existing FYNX Android social + marketplace app. Do not rebuild or r
 
 ## Removed permanently
 AI image generation and AI video generation are NOT part of the FYNX roadmap. Do not add them back.
+
+
+### Large Badge #6 — Marketplace Protected Transaction Full-Lifecycle Certification
+- [ ] Buyer checkout creates a protected order before payment and preserves the canonical order ID
+- [ ] Payment is verified server-side before protected-order progression
+- [ ] Seller shipping, buyer receipt confirmation and post-inspection completion use the real backend lifecycle
+- [ ] Disputes lock the canonical order and preserve prior order/escrow state
+- [ ] Refund/payout resolution is mutually exclusive and idempotent
+- [ ] Escrow and financial operations expose explicit pending, disputed, released/refunded states with unique idempotency/provider references
+- [ ] Order evidence and inventory reservation remain server-authoritative
+- [ ] Existing marketplace security gates plus real Android instrumentation remain GREEN
+- [ ] No fabricated buyers, sellers, listings, orders, payments or balances are introduced
+- [ ] Badge is not complete until the consolidated workflow is GREEN
