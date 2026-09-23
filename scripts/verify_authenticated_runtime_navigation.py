@@ -53,18 +53,30 @@ def _matches(node, wanted:list[str]) -> bool:
     hay=" | ".join((text,desc,rid)).lower()
     return any(label in hay for label in wanted)
 
-def _find_control_node(node, wanted:list[str]):
-    # Compose semantics may expose the visible label as a child of the
-    # clickable card/button. The label's bounds are still inside the interactive
-    # target, so tap the matched rendered node instead of relying on a fragile
-    # clickable-ancestor search.
-    if _matches(node, wanted) and _center(node):
-        return node
-    for child in list(node):
-        found=_find_control_node(child, wanted)
-        if found is not None:
-            return found
-    return None
+def _find_control_node(root, wanted:list[str]):
+    # Compose commonly exposes a Card's visible label as a child node while the
+    # click action belongs to the clickable Card/merged semantics node above it.
+    # Follow the matched node's ancestor path and tap the nearest real clickable
+    # ancestor. Fall back to the matched node only when no clickable ancestor
+    # is exposed by UIAutomator.
+    path=[]
+    def walk(node):
+        path.append(node)
+        if _matches(node, wanted) and _center(node):
+            return list(path)
+        for child in list(node):
+            found=walk(child)
+            if found:
+                return found
+        path.pop()
+        return None
+    matched_path=walk(root)
+    if not matched_path:
+        return None
+    for node in reversed(matched_path):
+        if node.attrib.get("clickable","false").lower()=="true" and _center(node):
+            return node
+    return matched_path[-1]
 
 def find_control(xml_text:str, labels:list[str]):
     if not xml_text: return None
