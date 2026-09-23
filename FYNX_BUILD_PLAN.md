@@ -89,3 +89,13 @@ AI image generation and AI video generation are NOT part of the FYNX roadmap. Do
 - [ ] Existing marketplace security gates plus real Android instrumentation remain GREEN
 - [ ] No fabricated buyers, sellers, listings, orders, payments or balances are introduced
 - [ ] Badge is not complete until the consolidated workflow is GREEN
+
+
+### Large Badge #7 — Notifications + Preferences + Delivery Certification
+- [ ] Server-backed notification feed, read/unread state and account isolation
+- [ ] Server-backed per-category notification preferences and quiet mode
+- [ ] Authenticated device registration/unregistration with unique device ownership
+- [ ] Server-side FCM delivery honors user preferences and handles retry/invalid tokens
+- [ ] Real event wiring covers messaging, groups and social activity without fabricated records
+- [ ] Existing notification/security gates plus real Android instrumentation remain GREEN
+- [ ] Badge is not complete until the consolidated workflow is GREEN
