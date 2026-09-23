@@ -286,7 +286,7 @@ if not FAILURES:
     # surface, so Money and AI may be below the first viewport. Each destination
     # gets a clean Features launch from Home; this avoids reusing stale coordinates
     # after the first navigation has already left the Features screen.
-    def open_features():
+    def open_features(target_labels:list[str]|None=None):
         run("adb","shell","am","force-stop",PACKAGE)
         run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
         time.sleep(2.5)
@@ -294,24 +294,26 @@ if not FAILURES:
         feature_xml=tap_control(home_xml,["More","Features"],"features",["FYNX Features"])
         if not feature_xml:
             return ""
-        for _ in range(8):
-            if find_control(feature_xml,["Money Tools","FYNX AI","FYNX AI Assistant"]):
-                break
-            # Fynx Features uses a real scrollable Compose container. Scroll only
-            # that container's visible region, then re-read the rendered hierarchy.
+        # Money and AI are real cards in a LazyColumn. Do not stop merely because
+        # the other card is visible: the target card itself must be present before
+        # we attempt its tap. This prevents a viewport-dependent false RED when
+        # one card is just outside the current scroll position.
+        for _ in range(12):
+            if target_labels is None or find_control(feature_xml,target_labels):
+                return feature_xml
             run("adb","shell","input","swipe","540","1600","540","850","500")
             time.sleep(.6)
             feature_xml=dump_ui("authenticated-features-scroll.xml")
-        return feature_xml
+        return feature_xml if target_labels is None else ""
 
     features=open_features()
     if features:
         report.append("- PASS authenticated Home -> Features screenshot/UI hierarchy")
         for name,labels,expected in (
-            ("money",["Money Tools","Money Center"],["Money Center"]),
-            ("ai",["FYNX AI","FYNX AI Assistant"],["FYNX AI Assistant","FYNX AI"]),
+            ("money",["Money Center"],["Money Center"]),
+            ("ai",["FYNX AI Assistant"],["FYNX AI Assistant"]),
         ):
-            current=open_features()
+            current=open_features(labels)
             if not current:
                 FAILURES.append("authenticated Features -> "+name)
                 continue
