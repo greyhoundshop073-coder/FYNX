@@ -195,6 +195,29 @@ def login():
     screenshot("authenticated-home.png")
     return xml, ""
 
+def dismiss_runtime_permission_prompt()->str:
+    # A fresh process can trigger Android's notification permission dialog after
+    # the authenticated session is already persisted. That system dialog blocks
+    # the real FYNX Home controls, so dismiss only the permission prompt and
+    # then re-read the actual app hierarchy. Never fabricate app state.
+    for _ in range(6):
+        xml=dump_ui("authenticated-permission-check.xml")
+        if not xml:
+            time.sleep(.5)
+            continue
+        allow=find_control(xml,["Don’t allow","Don't allow"])
+        if allow:
+            _,x,y=allow
+            run("adb","shell","input","tap",str(x),str(y))
+            time.sleep(1.0)
+            return dump_ui("authenticated-home-after-permission.xml")
+        # The prompt may not have appeared yet; stop polling as soon as the
+        # FYNX Home hierarchy is visible.
+        if find_control(xml,["Chat","Friends","Stories","More","Features"]):
+            return xml
+        time.sleep(.5)
+    return dump_ui("authenticated-home-after-permission.xml")
+
 def capture_surface(name:str, labels:list[str], xml:str)->str:
     next_xml=tap_control(xml,labels,name)
     if next_xml:
@@ -249,13 +272,13 @@ if not FAILURES:
         run("adb","shell","am","force-stop",PACKAGE)
         run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
         time.sleep(2.5)
-        xml=dump_ui("authenticated-home-reset.xml") or xml
+        xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-reset.xml") or xml
 
     # Open Features/Money/AI through the real UI where exposed.
     run("adb","shell","am","force-stop",PACKAGE)
     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
     time.sleep(2.5)
-    xml=dump_ui("authenticated-home-features.xml") or xml
+    xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-features.xml") or xml
     features=tap_control(xml,["More","Features"],"features")
     if features:
         report.append("- PASS authenticated Home -> Features screenshot/UI hierarchy")
