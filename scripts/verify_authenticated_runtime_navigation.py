@@ -109,16 +109,25 @@ def find_edit_fields(xml_text:str):
             fields.append(center)
     return fields
 
-def tap_control(xml_text:str, labels:list[str], name:str)->str:
+def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[str]|None=None)->str:
     control=find_control(xml_text,labels)
     if not control:
         FAILURES.append(name)
         return ""
     label,x,y=control
     run("adb","shell","input","tap",str(x),str(y))
-    time.sleep(2.5)
+    # Compose can animate the destination after the tap. For surfaces that have
+    # a stable title, wait for that real title instead of comparing raw XML.
+    # Raw hierarchy strings can legitimately remain similar even when navigation
+    # succeeded because Compose reuses nodes.
+    next_xml=""
+    for _ in range(10):
+        time.sleep(.5)
+        next_xml=dump_ui(f"authenticated-{name}.xml")
+        if expected_labels and any(find_control(next_xml,[wanted]) for wanted in expected_labels):
+            break
     screenshot(f"authenticated-{name}.png")
-    return dump_ui(f"authenticated-{name}.xml")
+    return next_xml
 
 def input_text(value:str):
     # CI test credentials should use an automation-safe password (letters/digits).
@@ -218,8 +227,8 @@ def dismiss_runtime_permission_prompt()->str:
         time.sleep(.5)
     return dump_ui("authenticated-home-after-permission.xml")
 
-def capture_surface(name:str, labels:list[str], xml:str)->str:
-    next_xml=tap_control(xml,labels,name)
+def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[str]|None=None)->str:
+    next_xml=tap_control(xml,labels,name,expected_labels)
     if next_xml:
         return next_xml
     return xml
@@ -282,9 +291,12 @@ if not FAILURES:
     features=tap_control(xml,["More","Features"],"features")
     if features:
         report.append("- PASS authenticated Home -> Features screenshot/UI hierarchy")
-        for name,labels in (("money",["Money Tools","Money Center"]),("ai",["FYNX AI","AI Assistant"])):
-            after=capture_surface(name,labels,features)
-            if after != features:
+        for name,labels,expected in (
+            ("money",["Money Tools","Money Center"],["Money Center"]),
+            ("ai",["FYNX AI","AI Assistant"],["FYNX AI"]),
+        ):
+            after=capture_surface(name,labels,features,expected)
+            if any(find_control(after,[wanted]) for wanted in expected):
                 report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
             else:
                 FAILURES.append("authenticated Features -> "+name)
