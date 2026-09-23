@@ -95,14 +95,16 @@ def login():
     screenshot("authenticated-before-login.png")
     if not find_control(xml,["Sign In"]):
         return xml, "authentication gate was not visible"
-    # Compose Material3 text-field labels are not guaranteed to appear as
-    # text/content-desc nodes in UIAutomator. Resolve the actual rendered
-    # EditText controls instead of relying on the visual label semantics.
-    edit_fields=find_edit_fields(xml)
-    if len(edit_fields) < 2:
-        return xml, f"login EditText controls were not visible (found {len(edit_fields)})"
-    user_control=("username",edit_fields[0][0],edit_fields[0][1])
-    pass_control=("password",edit_fields[1][0],edit_fields[1][1])
+    # Prefer explicit accessibility labels from the real auth fields. Fall back
+    # to the rendered EditText controls for emulator/UIAutomator variations.
+    user_control=find_control(xml,["Username"])
+    pass_control=find_control(xml,["Password"])
+    if not user_control or not pass_control:
+        edit_fields=find_edit_fields(xml)
+        if len(edit_fields) < 2:
+            return xml, f"login controls were not visible (labels/edittexts found {len(edit_fields)})"
+        user_control=("username",edit_fields[0][0],edit_fields[0][1])
+        pass_control=("password",edit_fields[1][0],edit_fields[1][1])
     for control,value in ((user_control,USERNAME),(pass_control,PASSWORD)):
         _,x,y=control
         run("adb","shell","input","tap",str(x),str(y))
