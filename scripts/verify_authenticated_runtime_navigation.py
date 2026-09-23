@@ -36,6 +36,16 @@ def nodes(xml_text:str):
     try: return list(ET.fromstring(xml_text).iter("node"))
     except ET.ParseError: return []
 
+def _center(node):
+    bounds=node.attrib.get("bounds","")
+    try:
+        left_top,right_bottom=bounds.split("][",1)
+        left,top=map(int,left_top.strip("[]").split(","))
+        right,bottom=map(int,right_bottom.strip("[]").split(","))
+        return (left+right)//2,(top+bottom)//2
+    except (ValueError,IndexError):
+        return None
+
 def find_control(xml_text:str, labels:list[str]):
     wanted=[x.lower() for x in labels]
     for node in nodes(xml_text):
@@ -44,15 +54,22 @@ def find_control(xml_text:str, labels:list[str]):
         rid=(node.attrib.get("resource-id") or "").strip()
         hay=" | ".join((text,desc,rid)).lower()
         if any(label in hay for label in wanted):
-            bounds=node.attrib.get("bounds","")
-            try:
-                left_top,right_bottom=bounds.split("][",1)
-                left,top=map(int,left_top.strip("[]").split(","))
-                right,bottom=map(int,right_bottom.strip("[]").split(","))
-                return text or desc or rid,(left+right)//2,(top+bottom)//2
-            except (ValueError,IndexError):
-                pass
+            center=_center(node)
+            if center:
+                return text or desc or rid,center[0],center[1]
     return None
+
+def find_edit_fields(xml_text:str):
+    fields=[]
+    for node in nodes(xml_text):
+        if node.attrib.get("class") != "android.widget.EditText":
+            continue
+        if node.attrib.get("visible-to-user","true").lower() == "false":
+            continue
+        center=_center(node)
+        if center:
+            fields.append(center)
+    return fields
 
 def tap_control(xml_text:str, labels:list[str], name:str)->str:
     control=find_control(xml_text,labels)
@@ -78,10 +95,14 @@ def login():
     screenshot("authenticated-before-login.png")
     if not find_control(xml,["Sign In"]):
         return xml, "authentication gate was not visible"
-    user_control=find_control(xml,["Username"])
-    pass_control=find_control(xml,["Password"])
-    if not user_control or not pass_control:
-        return xml, "login fields were not visible"
+    # Compose Material3 text-field labels are not guaranteed to appear as
+    # text/content-desc nodes in UIAutomator. Resolve the actual rendered
+    # EditText controls instead of relying on the visual label semantics.
+    edit_fields=find_edit_fields(xml)
+    if len(edit_fields) < 2:
+        return xml, f"login EditText controls were not visible (found {len(edit_fields)})"
+    user_control=("username",edit_fields[0][0],edit_fields[0][1])
+    pass_control=("password",edit_fields[1][0],edit_fields[1][1])
     for control,value in ((user_control,USERNAME),(pass_control,PASSWORD)):
         _,x,y=control
         run("adb","shell","input","tap",str(x),str(y))
