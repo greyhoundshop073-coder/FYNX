@@ -499,7 +499,7 @@ fun FynxHomeSocialHubPanel(
                         }) { Text(if (posting) "Publishing…" else "Post") }
                     }
 
-                    Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 18.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         if (!postingAllowed) Text("Posting is disabled by your Posts privacy setting.", color = MaterialTheme.colorScheme.error)
 
                         Row(
@@ -592,7 +592,7 @@ fun FynxHomeSocialHubPanel(
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 220.dp, max = 420.dp)
+                                .heightIn(min = 260.dp, max = 420.dp)
                                 .padding(top = 8.dp)
                                 .background(
                                     color = textBackground?.let { Color(it.color) } ?: MaterialTheme.colorScheme.background,
@@ -640,7 +640,7 @@ fun FynxHomeSocialHubPanel(
                         }
 
                         Row(
-                            Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(top = 6.dp),
+                            Modifier.fillMaxWidth().padding(top = 6.dp),
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
