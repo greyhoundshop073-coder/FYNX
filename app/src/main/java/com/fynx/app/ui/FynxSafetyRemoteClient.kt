@@ -66,6 +66,12 @@ object FynxSafetyRemoteClient {
             }
         }
 
+    suspend fun submitReport(context: Context, targetUsername: String, reason: String, details: String): Result<Report> =
+        FynxBackendClient.postJson(context, "/api/social/reports", JSONObject().put("targetUsername", targetUsername.trim().removePrefix("@")).put("reason", reason.trim()).put("details", details.trim()).toString()).mapCatching { raw ->
+            val item = JSONObject(raw).optJSONObject("report") ?: JSONObject()
+            Report(item.optString("id"), item.optString("targetUsername"), item.optString("reason"), item.optString("status"))
+        }
+
     suspend fun appeals(context: Context): Result<List<Appeal>> =
         FynxBackendClient.get(context, "/api/safety/appeals").mapCatching { raw ->
             val array = JSONObject(raw).optJSONArray("appeals") ?: org.json.JSONArray()

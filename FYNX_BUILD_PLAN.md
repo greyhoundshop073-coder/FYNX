@@ -102,6 +102,16 @@ AI image generation and AI video generation are NOT part of the FYNX roadmap. Do
 
 
 
+### Large Badge #9 — Trust, Safety & Account Protection Certification
+- [ ] Server-backed report creation, account-scoped report history and abuse-case status
+- [ ] Real block/unblock enforcement remains server-authoritative across social/profile/media flows
+- [ ] Account safety controls persist server-side and are authenticated/account-isolated
+- [ ] Appeals are authenticated, tied to the submitting account and cannot access another user's report
+- [ ] Anti-scam content inspection remains server-side and protected by the existing abuse guard
+- [ ] Privacy & Safety APK surface exposes real report submission, report history and appeals states
+- [ ] Android and backend verification cover the complete trust/safety contract with no fabricated safety records
+- [ ] Badge is not complete until the consolidated workflow is GREEN
+
 ### Large Badge #8 — FYNX AI Flows & Intelligence Certification
 - [ ] Real FYNX Assistant entry point, text composer, send, retry/error and conversation controls are production-wired
 - [ ] Persistent authenticated AI conversations and real media attachments remain user-scoped

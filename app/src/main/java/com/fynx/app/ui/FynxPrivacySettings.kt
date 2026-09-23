@@ -40,6 +40,10 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
     var appealDetails by remember { mutableStateOf("") }
     var appealReportId by remember { mutableStateOf("") }
     var submittingAppeal by remember { mutableStateOf(false) }
+    var reportTarget by remember { mutableStateOf("") }
+    var reportReason by remember { mutableStateOf("") }
+    var reportDetails by remember { mutableStateOf("") }
+    var submittingReport by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         FynxPrivacyRemoteClient.load(context).onSuccess { remote ->
@@ -125,6 +129,17 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
                         SafetyToggle("Message safety", state?.messageSafety ?: true, safetyLoading) { updateSafety("messageSafety", it) }
                         SafetyToggle("Marketplace safety", state?.marketplaceSafety ?: true, safetyLoading) { updateSafety("marketplaceSafety", it) }
                         SafetyToggle("Login alerts", state?.loginAlerts ?: true, safetyLoading) { updateSafety("loginAlerts", it) }
+                    }
+                }
+            }
+            item {
+                Card(modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                        Text("Report an account", style = MaterialTheme.typography.titleMedium)
+                        OutlinedTextField(value = reportTarget, onValueChange = { reportTarget = it.take(64) }, label = { Text("Username") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = true)
+                        OutlinedTextField(value = reportReason, onValueChange = { reportReason = it.take(80) }, label = { Text("Reason") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = true)
+                        OutlinedTextField(value = reportDetails, onValueChange = { reportDetails = it.take(4000) }, label = { Text("Details (optional)") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), minLines = 3)
+                        Button(enabled = !submittingReport && reportTarget.trim().length >= 2 && reportReason.trim().length >= 3, onClick = { submittingReport = true; scope.launch { FynxSafetyRemoteClient.submitReport(context, reportTarget, reportReason, reportDetails).onSuccess { reports = listOf(it) + reports; reportTarget=""; reportReason=""; reportDetails=""; notice="Report submitted. FYNX Safety will review it." }.onFailure { error -> notice=error.message ?: "Report submission failed." }; submittingReport=false } }, modifier = Modifier.padding(top = 8.dp)) { Text(if (submittingReport) "Submitting…" else "Submit report") }
                     }
                 }
             }
