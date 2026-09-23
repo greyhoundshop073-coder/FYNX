@@ -110,7 +110,6 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(if (showArchived) "No archived chats" else if (normalizedChatSearch.isNotBlank()) "No matching chats" else "Messages", style = MaterialTheme.typography.titleLarge)
                         Text(if (showArchived) "Chats you archive will stay here until you restore them." else if (normalizedChatSearch.isNotBlank()) "Try another name, username or message." else "Your private conversations will appear here. Start one with a real FYNX user.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (!showArchived && normalizedChatSearch.isBlank()) Button(onClick = onOpenContacts) { Text("Open phone contacts") }
                     }
                 }
             } else {
