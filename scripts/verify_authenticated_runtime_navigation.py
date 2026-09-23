@@ -93,8 +93,16 @@ def login():
     time.sleep(2.5)
     xml=dump_ui("authenticated-before-login.xml")
     screenshot("authenticated-before-login.png")
-    if not find_control(xml,["Sign In"]):
+    sign_in_gate=find_control(xml,["Sign In"])
+    if not sign_in_gate:
         return xml, "authentication gate was not visible"
+    # The app starts on the welcome gate when no local session exists. Enter
+    # the real Sign In screen before resolving its username/password controls.
+    _,x,y=sign_in_gate
+    run("adb","shell","input","tap",str(x),str(y))
+    time.sleep(2.5)
+    xml=dump_ui("authenticated-login-screen.xml")
+    screenshot("authenticated-login-screen.png")
     # Prefer explicit accessibility labels from the real auth fields. Fall back
     # to the rendered EditText controls for emulator/UIAutomator variations.
     user_control=find_control(xml,["Username"])
