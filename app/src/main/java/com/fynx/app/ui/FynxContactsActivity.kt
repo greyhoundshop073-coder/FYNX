@@ -30,7 +30,7 @@ class FynxContactsActivity : ComponentActivity() {
             val accent = remember { FynxPreferencesStore.loadAccent(context) }
             FynxTheme(
                 accent = accent,
-                darkMode = when (appearance) { "Light" -> false; "Dark" -> true; else -> isSystemInDarkTheme() }
+                darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }
             ) {
                 FynxContactsPanel(
                     onBack = { finish() },
