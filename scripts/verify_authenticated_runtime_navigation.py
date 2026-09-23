@@ -106,20 +106,34 @@ def login():
     # Prefer explicit accessibility labels from the real auth fields. Fall back
     # to the rendered EditText controls for emulator/UIAutomator variations.
     user_control=find_control(xml,["Username"])
+    if not user_control:
+        edit_fields=find_edit_fields(xml)
+        if not edit_fields:
+            return xml, "username control was not visible"
+        user_control=("username",edit_fields[0][0],edit_fields[0][1])
+    _,x,y=user_control
+    run("adb","shell","input","tap",str(x),str(y))
+    time.sleep(.3)
+    result=input_text(USERNAME)
+    if result.returncode != 0:
+        return xml, "adb input text failed for username"
+
+    # Opening the keyboard scrolls the Compose form. Re-read the hierarchy
+    # before locating Password; never reuse the pre-keyboard coordinates.
+    xml=dump_ui("authenticated-after-username.xml")
     pass_control=find_control(xml,["Password"])
-    if not user_control or not pass_control:
+    if not pass_control:
         edit_fields=find_edit_fields(xml)
         if len(edit_fields) < 2:
-            return xml, f"login controls were not visible (labels/edittexts found {len(edit_fields)})"
-        user_control=("username",edit_fields[0][0],edit_fields[0][1])
+            return xml, f"password control was not visible after username entry (edittexts found {len(edit_fields)})"
         pass_control=("password",edit_fields[1][0],edit_fields[1][1])
-    for control,value in ((user_control,USERNAME),(pass_control,PASSWORD)):
-        _,x,y=control
-        run("adb","shell","input","tap",str(x),str(y))
-        time.sleep(.3)
-        result=input_text(value)
-        if result.returncode != 0:
-            return xml, "adb input text failed"
+    _,x,y=pass_control
+    run("adb","shell","input","tap",str(x),str(y))
+    time.sleep(.3)
+    result=input_text(PASSWORD)
+    if result.returncode != 0:
+        return xml, "adb input text failed for password"
+
     # Dismiss the software keyboard so the real Sign In button is back in
     # the visible UI hierarchy before tapping it.
     run("adb","shell","input","keyevent","4")
