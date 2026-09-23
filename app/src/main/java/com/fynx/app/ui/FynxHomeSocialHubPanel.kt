@@ -66,7 +66,8 @@ fun FynxHomeSocialHubPanel(
     onOpenNotifications: () -> Unit = {},
     onOpenFindPeople: () -> Unit = {},
     onOpenAi: () -> Unit = {},
-    onOpenAuthorProfile: (String) -> Unit = {}
+    onOpenAuthorProfile: (String) -> Unit = {},
+    onOpenFastCamera: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -456,6 +457,27 @@ fun FynxHomeSocialHubPanel(
                 showCamera = true
             },
             onCreatePost = { showComposer = true; notice = null },
+            onOpenFastCamera = {
+                if (!posting) {
+                    capturedUris = emptyList()
+                    capturedTypes = emptyList()
+                    selectedVisualIndex = 0
+                    text = ""
+                    textBackground = null
+                    postLocation = null
+                    selectedCatalogueMusic = null
+                    musicPlaying = false
+                    selectedFeelingActivity = null
+                    showFeelingActivityPicker = false
+                    selectedAudienceIds = emptySet()
+                    audience = if (configuredPostVisibility == "Everyone") FynxPostAudience.EVERYONE else FynxPostAudience.FRIENDS
+                    visibility = defaultPostVisibility
+                    notice = null
+                }
+                cameraOpenedFromComposer = false
+                showComposer = false
+                showFastCamera = true
+            },
             onOpenAuthorProfile = onOpenAuthorProfile
         )
     }
