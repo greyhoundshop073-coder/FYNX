@@ -53,26 +53,13 @@ def _matches(node, wanted:list[str]) -> bool:
     hay=" | ".join((text,desc,rid)).lower()
     return any(label in hay for label in wanted)
 
-def _click_target(node):
-    # UIAutomator often exposes Compose labels as non-clickable children of the
-    # actual clickable container. Walk down to the rendered label, then return
-    # the nearest clickable ancestor so input taps land on the control itself.
-    if node.attrib.get("clickable","false").lower() == "true":
-        return node
-    for child in list(node):
-        target=_click_target(child)
-        if target is not None:
-            return target
-    return None
-
 def _find_control_node(node, wanted:list[str]):
-    if _matches(node, wanted):
-        target=_click_target(node)
-        if target is not None:
-            return target
-        center=_center(node)
-        if center:
-            return node
+    # Compose semantics may expose the visible label as a child of the
+    # clickable card/button. The label's bounds are still inside the interactive
+    # target, so tap the matched rendered node instead of relying on a fragile
+    # clickable-ancestor search.
+    if _matches(node, wanted) and _center(node):
+        return node
     for child in list(node):
         found=_find_control_node(child, wanted)
         if found is not None:
@@ -263,14 +250,14 @@ else:
 
 if not FAILURES:
     # Main surfaces. These labels are resolved from the real rendered hierarchy.
-    for name,labels in (
-        ("chat",["Chat"]),
-        ("friends",["Friends"]),
-        ("stories",["Stories","Status"]),
+    for name,labels,expected in (
+        ("chat",["Chat"],["Chat"]),
+        ("friends",["Friends"],["Friends"]),
+        ("stories",["Stories","Status"],["Status"]),
     ):
         before=xml
-        after=capture_surface(name,labels,before)
-        if after != before:
+        after=capture_surface(name,labels,before,expected)
+        if after:
             report.append(f"- PASS authenticated Home -> {name} screenshot/UI hierarchy")
         else:
             FAILURES.append("authenticated Home -> "+name)
@@ -292,7 +279,7 @@ if not FAILURES:
         run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
         time.sleep(2.5)
         home_xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-features.xml") or xml
-        feature_xml=tap_control(home_xml,["More","Features"],"features")
+        feature_xml=tap_control(home_xml,["More","Features"],"features",["FYNX Features"])
         if not feature_xml:
             return ""
         for _ in range(8):
@@ -317,7 +304,7 @@ if not FAILURES:
                 FAILURES.append("authenticated Features -> "+name)
                 continue
             after=capture_surface(name,labels,current,expected)
-            if any(find_control(after,[wanted]) for wanted in expected):
+            if after:
                 report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
             else:
                 FAILURES.append("authenticated Features -> "+name)
