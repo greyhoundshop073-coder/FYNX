@@ -29,7 +29,7 @@ check("Assistant has retry/error handling", "Retry" in panel and "temporarily un
 check("Assistant supports persistent conversations", "FynxAiConversationClient.create" in panel and "FynxAiConversationClient.list" in panel and "FynxAiConversationClient.get" in panel)
 check("Assistant supports conversation deletion", "FynxAiConversationClient.delete" in panel)
 check("Assistant supports authenticated image attachment", "uploadImage(context, uri)" in panel and "pendingMediaId" in panel)
-check("Assistant preserves bounded conversation context", "buildAiConversationContext" in panel and "buildAiConversationContext" in context)
+check("Assistant preserves bounded conversation context", "buildAiConversationContext" in context and "takeLast(6)" in context and "take(900)" in context)
 check("Assistant backend routes are registered", "registerFynxAiConversationRoutes({ app });" in scalability)
 check("Assistant conversation routes are authenticated", "authenticate(req)" in routes and "user_id=$2" in routes)
 check("Assistant replies are persisted", "ai_messages" in routes and "const reply = agentResult.reply" in routes)
