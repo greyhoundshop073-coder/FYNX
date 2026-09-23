@@ -110,7 +110,7 @@ object FynxPreferencesStore {
             if (followerCount != null) put("followerCount", followerCount.coerceAtLeast(0))
             if (followingCount != null) put("followingCount", followingCount.coerceAtLeast(0))
         }
-        context.getSharedPreferences("${KEY_REMOTE_PROFILE_STATS_CACHE}_\${accountNamespace(context)}", Context.MODE_PRIVATE)
+        context.getSharedPreferences("${KEY_REMOTE_PROFILE_STATS_CACHE}_${accountNamespace(context)}", Context.MODE_PRIVATE)
             .edit().putString(cacheKey(username), json.toString()).apply()
     }
 
