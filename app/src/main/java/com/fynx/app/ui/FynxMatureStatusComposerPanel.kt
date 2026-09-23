@@ -83,7 +83,12 @@ fun FynxMatureStatusComposerPanel(
     var foreground by remember { mutableLongStateOf(0xFFFFFFFF) }
     var font by remember { mutableStateOf(FynxStatusTextFont.CLASSIC) }
     var alignment by remember { mutableIntStateOf(1) }
-    var audience by remember { mutableStateOf(FynxStatusAudience.EVERYONE) }
+    var audience by remember {
+        mutableStateOf(
+            runCatching { FynxStatusAudience.valueOf(FynxPreferencesStore.loadVisibility(context, "status_audience", FynxStatusAudience.EVERYONE.name)) }
+                .getOrDefault(FynxStatusAudience.EVERYONE)
+        )
+    }
     var publishing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var recording by remember { mutableStateOf(false) }
