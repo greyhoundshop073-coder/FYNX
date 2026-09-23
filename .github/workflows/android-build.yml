@@ -197,6 +197,14 @@ jobs:
           sudo usermod -aG kvm "$USER"
           groups
           ls -l /dev/kvm
+      - name: Verify authenticated runtime credentials are available
+        env:
+          FYNX_E2E_USERNAME: ${{ secrets.FYNX_E2E_USERNAME }}
+          FYNX_E2E_PASSWORD: ${{ secrets.FYNX_E2E_PASSWORD }}
+        run: |
+          test -n "$FYNX_E2E_USERNAME"
+          test -n "$FYNX_E2E_PASSWORD"
+          echo "Authenticated FYNX visual certification credentials are available."
       - name: Run Android instrumentation tests and capture the real FYNX UI
         uses: reactivecircus/android-emulator-runner@v2
         with:

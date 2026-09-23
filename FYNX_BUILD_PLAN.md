@@ -142,3 +142,13 @@ AI image generation and AI video generation are NOT part of the FYNX roadmap. Do
 - [x] Trust/safety, appeals and account-protection continuity remains connected to the product surfaces
 - [x] Dedicated product-completeness verifier is wired into the Android release workflow
 - [x] Badge is complete when the consolidated workflow remains GREEN
+
+
+### Large Badge #12 — Authenticated Runtime Visual Certification
+- [ ] A dedicated real FYNX account is supplied to CI through GitHub Actions secrets only
+- [ ] The emulator signs into FYNX through the existing production authentication flow
+- [ ] Authenticated Home is captured after the real session is established
+- [ ] Authenticated Chat, Friends, Stories/Status, Features, Money and FYNX AI surfaces are captured from the running APK
+- [ ] No fabricated account, token, post, message, listing or other application record is created by the visual test
+- [ ] Credentials never enter the APK or repository
+- [ ] Authenticated visual certification is mandatory before the next product badge
