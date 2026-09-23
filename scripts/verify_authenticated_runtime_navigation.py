@@ -120,7 +120,12 @@ def login():
         result=input_text(value)
         if result.returncode != 0:
             return xml, "adb input text failed"
+    # Dismiss the software keyboard so the real Sign In button is back in
+    # the visible UI hierarchy before tapping it.
+    run("adb","shell","input","keyevent","4")
+    time.sleep(1.0)
     xml=dump_ui("authenticated-login-filled.xml")
+    screenshot("authenticated-login-filled.png")
     sign_in=find_control(xml,["Sign In"])
     if not sign_in:
         return xml, "Sign In control disappeared after credentials were entered"
