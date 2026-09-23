@@ -138,8 +138,15 @@ def login():
     # the real Sign In screen before resolving its username/password controls.
     _,x,y=sign_in_gate
     run("adb","shell","input","tap",str(x),str(y))
-    time.sleep(2.5)
-    xml=dump_ui("authenticated-login-screen.xml")
+    # Compose can take longer than a fixed sleep to publish the new semantics
+    # tree on a cold CI emulator. Poll the real hierarchy until the login
+    # controls are actually exposed instead of declaring a false RED.
+    xml=""
+    for _ in range(12):
+        time.sleep(1.0)
+        xml=dump_ui("authenticated-login-screen.xml")
+        if find_control(xml, ["Username"]) or len(find_edit_fields(xml)) >= 2:
+            break
     screenshot("authenticated-login-screen.png")
     # Prefer explicit accessibility labels from the real auth fields. Fall back
     # to the rendered EditText controls for emulator/UIAutomator variations.
