@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -194,7 +196,9 @@ private fun FynxAuthField(value: String, onValueChange: (String) -> Unit, label:
         trailingIcon = if (password) {
             { TextButton(onClick = { passwordVisible = !passwordVisible }) { Text(if (passwordVisible) "Hide" else "Show") } }
         } else null,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = label },
         shape = RoundedCornerShape(18.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = Color(0xFF238AF2),
