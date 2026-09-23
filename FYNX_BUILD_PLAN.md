@@ -99,3 +99,15 @@ AI image generation and AI video generation are NOT part of the FYNX roadmap. Do
 - [ ] Real event wiring covers messaging, groups and social activity without fabricated records
 - [ ] Existing notification/security gates plus real Android instrumentation remain GREEN
 - [ ] Badge is not complete until the consolidated workflow is GREEN
+
+
+
+### Large Badge #8 — FYNX AI Flows & Intelligence Certification
+- [ ] Real FYNX Assistant entry point, text composer, send, retry/error and conversation controls are production-wired
+- [ ] Persistent authenticated AI conversations and real media attachments remain user-scoped
+- [ ] AI context, tool execution, confirmation-gated messaging and sensitive-action restrictions remain server-authoritative
+- [ ] Voice/realtime AI uses authenticated FYNX session transport with bounded tool processing
+- [ ] Provider credentials remain server-side and abuse/security controls remain active
+- [ ] Existing AI extension and security gates remain GREEN
+- [ ] No fabricated AI application data or secrets are introduced
+- [ ] Badge is not complete until the consolidated workflow is GREEN
