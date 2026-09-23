@@ -12,6 +12,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.KeyboardActions
@@ -274,6 +275,17 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     fun playVoice(message: ChatMessage) {
         val voiceUrl = message.voiceUri ?: return
+        val currentPlayer = player
+        if (playingVoiceId == message.id && currentPlayer != null) {
+            runCatching {
+                if (currentPlayer.isPlaying) currentPlayer.pause() else currentPlayer.start()
+            }.onFailure {
+                playingVoiceId = null
+                currentPlayer.release()
+                player = null
+            }
+            return
+        }
         player?.release()
         player = null
         playingVoiceId = null
@@ -364,6 +376,21 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     }
 
     val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, ignoreCase = true) }
+    val messageListState = rememberLazyListState()
+
+    LaunchedEffect(visibleMessages.size, searchQuery) {
+        if (visibleMessages.isEmpty()) return@LaunchedEffect
+        delay(60L)
+        if (searchQuery.isNotBlank()) {
+            messageListState.scrollToItem(0)
+        } else {
+            val lastIndex = messageListState.layoutInfo.totalItemsCount - 1
+            val lastVisible = messageListState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: -1
+            if (lastIndex >= 0 && (lastVisible < 0 || lastVisible >= lastIndex - 2)) {
+                messageListState.animateScrollToItem(lastIndex)
+            }
+        }
+    }
 
     if (showChatSettings) {
         FynxChatSettingsPanel(chatUsername = chat.username, onBack = { showChatSettings = false })
@@ -465,7 +492,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         if (searchOpen) OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search messages…") })
         networkError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 3.dp)) }
 
-        LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
+        LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
             if (isNewConversation && searchQuery.isBlank()) {
                 item(key = "fynx_first_contact_intro") {
                     FynxFirstContactIntro(recipientProfile, recipientCreatedAt, chat.name, chat.username, chat.avatarUri)
