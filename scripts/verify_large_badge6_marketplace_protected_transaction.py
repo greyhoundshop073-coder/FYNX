@@ -21,7 +21,7 @@ checks = [
     ("payment verification is required before protected confirmation", "verifyMarketplacePayment" in panel and "Verify payment" in panel),
     ("buyer can confirm delivery through the backend", '"/api/marketplace/orders/$id/confirm-delivery"' in client),
     ("seller shipping uses the backend order route", '"/api/marketplace/orders/$id/ship"' in client),
-    ("order lifecycle exposes received confirmation", '"SHIPPED" ->' not in lifecycle and "Confirm received" in lifecycle),
+    ("order lifecycle exposes received confirmation", "Confirm received" in lifecycle and "confirmMarketplaceDelivery" in lifecycle),
     ("order lifecycle exposes completion after inspection", "Complete the order" in lifecycle and '"INSPECTION"' in lifecycle),
     ("order lifecycle exposes dispute reporting", "disputeMarketplaceOrder" in panel and "Open dispute" in lifecycle),
     ("unpaid protected orders can be cancelled", "cancelMarketplaceOrder" in panel and "PAYMENT_PENDING" in panel),
