@@ -92,7 +92,7 @@ object FynxPreferencesStore {
     data class RemoteProfileStats(val postCount: Int, val followerCount: Int?, val followingCount: Int?)
 
     fun loadRemoteProfileStats(context: Context, username: String): RemoteProfileStats? {
-        val raw = context.getSharedPreferences("${KEY_REMOTE_PROFILE_STATS_CACHE}_\${accountNamespace(context)}", Context.MODE_PRIVATE)
+        val raw = context.getSharedPreferences("${KEY_REMOTE_PROFILE_STATS_CACHE}_${accountNamespace(context)}", Context.MODE_PRIVATE)
             .getString(cacheKey(username), null) ?: return null
         return runCatching {
             val json = JSONObject(raw)
