@@ -71,6 +71,12 @@ report=["# FYNX Runtime Navigation Diagnostic","",
         f"- Commit: {os.environ.get('GITHUB_SHA','local')}",
         f"- Run: {os.environ.get('GITHUB_RUN_ID','local')}","",
         "Observed behavior from the built APK only. No fake application data is created.",""]
+install=run("adb","install","-r","app/build/outputs/apk/debug/app-debug.apk")
+report.append(f"- APK install: {'PASS' if install.returncode==0 else 'FAIL'}")
+if install.returncode != 0:
+    report.append("  - adb install output: "+install.stdout.strip().replace("\n"," | "))
+    raise SystemExit(1)
+
 failures=[]
 
 for name,uri in {"home":"fynx://home","stories":"fynx://stories","money":"fynx://money"}.items():
