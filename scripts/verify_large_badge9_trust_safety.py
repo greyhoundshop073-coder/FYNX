@@ -13,7 +13,7 @@ checks=[
 ("appeals are authenticated and persisted",'app.post("/api/safety/appeals",auth' in trust and "INSERT INTO safety_appeals" in trust),
 ("appeals cannot reference another user's report","WHERE id=$1 AND reporter_id=$2" in trust),
 ("appeal history is account-scoped",'app.get("/api/safety/appeals",auth' in trust and "WHERE user_id=$1" in trust),
-("server wires trust safety with real auth and database","registerTrustSafetyRoutes({ app, pool, auth });" in server and 'import { registerTrustSafetyRoutes from "./trustSafety.js";' in server),
+("server wires trust safety with real auth and database","registerTrustSafetyRoutes({ app, pool, auth });" in server and 'import { registerTrustSafetyRoutes } from "./trustSafety.js";' in server),
 ("block routes are authenticated",'app.post("/api/blocks/:username", auth' in social and 'app.delete("/api/blocks/:username", auth' in social),
 ("blocks remove friendship","INSERT INTO blocks" in social and "DELETE FROM friendships" in social),
 ("blocked users are denied social media access","NOT EXISTS(SELECT 1 FROM blocks" in social),
