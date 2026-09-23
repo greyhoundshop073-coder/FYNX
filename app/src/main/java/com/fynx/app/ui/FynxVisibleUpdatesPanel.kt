@@ -65,7 +65,8 @@ fun FynxVisibleUpdatesPanel(
     onOpenStories: () -> Unit,
     onOpenAi: () -> Unit,
     onOpenCamera: () -> Unit = {},
-    onCreateStatus: () -> Unit = onOpenStories
+    onCreateStatus: () -> Unit = onOpenStories,
+    onOpenStatusOwner: (String) -> Unit = { onOpenStories() }
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -152,7 +153,7 @@ fun FynxVisibleUpdatesPanel(
                                 currentUsername.ifBlank { "You" },
                                 "Your status",
                                 true,
-                                if (own != null) onOpenStories else onCreateStatus,
+                                if (own != null) onOpenStatusOwner(current), else onCreateStatus,
                                 own?.second ?: 0,
                                 ownerPhotoIds[current]
                             )
@@ -174,7 +175,7 @@ fun FynxVisibleUpdatesPanel(
                             status.ownerUsername,
                             status.ownerDisplayName.ifBlank { status.ownerUsername },
                             true,
-                            onOpenStories,
+                            { onOpenStatusOwner(status.ownerUsername.removePrefix("@").trim()) },
                             count,
                             ownerPhotoIds[status.ownerUsername.removePrefix("@").trim().lowercase()]
                         )
