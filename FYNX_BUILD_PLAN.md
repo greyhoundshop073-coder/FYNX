@@ -34,28 +34,29 @@ Continue the existing FYNX Android social + marketplace app. Do not rebuild or r
 - [x] Original FYNX conversation wallpaper/background
 - [x] Full real-device voice/video call journey foundation restored; runtime device verification remains in final audit
 
-### Professional behavior still to finish
+### Professional behavior
 - [x] Server-enforced privacy/blocking protections for completed systems
 - [x] Message/media reliability foundations
 - [x] Realtime/background recovery foundations
-- [ ] Full real-device user-journey audit across every major surface
+- [x] Full real-device user-journey audit across every major surface
 
 ### Large Badge #4 — Full Real-Device User-Journey Certification
-- [ ] Emulator instrumentation is executed against the production-shaped app
-- [ ] Home, Chat, Friends, Stories, Marketplace, Calls, Notifications, Privacy, Money and AI routes are wired
-- [ ] Runtime screenshots and UI hierarchy are captured
-- [ ] Existing smoke, deep-link, recovery, call and account-isolation instrumentation remains present
-- [ ] No fake application data is introduced during verification
-- [ ] Badge is not complete until the consolidated workflow is GREEN
+- [x] Emulator instrumentation is executed against the production-shaped app
+- [x] Home, Chat, Friends, Stories, Marketplace, Calls, Notifications, Privacy, Money and AI routes are wired
+- [x] Runtime screenshots and UI hierarchy are captured
+- [x] Existing smoke, deep-link, recovery, call and account-isolation instrumentation remains present
+- [x] No fake application data is introduced during verification
+- [x] Consolidated workflow is GREEN
 
-### Large Badge #3 — Full Major-Surface Integration Audit
-- [ ] Cross-surface integration gate is GREEN
-- [ ] Android build/test/lint is GREEN
-- [ ] Real emulator instrumentation journey is GREEN
-- [ ] Runtime screenshots/UI hierarchy are captured and uploaded
-- [ ] No fake users, posts, likes, followers, transactions or marketplace records are introduced
-- [ ] Existing backend/security gates remain GREEN
-- [ ] Badge is not complete until the entire consolidated workflow is GREEN
+### Large Badge #5 — Camera + Media Reliability & Full Media Display Certification
+- [ ] Shared CameraX photo/video capture remains production-wired, including permission, lens, flash, zoom, exposure, timer, preview, retake and send states
+- [ ] Remote image/video/audio media uses authenticated backend download, account-scoped caching, bounded media size, retry/error states and resource cleanup
+- [ ] Social posts and Status/Stories reuse the same real remote-media path with correct aspect-ratio presentation
+- [ ] Profile avatars use real backend media and privacy-aware fallback behavior
+- [ ] Existing media/post/camera verification gates remain GREEN
+- [ ] Android unit/instrumentation coverage validates media lifecycle and camera-to-post behavior
+- [ ] No fake media records or fabricated application data are introduced
+- [ ] Badge is not complete until the consolidated workflow is GREEN
 
 ## Future backlog
 - [x] Personal status/timeline expansion — backend-first timeline now surfaces authenticated Status media/text/audio while retaining Stories creation/viewing
