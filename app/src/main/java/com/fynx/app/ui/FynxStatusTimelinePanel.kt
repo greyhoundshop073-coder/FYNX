@@ -149,7 +149,7 @@ fun FynxStatusTimelinePanel(
     }
 
     selected?.let { initial ->
-        val ownerStatuses = visibleStatuses.filter { it.ownerUsername == initial.ownerUsername }.sortedBy { it.createdAtMillis }
+        val ownerStatuses = visibleStatuses.filter { it.ownerUsername.equals(initial.ownerUsername, true) }.sortedBy { it.createdAtMillis }
         FynxStatusStoryViewer(
             ownerStatuses,
             ownerStatuses.indexOfFirst { it.id == initial.id }.coerceAtLeast(0),
