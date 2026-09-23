@@ -46,17 +46,55 @@ def _center(node):
     except (ValueError,IndexError):
         return None
 
+def _matches(node, wanted:list[str]) -> bool:
+    text=(node.attrib.get("text") or "").strip()
+    desc=(node.attrib.get("content-desc") or "").strip()
+    rid=(node.attrib.get("resource-id") or "").strip()
+    hay=" | ".join((text,desc,rid)).lower()
+    return any(label in hay for label in wanted)
+
+def _click_target(node):
+    # UIAutomator often exposes Compose labels as non-clickable children of the
+    # actual clickable container. Walk down to the rendered label, then return
+    # the nearest clickable ancestor so input taps land on the control itself.
+    if node.attrib.get("clickable","false").lower() == "true":
+        return node
+    for child in list(node):
+        target=_click_target(child)
+        if target is not None:
+            return target
+    return None
+
+def _find_control_node(node, wanted:list[str]):
+    if _matches(node, wanted):
+        target=_click_target(node)
+        if target is not None:
+            return target
+        center=_center(node)
+        if center:
+            return node
+    for child in list(node):
+        found=_find_control_node(child, wanted)
+        if found is not None:
+            return found
+    return None
+
 def find_control(xml_text:str, labels:list[str]):
+    if not xml_text: return None
     wanted=[x.lower() for x in labels]
-    for node in nodes(xml_text):
+    try:
+        root=ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    node=_find_control_node(root, wanted)
+    if node is None:
+        return None
+    center=_center(node)
+    if center:
         text=(node.attrib.get("text") or "").strip()
         desc=(node.attrib.get("content-desc") or "").strip()
         rid=(node.attrib.get("resource-id") or "").strip()
-        hay=" | ".join((text,desc,rid)).lower()
-        if any(label in hay for label in wanted):
-            center=_center(node)
-            if center:
-                return text or desc or rid,center[0],center[1]
+        return text or desc or rid,center[0],center[1]
     return None
 
 def find_edit_fields(xml_text:str):
