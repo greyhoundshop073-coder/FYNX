@@ -16,14 +16,14 @@ settlement = (ROOT / "backend/marketplaceSettlement.js").read_text(encoding="utf
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 
 checks = [
-    ("buyer checkout creates a protected order before payment", "initializeMarketplacePayment" in panel and "order.id" in panel),
+    ("buyer checkout creates a protected order before payment", "createProtectedMarketplaceCheckoutOrder" in checkout and "paymentOrder" in panel),
     ("checkout sends the canonical order ID to payment initialization", 'put("orderId", orderId)' in checkout),
-    ("payment verification is required before protected confirmation", "verifyMarketplacePayment" in panel and "verified" in checkout),
+    ("payment verification is required before protected confirmation", "verifyMarketplacePayment" in panel and "Verify payment" in panel),
     ("buyer can confirm delivery through the backend", '"/api/marketplace/orders/$id/confirm-delivery"' in client),
     ("seller shipping uses the backend order route", '"/api/marketplace/orders/$id/ship"' in client),
-    ("order lifecycle exposes received confirmation", '"SHIPPED" -> "Confirm the order when you receive it."' in lifecycle),
-    ("order lifecycle exposes completion after inspection", "Inspect the order and complete it" in lifecycle),
-    ("order lifecycle exposes dispute reporting", "disputeMarketplaceOrder" in panel and "Open dispute" in panel),
+    ("order lifecycle exposes received confirmation", '"SHIPPED" ->' not in lifecycle and "Confirm received" in lifecycle),
+    ("order lifecycle exposes completion after inspection", "Complete the order" in lifecycle and '"INSPECTION"' in lifecycle),
+    ("order lifecycle exposes dispute reporting", "disputeMarketplaceOrder" in panel and "Open dispute" in lifecycle),
     ("unpaid protected orders can be cancelled", "cancelMarketplaceOrder" in panel and "PAYMENT_PENDING" in panel),
     ("backend delivery confirmation is authenticated", "app.post('/api/marketplace/orders/:id/confirm-delivery', auth" in completion),
     ("backend shipping requires seller authorization", "only the seller can ship this order" in completion),
