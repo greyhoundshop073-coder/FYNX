@@ -363,9 +363,9 @@ fun FynxMatureStatusComposerPanel(
                                 label = { Text(if (audience == FynxStatusAudience.EVERYONE) "Everyone" else if (audience == FynxStatusAudience.FRIENDS) "Friends" else "Only me") }
                             )
                             DropdownMenu(expanded = audienceMenu, onDismissRequest = { audienceMenu = false }) {
-                                DropdownMenuItem(text = { Text("Everyone") }, onClick = { audience = FynxStatusAudience.EVERYONE; audienceMenu = false })
-                                DropdownMenuItem(text = { Text("Friends") }, onClick = { audience = FynxStatusAudience.FRIENDS; audienceMenu = false })
-                                DropdownMenuItem(text = { Text("Only me") }, onClick = { audience = FynxStatusAudience.ONLY_ME; audienceMenu = false })
+                                DropdownMenuItem(text = { Text("Everyone") }, onClick = { audience = FynxStatusAudience.EVERYONE; FynxPreferencesStore.saveVisibility(context, "status_audience", audience.name); audienceMenu = false })
+                                DropdownMenuItem(text = { Text("Friends") }, onClick = { audience = FynxStatusAudience.FRIENDS; FynxPreferencesStore.saveVisibility(context, "status_audience", audience.name); audienceMenu = false })
+                                DropdownMenuItem(text = { Text("Only me") }, onClick = { audience = FynxStatusAudience.ONLY_ME; FynxPreferencesStore.saveVisibility(context, "status_audience", audience.name); audienceMenu = false })
                             }
                         }
                         Spacer(Modifier.weight(1f))
