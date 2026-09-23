@@ -152,3 +152,14 @@ AI image generation and AI video generation are NOT part of the FYNX roadmap. Do
 - [ ] No fabricated account, token, post, message, listing or other application record is created by the visual test
 - [ ] Credentials never enter the APK or repository
 - [ ] Authenticated visual certification is mandatory before the next product badge
+
+
+### Large Badge #13 — Regression, Security & Release Hardening Certification
+- [ ] Critical backend/client security invariants remain enforced: authentication, HTTPS transport, trusted media host, bounded responses/media, request limits, rate limits and database timeouts
+- [ ] Secure Android token storage and logout/session invalidation remain intact
+- [ ] Existing production, network, security, marketplace, trust/safety and product-completeness gates remain consolidated before APK publication
+- [ ] Authenticated runtime visual certification remains mandatory and uses CI secrets only
+- [ ] Real Android instrumentation remains mandatory before APK publication
+- [ ] No common API credentials/private keys are committed to Android source or manifest
+- [ ] Exact-commit APK publication remains success-gated
+- [ ] Badge is not complete until the consolidated workflow is GREEN
