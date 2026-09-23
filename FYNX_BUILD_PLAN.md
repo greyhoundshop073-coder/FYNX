@@ -121,3 +121,14 @@ AI image generation and AI video generation are NOT part of the FYNX roadmap. Do
 - [ ] Existing AI extension and security gates remain GREEN
 - [ ] No fabricated AI application data or secrets are introduced
 - [ ] Badge is not complete until the consolidated workflow is GREEN
+
+
+### Large Badge #10 — Final Integration & Release Certification
+- [x] Major social, messaging, marketplace, media, notifications, AI and trust/safety certification gates remain consolidated in CI
+- [x] Production journey and security certification remain wired before Android build/test
+- [x] Android lint, unit tests and APK assembly remain mandatory
+- [x] Real Android instrumentation executes before release artifact publication
+- [x] Runtime screenshots and UI hierarchies are captured from the built APK
+- [x] Exact-commit debug APK artifact is published only after successful build/test/instrumentation
+- [x] No common API-secret patterns are permitted in critical client files
+- [ ] Final certification is complete only when the consolidated workflow is GREEN
