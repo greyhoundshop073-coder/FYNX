@@ -52,10 +52,10 @@ required_ok = all([
 ])
 check("all major FYNX surface files exist", required_ok)
 
-check("Home is part of the authenticated app", "HomePanel" in app and "AuthState.SIGNED_IN" in app)
+check("Home is part of the authenticated app", "HomePanel" in app and "authSession.state == AuthState.SIGNED_IN" in app)
 check("Chat is connected to the app", ("ChatsPanel" in app or "ConversationPanel" in app or "GroupChatPanel" in app) and "ConversationPanel" in app)
 check("People/Profile is connected to real profile loading", "ProfilePanel" in app and "FynxProfileRemoteClient" in profile)
-check("Stories/Status surface is connected", "StoriesPanel" in app and ("FynxStatus" in app or "Status" in stories))
+check("Stories/Status surface is connected", "FynxStatusHubPanel" in app and ("FynxStatusTimelinePanel" in stories or "FynxStatusTimelinePanel" in read("app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt")))
 check("Groups use server-backed routes", "/api/groups" in groups_backend)
 check("Marketplace uses remote data and protected transactions", ("FynxRemoteHomeSocialPanel" in marketplace or "FynxTransactionFoundation" in marketplace) and "marketplace_orders" in marketplace_backend)
 check("Calls retain realtime and media controls", "realtimeClient.connect()" in calls and "setMicrophoneEnabled" in calls and "setCameraEnabled" in calls)
