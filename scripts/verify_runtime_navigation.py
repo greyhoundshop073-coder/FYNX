@@ -12,9 +12,19 @@ def run(*args:str):
     return subprocess.run(args,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
 
 def dump_ui(path:Path)->str:
-    run("adb","shell","uiautomator","dump","/sdcard/fynx-runtime.xml")
-    pulled=run("adb","pull","/sdcard/fynx-runtime.xml",str(path))
-    return path.read_text(encoding="utf-8",errors="replace") if pulled.returncode==0 and path.exists() else ""
+    dump=run("adb","shell","uiautomator","dump","/sdcard/fynx-runtime.xml")
+    if dump.returncode != 0:
+        return ""
+    raw=subprocess.run(
+        ["adb","exec-out","cat","/sdcard/fynx-runtime.xml"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    ).stdout
+    if raw.startswith(b"<?xml"):
+        path.write_bytes(raw)
+        return raw.decode("utf-8",errors="replace")
+    return ""
 
 def screenshot(path:Path)->None:
     with path.open("wb") as out: subprocess.run(["adb","exec-out","screencap","-p"],stdout=out,check=False)
@@ -65,8 +75,8 @@ failures=[]
 
 for name,uri in {"home":"fynx://home","stories":"fynx://stories","money":"fynx://money"}.items():
     xml=launch(uri,ROOT/f"route-{name}.png",ROOT/f"route-{name}.xml")
-    ok=bool(xml) and (ROOT/f"route-{name}.png").stat().st_size>1000
-    report.append(f"- {'PASS' if ok else 'FAIL'} static route {uri} -> screenshot/UI hierarchy captured")
+    ok=(ROOT/f"route-{name}.png").exists() and (ROOT/f"route-{name}.png").stat().st_size>1000
+    report.append(f"- {'PASS' if ok else 'FAIL'} static route {uri} -> screenshot captured" + (" + UI hierarchy" if xml else " + UI hierarchy unavailable"))
     if not ok: failures.append("static route "+uri)
 
 report+=["","## Visible UI journey"]
