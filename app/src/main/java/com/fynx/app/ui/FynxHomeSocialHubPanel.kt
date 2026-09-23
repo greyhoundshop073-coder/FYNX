@@ -60,6 +60,7 @@ fun FynxHomeSocialHubPanel(
     onCameraRequestConsumed: () -> Unit = {},
     onOpenChats: () -> Unit = {},
     onOpenStories: () -> Unit = {},
+    onOpenStatusOwner: (String) -> Unit = {},
     onOpenProfile: () -> Unit = {},
     onOpenMarketplace: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
