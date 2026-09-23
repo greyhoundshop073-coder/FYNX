@@ -28,12 +28,6 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     val scope = rememberCoroutineScope()
     var chats by remember { mutableStateOf(FynxChatStore.loadPreviews(context)) }
     var groups by remember { mutableStateOf(FynxGroupsStore.load(context)) }
-    var showNewChat by remember { mutableStateOf(false) }
-    var username by remember { mutableStateOf("") }
-    var searchResults by remember { mutableStateOf(emptyList<FynxSocialClient.User>()) }
-    var selectedUser by remember { mutableStateOf<FynxSocialClient.User?>(null) }
-    var searchBusy by remember { mutableStateOf(false) }
-    var searchError by remember { mutableStateOf<String?>(null) }
     var selfUsername by remember { mutableStateOf("") }
     var listView by remember { mutableStateOf(FynxPreferencesStore.loadChatListView(context)) }
     var showArchived by remember { mutableStateOf(false) }
@@ -66,25 +60,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         }
     }
 
-    LaunchedEffect(showNewChat, username, selfUsername) {
-        if (!showNewChat || username.trim().length < 2) {
-            searchResults = emptyList()
-            searchBusy = false
-            return@LaunchedEffect
-        }
-        delay(250L)
-        searchBusy = true
-        searchError = null
-        FynxSocialClient.searchUsers(context, username.trim())
-            .onSuccess {
-                searchResults = it.filterNot { person ->
-                    val candidate = (person.username ?: "").removePrefix("@").trim().lowercase()
-                    selfUsername.isNotBlank() && candidate == selfUsername
-                }
-            }
-            .onFailure { searchResults = emptyList(); searchError = it.message ?: "Could not search FYNX accounts." }
-        searchBusy = false
-    }
+
 
     val rowSpacing = when (listView) { "Compact" -> 2.dp; "Large" -> 14.dp; else -> 8.dp }
     val avatarSize = when (listView) { "Compact" -> 38.dp; "Large" -> 54.dp; else -> 42.dp }
@@ -277,46 +253,5 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             Icon(Icons.Default.Add, contentDescription = "Phone contacts")
         }
     }
-    if (showNewChat) {
-        FynxPlainDialog(
-            onDismissRequest = { showNewChat = false },
-            title = { Text("New chat", style = MaterialTheme.typography.headlineSmall) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Search for a real FYNX username to start a private conversation.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedTextField(value = username, onValueChange = { username = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Username") }, singleLine = true, placeholder = { Text("@username") })
-                    if (searchBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                    searchError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    searchResults.forEach { person ->
-                        val personUsername = person.username ?: ""
-                        ListItem(
-                            headlineContent = { Text(person.displayName.ifBlank { personUsername }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                            supportingContent = { Text("@$personUsername", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                            modifier = Modifier.fillMaxWidth().clickable { selectedUser = person },
-                            leadingContent = { FynxRemoteProfileAvatar(person.profilePhotoMediaId, person.displayName.ifBlank { personUsername }, Modifier.size(42.dp)) },
-                            trailingContent = { if (selectedUser?.username == person.username) Text("✓", color = MaterialTheme.colorScheme.primary, maxLines = 1) },
-                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        )
-                        HorizontalDivider()
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(enabled = selectedUser != null, onClick = {
-                    val person = selectedUser ?: return@TextButton
-                    val personUsername = person.username ?: return@TextButton
-                    scope.launch {
-                        val avatarUri = person.profilePhotoMediaId?.let { "/api/media/${it.trim()}" }
-                            ?: FynxProfileRemoteClient.get(context, personUsername).getOrNull()?.profilePhotoMediaId?.let { "/api/media/${it.trim()}" }
-                        val newChat = ChatPreview(person.displayName.ifBlank { personUsername }, personUsername, "", "", avatarUri = avatarUri)
-                        FynxChatStore.savePreview(context, newChat)
-                        chats = FynxChatStore.loadPreviews(context)
-                        onOpenChat(newChat)
-                        showNewChat = false
-                    }
-                }) { Text("Open chat") }
-            },
-            dismissButton = { TextButton(onClick = { showNewChat = false }) { Text("Cancel") } },
-        )
-    }
+
 }
