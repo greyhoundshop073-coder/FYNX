@@ -87,11 +87,23 @@ for name,uri in {"home":"fynx://home","stories":"fynx://stories","money":"fynx:/
 
 report+=["","## Visible UI journey"]
 home_xml=launch("fynx://home",ROOT/"journey-home.png",ROOT/"journey-home.xml")
-for name,labels in (("chat",["Chat"]),("stories",["Stories","Status"]),("money",["Money Tools","Money"])):
-    ok,detail=tap_and_capture(name,home_xml,labels)
-    report.append(f"- {'PASS' if ok else 'FAIL'} Home -> {name}: {detail}")
-    if not ok: failures.append("Home -> "+name)
+auth_gate = find_control(home_xml, ["Create Account"]) and find_control(home_xml, ["Sign In"])
+if auth_gate:
+    report.append("- PASS runtime reached the real FYNX authentication gate")
+    ok,detail=tap_and_capture("auth-create-account",home_xml,["Create Account"])
+    report.append(f"- {'PASS' if ok else 'FAIL'} Auth -> Create Account: {detail}")
+    if not ok: failures.append("Auth -> Create Account")
     home_xml=launch("fynx://home",ROOT/"journey-home-reset.png",ROOT/"journey-home-reset.xml")
+    ok,detail=tap_and_capture("auth-sign-in",home_xml,["Sign In"])
+    report.append(f"- {'PASS' if ok else 'FAIL'} Auth -> Sign In: {detail}")
+    if not ok: failures.append("Auth -> Sign In")
+    report.append("- BLOCKED Home social journey: emulator has no authenticated real user session; no fake account/data is created")
+else:
+    for name,labels in (("chat",["Chat"]),("stories",["Stories","Status"]),("money",["Money Tools","Money"])):
+        ok,detail=tap_and_capture(name,home_xml,labels)
+        report.append(f"- {'PASS' if ok else 'FAIL'} Home -> {name}: {detail}")
+        if not ok: failures.append("Home -> "+name)
+        home_xml=launch("fynx://home",ROOT/"journey-home-reset.png",ROOT/"journey-home-reset.xml")
 
 report+=["","## Parameterized routes",
          "- Profile, Chat, Group and Call deep links require a real identifier; this diagnostic does not invent one.",
