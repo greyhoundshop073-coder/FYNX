@@ -22,7 +22,7 @@ checks = [
     ("single notification read is server-backed and account-scoped", '"/api/notifications/$encoded/read"' in remote),
     ("mark-all-read is server-backed", '"/api/notifications/read-all"' in remote),
     ("activity center supports filtering and unread state", "filterByType" in activity and "unreadOnly" in activity),
-    ("device registration is present", "notification-devices" in device and "POST" in device),
+    ("device registration is present", "notification-devices" in device and "postJson" in device and "registerCurrentToken" in device),
     ("device unregister is present", "DELETE" in device and "notification-devices" in device),
     ("backend notification preference routes authenticate", "function auth" in backend and "jwt.verify" in backend),
     ("backend notification preferences are keyed by authenticated user", "user_id BIGINT PRIMARY KEY" in backend and "req.user.sub" in backend),
