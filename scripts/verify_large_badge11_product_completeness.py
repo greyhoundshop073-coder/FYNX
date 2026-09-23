@@ -38,7 +38,7 @@ check("profile posts use remote media", "FynxRemoteMedia" in profile and "/api/s
 check("other profiles use remote media", "FynxRemoteMedia" in other_profile)
 check("group chat uses shared remote media", "FynxRemoteMedia" in group_chat and "FynxRemoteAudio" in group_chat)
 check("media has retry/error state", "Media unavailable" in remote_media and "Retry" in remote_media)
-check("existing workstream verifies profile/media/admin continuity", "FynxRemoteMedia" in workstream and "FynxProfileRemoteClient" in workstream and "FynxAdminClient" in workstream)
+check("existing workstream verifies profile/media continuity", "remote media uses the authenticated central downloader" in workstream and "profile cold start hydrates the cached remote avatar" in workstream)
 check("announcements route is wired into runtime", "registerAdminRoutes({ app })" in read("backend/scalability.js"))
 check("Announcements route is reachable from app navigation", '"Announcements"' in app and "FynxAnnouncementsPanel()" in app)
 check("Admin route is reachable from app navigation", '"Admin"' in app and "FynxAdminControlCenterPanel()" in app)
