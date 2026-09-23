@@ -40,6 +40,15 @@ Continue the existing FYNX Android social + marketplace app. Do not rebuild or r
 - [x] Realtime/background recovery foundations
 - [ ] Full real-device user-journey audit across every major surface
 
+### Large Badge #3 — Full Major-Surface Integration Audit
+- [ ] Cross-surface integration gate is GREEN
+- [ ] Android build/test/lint is GREEN
+- [ ] Real emulator instrumentation journey is GREEN
+- [ ] Runtime screenshots/UI hierarchy are captured and uploaded
+- [ ] No fake users, posts, likes, followers, transactions or marketplace records are introduced
+- [ ] Existing backend/security gates remain GREEN
+- [ ] Badge is not complete until the entire consolidated workflow is GREEN
+
 ## Future backlog
 - [x] Personal status/timeline expansion — backend-first timeline now surfaces authenticated Status media/text/audio while retaining Stories creation/viewing
 - [ ] FYNX official announcements/admin controls
