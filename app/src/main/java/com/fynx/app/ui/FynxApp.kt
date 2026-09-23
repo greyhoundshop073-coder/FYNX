@@ -400,7 +400,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     }
                 }
             )
-            "Contacts" -> FynxContactsPanel(onBack = { selected = "Chats" })
+            "Contacts" -> FynxContactsPanel(onBack = { selected = "Chats" }, onVoiceCall = { callTarget = it; callVideo = false; selected = "Calls" }, onVideoCall = { callTarget = it; callVideo = true; selected = "Calls" })
             "Marketplace" -> FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, initialListingId = marketplaceListingId)
             "Money Tools" -> MoneyCenterPanel()
             "Business Account" -> FynxBusinessAccountPanel(onBack = { selected = "Features" }, onOpenAdvertising = { selected = "Advertising" }, onOpenDashboard = { selected = "Advertising Dashboard" })
