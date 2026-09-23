@@ -209,11 +209,6 @@ jobs:
           echo "Authenticated FYNX visual certification credentials are available."
       - name: Run Android instrumentation tests and capture the real FYNX UI
         uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
         env:
           FYNX_E2E_USERNAME: ${{ secrets.FYNX_E2E_USERNAME }}
           FYNX_E2E_PASSWORD: ${{ secrets.FYNX_E2E_PASSWORD }}
