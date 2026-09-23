@@ -283,19 +283,40 @@ if not FAILURES:
         time.sleep(2.5)
         xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-reset.xml") or xml
 
-    # Open Features/Money/AI through the real UI where exposed.
-    run("adb","shell","am","force-stop",PACKAGE)
-    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-    time.sleep(2.5)
-    xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-features.xml") or xml
-    features=tap_control(xml,["More","Features"],"features")
+    # Open Features/Money/AI through the real UI. Features is a scrollable
+    # surface, so Money and AI may be below the first viewport. Each destination
+    # gets a clean Features launch from Home; this avoids reusing stale coordinates
+    # after the first navigation has already left the Features screen.
+    def open_features():
+        run("adb","shell","am","force-stop",PACKAGE)
+        run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
+        time.sleep(2.5)
+        home_xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-features.xml") or xml
+        feature_xml=tap_control(home_xml,["More","Features"],"features")
+        if not feature_xml:
+            return ""
+        for _ in range(8):
+            if find_control(feature_xml,["Money Tools","FYNX AI","FYNX AI Assistant"]):
+                break
+            # Fynx Features uses a real scrollable Compose container. Scroll only
+            # that container's visible region, then re-read the rendered hierarchy.
+            run("adb","shell","input","swipe","540","1600","540","850","500")
+            time.sleep(.6)
+            feature_xml=dump_ui("authenticated-features-scroll.xml")
+        return feature_xml
+
+    features=open_features()
     if features:
         report.append("- PASS authenticated Home -> Features screenshot/UI hierarchy")
         for name,labels,expected in (
             ("money",["Money Tools","Money Center"],["Money Center"]),
-            ("ai",["FYNX AI","AI Assistant"],["FYNX AI"]),
+            ("ai",["FYNX AI","FYNX AI Assistant"],["FYNX AI Assistant","FYNX AI"]),
         ):
-            after=capture_surface(name,labels,features,expected)
+            current=open_features()
+            if not current:
+                FAILURES.append("authenticated Features -> "+name)
+                continue
+            after=capture_surface(name,labels,current,expected)
             if any(find_control(after,[wanted]) for wanted in expected):
                 report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
             else:
