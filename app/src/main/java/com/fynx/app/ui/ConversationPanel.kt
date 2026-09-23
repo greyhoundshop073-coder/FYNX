@@ -317,6 +317,52 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         }
     }
 
+    fun submitComposer() {
+        val value = text.trim()
+        if (value.isBlank() || sending) return
+        sending = true
+        scope.launch {
+            if (editingId != null) {
+                FynxProductionMessaging.editMessage(context, editingId!!, value)
+                    .onSuccess { remote ->
+                        currentUserId?.let { myId ->
+                            messages = messages.map { existing ->
+                                if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing
+                            }
+                        }
+                        text = ""
+                        editingId = null
+                        replyToId = null
+                    }
+                    .onFailure { networkError = it.message ?: "Message could not be edited" }
+            } else {
+                val selectedAttachment = attachment
+                val sendResult = if (selectedAttachment != null) {
+                    val selectedType = attachmentType ?: "image"
+                    FynxProductionMessaging.uploadMedia(context, selectedAttachment)
+                        .mapCatching { media ->
+                            FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId, media.id, selectedType, 0L).getOrThrow()
+                        }
+                } else {
+                    FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
+                }
+                sendResult
+                    .onSuccess { remote ->
+                        currentUserId?.let { myId ->
+                            messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp }
+                        }
+                        text = ""
+                        editingId = null
+                        replyToId = null
+                        attachment = null
+                        attachmentType = null
+                    }
+                    .onFailure { networkError = it.message ?: "Message could not be sent" }
+            }
+            sending = false
+        }
+    }
+
     val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, ignoreCase = true) }
 
     if (showChatSettings) {
@@ -484,6 +530,20 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                 }
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
                                 DropdownMenuItem(text = { Text("Reply") }, onClick = { replyToId = message.id; menuMessageId = null }, leadingIcon = { Icon(Icons.Default.Reply, null) })
+                                DropdownMenuItem(
+                                    text = { Text("Edit") },
+                                    enabled = message.fromMe && message.text.isNotBlank() && !message.text.equals("Message deleted", true),
+                                    onClick = {
+                                        text = message.text
+                                        editingId = message.id
+                                        replyToId = null
+                                        attachment = null
+                                        attachmentType = null
+                                        menuMessageId = null
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Edit, null) }
+                                )
+
                                 DropdownMenuItem(text = { Text("Copy") }, enabled = message.text.isNotBlank(), onClick = { clipboardManager.setText(AnnotatedString(message.text)); menuMessageId = null }, leadingIcon = { Icon(Icons.Default.ContentCopy, null) })
                                                                                                 DropdownMenuItem(text = { Text("Delete") }, onClick = {
                                     scope.launch {
@@ -570,43 +630,14 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = {
-                        val value = text.trim()
-                        if (value.isNotEmpty() && !sending) {
-                            sending = true
-                            scope.launch {
-                                FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
-                                    .onSuccess { remote ->
-                                        currentUserId?.let { myId -> messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp } }
-                                        text = ""; editingId = null; replyToId = null
-                                    }.onFailure { networkError = it.message ?: "Message could not be sent" }
-                                sending = false
-                            }
-                        }
+                        if (text.isNotBlank() && !sending) submitComposer()
                     })
                 )
                 Spacer(Modifier.width(8.dp))
                 IconButton(
                     onClick = {
                         if (text.isNotBlank() || attachment != null) {
-                            val value = text.trim()
-                            val selectedAttachment = attachment
-                            if (!sending) {
-                                sending = true
-                                scope.launch {
-                                    val sendResult = if (selectedAttachment != null) {
-                                        val selectedType = attachmentType ?: "image"
-                                        FynxProductionMessaging.uploadMedia(context, selectedAttachment)
-                                            .mapCatching { media -> FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId, media.id, selectedType, 0L).getOrThrow() }
-                                    } else {
-                                        FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
-                                    }
-                                    sendResult.onSuccess { remote ->
-                                        currentUserId?.let { myId -> messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp } }
-                                        text = ""; editingId = null; replyToId = null; attachment = null; attachmentType = null
-                                    }.onFailure { networkError = it.message ?: "Message could not be sent" }
-                                    sending = false
-                                }
-                            }
+                            submitComposer()
                         } else {
                             startRecording()
                         }
