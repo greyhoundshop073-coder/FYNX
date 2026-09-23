@@ -379,14 +379,14 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = 10.dp, vertical = 6.dp)
+                .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .height(58.dp)
-                    .background(Color(0xFF1F222B).copy(alpha = 0.97f), RoundedCornerShape(30.dp))
-                    .padding(horizontal = 4.dp),
+                    .height(54.dp)
+                    .background(Color(0xFF1F222B).copy(alpha = 0.94f), RoundedCornerShape(18.dp))
+                    .padding(horizontal = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
@@ -600,9 +600,9 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             }
         }
 
-        Surface(color = Color(0xFF17191F).copy(alpha = 0.98f), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().height(70.dp).navigationBarsPadding().imePadding()) {
+        Surface(color = Color(0xFF17191F).copy(alpha = 0.98f), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
             Row(
-                Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 16.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { showEmojiPanel = !showEmojiPanel }, modifier = Modifier.size(48.dp)) {
