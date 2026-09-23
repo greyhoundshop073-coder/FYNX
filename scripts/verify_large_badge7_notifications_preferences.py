@@ -32,7 +32,7 @@ checks = [
     ("server push stores notification before delivery", "INSERT INTO fynx_notifications" in push and "queueFynxNotification" in push),
     ("FCM credentials remain server-side", "FIREBASE_SERVICE_ACCOUNT_JSON" in push and "FIREBASE_PRIVATE_KEY" in push and "FYNX" not in models),
     ("push delivery has retry and invalid-token handling", "attempt < 3" in push and "UNREGISTERED" in push and "status='SENT'" in push),
-    ("notification route wiring covers real message/group/social events", "queueFynxNotification" in bootstrap and "type: "MESSAGE"" in bootstrap and "type:'GROUP'" in bootstrap and "type:'COMMENT'" in bootstrap),
+    ("notification route wiring covers real message/group/social events", "queueFynxNotification" in bootstrap and 'type: "MESSAGE"' in bootstrap and "type:'GROUP'" in bootstrap and "type:'COMMENT'" in bootstrap),
     ("existing notification verification gates remain in CI", "verify_notifications_settings_integration.py" in workflow),
     ("real Android instrumentation remains in CI", "connectedDebugAndroidTest" in workflow and "verify_runtime_navigation.py" in workflow),
     ("no fake notification records are introduced", "mockNotification" not in backend and "fakeNotification" not in backend),
