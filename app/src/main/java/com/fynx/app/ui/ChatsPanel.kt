@@ -22,7 +22,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit = {}, onCreateGroup: () -> Unit = {}) {
+fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit = {}, onCreateGroup: () -> Unit = {}, onOpenContacts: () -> Unit = {}) {
     var section by remember { mutableStateOf("Chats") }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -134,7 +134,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(if (showArchived) "No archived chats" else if (normalizedChatSearch.isNotBlank()) "No matching chats" else "Messages", style = MaterialTheme.typography.titleLarge)
                         Text(if (showArchived) "Chats you archive will stay here until you restore them." else if (normalizedChatSearch.isNotBlank()) "Try another name, username or message." else "Your private conversations will appear here. Start one with a real FYNX user.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (!showArchived && normalizedChatSearch.isBlank()) Button(onClick = { showNewChat = true; username = ""; selectedUser = null }) { Text("Start a conversation") }
+                        if (!showArchived && normalizedChatSearch.isBlank()) Button(onClick = onOpenContacts) { Text("Open phone contacts") }
                     }
                 }
             } else {
@@ -269,18 +269,12 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         }
     }
         FloatingActionButton(
-            onClick = {
-                username = ""
-                selectedUser = null
-                searchResults = emptyList()
-                searchError = null
-                showNewChat = true
-            },
+            onClick = onOpenContacts,
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 22.dp),
             containerColor = Color(0xFF25D366),
             contentColor = Color.White
         ) {
-            Icon(Icons.Default.Add, contentDescription = "New chat and contacts")
+            Icon(Icons.Default.Add, contentDescription = "Phone contacts")
         }
     }
     if (showNewChat) {
