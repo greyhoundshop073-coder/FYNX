@@ -65,6 +65,7 @@ fun FynxVisibleUpdatesPanel(
     onOpenStories: () -> Unit,
     onOpenAi: () -> Unit,
     onOpenCamera: () -> Unit = {},
+    onOpenFastCamera: () -> Unit = onOpenCamera,
     onCreateStatus: () -> Unit = onOpenStories,
     onOpenStatusOwner: (String) -> Unit = { onOpenStories() }
 ) {
@@ -206,7 +207,7 @@ fun FynxVisibleUpdatesPanel(
                     Text("Ask, create, translate and get help", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
                 IconButton(
-                    onClick = onOpenCamera,
+                    onClick = onOpenFastCamera,
                     modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape)
                 ) {
                     Icon(Icons.Default.CameraAlt, contentDescription = "Open FYNX camera", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(21.dp))
