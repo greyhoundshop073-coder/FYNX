@@ -185,6 +185,8 @@ jobs:
         run: python3 scripts/verify_fynx_production.py
       - name: Verify Large Badge #10 — Final Integration & Release Certification
         run: python3 scripts/verify_large_badge10_final_integration.py
+      - name: Verify Large Badge #11 — Final Product Completeness & UX Integration
+        run: python3 scripts/verify_large_badge11_product_completeness.py
       - name: Build, test and lint
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
       - name: Enable KVM for Android emulator tests
