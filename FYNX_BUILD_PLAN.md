@@ -60,9 +60,9 @@ Continue the existing FYNX Android social + marketplace app. Do not rebuild or r
 
 ## Future backlog
 - [x] Personal status/timeline expansion — backend-first timeline now surfaces authenticated Status media/text/audio while retaining Stories creation/viewing
-- [ ] FYNX official announcements/admin controls
-- [ ] Owner/Admin control center
-- [ ] Anti-scam, account safety and appeals
+- [x] FYNX official announcements/admin controls — server-backed announcements are exposed in the APK with authenticated retry/error handling
+- [x] Owner/Admin control center — server-authoritative dashboard, admin grants/revocation, account status and marketplace protection controls
+- [x] Anti-scam, account safety and appeals — server-backed safety/report/appeal flows certified by Large Badge #9
 - [x] Server-backed notification preferences foundation
 
 ## Stage 12 follow-up
@@ -70,9 +70,9 @@ Continue the existing FYNX Android social + marketplace app. Do not rebuild or r
 - [x] AI-assisted captions, rewrites, ideas and marketplace descriptions
 - [x] AI Photo Editor integration
 - [x] AI Money Coach
-- [ ] Chat profile information improvements
+- [x] Chat profile information improvements — conversation header uses real remote display name, username, joined/country data and remote profile identity
 - [x] Consistent profile media display foundation
-- [ ] Consistent full media display across status/social/media surfaces
+- [x] Consistent full media display across status/social/media surfaces — shared authenticated remote media path is reused across Status, social/profile content and chat/group media
 
 ## Removed permanently
 AI image generation and AI video generation are NOT part of the FYNX roadmap. Do not add them back.
@@ -131,4 +131,14 @@ AI image generation and AI video generation are NOT part of the FYNX roadmap. Do
 - [x] Runtime screenshots and UI hierarchies are captured from the built APK
 - [x] Exact-commit debug APK artifact is published only after successful build/test/instrumentation
 - [x] No common API-secret patterns are permitted in critical client files
-- [ ] Final certification is complete only when the consolidated workflow is GREEN
+- [x] Final certification is complete — consolidated workflow is GREEN
+
+
+### Large Badge #11 — Final Product Completeness & UX Integration
+- [x] Official FYNX announcements are reachable in the APK and backed by the authenticated backend
+- [x] Owner/Admin control center uses server-authoritative dashboard, role protection, account controls and marketplace protection review
+- [x] Chat profile information displays real remote identity details without fabricated user data
+- [x] Full media display is consistent across Chat, Groups, Status/Stories, social/profile and marketplace surfaces using the shared remote-media path
+- [x] Trust/safety, appeals and account-protection continuity remains connected to the product surfaces
+- [x] Dedicated product-completeness verifier is wired into the Android release workflow
+- [x] Badge is complete when the consolidated workflow remains GREEN
