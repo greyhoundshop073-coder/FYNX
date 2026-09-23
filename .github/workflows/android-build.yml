@@ -163,6 +163,8 @@ jobs:
         run: python3 scripts/verify_large_badge2_social_creation_connection.py
       - name: Verify Large Badge #3 — Full Major-Surface Integration Audit
         run: python3 scripts/verify_large_badge3_full_surface_audit.py
+      - name: Verify Large Badge #4 — Full Real-Device User-Journey Certification
+        run: python3 scripts/verify_large_badge4_real_device_certification.py
       - name: Verify Home 4F media and lifecycle audit
         run: python3 scripts/verify_home_4f_media_lifecycle.py
       - name: Verify production social feed wiring

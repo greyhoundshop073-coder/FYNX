@@ -40,6 +40,14 @@ Continue the existing FYNX Android social + marketplace app. Do not rebuild or r
 - [x] Realtime/background recovery foundations
 - [ ] Full real-device user-journey audit across every major surface
 
+### Large Badge #4 — Full Real-Device User-Journey Certification
+- [ ] Emulator instrumentation is executed against the production-shaped app
+- [ ] Home, Chat, Friends, Stories, Marketplace, Calls, Notifications, Privacy, Money and AI routes are wired
+- [ ] Runtime screenshots and UI hierarchy are captured
+- [ ] Existing smoke, deep-link, recovery, call and account-isolation instrumentation remains present
+- [ ] No fake application data is introduced during verification
+- [ ] Badge is not complete until the consolidated workflow is GREEN
+
 ### Large Badge #3 — Full Major-Surface Integration Audit
 - [ ] Cross-surface integration gate is GREEN
 - [ ] Android build/test/lint is GREEN
