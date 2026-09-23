@@ -9,7 +9,11 @@ ROOT=Path("fynx-runtime-screenshots"); ROOT.mkdir(parents=True,exist_ok=True)
 PACKAGE="com.fynx.app"
 
 def run(*args:str):
-    return subprocess.run(args,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+    try:
+        return subprocess.run(args,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=20)
+    except subprocess.TimeoutExpired as exc:
+        output=exc.stdout.decode("utf-8","replace") if isinstance(exc.stdout,bytes) else (exc.stdout or "")
+        return subprocess.CompletedProcess(args,124,output+"\nCOMMAND TIMEOUT")
 
 def dump_ui(path:Path)->str:
     dump=run("adb","shell","uiautomator","dump","/sdcard/fynx-runtime.xml")
