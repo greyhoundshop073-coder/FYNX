@@ -159,8 +159,13 @@ fun FynxHomeSocialHubPanel(
                 notice = null
             }
             cameraOpenedFromComposer = false
-            showComposer = false
-            showCamera = true
+            // The Home header camera is the social creation entry point:
+            // open the full "What's on your mind?" composer. The separate
+            // camera button in the Home content remains the intentional
+            // fast/direct camera path.
+            showCamera = false
+            showFastCamera = false
+            showComposer = true
             onCameraRequestConsumed()
         }
     }
