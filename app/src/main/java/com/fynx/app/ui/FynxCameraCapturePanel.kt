@@ -6,6 +6,9 @@ import android.graphics.BitmapFactory
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Matrix
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaMuxer
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -112,6 +115,12 @@ fun FynxCameraCapturePanel(
     var captureTimerSeconds by remember { mutableIntStateOf(0) }
     var timerCountingDown by remember { mutableIntStateOf(0) }
     var showGrid by remember { mutableStateOf(false) }
+    var videoSpeed by remember { mutableFloatStateOf(1f) }
+    var videoMuted by remember { mutableStateOf(false) }
+    var videoTrimStartMs by remember { mutableLongStateOf(0L) }
+    var videoTrimEndMs by remember { mutableLongStateOf(0L) }
+    var videoDurationMs by remember { mutableLongStateOf(0L) }
+    var applyingVideoEdit by remember { mutableStateOf(false) }
 
     LaunchedEffect(recording != null, recordingStartedAt) { while (recording != null) { recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L); delay(200L) } }
     LaunchedEffect(showCaptureControls, pendingUri, recording) { if (showCaptureControls && pendingUri == null && recording == null && timerCountingDown == 0) { delay(5000L); showCaptureControls = false } }
@@ -144,6 +153,28 @@ fun FynxCameraCapturePanel(
     fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; enhancing = false; error = null }
     fun rotatePhoto() { val uri = pendingUri ?: return; if (pendingType != "image") return; val source = uri.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val matrix = Matrix().apply { postRotate(90f) }; val rotated = android.graphics.Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,true); FileOutputStream(source).use { check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); rotated.recycle() }.onFailure { error = it.message ?: "Photo rotation failed" } }
     fun applyFilterToPhoto(selected: CameraFilter) { val current = pendingUri ?: return; val original = pendingOriginalUri ?: current; if (pendingType != "image") return; val source = original.path?.let { File(it) } ?: return; val target = current.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val matrix = ColorMatrix().apply { setFynxFilter(selected.saturation,selected.brightness,selected.contrast,1f) }; val outputBitmap=android.graphics.Bitmap.createBitmap(bitmap.width,bitmap.height,android.graphics.Bitmap.Config.ARGB_8888); android.graphics.Canvas(outputBitmap).drawBitmap(bitmap,0f,0f,android.graphics.Paint().apply { colorFilter=ColorMatrixColorFilter(matrix) }); FileOutputStream(target).use { check(outputBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); outputBitmap.recycle(); filter=selected; error=null }.onFailure { error=it.message ?: "Filter could not be applied" } }
+    fun editVideo() {
+        val source = pendingUri ?: return
+        if (pendingType != "video" || applyingVideoEdit || videoDurationMs <= 0L) return
+        applyingVideoEdit = true
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val output = File(context.cacheDir, "fynx_video_edit_" + System.currentTimeMillis() + ".mp4")
+                    remuxCameraVideo(source.path ?: error("Video file unavailable"), output, videoTrimStartMs, videoTrimEndMs, videoSpeed, videoMuted)
+                    Uri.fromFile(output)
+                }
+            }
+            result.onSuccess {
+                deleteUri(source)
+                pendingUri = it
+                videoDurationMs = mediaDurationMs(it.path ?: "")
+                videoTrimStartMs = 0L
+                videoTrimEndMs = videoDurationMs
+            }.onFailure { error = it.message ?: "Video editing failed" }
+            applyingVideoEdit = false
+        }
+    }
     fun enhancePhoto() { val source=pendingUri ?: return; if(pendingType!="image" || enhancing)return; enhancing=true; error=null; scope.launch { val result=withContext(Dispatchers.IO){FynxAiPhotoEnhancer.enhance(context,source)}; result.onSuccess { enhancedUri -> deleteUri(source); pendingUri=enhancedUri; filter=CameraFilter.NATURAL; error=null }.onFailure { error=it.message ?: "AI photo enhancement failed" }; enhancing=false } }
 
     if (!hasCamera) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
@@ -154,6 +185,18 @@ fun FynxCameraCapturePanel(
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=12.dp)){
                 error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))}
                 if(previewType=="image"){Text("Edit photo",style=MaterialTheme.typography.labelLarge);Row(Modifier.fillMaxWidth().padding(vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)){CameraFilter.values().forEach{option->FilterChip(selected=filter==option,enabled=!enhancing,onClick={applyFilterToPhoto(option)},label={Text(option.label)})}};OutlinedButton(onClick={::enhancePhoto},enabled=!enhancing,modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){Text(if(enhancing)"Enhancing…" else "✨ AI Enhance")}}
+            } else {
+                Text("Edit video", style = MaterialTheme.typography.labelLarge)
+                Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(0.5f, 1f, 2f).forEach { speed -> FilterChip(selected = videoSpeed == speed, onClick = { videoSpeed = speed }, label = { Text(speed.toString()+"x") }) }
+                    FilterChip(selected = videoMuted, onClick = { videoMuted = !videoMuted }, label = { Text(if (videoMuted) "Muted" else "Sound") })
+                }
+                if (videoDurationMs > 1000L) {
+                    Text("Trim " + formatCameraRecordingTime(videoTrimStartMs) + " – " + formatCameraRecordingTime(videoTrimEndMs), style = MaterialTheme.typography.labelMedium)
+                    RangeSlider(value = (videoTrimStartMs.toFloat() / videoDurationMs)..(videoTrimEndMs.toFloat() / videoDurationMs), onValueChange = { range -> videoTrimStartMs = (range.start * videoDurationMs).toLong().coerceIn(0L, videoDurationMs - 500L); videoTrimEndMs = (range.endInclusive * videoDurationMs).toLong().coerceIn(videoTrimStartMs + 500L, videoDurationMs) }, valueRange = 0f..1f)
+                }
+                OutlinedButton(onClick = ::editVideo, enabled = !applyingVideoEdit && videoTrimEndMs > videoTrimStartMs, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) { Text(if (applyingVideoEdit) "Applying…" else "Apply video edits") }
+            }
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){OutlinedButton(onClick={if(!enhancing)retake()},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Text("Retake")};if(previewType=="image")OutlinedButton(onClick={if(!enhancing)rotatePhoto()},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.RotateRight,null);Spacer(Modifier.width(4.dp));Text("Rotate")};Button(onClick={if(!enhancing)onCaptured(previewUri,previewType)},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.Send,null);Spacer(Modifier.width(4.dp));Text("Send")}}
             }
         };return
@@ -211,3 +254,4 @@ private fun formatCameraRecordingTime(milliseconds:Long):String{val totalSeconds
 enum class CameraMode{PHOTO,VIDEO}
 enum class CameraFilter(val label:String,val saturation:Float,val brightness:Float,val contrast:Float){NATURAL("Natural",1f,0f,1f),VIVID("Vivid",1.35f,0f,1.08f),WARM("Warm",1.1f,0.04f,1.02f),COOL("Cool",0.9f,0.02f,1.02f),BW("B&W",0f,0f,1.08f)}
 private fun ColorMatrix.setFynxFilter(saturation:Float,brightness:Float,contrast:Float,alpha:Float){setSaturation(saturation);val scale=contrast;val translate=brightness*255f;postConcat(ColorMatrix(floatArrayOf(scale,0f,0f,0f,translate,0f,scale,0f,0f,translate,0f,0f,scale,0f,translate,0f,0f,0f,alpha,0f)))}
+private fun mediaDurationMs(path:String):Long=runCatching{android.media.MediaMetadataRetriever().use{it.setDataSource(path);it.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?:0L}}.getOrDefault(0L)
