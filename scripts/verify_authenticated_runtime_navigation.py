@@ -242,14 +242,19 @@ if not FAILURES:
             report.append(f"- PASS authenticated Home -> {name} screenshot/UI hierarchy")
         else:
             FAILURES.append("authenticated Home -> "+name)
-        xml=dump_ui("authenticated-home-reset.xml") or xml
+        # Reset the process between journeys. Chat can keep an open panel even
+        # after selected=Home, so a deep-link alone is not a clean Home state.
+        # force-stop preserves the real persisted login session while clearing
+        # transient Compose navigation state.
+        run("adb","shell","am","force-stop",PACKAGE)
         run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-        time.sleep(2)
+        time.sleep(2.5)
         xml=dump_ui("authenticated-home-reset.xml") or xml
 
     # Open Features/Money/AI through the real UI where exposed.
+    run("adb","shell","am","force-stop",PACKAGE)
     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-    time.sleep(2)
+    time.sleep(2.5)
     xml=dump_ui("authenticated-home-features.xml") or xml
     features=tap_control(xml,["More","Features"],"features")
     if features:
