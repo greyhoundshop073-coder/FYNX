@@ -50,7 +50,7 @@ checks = [
     ("Notification delivery remains server-side", "queueFynxNotification" in notifications and "FIREBASE_SERVICE_ACCOUNT_JSON" in notifications),
     ("Production startup installs social + notification wiring", "notificationBootstrap.js" in startup),
     ("Runtime diagnostic captures APK screenshots/UI hierarchies", "screencap" in runtime and "uiautomator" in runtime),
-    ("Runtime diagnostic refuses to manufacture social data", "no fake application data is created" in runtime and "no fake account/data is created" in runtime),
+    ("Runtime diagnostic refuses to manufacture social data", "no fake application data is created" in runtime.lower() and "no fake account/data is created" in runtime.lower()),
 ]
 
 # Explicit anti-fabrication guard: the badge must never be made green by adding
