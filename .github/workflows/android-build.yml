@@ -214,8 +214,11 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_2
+          env:
+            FYNX_E2E_USERNAME: ${{ secrets.FYNX_E2E_USERNAME }}
+            FYNX_E2E_PASSWORD: ${{ secrets.FYNX_E2E_PASSWORD }}
           script: |
-            bash -c 'set +e; mkdir -p fynx-runtime-screenshots; TEST_STATUS=0; ./gradlew connectedDebugAndroidTest --no-daemon --build-cache; TEST_STATUS=$?; python3 scripts/verify_runtime_navigation.py; NAV_STATUS=$?; printf "Commit: %s\nRun: %s\nInstrumentation exit: %s\nNavigation exit: %s\n" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$TEST_STATUS" "$NAV_STATUS" > fynx-runtime-screenshots/README.txt; if [ "$TEST_STATUS" -ne 0 ]; then exit "$TEST_STATUS"; fi; exit "$NAV_STATUS"'
+            bash -c 'set +e; mkdir -p fynx-runtime-screenshots; TEST_STATUS=0; ./gradlew connectedDebugAndroidTest --no-daemon --build-cache; TEST_STATUS=$?; python3 scripts/verify_runtime_navigation.py; NAV_STATUS=$?; python3 scripts/verify_authenticated_runtime_navigation.py; AUTH_STATUS=$?; printf "Commit: %s\nRun: %s\nInstrumentation exit: %s\nNavigation exit: %s\nAuthenticated visual exit: %s\n" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$TEST_STATUS" "$NAV_STATUS" "$AUTH_STATUS" > fynx-runtime-screenshots/README.txt; if [ "$TEST_STATUS" -ne 0 ]; then exit "$TEST_STATUS"; fi; if [ "$NAV_STATUS" -ne 0 ]; then exit "$NAV_STATUS"; fi; exit "$AUTH_STATUS"'
       - name: Upload FYNX runtime screenshots and UI hierarchies
         if: always()
         uses: actions/upload-artifact@v4
