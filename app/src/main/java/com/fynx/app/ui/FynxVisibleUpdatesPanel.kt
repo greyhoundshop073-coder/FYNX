@@ -154,7 +154,7 @@ fun FynxVisibleUpdatesPanel(
                                 currentUsername.ifBlank { "You" },
                                 "Your status",
                                 true,
-                                if (own != null) onOpenStatusOwner(current), else onCreateStatus,
+                                if (own != null) { { onOpenStatusOwner(current) } } else { onCreateStatus },
                                 own?.second ?: 0,
                                 ownerPhotoIds[current]
                             )
