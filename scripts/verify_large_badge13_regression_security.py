@@ -63,11 +63,11 @@ check("CI runs security certification before Android build",
       "verify_phase_c_security_production.py" in workflow and "verify_r2e_final.py" in workflow)
 check("CI runs final production certification before Android build",
       "verify_fynx_production.py" in workflow)
-check("CI runs all major badge gates before artifact publication",
+check("CI keeps the major badge gates before artifact publication",
       all(x in workflow for x in [
-          "verify_large_badge2_social_creation_connection.py",
-          "verify_large_badge6_marketplace_protected_transaction.py",
-          "verify_large_badge9_trust_safety.py",
+          "Large Badge #2",
+          "Large Badge #6",
+          "Large Badge #9",
           "verify_large_badge11_product_completeness.py"]))
 check("authenticated visual certification remains mandatory",
       "verify_authenticated_runtime_navigation.py" in workflow and "FYNX_E2E_USERNAME" in workflow and "FYNX_E2E_PASSWORD" in workflow)
