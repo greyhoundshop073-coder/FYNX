@@ -36,6 +36,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     var video by remember { mutableStateOf(initialVideo) }
     var targetUserId by remember { mutableStateOf<String?>(null) }
     var targetUsername by remember { mutableStateOf(initialName?.removePrefix("@")?.trim()) }
+    var endingCall by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var calls by remember { mutableStateOf(FynxCallsStore.load(context)) }
     var filter by remember { mutableStateOf(FynxCallHistoryFilter.ALL) }
@@ -222,11 +223,13 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             onSwitchCamera = { session = FynxCallsFoundation.switchCamera(session!!); mediaEngine.switchCamera() },
             onToggleSpeaker = { session = FynxCallsFoundation.toggleSpeaker(session!!); mediaEngine.setSpeakerEnabled(session!!.speakerEnabled) },
             onEnd = {
+                if (endingCall) return@FynxActiveCallPanel
+                endingCall = true
                 val current = session!!; targetUserId?.let { realtimeClient.sendCallEnd(current.id, it, video) }
                 val incoming = current.state == FynxCallState.RINGING
                 mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null
                 FynxCallsStore.updateStatus(context, current.id, if (incoming) "Declined" else "Ended", missed = incoming)
-                calls = FynxCallsStore.load(context); activeCall = null; session = null; pendingIncomingAccept = false
+                calls = FynxCallsStore.load(context); activeCall = null; session = null; pendingIncomingAccept = false; endingCall = false
             }
         )
         return
