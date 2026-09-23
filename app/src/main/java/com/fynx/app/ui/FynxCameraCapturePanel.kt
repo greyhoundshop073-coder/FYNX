@@ -179,6 +179,7 @@ fun FynxCameraCapturePanel(
 
     if (!hasCamera) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
     val previewUri=pendingUri; val previewType=pendingType
+    LaunchedEffect(previewUri, previewType) { if (previewUri != null && previewType == "video") { videoDurationMs = withContext(Dispatchers.IO) { mediaDurationMs(previewUri.path ?: "") }; videoTrimStartMs = 0L; videoTrimEndMs = videoDurationMs; videoSpeed = 1f; videoMuted = false } }
     if(previewUri!=null && previewType!=null){
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
             if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.FIT_CENTER}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize().padding(18.dp)) else AndroidView(factory={android.widget.VideoView(it).apply{setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()}}},update={view->if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.start()}},modifier=Modifier.fillMaxSize().padding(18.dp))
@@ -255,3 +256,43 @@ enum class CameraMode{PHOTO,VIDEO}
 enum class CameraFilter(val label:String,val saturation:Float,val brightness:Float,val contrast:Float){NATURAL("Natural",1f,0f,1f),VIVID("Vivid",1.35f,0f,1.08f),WARM("Warm",1.1f,0.04f,1.02f),COOL("Cool",0.9f,0.02f,1.02f),BW("B&W",0f,0f,1.08f)}
 private fun ColorMatrix.setFynxFilter(saturation:Float,brightness:Float,contrast:Float,alpha:Float){setSaturation(saturation);val scale=contrast;val translate=brightness*255f;postConcat(ColorMatrix(floatArrayOf(scale,0f,0f,0f,translate,0f,scale,0f,0f,translate,0f,0f,scale,0f,translate,0f,0f,0f,alpha,0f)))}
 private fun mediaDurationMs(path:String):Long=runCatching{android.media.MediaMetadataRetriever().use{it.setDataSource(path);it.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?:0L}}.getOrDefault(0L)
+
+private fun remuxCameraVideo(sourcePath:String,output:File,startMs:Long,endMs:Long,speed:Float,muteAudio:Boolean){
+    val extractor=MediaExtractor()
+    val muxer=MediaMuxer(output.absolutePath,MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+    try{
+        extractor.setDataSource(sourcePath)
+        val map=mutableMapOf<Int,Int>()
+        for(i in 0 until extractor.trackCount){
+            val format=extractor.getTrackFormat(i)
+            val mime=format.getString(MediaFormat.KEY_MIME) ?: continue
+            val audio=mime.startsWith("audio/")
+            if(audio && muteAudio) continue
+            if(mime.startsWith("video/") || audio) map[i]=muxer.addTrack(format)
+        }
+        muxer.start()
+        val buffer=java.nio.ByteBuffer.allocate(1024*1024)
+        val info=android.media.MediaCodec.BufferInfo()
+        for((sourceTrack,muxTrack) in map){
+            extractor.selectTrack(sourceTrack)
+            while(true){
+                val size=extractor.readSampleData(buffer,0)
+                if(size<0) break
+                val timeUs=extractor.sampleTime
+                if(timeUs>=startMs*1000L && timeUs<=endMs*1000L){
+                    info.offset=0
+                    info.size=size
+                    info.presentationTimeUs=((timeUs-startMs*1000L)/speed).toLong().coerceAtLeast(0L)
+                    info.flags=extractor.sampleFlags
+                    muxer.writeSampleData(muxTrack,buffer,info)
+                }
+                extractor.advance()
+            }
+            extractor.unselectTrack(sourceTrack)
+        }
+    } finally {
+        runCatching{muxer.stop()}
+        muxer.release()
+        extractor.release()
+    }
+}
