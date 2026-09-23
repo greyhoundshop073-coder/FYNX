@@ -14,6 +14,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -61,6 +63,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
             .background(background)
             .imePadding()
             .padding(horizontal = 22.dp)
+            .semantics { testTagsAsResourceId = true }
     ) {
         Column(
             modifier = Modifier
@@ -198,6 +201,7 @@ private fun FynxAuthField(value: String, onValueChange: (String) -> Unit, label:
         } else null,
         modifier = Modifier
             .fillMaxWidth()
+            .testTag(label.lowercase().replace(" ", "_"))
             .semantics { contentDescription = label },
         shape = RoundedCornerShape(18.dp),
         colors = OutlinedTextFieldDefaults.colors(
