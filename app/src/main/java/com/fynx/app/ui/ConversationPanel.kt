@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -627,7 +628,17 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             }
         }
 
-        Surface(color = Color(0xFF17191F).copy(alpha = 0.98f), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
+        if (isRecording) {
+            Surface(color = Color(0xFF17191F).copy(alpha = 0.98f), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Mic, "Recording", tint = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Recording ${recordingElapsed / 1000L}s", Modifier.weight(1f))
+                    TextButton(onClick = { cancelRecording() }) { Text("Cancel") }
+                    Button(onClick = { stopRecording() }, enabled = !sending) { Text("Send") }
+                }
+            }
+        } else Surface(color = Color(0xFF17191F).copy(alpha = 0.98f), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -654,8 +665,16 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     placeholder = { Text(if (editingId == null) "Message..." else "Edit message...") },
                     leadingIcon = { IconButton(onClick = { showEmojiPanel = !showEmojiPanel }) { Icon(Icons.Default.EmojiEmotions, "Emoji", Modifier.size(22.dp)) } },
                     trailingIcon = {
-                        IconButton(onClick = { if (text.isNotBlank() || attachment != null) submitComposer() else startRecording() }, enabled = !sending) {
-                            Icon(if (text.isNotBlank() || attachment != null) Icons.Default.Send else Icons.Default.Mic, if (text.isNotBlank() || attachment != null) "Send message" else "Microphone", Modifier.size(22.dp))
+                        val voiceMode = text.isBlank() && attachment == null
+                        Box(Modifier.size(46.dp).pointerInput(voiceMode, sending) {
+                            if (!voiceMode || sending) return@pointerInput
+                            detectTapGestures(onTap = { startRecording() }, onPress = {
+                                startRecording()
+                                tryAwaitRelease()
+                                if (isRecording) stopRecording()
+                            })
+                        }, contentAlignment = Alignment.Center) {
+                            Icon(if (voiceMode) Icons.Default.Mic else Icons.Default.Send, if (voiceMode) "Hold to record voice message" else "Send message", Modifier.size(22.dp))
                         }
                     },
                     singleLine = false,
@@ -673,7 +692,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     if (showCamera) {
         Dialog(onDismissRequest = { showCamera = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-            Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(onCaptured = { uri, type -> attachment = uri; attachmentType = type; showCamera = false }) } }
+            Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(onCaptured = { uri, type -> attachment = uri; attachmentType = type; showCamera = false }, onDismiss = { showCamera = false }) } }
         }
     }
 
