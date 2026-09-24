@@ -465,7 +465,11 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
                                 onClick = { menuOpen = false; onSave(post.id, !interactionState.saved) },
                                 leadingIcon = { Icon(if (interactionState.saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, null) }
                             )
-                            DropdownMenuItem(text = { Text("I'm interested") }, onClick = { menuOpen = false })
+                            DropdownMenuItem(
+                                text = { Text("Share post") },
+                                onClick = { menuOpen = false; onShare(post) },
+                                leadingIcon = { Icon(Icons.Default.Share, null) }
+                            )
                             DropdownMenuItem(text = { Text("I'm not interested") }, onClick = { menuOpen = false; onNotInterested(post.id) })
                             DropdownMenuItem(text = { Text("Report post") }, onClick = { menuOpen = false; onReport() })
                         }
