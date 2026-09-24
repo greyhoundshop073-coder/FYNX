@@ -416,9 +416,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .height(54.dp)
-                    .background(Color(0xFF1F222B).copy(alpha = 0.94f), RoundedCornerShape(18.dp))
-                    .padding(horizontal = 2.dp),
+                    .height(52.dp).background(Color(0xFF20252A)).padding(horizontal = 0.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
@@ -432,7 +430,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     Text(
                         when { otherIsTyping -> "typing…"; isOnline -> "online"; else -> "last seen recently" },
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFB8BAC4),
+                        color = Color(0xFF9FA8B0),
                         maxLines = 1
                     )
                 }
@@ -525,7 +523,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             Spacer(Modifier.width(6.dp))
                         }
                         Box {
-                            Surface(color = if (message.fromMe) Color(0xFF7052C8) else Color(0xFF2A2C35), contentColor = Color.White, shape = RoundedCornerShape(18.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { menuMessageId = message.id }, onLongClick = { menuMessageId = message.id })) {
+                            Surface(color = if (message.fromMe) Color(0xFF33434F) else Color(0xFF252A2F), contentColor = Color(0xFFE7EAED), shape = RoundedCornerShape(16.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { menuMessageId = message.id }, onLongClick = { menuMessageId = message.id })) {
                             Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
                                 if (message.replyToId != null) {
                                     val replied = messages.firstOrNull { it.id == message.replyToId }
@@ -633,7 +631,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         }
 
         if (isRecording) {
-            Surface(color = Color(0xFF17191F).copy(alpha = 0.98f), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
+            Surface(color = Color(0xFF20252A), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Mic, "Recording", tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(8.dp))
@@ -642,7 +640,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     Button(onClick = { stopRecording() }, enabled = !sending) { Text("Send") }
                 }
             }
-        } else Surface(color = Color(0xFF17191F).copy(alpha = 0.98f), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
+        } else Surface(color = Color(0xFF20252A), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -656,8 +654,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     maxLines = 5,
                     shape = RoundedCornerShape(26.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color(0xFF282B34),
-                        unfocusedContainerColor = Color(0xFF282B34),
+                        focusedContainerColor = Color(0xFF292F34),
+                        unfocusedContainerColor = Color(0xFF292F34),
                         focusedBorderColor = Color.Transparent,
                         unfocusedBorderColor = Color.Transparent,
                         cursorColor = Color.White,
@@ -703,17 +701,37 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     }
 
     if (showAttachmentSheet) {
-        ModalBottomSheet(onDismissRequest = { showAttachmentSheet = false }) {
-            Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 8.dp)) {
-                Text("Attachments", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(12.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) { IconButton(onClick = { showAttachmentSheet = false; cameraInitialMode = CameraMode.PHOTO; showCamera = true }) { Icon(Icons.Default.CameraAlt, null) }; Text("Camera") }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) { IconButton(onClick = { showAttachmentSheet = false; mediaPicker.launch(arrayOf("image/*", "video/*")) }) { Icon(Icons.Default.PhotoLibrary, null) }; Text("Photos & videos") }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) { IconButton(onClick = { showAttachmentSheet = false; mediaPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) }) { Icon(Icons.Default.Description, null) }; Text("Document") }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) { IconButton(onClick = { showAttachmentSheet = false; cameraInitialMode = CameraMode.VIDEO; showCamera = true }) { Icon(Icons.Default.Videocam, null) }; Text("Video note") }
+        ModalBottomSheet(
+            onDismissRequest = { showAttachmentSheet = false },
+            containerColor = Color(0xFF20252A),
+            tonalElevation = 0.dp
+        ) {
+            Row(
+                Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val items = listOf(
+                    Triple("Camera", Icons.Default.CameraAlt) { showAttachmentSheet = false; cameraInitialMode = CameraMode.PHOTO; showCamera = true },
+                    Triple("Gallery", Icons.Default.PhotoLibrary) { showAttachmentSheet = false; mediaPicker.launch(arrayOf("image/*", "video/*")) },
+                    Triple("Document", Icons.Default.Description) { showAttachmentSheet = false; mediaPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) },
+                    Triple("Video note", Icons.Default.Videocam) { showAttachmentSheet = false; cameraInitialMode = CameraMode.VIDEO; showCamera = true }
+                )
+                items.forEach { (label, icon, action) ->
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Surface(
+                            onClick = action,
+                            modifier = Modifier.size(54.dp),
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                            color = Color(0xFF2A3137),
+                            contentColor = Color(0xFFE7EAED)
+                        ) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Icon(icon, label, Modifier.size(24.dp))
+                            }
+                        }
+                        Text(label, style = MaterialTheme.typography.labelSmall, color = Color(0xFFC4CBD1), maxLines = 1)
+                    }
                 }
-                Spacer(Modifier.height(12.dp))
             }
         }
     }
