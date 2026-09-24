@@ -72,7 +72,10 @@ check("CI keeps the major badge gates before artifact publication",
 check("authenticated visual certification remains mandatory",
       "verify_authenticated_runtime_navigation.py" in workflow and "FYNX_E2E_USERNAME" in workflow and "FYNX_E2E_PASSWORD" in workflow)
 check("instrumentation remains mandatory before APK publication",
-      "connectedDebugAndroidTest" in workflow and "if: success()" in workflow and "Upload exact-commit debug APK" in workflow)
+      "connectedDebugAndroidTest" in workflow and
+      "github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true'" in workflow and
+      "Upload exact-commit debug APK" in workflow and
+      "if-no-files-found: error" in workflow)
 check("no common API secrets are committed to Android source",
       not re.search(r"sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}|-----BEGIN (?:RSA |EC )?PRIVATE KEY-----",
                    "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "app/src/main/java").rglob("*.kt"))))
