@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Videocam
@@ -242,6 +243,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 }
             }
         }
+        val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, true) }
         val pinnedMessage = messages.lastOrNull { it.pinned }
         if (searchOpen) OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search messages…") })
         pinnedMessage?.let { pinned ->
@@ -255,7 +257,6 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
         syncMessage?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         if (!canSendMessages) Text("Only admins can send messages in this group.", Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, true) }
         LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
             if (visibleMessages.isEmpty() && searchQuery.isBlank()) {
                 item(key = "fynx-empty-group") {
