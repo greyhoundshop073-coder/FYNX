@@ -26,6 +26,7 @@ object FynxDiscoveryClient {
     suspend fun recordProfileView(context: Context, targetUserId: String): Result<Unit> = recordEvent(context, "PROFILE_VIEW", targetUserId = targetUserId)
     suspend fun recordProductClick(context: Context, listingId: String): Result<Unit> = recordEvent(context, "PRODUCT_CLICK", listingId = listingId)
     suspend fun recordPurchase(context: Context, listingId: String): Result<Unit> = recordEvent(context, "PURCHASE", listingId = listingId)
+        suspend fun recordInterested(context: Context, postId: String): Result<Unit> = recordEvent(context, "INTERESTED", postId = postId)
     suspend fun recordNotInterested(context: Context, postId: String): Result<Unit> = recordEvent(context, "NOT_INTERESTED", postId = postId)
 
     suspend fun trending(context: Context, limit: Int = 20): Result<List<TrendingPost>> =
@@ -59,5 +60,5 @@ object FynxDiscoveryClient {
     }
 
     private fun encode(value: String): String = URLEncoder.encode(value.trim(), "UTF-8")
-    private val EVENT_TYPES = setOf("VIEW", "LIKE", "COMMENT", "SHARE", "SAVE", "FOLLOW", "PROFILE_VIEW", "PRODUCT_CLICK", "MESSAGE", "PURCHASE", "NOT_INTERESTED","REPORT")
+    private val EVENT_TYPES = setOf("VIEW", "LIKE", "COMMENT", "SHARE", "SAVE", "FOLLOW", "PROFILE_VIEW", "PRODUCT_CLICK", "MESSAGE", "PURCHASE", "INTERESTED", "NOT_INTERESTED", "REPORT")
 }
