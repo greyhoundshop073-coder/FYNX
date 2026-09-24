@@ -224,7 +224,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             .collect { (lastVisibleIndex, totalItems) -> if (hasMore && !loading && !loadingMore && !feedRequestInFlight && lastVisibleIndex != null && lastVisibleIndex >= totalItems - 4) loadMore() }
     }
 
-    LazyColumn(state = feedListState, modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 120.dp)) {
+    LazyColumn(state = feedListState, modifier = modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 180.dp)) {
         header?.let { content -> item(key = "home_ai_status") { content() } }
         item(key = "feed_header") {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
