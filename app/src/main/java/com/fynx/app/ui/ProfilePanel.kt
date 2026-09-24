@@ -267,6 +267,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
 private fun formatProfileCount(value: Int): String = when { value >= 1_000_000 -> String.format("%.1fM", value / 1_000_000f).replace(".0M", "M"); value >= 1_000 -> String.format("%.1fK", value / 1_000f).replace(".0K", "K"); else -> value.toString() }
 
 @Composable
+// Official-account photo viewer.
 private fun FynxProfilePhotoViewer(mediaId: String, name: String, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var bitmap by remember(mediaId) { mutableStateOf<android.graphics.Bitmap?>(null) }
