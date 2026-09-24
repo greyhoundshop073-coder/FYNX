@@ -873,27 +873,31 @@ private fun HomePeopleRecommendationsCard(items: List<HomePeopleRecommendation>,
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var busyUsername by remember { mutableStateOf<String?>(null) }
+    var followedUsers by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var friendRequests by remember { mutableStateOf<Set<String>>(emptySet()) }
+
     Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp), shape = FynxDesign.LargeCardShape) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("People You May Know", style = MaterialTheme.typography.titleMedium)
-            Text("Real FYNX people based on your existing relationships.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
-            androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("People You May Know", style = MaterialTheme.typography.titleMedium)
+                    Text("People connected to your existing FYNX network.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
+                }
+                TextButton(onClick = { items.firstOrNull()?.let { onOpenProfile(it.username) } }, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("See all", style = MaterialTheme.typography.labelMedium) }
+            }
+            androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 2.dp)) {
                 items(items, key = { it.username }) { person ->
-                    Column(Modifier.width(150.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    val key = person.username.removePrefix("@").trim().lowercase()
+                    val isFollowing = key in followedUsers
+                    val requestSent = key in friendRequests
+                    Column(Modifier.width(154.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Box(Modifier.size(64.dp).clip(CircleShape).clickable { onOpenProfile(person.username) }) { FynxRemoteProfileAvatar(person.photoId, person.displayName, Modifier.fillMaxSize()) }
                         Text(person.displayName, style = MaterialTheme.typography.labelLarge, maxLines = 1, modifier = Modifier.clickable { onOpenProfile(person.username) })
-                        Text("@${person.username.removePrefix("@")}", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary, maxLines = 1)
-                        if (person.mutualFriends > 0) Text("${person.mutualFriends} mutual friend${if (person.mutualFriends == 1) "" else "s"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1)
-                        else Text(person.reason.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary, maxLines = 1)
+                        Text("@$key", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary, maxLines = 1)
+                        Text(if (person.mutualFriends > 0) person.mutualFriends.toString() + " mutual friend" + if (person.mutualFriends == 1) "" else "s" else person.reason.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = if (person.mutualFriends > 0) MaterialTheme.colorScheme.primary else FynxDesign.TextSecondary, maxLines = 1)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Button(enabled = busyUsername == null, onClick = {
-                                busyUsername = person.username
-                                scope.launch { FynxRemoteSocialClient.follow(context, person.username, false).onSuccess { busyUsername = null }.onFailure { busyUsername = null } }
-                            }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp)) { Text("Follow", maxLines = 1) }
-                            OutlinedButton(enabled = busyUsername == null, onClick = {
-                                busyUsername = person.username
-                                scope.launch { FynxSocialClient.sendRequest(context, person.username).onSuccess { onDismiss(person.username) }.onFailure { busyUsername = null } }
-                            }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp)) { Text("Add friend", maxLines = 1) }
+                            Button(enabled = busyUsername == null && !isFollowing, onClick = { busyUsername = key; scope.launch { FynxRemoteSocialClient.follow(context, person.username, true).onSuccess { followedUsers = followedUsers + key; busyUsername = null }.onFailure { busyUsername = null } } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(if (isFollowing) "Following" else "Follow", maxLines = 1) }
+                            OutlinedButton(enabled = busyUsername == null && !requestSent, onClick = { busyUsername = key; scope.launch { FynxSocialClient.sendRequest(context, person.username).onSuccess { friendRequests = friendRequests + key; busyUsername = null }.onFailure { busyUsername = null } } }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 3.dp)) { Text(if (requestSent) "Requested" else "Add friend", maxLines = 1) }
                         }
                         TextButton(enabled = busyUsername == null, onClick = { onDismiss(person.username) }, contentPadding = PaddingValues(horizontal = 2.dp)) { Text("Not now", style = MaterialTheme.typography.labelSmall) }
                     }
