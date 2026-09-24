@@ -256,7 +256,7 @@ private fun formatStatusTimestamp(timeMillis: Long): String {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun FynxStatusStoryViewer(
     statuses: List<FynxStatus>,
