@@ -67,7 +67,7 @@ messages = read("backend/server.js")
 
 check("two-real-user status visibility path", "FynxStatusClient.list(context)" in timeline and "expires_at > NOW()" in status_routes)
 check("two-real-user post visibility path", "FynxRemoteSocialClient.feedPage" in home and "visibility" in social_routes)
-check("two-real-user block enforcement", "blocks" in social_routes and "blocks" in status_routes and "blocks" in messages)
+check("two-real-user block enforcement", "blocks" in social_routes and "blocks" in status_routes and "NOT EXISTS (SELECT 1 FROM blocks" in messages)
 check("production app is not in preview mode", "FYNX_PREVIEW_MODE = false" in app)
 check("signed-in gate protects the production surface", "AuthState.SIGNED_IN" in app)
 check("backend client owns authenticated API access", "hasAccessToken" in client and "Authorization" in client)
@@ -78,7 +78,7 @@ check("profile uses real backend identity and counts", "FynxProfileRemoteClient"
 # member list that bypasses the server visibility decision.
 check("other-user profile does not expose private follower/following lists", not re.search(r"(?:followers?|following)\\s+(?:list|members?|user|people|names)", other_profile, re.IGNORECASE))
 check("profile privacy is enforced server-side", "connectionsVisible:self" in profile_api and "privacy" in profile_api.lower())
-check("private chat is connected to authenticated backend flow", "FynxBackendClient" in chat and ("send" in chat.lower() or "message" in chat.lower()))
+check("private chat is connected to authenticated backend flow", ("FynxProductionMessaging" in chat and "sendText" in chat and "history" in chat) or ("FynxBackendClient" in chat and ("send" in chat.lower() or "message" in chat.lower())))
 check("marketplace is remote/backend-backed", "FynxMarketplaceClient.listings" in market and "FynxMarketplaceClient.createListing" in market)
 check("marketplace transaction protection remains server-side", all(x in market_api for x in ["marketplace_orders", "PAYMENT_PENDING", "DISPUTED", "marketplace_order_disputes", "payout:'not_released'"]))
 check("group membership and messages are server-authoritative", all(x in group_api for x in ["fynx_group_members", "fynx_group_messages", "app.get('/api/groups/:groupId/messages'", "app.post('/api/groups/:groupId/messages'", "jwt.verify"]))
