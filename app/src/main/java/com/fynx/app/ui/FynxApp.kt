@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
@@ -57,6 +58,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { val stored = FynxAuthStore.load(context); if (stored.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) stored else AuthSession() }) }
     var adminRole by remember { mutableStateOf<String?>(null) }
     var notifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
+    var remoteUnreadCount by remember { mutableIntStateOf(-1) }
     var inviteCode by remember { mutableStateOf<String?>(null) }
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
     var appearance by remember { mutableStateOf(FynxPreferencesStore.loadAppearance(context)) }
@@ -116,6 +118,17 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         if (selected != "Marketplace") marketplaceListingId = null
     }
     LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context); notifications = FynxNotificationStore.load(context) }
+    LaunchedEffect(authSession.state, authSession.username) {
+        if (authSession.state != AuthState.SIGNED_IN || !FynxBackendClient.hasAccessToken(context)) return@LaunchedEffect
+        while (true) {
+            FynxNotificationRemoteClient.loadFeed(context).onSuccess { feed ->
+                remoteUnreadCount = feed.unreadCount
+                notifications = feed.notifications
+                FynxNotificationStore.save(context, feed.notifications)
+            }
+            kotlinx.coroutines.delay(15_000L)
+        }
+    }
     LaunchedEffect(authSession.state, authSession.username, profileVersion) {
         remoteMyPhotoId = FynxProfileRemoteClient.cachedProfilePhotoId(context, authSession.username ?: "")
         if (authSession.state == AuthState.SIGNED_IN && !authSession.username.isNullOrBlank() && FynxBackendClient.hasAccessToken(context)) {
@@ -174,7 +187,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         // When the IME is open, hide the floating navigation instead of moving it
         // over the Home feed. It returns automatically when the keyboard closes.
         val isKeyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-        val unread = notifications.unreadNotificationCount()
+        val unread = if (remoteUnreadCount >= 0) remoteUnreadCount else notifications.unreadNotificationCount()
         val myProfile = remember(authSession.username, profileVersion) { FynxPreferencesStore.loadProfile(context, authSession.username) }
         val myPhoto = FynxPreferencesStore.loadProfilePhoto(context)
         Scaffold(
@@ -410,7 +423,37 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Stories" -> FynxStatusHubPanel(openOwnerUsername = statusOpenOwner)
             "Gifts" -> GiftsPanel()
             "Groups" -> FynxGroupsPanel(currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", onOpenGroup = { openGroup = it })
-            "Notifications" -> NotificationPanel(notifications = notifications, onBack = { selected = "Home" }, onNotificationRead = { notifications = FynxNotificationStore.load(context) }, onMarkAllRead = { notifications = FynxNotificationStore.load(context) })
+            "Notifications" -> NotificationPanel(
+                notifications = notifications,
+                onBack = { selected = "Home" },
+                onNotificationRead = { notifications = FynxNotificationStore.load(context) },
+                onMarkAllRead = { notifications = FynxNotificationStore.load(context); remoteUnreadCount = 0 },
+                onUnreadCountChanged = { remoteUnreadCount = it },
+                onNotificationOpen = { notification ->
+                    val route = notification.route?.takeIf { it.isNotBlank() }
+                        ?: notification.sourceUsername?.takeIf { it.isNotBlank() }?.let { "fynx://profile/" + Uri.encode(it) }
+                        ?: "fynx://home"
+                    when (val destination = FynxDeepLinkParser.parse(Uri.parse(route))) {
+                        is FynxDeepLinkDestination.Profile -> { profileUser = destination.username; selected = "Home" }
+                        is FynxDeepLinkDestination.Chat -> {
+                            val normalized = destination.username.removePrefix("@").trim()
+                            if (normalized.isNotBlank()) {
+                                scope.launch {
+                                    val local = FynxChatStore.loadPreviews(context).firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
+                                    val remote = if (local == null) FynxSocialClient.searchUsers(context, normalized).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) } else null
+                                    openChat = local ?: remote?.let { user -> ChatPreview(user.displayName.ifBlank { normalized }, "@" + user.username.removePrefix("@"), "Start a conversation", "Now", user.profilePhotoMediaId?.let { "/api/media/" + it }) }
+                                    if (openChat != null) FynxChatStore.savePreview(context, openChat!!)
+                                }
+                            }
+                        }
+                        is FynxDeepLinkDestination.Group -> openGroup = destination.id
+                        is FynxDeepLinkDestination.Marketplace -> { marketplaceListingId = destination.listingId; selected = "Marketplace" }
+                        FynxDeepLinkDestination.Stories -> selected = "Stories"
+                        FynxDeepLinkDestination.Money -> selected = "Money Tools"
+                        FynxDeepLinkDestination.Home, is FynxDeepLinkDestination.Invite, null -> selected = "Home"
+                    }
+                }
+            )
             "Share" -> FynxSharePanel()
             "Invite" -> FynxInvitePanel(code = inviteCode, onShare = { FynxShareActions.share(context, FynxShareActions.defaultPayload()) }, onBack = { selected = "Features" })
             "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo, initialOutgoing = callTarget != null)
