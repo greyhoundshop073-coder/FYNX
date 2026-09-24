@@ -154,6 +154,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var text by remember { mutableStateOf("") }
+    var mentionQuery by remember { mutableStateOf<String?>(null) }
     val group = remember(groupId) { FynxGroupsStore.load(context).firstOrNull { it.id == groupId } }
     var currentGroup by remember(groupId) { mutableStateOf(group) }
     val groupTitle = currentGroup?.name ?: "Group"
@@ -348,6 +349,45 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             }
         }
         if (showEmojiPanel && canSendMessages) { FynxChatEmojiPanel(onEmojiSelected = { emoji -> text += emoji; showEmojiPanel = false }) }
+        val mentionSuggestions = remember(text, selectedGroup?.members) {
+            val match = Regex("""(?:^|\s)@([A-Za-z0-9_.-]*)$""").find(text)
+            val query = match?.groupValues?.getOrNull(1)?.lowercase()
+            mentionQuery = query
+            if (query == null || selectedGroup == null) emptyList()
+            else selectedGroup.members
+                .map { it.username.removePrefix("@").trim() }
+                .filter { it.isNotBlank() && it.lowercase().contains(query) }
+                .distinct()
+                .take(6)
+        }
+        if (canSendMessages && mentionSuggestions.isNotEmpty()) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                color = Color(0xFF08090D),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Text("Mention a member", modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp), color = Color(0xFF9C90F0), style = MaterialTheme.typography.labelMedium)
+                    mentionSuggestions.forEach { username ->
+                        TextButton(
+                            onClick = {
+                                val current = text
+                                val match = Regex("""(?:^|\s)@[A-Za-z0-9_.-]*$""").find(current)
+                                text = if (match != null) current.removeRange(match.range).trimEnd() + " @$username " else current + " @$username "
+                                mentionQuery = null
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                FynxAvatar(username, senderAvatarUris[username], Modifier.size(30.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("@$username", color = Color.White, modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+            }
+        }
         Surface(color = Color(0xFF08090D).copy(alpha = 0.98f), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
