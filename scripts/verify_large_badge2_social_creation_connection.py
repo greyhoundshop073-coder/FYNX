@@ -43,7 +43,7 @@ checks = [
     ("Save/Repost enforce post visibility", "const visiblePost = async" in discovery and "visiblePost(postId, req.user.sub)" in discovery),
     ("Follow/unfollow is real and authenticated", "app.post(\"/api/social/follow/:username\", auth" in follow and "DELETE FROM social_follows" in follow),
     ("Follow blocks self-follow and blocked relationships", "cannot follow yourself" in follow and "follow unavailable" in follow),
-    ("Post author identity opens the real profile route", "onOpenProfile = { openAuthorStatus" in home and "onOpenAuthorProfile" in home),
+    ("Post author identity opens the real profile route", "onOpenProfile = { onOpenAuthorProfile" in home and "onOpenStatus = { openAuthorStatus" in home),
     ("Like/reaction notification hook is server-side", "queueFynxNotification" in reactions and "type: 'REACTION'" in reactions),
     ("Comment/reply notification hook is server-side", "queueFynxNotification" in notification_bootstrap and "type:'COMMENT'" in notification_bootstrap),
     ("Follow notification hook fires only for a new relationship", "queueFynxNotification" in follow and "type: \"FOLLOW\"" in follow and "inserted.rowCount > 0" in follow),
