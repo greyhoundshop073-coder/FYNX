@@ -8,6 +8,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
@@ -210,7 +212,7 @@ fun FynxChatDoodlePattern() {
                     }
                     val px = offsetX + x.dp.toPx()
                     val py = offsetY + y.dp.toPx()
-                    androidx.compose.ui.graphics.drawscope.DrawScope.rotate(rotation, p(px, py)) {
+                    withTransform({ rotate(rotation, pivot = p(px, py)) }) {
                         drawMotif(index + tx * 7 + ty * 11, px, py, scale)
                     }
                 }
