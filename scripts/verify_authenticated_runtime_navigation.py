@@ -261,6 +261,34 @@ else:
         report.append("- PASS real account authenticated through the FYNX login flow")
 
 if not FAILURES:
+    # Capture the exact Home camera -> post composer -> real camera path so the
+    # uploaded visual artifact shows the surfaces that were actually changed.
+    home_before_camera = xml
+    composer_xml = tap_control(
+        home_before_camera,
+        ["Open FYNX camera"],
+        "home-camera-composer",
+        ["What's on your mind?", "Photo", "Video/Camera"],
+    )
+    if composer_xml:
+        report.append("- PASS Home header camera -> real post composer screenshot/UI hierarchy")
+        camera_xml = tap_control(
+            composer_xml,
+            ["Video/Camera"],
+            "composer-camera",
+            ["Switch front/back camera", "Photo", "Recording"],
+        )
+        if camera_xml:
+            report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
+        else:
+            FAILURES.append("post composer -> real camera")
+    else:
+        FAILURES.append("Home header camera -> real post composer")
+    run("adb","shell","am","force-stop",PACKAGE)
+    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
+    time.sleep(2.5)
+    xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-camera-reset.xml") or xml
+
     # Main surfaces. These labels are resolved from the real rendered hierarchy.
     for name,labels,expected in (
         ("chat",["Chat"],["Chat"]),
