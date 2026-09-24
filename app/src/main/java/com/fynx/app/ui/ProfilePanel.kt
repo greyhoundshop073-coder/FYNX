@@ -251,7 +251,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
         if (session.state == AuthState.SIGNED_IN) item { OutlinedButton(onClick = { if (onSignOut != null) onSignOut() else { FynxAuthStore.clear(context); (context as? Activity)?.recreate() } }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) { Text("Sign out") } }
     }
     connectionType?.let { type -> ProfileConnectionsDialog(type, connections, connectionsLoading, connectionsError) { connectionType = null } }
-    if (showProfilePhoto && remotePhotoId != null) FynxProfilePhotoViewer(remotePhotoId!!, profile.displayName) { showProfilePhoto = false }
+    if (showProfilePhoto) FynxProfilePhotoViewer(remotePhotoId, photo, profile.displayName) { showProfilePhoto = false }
 }
 
 @Composable private fun ProfileStat(label: String, value: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
@@ -268,18 +268,36 @@ private fun formatProfileCount(value: Int): String = when { value >= 1_000_000 -
 
 @Composable
 // Official-account photo viewer.
-private fun FynxProfilePhotoViewer(mediaId: String, name: String, onDismiss: () -> Unit) {
+private fun FynxProfilePhotoViewer(mediaId: String?, localPhotoUri: String?, name: String, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    var bitmap by remember(mediaId) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    LaunchedEffect(mediaId) {
-        val uri = FynxProductionMessaging.cacheRemoteMedia(context, mediaId, "/api/social/media/$mediaId").getOrNull()
-        bitmap = if (uri != null) withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { context.contentResolver.openInputStream(uri).use { android.graphics.BitmapFactory.decodeStream(it) } }.getOrNull() } else null
+    var bitmap by remember(mediaId, localPhotoUri) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    LaunchedEffect(mediaId, localPhotoUri) {
+        bitmap = withContext(kotlinx.coroutines.Dispatchers.IO) {
+            when {
+                !mediaId.isNullOrBlank() -> FynxProductionMessaging.cacheRemoteMedia(context, mediaId, "/api/social/media/$mediaId").getOrNull()?.let { uri ->
+                    runCatching { context.contentResolver.openInputStream(uri).use { android.graphics.BitmapFactory.decodeStream(it) } }.getOrNull()
+                }
+                !localPhotoUri.isNullOrBlank() -> runCatching {
+                    context.contentResolver.openInputStream(Uri.parse(localPhotoUri)).use { android.graphics.BitmapFactory.decodeStream(it) }
+                }.getOrNull()
+                else -> null
+            }
+        }
     }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
-            if (bitmap != null) androidx.compose.foundation.Image(bitmap!!.asImageBitmap(), contentDescription = "Profile photo", modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
-            else FynxAvatar(name, Modifier.size(120.dp))
+        Box(
+            Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            if (bitmap != null) androidx.compose.foundation.Image(
+                bitmap!!.asImageBitmap(),
+                contentDescription = "Profile photo",
+                modifier = Modifier.fillMaxWidth().padding(12.dp).clip(RoundedCornerShape(18.dp)),
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit
+            ) else FynxAvatar(name, Modifier.size(120.dp))
+            TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) { Text("Close", color = androidx.compose.ui.graphics.Color.White) }
         }
+    }
     }
 }
 
