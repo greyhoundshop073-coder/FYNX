@@ -188,6 +188,21 @@ object FynxProductionMessaging {
         return FynxBackendClient.patchJson(context, "/api/messages/$id", JSONObject().put("text", cleanText).toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
     }
 
+
+    suspend fun setPinned(context: Context, messageId: String, pinned: Boolean): Result<RemoteMessage> {
+        val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id"))
+        return FynxBackendClient.patchJson(context, "/api/messages/$id/pin", JSONObject().put("pinned", pinned).toString())
+            .mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
+    }
+
+    suspend fun forwardMessage(context: Context, messageId: String, recipientUsername: String): Result<RemoteMessage> {
+        val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id"))
+        val recipient = recipientUsername.trim().removePrefix("@").lowercase()
+        if (recipient.isBlank()) return Result.failure(IllegalArgumentException("recipient is required"))
+        return FynxBackendClient.postJson(context, "/api/messages/$id/forward", JSONObject().put("recipientUsername", recipient).toString())
+            .mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
+    }
+
     suspend fun deleteMessage(context: Context, messageId: String): Result<Unit> {
         val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id"))
         return FynxBackendClient.delete(context, "/api/messages/$id").map { Unit }
@@ -206,7 +221,7 @@ object FynxProductionMessaging {
         text = if (message.deleted) "Message deleted" else message.text, fromMe = message.senderId == currentUserId, id = message.id,
         timestamp = message.timestamp, delivered = message.delivered, read = message.read, replyToId = message.replyToId, edited = message.edited,
         attachmentUri = message.mediaUrl, attachmentType = message.mediaType, voiceUri = if (message.mediaType == "audio") message.mediaUrl else null,
-        voiceDurationMs = message.voiceDurationMs, reaction = message.reaction, mediaId = message.mediaId, senderName = message.senderDisplayName, senderUsername = message.senderUsername
+        voiceDurationMs = message.voiceDurationMs, reaction = message.reaction, mediaId = message.mediaId, pinned = message.pinned, senderName = message.senderDisplayName, senderUsername = message.senderUsername
     )
 
     fun fromJson(item: JSONObject): RemoteMessage = RemoteMessage(
