@@ -81,6 +81,7 @@ async function ensureSchema(pool) {
       message TEXT NOT NULL,
       target_id TEXT,
       source_username TEXT,
+      route TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       read_at TIMESTAMPTZ,
       PRIMARY KEY(id,user_id)
@@ -98,6 +99,7 @@ async function ensureSchema(pool) {
       PRIMARY KEY(notification_id,user_id,provider,token)
     );
     CREATE INDEX IF NOT EXISTS fynx_notification_delivery_status_idx ON fynx_notification_delivery(status,updated_at);
+    ALTER TABLE fynx_notifications ADD COLUMN IF NOT EXISTS route TEXT;
   `).catch(error => { schemaPromise = undefined; throw error; });
   return schemaPromise;
 }
@@ -147,7 +149,7 @@ export async function queueFynxNotification(pool, {
     const id = String(notificationId || `push-${type}-${userId}-${targetId || "home"}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`).slice(0, 180);
     const safeTitle = safeText(title, "FYNX");
     const safeMessage = safeText(message, "You have a new FYNX notification.");
-    await pool.query(`INSERT INTO fynx_notifications(id,user_id,type,title,message,target_id,source_username,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,NOW()) ON CONFLICT(id,user_id) DO UPDATE SET title=EXCLUDED.title,message=EXCLUDED.message,target_id=EXCLUDED.target_id,source_username=EXCLUDED.source_username`, [id, userId, type, safeTitle, safeMessage, targetId == null ? null : String(targetId).slice(0, 200), sourceUsername == null ? null : String(sourceUsername).slice(0, 80)]);
+    await pool.query(`INSERT INTO fynx_notifications(id,user_id,type,title,message,target_id,source_username,route,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,NOW()) ON CONFLICT(id,user_id) DO UPDATE SET title=EXCLUDED.title,message=EXCLUDED.message,target_id=EXCLUDED.target_id,source_username=EXCLUDED.source_username,route=EXCLUDED.route`, [id, userId, type, safeTitle, safeMessage, targetId == null ? null : String(targetId).slice(0, 200), sourceUsername == null ? null : String(sourceUsername).slice(0, 80), safeText(route, "fynx://home", 500)]);
     if (!(await pushAllowed(pool, userId, type))) return { stored: true, delivered: false, reason: "notification preference disabled", id };
     if (!fynxPushConfigured()) return { stored: true, delivered: false, reason: "firebase server credentials not configured", id };
     const devices = (await pool.query(`SELECT provider,token FROM notification_devices WHERE user_id=$1 AND enabled=TRUE AND provider='fcm'`, [userId])).rows;

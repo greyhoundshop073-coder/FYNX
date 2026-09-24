@@ -12,7 +12,8 @@ data class FynxNotification(
     val targetId: String? = null,
     val sourceUsername: String? = null,
     val targetIds: List<String> = emptyList(),
-    val sourceUsernames: List<String> = emptyList()
+    val sourceUsernames: List<String> = emptyList(),
+    val route: String? = null
 )
 
 fun List<FynxNotification>.markNotificationRead(id: String): List<FynxNotification> =

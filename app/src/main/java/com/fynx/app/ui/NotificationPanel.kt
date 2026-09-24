@@ -43,6 +43,7 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
             FynxNotificationRemoteClient.loadFeed(context).onSuccess { feed ->
                 remoteNotifications = feed.notifications
                 remoteUnreadCount = feed.unreadCount
+                onUnreadCountChanged(feed.unreadCount)
                 FynxNotificationStore.save(context, feed.notifications)
                 localNotifications = FynxNotificationStore.load(context)
                 remoteError = null
@@ -64,6 +65,7 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
         localNotifications = FynxNotificationStore.load(context)
         remoteNotifications = remoteNotifications.map { it.copy(read = true) }
         remoteUnreadCount = 0
+        onUnreadCountChanged(0)
         scope.launch {
             FynxNotificationRemoteClient.markAllRead(context).onSuccess { loadRemoteNotifications() }.onFailure { loadRemoteNotifications() }
         }
@@ -147,6 +149,7 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
                                 localNotifications = FynxNotificationStore.load(context)
                                 remoteNotifications = remoteNotifications.map { if (it.id == notification.id) it.copy(read = true) else it }
                                 remoteUnreadCount = maxOf(0, remoteUnreadCount - 1)
+                                onUnreadCountChanged(remoteUnreadCount)
                                 scope.launch { FynxNotificationRemoteClient.markRead(context, notification.id) }
                                 onNotificationRead(notification.id)
                             }
