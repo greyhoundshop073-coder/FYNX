@@ -7,7 +7,6 @@ import android.media.MediaPlayer
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.view.ViewGroup
-import android.widget.MediaController
 import android.widget.VideoView
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -583,7 +582,6 @@ private fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: ((
                 FynxPassiveVideoView(ctx).apply {
                     videoView = this
                     layoutParams = ViewGroup.LayoutParams(-1, -1)
-                    setMediaController(MediaController(ctx))
                     setVideoPath(file!!.absolutePath)
                     setOnPreparedListener { player ->
                         preparedPlayer = player
@@ -594,20 +592,40 @@ private fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: ((
                     setOnCompletionListener { playing = false }
                 }
             }, modifier = Modifier.fillMaxSize())
-            Box(Modifier.fillMaxSize().clickable {
-                when {
-                    onOpenMarketplace != null -> onOpenMarketplace()
-                    videoView?.isPlaying == true -> { videoView?.pause(); playing = false }
-                    playbackActive -> { videoView?.start(); playing = true }
-                    else -> fullscreen = true
+            Box(
+                Modifier.fillMaxSize().padding(8.dp),
+                contentAlignment = Alignment.BottomEnd
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (onOpenMedia != null) IconButton(onClick = onOpenMedia) {
+                        Icon(Icons.Default.OpenInNew, "Open video", tint = Color.White)
+                    }
+                    IconButton(onClick = { fullscreen = true }) {
+                        Icon(Icons.Default.Fullscreen, "Open video full screen", tint = Color.White)
+                    }
+                    IconButton(onClick = {
+                        muted = !muted
+                        preparedPlayer?.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f)
+                    }) {
+                        Icon(if (muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp, if (muted) "Unmute video" else "Mute video", tint = Color.White)
+                    }
                 }
-            })
-            Row(Modifier.align(Alignment.BottomEnd).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (onOpenMedia != null) IconButton(onClick = onOpenMedia) { Icon(Icons.Default.OpenInNew, "Open video discovery", tint = Color.White) }
-                IconButton(onClick = { muted = !muted; preparedPlayer?.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f) }) {
-                    Icon(if (muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp, if (muted) "Unmute video" else "Mute video", tint = Color.White)
+            }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                FilledIconButton(
+                    onClick = {
+                        if (videoView?.isPlaying == true) {
+                            videoView?.pause()
+                            playing = false
+                        } else {
+                            videoView?.start()
+                            playing = true
+                        }
+                    },
+                    modifier = Modifier.size(56.dp)
+                ) {
+                    Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause video" else "Play video")
                 }
-                Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause video" else "Play video", tint = Color.White)
             }
         }
     } else {
@@ -623,7 +641,7 @@ private fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: ((
         Dialog(onDismissRequest = { fullscreen = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
             Box(Modifier.fillMaxSize().background(Color.Black)) {
                 if (type == "video") {
-                    AndroidView(factory = { ctx -> VideoView(ctx).apply { layoutParams = ViewGroup.LayoutParams(-1, -1); setMediaController(MediaController(ctx)); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxSize())
+                    AndroidView(factory = { ctx -> VideoView(ctx).apply { layoutParams = ViewGroup.LayoutParams(-1, -1); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxSize())
                 } else {
                     var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
                     LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }
