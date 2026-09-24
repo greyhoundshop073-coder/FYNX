@@ -446,7 +446,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                                 }
                             }
                         }
-                        is FynxDeepLinkDestination.Call -> { callTarget = destination.username; callVideo = destination.video; selected = "Calls" }\n                        is FynxDeepLinkDestination.Group -> openGroup = destination.id
+                        is FynxDeepLinkDestination.Call -> { callTarget = destination.username; callVideo = destination.video; selected = "Calls" }
+                        is FynxDeepLinkDestination.Group -> openGroup = destination.id
                         is FynxDeepLinkDestination.Marketplace -> { marketplaceListingId = destination.listingId; selected = "Marketplace" }
                         FynxDeepLinkDestination.Stories -> selected = "Stories"
                         FynxDeepLinkDestination.Money -> selected = "Money Tools"
