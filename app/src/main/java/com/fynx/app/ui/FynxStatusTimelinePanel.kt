@@ -558,8 +558,9 @@ private fun FynxStatusStoryViewer(
                                     .weight(1f)
                                     .onFocusChanged { replyFocused = it.isFocused },
                                 enabled = !replying,
-                                singleLine = true,
-                                shape = RoundedCornerShape(50),
+                                minLines = 1,
+                                maxLines = 4,
+                                shape = RoundedCornerShape(26.dp),
                                 placeholder = { Text("Reply to this Status…", color = Color.White.copy(alpha = 0.72f)) },
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = Color.White,

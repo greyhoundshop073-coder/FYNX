@@ -179,10 +179,26 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
                     // double keyboard padding.
                     Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(10.dp), verticalAlignment = Alignment.Bottom) {
                         Column(Modifier.weight(1f)) {
-                            OutlinedTextField(value = text, onValueChange = { text = it.take(MAX_COMMENT_LENGTH) }, modifier = Modifier.fillMaxWidth(), placeholder = { Text(if (replyingTo == null) "Write a comment…" else "Write a reply…") }, maxLines = 4, enabled = !sending && !loading, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, keyboardType = KeyboardType.Text, imeAction = ImeAction.Send), keyboardActions = KeyboardActions(onSend = { send() }))
+                            OutlinedTextField(
+                                value = text,
+                                onValueChange = { text = it.take(MAX_COMMENT_LENGTH) },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text(if (replyingTo == null) "Write a comment…" else "Write a reply…") },
+                                minLines = 1,
+                                maxLines = 4,
+                                shape = RoundedCornerShape(26.dp),
+                                enabled = !sending && !loading,
+                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, keyboardType = KeyboardType.Text, imeAction = ImeAction.Send),
+                                keyboardActions = KeyboardActions(onSend = { send() }),
+                                trailingIcon = {
+                                    IconButton(onClick = { send() }, enabled = text.trim().isNotEmpty() && !sending && !loading) {
+                                        if (sending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Send, "Send comment")
+                                    }
+                                }
+                            )
                             Text("${text.length}/$MAX_COMMENT_LENGTH", Modifier.fillMaxWidth().padding(top = 2.dp, end = 4.dp), textAlign = TextAlign.End, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Spacer(Modifier.width(8.dp)); IconButton(onClick = { send() }, enabled = text.trim().isNotEmpty() && !sending && !loading) { if (sending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Send, "Send comment") }
+                        Spacer(Modifier.width(4.dp))
                     }
                 }
             }

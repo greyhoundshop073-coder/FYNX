@@ -632,15 +632,14 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { showEmojiPanel = !showEmojiPanel }, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Default.EmojiEmotions, "Emoji", Modifier.size(24.dp))
-                }
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(2.dp))
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(24.dp),
+                    minLines = 1,
+                    maxLines = 5,
+                    shape = RoundedCornerShape(26.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = Color(0xFF282B34),
                         unfocusedContainerColor = Color(0xFF282B34),
@@ -653,31 +652,19 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         unfocusedPlaceholderColor = Color(0xFF9A9DA8)
                     ),
                     placeholder = { Text(if (editingId == null) "Message..." else "Edit message...") },
-                    maxLines = 1,
-                    singleLine = true,
+                    leadingIcon = { IconButton(onClick = { showEmojiPanel = !showEmojiPanel }) { Icon(Icons.Default.EmojiEmotions, "Emoji", Modifier.size(22.dp)) } },
+                    trailingIcon = {
+                        IconButton(onClick = { if (text.isNotBlank() || attachment != null) submitComposer() else startRecording() }, enabled = !sending) {
+                            Icon(if (text.isNotBlank() || attachment != null) Icons.Default.Send else Icons.Default.Mic, if (text.isNotBlank() || attachment != null) "Send message" else "Microphone", Modifier.size(22.dp))
+                        }
+                    },
+                    singleLine = false,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = {
                         if (text.isNotBlank() && !sending) submitComposer()
                     })
                 )
-                Spacer(Modifier.width(8.dp))
-                IconButton(
-                    onClick = {
-                        if (text.isNotBlank() || attachment != null) {
-                            submitComposer()
-                        } else {
-                            startRecording()
-                        }
-                    },
-                    enabled = !sending,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        if (text.isNotBlank() || attachment != null) Icons.Default.Send else Icons.Default.Mic,
-                        if (text.isNotBlank() || attachment != null) "Send message" else "Microphone",
-                        Modifier.size(24.dp)
-                    )
-                }
+                Spacer(Modifier.width(2.dp))
             }
         }
     }

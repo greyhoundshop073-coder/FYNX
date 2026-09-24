@@ -427,11 +427,12 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(6.dp),
+                            .padding(horizontal = 4.dp, vertical = 3.dp),
                         enabled = !loading && !voiceConnected,
                         minLines = 1,
-                        maxLines = 5,
-                        shape = FynxDesign.ControlShape,
+                        minLines = 1,
+                        maxLines = 6,
+                        shape = RoundedCornerShape(26.dp),
                         placeholder = { Text(if (voiceConnected) "Listening to you…" else "Message FYNX Assistant…") },
                         leadingIcon = {
                             Box {

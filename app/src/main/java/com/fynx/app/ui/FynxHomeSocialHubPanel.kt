@@ -607,9 +607,9 @@ fun FynxHomeSocialHubPanel(
                             enabled = !posting && postingAllowed,
                             textStyle = MaterialTheme.typography.bodyLarge.copy(color = textBackground?.let { Color(it.foregroundColor) } ?: MaterialTheme.colorScheme.onBackground),
                             decorationBox = { innerTextField ->
-                                Box(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 8.dp)) {
+                                Box(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 2.dp)) {
                                     if (text.isEmpty()) {
-                                        Text("What's on your mind?", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("What's on your mind?", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                     innerTextField()
                                 }

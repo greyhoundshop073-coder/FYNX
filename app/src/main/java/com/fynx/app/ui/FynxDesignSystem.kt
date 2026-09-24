@@ -45,7 +45,7 @@ object FynxDesign {
     val CharcoalSelectedContainer = Color(0xFF37434B)
     val CardShape = RoundedCornerShape(16.dp)
     val LargeCardShape = RoundedCornerShape(20.dp)
-    val ControlShape = RoundedCornerShape(14.dp)
+    val ControlShape = RoundedCornerShape(24.dp)
 }
 
 private fun fynxTypography(): Typography = Typography().run {
