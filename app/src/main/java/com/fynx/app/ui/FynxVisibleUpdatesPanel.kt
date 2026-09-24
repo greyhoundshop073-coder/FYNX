@@ -117,10 +117,6 @@ fun FynxVisibleUpdatesPanel(
     val current = currentUsername.removePrefix("@").trim().lowercase()
     val activeStatuses = statuses
         .filter { it.expiresAtMillis <= 0L || it.expiresAtMillis > System.currentTimeMillis() }
-        .filter {
-            val owner = it.ownerUsername.removePrefix("@").trim().lowercase()
-            owner == current || owner in followingUsernames
-        }
     val grouped = activeStatuses.groupBy { it.ownerUsername }
         .mapNotNull { (_, list) -> list.maxByOrNull { it.createdAtMillis }?.let { it to list.size } }
     val own = grouped.firstOrNull { it.first.ownerUsername.equals(currentUsername, true) }
