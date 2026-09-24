@@ -460,7 +460,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         if (isNewConversation) {
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
-                color = Color(0xFF202532),
+                color = Color(0xFF08090D),
                 shape = RoundedCornerShape(14.dp),
                 tonalElevation = 0.dp
             ) {
@@ -681,7 +681,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         }
 
         if (isRecording) {
-            Surface(color = Color(0xFF1D222C), contentColor = MaterialTheme.colorScheme.onSurface, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
+            Surface(color = Color(0xFF08090D), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Mic, "Recording", tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(8.dp))
@@ -753,7 +753,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     if (showAttachmentSheet) {
         ModalBottomSheet(
             onDismissRequest = { showAttachmentSheet = false },
-            containerColor = Color(0xFF1D222C),
+            containerColor = Color(0xFF08090D),
             tonalElevation = 0.dp
         ) {
             Row(
