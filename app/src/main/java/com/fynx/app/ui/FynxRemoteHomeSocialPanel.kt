@@ -882,8 +882,8 @@ private fun HomePeopleRecommendationsCard(items: List<HomePeopleRecommendation>,
                     Column(Modifier.width(150.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Box(Modifier.size(64.dp).clip(CircleShape).clickable { onOpenProfile(person.username) }) { FynxRemoteProfileAvatar(person.photoId, person.displayName, Modifier.fillMaxSize()) }
                         Text(person.displayName, style = MaterialTheme.typography.labelLarge, maxLines = 1, modifier = Modifier.clickable { onOpenProfile(person.username) })
-                        Text("@\${person.username.removePrefix("@")}", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary, maxLines = 1)
-                        if (person.mutualFriends > 0) Text("\${person.mutualFriends} mutual friend\${if (person.mutualFriends == 1) "" else "s"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1)
+                        Text("@${person.username.removePrefix("@")}", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary, maxLines = 1)
+                        if (person.mutualFriends > 0) Text("${person.mutualFriends} mutual friend${if (person.mutualFriends == 1) "" else "s"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1)
                         else Text(person.reason.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary, maxLines = 1)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                             Button(enabled = busyUsername == null, onClick = {
