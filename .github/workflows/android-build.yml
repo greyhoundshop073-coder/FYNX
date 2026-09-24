@@ -250,7 +250,6 @@ jobs:
       - name: Upload exact-commit debug APK
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
         uses: actions/upload-artifact@v4
-        if: success()
         with:
           name: FYNX-debug-apk-${{ github.sha }}
           path: fynx-apk-artifact/
@@ -258,7 +257,6 @@ jobs:
       - name: Upload latest debug APK alias
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
         uses: actions/upload-artifact@v4
-        if: success()
         with:
           name: FYNX-latest-debug-apk
           path: fynx-apk-artifact/
@@ -266,7 +264,6 @@ jobs:
       - name: Upload instrumentation test APK
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
         uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: FYNX-debug-androidTest-apk-${{ github.sha }}
           path: app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
