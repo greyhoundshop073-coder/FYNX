@@ -186,7 +186,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
                                 placeholder = { Text(if (replyingTo == null) "Write a comment…" else "Write a reply…") },
                                 minLines = 1,
                                 maxLines = 4,
-                                shape = RoundedCornerShape(26.dp),
+                                shape = FynxDesign.ControlShape,
                                 enabled = !sending && !loading,
                                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, keyboardType = KeyboardType.Text, imeAction = ImeAction.Send),
                                 keyboardActions = KeyboardActions(onSend = { send() }),
