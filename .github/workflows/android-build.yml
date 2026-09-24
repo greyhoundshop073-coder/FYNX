@@ -233,16 +233,14 @@ jobs:
           script: |
             bash -c 'set +e; mkdir -p fynx-runtime-screenshots; TEST_STATUS=0; ./gradlew connectedDebugAndroidTest --no-daemon --build-cache; TEST_STATUS=$?; python3 scripts/verify_runtime_navigation.py; NAV_STATUS=$?; python3 scripts/verify_authenticated_runtime_navigation.py; AUTH_STATUS=$?; printf "Commit: %s\nRun: %s\nInstrumentation exit: %s\nNavigation exit: %s\nAuthenticated visual exit: %s\n" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$TEST_STATUS" "$NAV_STATUS" "$AUTH_STATUS" > fynx-runtime-screenshots/README.txt; if [ "$TEST_STATUS" -ne 0 ]; then exit "$TEST_STATUS"; fi; if [ "$NAV_STATUS" -ne 0 ]; then exit "$NAV_STATUS"; fi; exit "$AUTH_STATUS"'
       - name: Upload FYNX runtime screenshots and UI hierarchies
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
-        if: always()
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: FYNX-runtime-visual-check-${{ github.sha }}
           path: fynx-runtime-screenshots/
           if-no-files-found: warn
       - name: Prepare exact-commit APK artifact
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
-        if: success()
+        if: ${{ success() && github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
         run: |
           test -f app/build/outputs/apk/debug/app-debug.apk
           mkdir -p fynx-apk-artifact
