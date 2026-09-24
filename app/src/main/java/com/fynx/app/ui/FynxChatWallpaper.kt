@@ -18,15 +18,11 @@ fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, wallpaperOverride
     val context = androidx.compose.ui.platform.LocalContext.current
     val wallpaper = wallpaperOverride ?: FynxPreferencesStore.loadChatWallpaper(context)
     val base = when (wallpaper) {
-        "Midnight" -> Color(0xFF171B20)
-        "Aurora" -> Color(0xFF192122)
-        "Sunrise" -> Color(0xFF211F21)
-        "Ocean" -> Color(0xFF18242A)
-        "Minimal" -> MaterialTheme.colorScheme.background
-        else -> Color(0xFF1B1F23)
+        "Minimal" -> Color(0xFF0B0E14)
+        else -> Color(0xFF0D0E12)
     }
     Box(modifier.background(base)) {
-        if (wallpaper == "FYNX Default") FynxChatDoodlePattern()
+        FynxChatDoodlePattern()
         content()
     }
 }
@@ -34,115 +30,191 @@ fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, wallpaperOverride
 @Composable
 fun FynxChatDoodlePattern() {
     androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-        val ink = Color(0xFFD8DEE4).copy(alpha = 0.055f)
-        val sw = 0.9.dp.toPx()
-        val cellW = 125.dp.toPx()
-        val cellH = 112.dp.toPx()
+        val ink = Color(0xFF8A94A6).copy(alpha = 0.085f)
+        val sw = 0.72.dp.toPx()
+        val tileW = 420.dp.toPx()
+        val tileH = 520.dp.toPx()
+
+        fun p(x: Float, y: Float) = androidx.compose.ui.geometry.Offset(x, y)
         fun line(a: androidx.compose.ui.geometry.Offset, b: androidx.compose.ui.geometry.Offset) = drawLine(ink, a, b, sw)
-        fun circle(x: Float, y: Float, r: Float) = drawCircle(color = ink, radius = r, center = androidx.compose.ui.geometry.Offset(x, y), style = androidx.compose.ui.graphics.drawscope.Stroke(width = sw))
+        fun circle(x: Float, y: Float, r: Float) =
+            drawCircle(ink, r, p(x, y), style = androidx.compose.ui.graphics.drawscope.Stroke(sw))
+
         fun bubble(x: Float, y: Float, s: Float) {
-            drawRoundRect(ink, androidx.compose.ui.geometry.Offset(x,y), androidx.compose.ui.geometry.Size(54*s,36*s), androidx.compose.ui.geometry.CornerRadius(11*s,11*s), style=androidx.compose.ui.graphics.drawscope.Stroke(width=sw))
-            line(androidx.compose.ui.geometry.Offset(x+12*s,y+36*s), androidx.compose.ui.geometry.Offset(x+7*s,y+46*s))
-            line(androidx.compose.ui.geometry.Offset(x+20*s,y+13*s), androidx.compose.ui.geometry.Offset(x+35*s,y+13*s))
+            drawRoundRect(
+                ink, p(x, y), androidx.compose.ui.geometry.Size(34f * s, 24f * s),
+                androidx.compose.ui.geometry.CornerRadius(7f * s, 7f * s),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(sw)
+            )
+            line(p(x + 8f * s, y + 24f * s), p(x + 5f * s, y + 29f * s))
+            line(p(x + 11f * s, y + 8f * s), p(x + 23f * s, y + 8f * s))
+            line(p(x + 11f * s, y + 13f * s), p(x + 19f * s, y + 13f * s))
         }
-        fun camera(x: Float,y: Float,s: Float) {
-            drawRoundRect(ink, androidx.compose.ui.geometry.Offset(x,y), androidx.compose.ui.geometry.Size(54*s,38*s), androidx.compose.ui.geometry.CornerRadius(7*s,7*s), style=androidx.compose.ui.graphics.drawscope.Stroke(width=sw))
-            circle(x+27*s,y+19*s,10*s)
-            line(androidx.compose.ui.geometry.Offset(x+11*s,y), androidx.compose.ui.geometry.Offset(x+19*s,y-8*s))
+
+        fun camera(x: Float, y: Float, s: Float) {
+            drawRoundRect(
+                ink, p(x, y), androidx.compose.ui.geometry.Size(32f * s, 22f * s),
+                androidx.compose.ui.geometry.CornerRadius(5f * s, 5f * s),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(sw)
+            )
+            line(p(x + 8f * s, y), p(x + 12f * s, y - 4f * s))
+            circle(x + 16f * s, y + 11f * s, 6f * s)
         }
-        fun bicycle(x: Float,y: Float,s: Float) {
-            circle(x,y,15*s); circle(x+50*s,y,15*s)
-            line(androidx.compose.ui.geometry.Offset(x,y),androidx.compose.ui.geometry.Offset(x+22*s,y-24*s))
-            line(androidx.compose.ui.geometry.Offset(x+22*s,y-24*s),androidx.compose.ui.geometry.Offset(x+50*s,y))
-            line(androidx.compose.ui.geometry.Offset(x,y),androidx.compose.ui.geometry.Offset(x+40*s,y))
-            line(androidx.compose.ui.geometry.Offset(x+22*s,y-24*s),androidx.compose.ui.geometry.Offset(x+31*s,y-33*s))
-            line(androidx.compose.ui.geometry.Offset(x+18*s,y-25*s),androidx.compose.ui.geometry.Offset(x+11*s,y-34*s))
+
+        fun phone(x: Float, y: Float, s: Float) {
+            drawRoundRect(
+                ink, p(x, y), androidx.compose.ui.geometry.Size(17f * s, 31f * s),
+                androidx.compose.ui.geometry.CornerRadius(5f * s, 5f * s),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(sw)
+            )
+            line(p(x + 6f * s, y + 4f * s), p(x + 11f * s, y + 4f * s))
+            circle(x + 8.5f * s, y + 26f * s, 1.2f * s)
         }
-        fun map(x: Float,y: Float,s: Float) {
-            line(androidx.compose.ui.geometry.Offset(x,y+8*s),androidx.compose.ui.geometry.Offset(x+18*s,y))
-            line(androidx.compose.ui.geometry.Offset(x+18*s,y),androidx.compose.ui.geometry.Offset(x+38*s,y+8*s))
-            line(androidx.compose.ui.geometry.Offset(x+38*s,y+8*s),androidx.compose.ui.geometry.Offset(x+58*s,y))
-            line(androidx.compose.ui.geometry.Offset(x+58*s,y),androidx.compose.ui.geometry.Offset(x+58*s,y+42*s))
-            line(androidx.compose.ui.geometry.Offset(x+58*s,y+42*s),androidx.compose.ui.geometry.Offset(x+38*s,y+50*s))
-            line(androidx.compose.ui.geometry.Offset(x+38*s,y+50*s),androidx.compose.ui.geometry.Offset(x+18*s,y+42*s))
-            line(androidx.compose.ui.geometry.Offset(x+18*s,y+42*s),androidx.compose.ui.geometry.Offset(x,y+50*s))
-            line(androidx.compose.ui.geometry.Offset(x,y+50*s),androidx.compose.ui.geometry.Offset(x,y+8*s))
-            line(androidx.compose.ui.geometry.Offset(x+18*s,y),androidx.compose.ui.geometry.Offset(x+18*s,y+42*s))
-            line(androidx.compose.ui.geometry.Offset(x+38*s,y+8*s),androidx.compose.ui.geometry.Offset(x+38*s,y+50*s))
+
+        fun music(x: Float, y: Float, s: Float) {
+            line(p(x + 15f * s, y), p(x + 15f * s, y + 20f * s))
+            line(p(x + 15f * s, y), p(x + 25f * s, y - 3f * s))
+            circle(x + 10f * s, y + 22f * s, 5f * s)
         }
-        fun palette(x: Float,y: Float,s: Float) {
-            circle(x+24*s,y+24*s,24*s)
-            circle(x+39*s,y+12*s,4*s); circle(x+15*s,y+13*s,3*s); circle(x+11*s,y+29*s,3*s); circle(x+22*s,y+40*s,3*s)
-            drawCircle(Color(0xFF1B1F23),8*s,androidx.compose.ui.geometry.Offset(x+39*s,y+34*s))
+
+        fun pin(x: Float, y: Float, s: Float) {
+            circle(x + 10f * s, y + 9f * s, 7f * s)
+            line(p(x + 3f * s, y + 12f * s), p(x + 10f * s, y + 26f * s))
+            line(p(x + 17f * s, y + 12f * s), p(x + 10f * s, y + 26f * s))
+            circle(x + 10f * s, y + 9f * s, 2f * s)
         }
-        fun lightbulb(x: Float,y: Float,s: Float) {
-            circle(x+24*s,y+21*s,17*s)
-            line(androidx.compose.ui.geometry.Offset(x+14*s,y+34*s),androidx.compose.ui.geometry.Offset(x+18*s,y+44*s))
-            line(androidx.compose.ui.geometry.Offset(x+18*s,y+44*s),androidx.compose.ui.geometry.Offset(x+30*s,y+44*s))
-            line(androidx.compose.ui.geometry.Offset(x+30*s,y+44*s),androidx.compose.ui.geometry.Offset(x+34*s,y+34*s))
-            line(androidx.compose.ui.geometry.Offset(x+24*s,y),androidx.compose.ui.geometry.Offset(x+24*s,y-8*s))
-            line(androidx.compose.ui.geometry.Offset(x+3*s,y+9*s),androidx.compose.ui.geometry.Offset(x-3*s,y+4*s))
-            line(androidx.compose.ui.geometry.Offset(x+45*s,y+9*s),androidx.compose.ui.geometry.Offset(x+51*s,y+4*s))
+
+        fun mic(x: Float, y: Float, s: Float) {
+            drawRoundRect(
+                ink, p(x + 5f * s, y), androidx.compose.ui.geometry.Size(10f * s, 20f * s),
+                androidx.compose.ui.geometry.CornerRadius(6f * s, 6f * s),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(sw)
+            )
+            line(p(x + 2f * s, y + 12f * s), p(x + 2f * s, y + 16f * s))
+            line(p(x + 2f * s, y + 16f * s), p(x + 10f * s, y + 22f * s))
+            line(p(x + 18f * s, y + 12f * s), p(x + 18f * s, y + 16f * s))
+            line(p(x + 18f * s, y + 16f * s), p(x + 10f * s, y + 22f * s))
         }
-        fun house(x: Float,y: Float,s: Float) {
-            line(androidx.compose.ui.geometry.Offset(x,y+22*s),androidx.compose.ui.geometry.Offset(x+27*s,y))
-            line(androidx.compose.ui.geometry.Offset(x+27*s,y),androidx.compose.ui.geometry.Offset(x+54*s,y+22*s))
-            line(androidx.compose.ui.geometry.Offset(x+5*s,y+19*s),androidx.compose.ui.geometry.Offset(x+5*s,y+52*s))
-            line(androidx.compose.ui.geometry.Offset(x+49*s,y+19*s),androidx.compose.ui.geometry.Offset(x+49*s,y+52*s))
-            line(androidx.compose.ui.geometry.Offset(x+5*s,y+52*s),androidx.compose.ui.geometry.Offset(x+49*s,y+52*s))
-            drawRoundRect(ink,androidx.compose.ui.geometry.Offset(x+22*s,y+35*s),androidx.compose.ui.geometry.Size(10*s,17*s),androidx.compose.ui.geometry.CornerRadius(2*s,2*s),style=androidx.compose.ui.graphics.drawscope.Stroke(width=sw))
+
+        fun heart(x: Float, y: Float, s: Float) {
+            val a = p(x + 10f * s, y + 25f * s)
+            val b = p(x, y + 10f * s)
+            val c = p(x + 4f * s, y + 3f * s)
+            val d = p(x + 10f * s, y + 8f * s)
+            val e = p(x + 16f * s, y + 3f * s)
+            val f = p(x + 20f * s, y + 10f * s)
+            line(a, b); line(b, c); line(c, d); line(d, e); line(e, f); line(f, a)
         }
-        fun guitar(x: Float,y: Float,s: Float) {
-            circle(x+18*s,y+32*s,13*s); circle(x+34*s,y+19*s,10*s)
-            line(androidx.compose.ui.geometry.Offset(x+34*s,y+10*s),androidx.compose.ui.geometry.Offset(x+34*s,y-14*s))
-            line(androidx.compose.ui.geometry.Offset(x+29*s,y-14*s),androidx.compose.ui.geometry.Offset(x+39*s,y-14*s))
-            line(androidx.compose.ui.geometry.Offset(x+18*s,y+19*s),androidx.compose.ui.geometry.Offset(x+34*s,y+10*s))
+
+        fun star(x: Float, y: Float, s: Float) {
+            val pts = listOf(
+                p(x + 9f*s, y), p(x + 12f*s, y + 6f*s), p(x + 19f*s, y + 7f*s),
+                p(x + 14f*s, y + 12f*s), p(x + 16f*s, y + 19f*s), p(x + 9f*s, y + 15f*s),
+                p(x + 3f*s, y + 19f*s), p(x + 4f*s, y + 12f*s), p(x, y + 7f*s), p(x + 7f*s, y + 6f*s)
+            )
+            for (i in pts.indices) line(pts[i], pts[(i + 1) % pts.size])
         }
-        fun rocket(x: Float,y: Float,s: Float) {
-            line(androidx.compose.ui.geometry.Offset(x+20*s,y+44*s),androidx.compose.ui.geometry.Offset(x+20*s,y+4*s))
-            line(androidx.compose.ui.geometry.Offset(x+20*s,y+4*s),androidx.compose.ui.geometry.Offset(x+32*s,y-9*s))
-            line(androidx.compose.ui.geometry.Offset(x+32*s,y-9*s),androidx.compose.ui.geometry.Offset(x+44*s,y+4*s))
-            line(androidx.compose.ui.geometry.Offset(x+44*s,y+4*s),androidx.compose.ui.geometry.Offset(x+44*s,y+44*s))
-            line(androidx.compose.ui.geometry.Offset(x+20*s,y+44*s),androidx.compose.ui.geometry.Offset(x+44*s,y+44*s))
-            circle(x+32*s,y+14*s,5*s)
-            line(androidx.compose.ui.geometry.Offset(x+20*s,y+24*s),androidx.compose.ui.geometry.Offset(x+10*s,y+35*s))
-            line(androidx.compose.ui.geometry.Offset(x+44*s,y+24*s),androidx.compose.ui.geometry.Offset(x+54*s,y+35*s))
+
+        fun smile(x: Float, y: Float, s: Float) {
+            circle(x + 12f*s, y + 12f*s, 11f*s)
+            circle(x + 8f*s, y + 9f*s, 1.2f*s)
+            circle(x + 16f*s, y + 9f*s, 1.2f*s)
+            line(p(x + 7f*s, y + 15f*s), p(x + 12f*s, y + 18f*s))
+            line(p(x + 12f*s, y + 18f*s), p(x + 17f*s, y + 15f*s))
         }
-        fun soccer(x: Float,y: Float,s: Float) {
-            circle(x+25*s,y+25*s,24*s)
-            line(androidx.compose.ui.geometry.Offset(x+25*s,y+10*s),androidx.compose.ui.geometry.Offset(x+14*s,y+18*s))
-            line(androidx.compose.ui.geometry.Offset(x+25*s,y+10*s),androidx.compose.ui.geometry.Offset(x+36*s,y+18*s))
-            line(androidx.compose.ui.geometry.Offset(x+14*s,y+18*s),androidx.compose.ui.geometry.Offset(x+18*s,y+31*s))
-            line(androidx.compose.ui.geometry.Offset(x+36*s,y+18*s),androidx.compose.ui.geometry.Offset(x+32*s,y+31*s))
-            line(androidx.compose.ui.geometry.Offset(x+18*s,y+31*s),androidx.compose.ui.geometry.Offset(x+32*s,y+31*s))
+
+        fun paperclip(x: Float, y: Float, s: Float) {
+            drawRoundRect(
+                ink, p(x + 5f*s, y), androidx.compose.ui.geometry.Size(10f*s, 24f*s),
+                androidx.compose.ui.geometry.CornerRadius(5f*s, 5f*s),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(sw)
+            )
+            line(p(x + 10f*s, y + 5f*s), p(x + 10f*s, y + 17f*s))
         }
-        fun coffee(x: Float,y: Float,s: Float) {
-            drawRoundRect(ink,androidx.compose.ui.geometry.Offset(x,y),androidx.compose.ui.geometry.Size(40*s,34*s),androidx.compose.ui.geometry.CornerRadius(5*s,5*s),style=androidx.compose.ui.graphics.drawscope.Stroke(width=sw))
-            drawArc(ink,-90f,180f,false,androidx.compose.ui.geometry.Offset(x+34*s,y+8*s),androidx.compose.ui.geometry.Size(16*s,17*s),style=androidx.compose.ui.graphics.drawscope.Stroke(width=sw))
-            line(androidx.compose.ui.geometry.Offset(x+9*s,y-7*s),androidx.compose.ui.geometry.Offset(x+6*s,y-13*s)); line(androidx.compose.ui.geometry.Offset(x+20*s,y-7*s),androidx.compose.ui.geometry.Offset(x+23*s,y-13*s))
+
+        fun video(x: Float, y: Float, s: Float) {
+            drawRoundRect(
+                ink, p(x, y + 3f*s), androidx.compose.ui.geometry.Size(25f*s, 18f*s),
+                androidx.compose.ui.geometry.CornerRadius(4f*s, 4f*s),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(sw)
+            )
+            line(p(x + 25f*s, y + 8f*s), p(x + 32f*s, y + 4f*s))
+            line(p(x + 32f*s, y + 4f*s), p(x + 32f*s, y + 20f*s))
+            line(p(x + 32f*s, y + 20f*s), p(x + 25f*s, y + 16f*s))
         }
-        fun flower(x: Float,y: Float,s: Float) {
-            circle(x,y,6*s); circle(x,y-13*s,9*s); circle(x+13*s,y,9*s); circle(x,y+13*s,9*s); circle(x-13*s,y,9*s)
-            line(androidx.compose.ui.geometry.Offset(x,y+19*s),androidx.compose.ui.geometry.Offset(x,y+43*s))
-            line(androidx.compose.ui.geometry.Offset(x,y+30*s),androidx.compose.ui.geometry.Offset(x-12*s,y+25*s))
+
+        fun headphones(x: Float, y: Float, s: Float) {
+            circle(x + 12f*s, y + 13f*s, 11f*s)
+            line(p(x + 1f*s, y + 13f*s), p(x + 1f*s, y + 22f*s))
+            line(p(x + 23f*s, y + 13f*s), p(x + 23f*s, y + 22f*s))
         }
-        fun cloud(x: Float,y: Float,s: Float) {
-            circle(x+13*s,y+18*s,11*s); circle(x+30*s,y+13*s,15*s); circle(x+48*s,y+20*s,11*s)
-            line(androidx.compose.ui.geometry.Offset(x+3*s,y+27*s),androidx.compose.ui.geometry.Offset(x+58*s,y+27*s))
+
+        fun coffee(x: Float, y: Float, s: Float) {
+            drawRoundRect(
+                ink, p(x, y + 4f*s), androidx.compose.ui.geometry.Size(24f*s, 17f*s),
+                androidx.compose.ui.geometry.CornerRadius(4f*s, 4f*s),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(sw)
+            )
+            line(p(x + 24f*s, y + 8f*s), p(x + 30f*s, y + 8f*s))
+            line(p(x + 30f*s, y + 8f*s), p(x + 30f*s, y + 16f*s))
+            line(p(x + 30f*s, y + 16f*s), p(x + 24f*s, y + 16f*s))
+            line(p(x + 7f*s, y), p(x + 5f*s, y - 5f*s))
+            line(p(x + 15f*s, y), p(x + 17f*s, y - 5f*s))
         }
-        val icons=listOf<(Float,Float)->Unit>(
-            {x,y->bicycle(x,y,.88f)},{x,y->camera(x,y,.88f)},{x,y->map(x,y,.82f)},{x,y->palette(x,y,.86f)},
-            {x,y->lightbulb(x,y,.82f)},{x,y->house(x,y,.86f)},{x,y->guitar(x,y,.9f)},{x,y->rocket(x,y,.9f)},
-            {x,y->soccer(x,y,.78f)},{x,y->coffee(x,y,.9f)},{x,y->flower(x,y,.9f)},{x,y->cloud(x,y,.82f)},{x,y->bubble(x,y,.82f)}
-        )
-        var row=0; var y=-55f
-        while(y<size.height+cellH){
-            var col=0; var x=if(row%2==0)-38f else -133f
-            while(x<size.width+cellW){
-                icons[(row*3+col*5)%icons.size](x+(col%3)*9f,y+(row%2)*7f)
-                x+=cellW; col++
+
+        fun link(x: Float, y: Float, s: Float) {
+            drawRoundRect(ink, p(x, y + 6f*s), androidx.compose.ui.geometry.Size(16f*s, 8f*s), androidx.compose.ui.geometry.CornerRadius(4f*s, 4f*s), style = androidx.compose.ui.graphics.drawscope.Stroke(sw))
+            drawRoundRect(ink, p(x + 10f*s, y + 6f*s), androidx.compose.ui.geometry.Size(16f*s, 8f*s), androidx.compose.ui.geometry.CornerRadius(4f*s, 4f*s), style = androidx.compose.ui.graphics.drawscope.Stroke(sw))
+            line(p(x + 10f*s, y + 10f*s), p(x + 16f*s, y + 10f*s))
+        }
+
+        fun drawMotif(index: Int, x: Float, y: Float, scale: Float) {
+            when (index % 14) {
+                0 -> bubble(x, y, scale)
+                1 -> camera(x, y, scale)
+                2 -> phone(x, y, scale)
+                3 -> music(x, y, scale)
+                4 -> pin(x, y, scale)
+                5 -> mic(x, y, scale)
+                6 -> heart(x, y, scale)
+                7 -> star(x, y, scale)
+                8 -> smile(x, y, scale)
+                9 -> paperclip(x, y, scale)
+                10 -> video(x, y, scale)
+                11 -> headphones(x, y, scale)
+                12 -> coffee(x, y, scale)
+                else -> link(x, y, scale)
             }
-            y+=cellH; row++
+        }
+
+        val placements = listOf(
+            Triple(30f, 28f, 0.78f), Triple(166f, 4f, 0.62f), Triple(308f, 48f, 0.70f),
+            Triple(86f, 126f, 0.66f), Triple(244f, 142f, 0.76f), Triple(366f, 106f, 0.58f),
+            Triple(14f, 230f, 0.64f), Triple(142f, 270f, 0.72f), Triple(294f, 232f, 0.62f),
+            Triple(48f, 376f, 0.70f), Triple(206f, 344f, 0.60f), Triple(352f, 404f, 0.72f),
+            Triple(118f, 470f, 0.62f), Triple(270f, 486f, 0.68f)
+        )
+
+        val tilesX = (size.width / tileW).toInt() + 2
+        val tilesY = (size.height / tileH).toInt() + 2
+        for (tx in -1 until tilesX) {
+            for (ty in -1 until tilesY) {
+                val offsetX = tx * tileW
+                val offsetY = ty * tileH
+                placements.forEachIndexed { index, (x, y, scale) ->
+                    val rotation = when ((index + tx * 3 + ty * 5) and 3) {
+                        0 -> -12f
+                        1 -> -4f
+                        2 -> 7f
+                        else -> 14f
+                    }
+                    val px = offsetX + x.dp.toPx()
+                    val py = offsetY + y.dp.toPx()
+                    androidx.compose.ui.graphics.drawscope.DrawScope.rotate(rotation, p(px, py)) {
+                        drawMotif(index + tx * 7 + ty * 11, px, py, scale)
+                    }
+                }
+            }
         }
     }
 }
