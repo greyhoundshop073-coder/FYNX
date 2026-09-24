@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextAlign
@@ -58,6 +59,7 @@ fun OtherUserProfilePanel(
     var reportReason by remember(username) { mutableStateOf("Safety or spam") }
     var reportDetails by remember(username) { mutableStateOf("") }
     var reportMessage by remember(username) { mutableStateOf<String?>(null) }
+    var showProfilePhoto by remember(username) { mutableStateOf(false) }
 
     fun loadProfile() {
         scope.launch {
@@ -105,7 +107,7 @@ fun OtherUserProfilePanel(
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .35f))
                         ) {
                             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                RemoteProfilePhoto(person.profilePhotoMediaId, person.displayName, Modifier.size(80.dp).clip(CircleShape))
+                                RemoteProfilePhoto(person.profilePhotoMediaId, person.displayName, Modifier.size(80.dp).clip(CircleShape).clickable { if (person.profilePhotoMediaId != null) showProfilePhoto = true })
                                 Spacer(Modifier.height(12.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -177,6 +179,10 @@ fun OtherUserProfilePanel(
         }
     }
 
+    if (showProfilePhoto && profile?.profilePhotoMediaId != null) {
+        ProfilePhotoViewerDialog(profile!!.profilePhotoMediaId!!, profile!!.displayName) { showProfilePhoto = false }
+    }
+
     if (reportOpen && profile != null) {
         AlertDialog(
             onDismissRequest = { if (!busy) reportOpen = false },
@@ -202,6 +208,22 @@ fun OtherUserProfilePanel(
             dismissButton = { TextButton(enabled = !busy, onClick = { reportOpen = false }) { Text("Cancel") }
             }
         )
+    }
+}
+
+@Composable
+private fun ProfilePhotoViewerDialog(mediaId: String, name: String, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var bitmap by remember(mediaId) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    LaunchedEffect(mediaId) {
+        val uri = FynxProductionMessaging.cacheRemoteMedia(context, mediaId, "/api/social/media/$mediaId").getOrNull()
+        bitmap = if (uri != null) withContext(Dispatchers.IO) { runCatching { context.contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it) } }.getOrNull() } else null
+    }
+    Dialog(onDismissRequest = onDismiss) {
+        Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
+            if (bitmap != null) Image(bitmap!!.asImageBitmap(), contentDescription = "Profile photo", modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)), contentScale = ContentScale.Fit)
+            else FynxAvatar(name, Modifier.size(120.dp))
+        }
     }
 }
 
