@@ -101,8 +101,16 @@ fun FynxMatureStatusComposerPanel(
     var showMediaTools by remember { mutableStateOf(false) }
     var cameraOpen by remember { mutableStateOf(false) }
 
-    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { mediaUri = it; type = FynxStatusType.PHOTO; showColors = false; showTools = false; error = null } }
-    val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { mediaUri = it; type = FynxStatusType.VIDEO; showColors = false; showTools = false; error = null } }
+    val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let {
+            mediaUri = it
+            val mime = context.contentResolver.getType(it).orEmpty().lowercase()
+            type = if (mime.startsWith("video/")) FynxStatusType.VIDEO else FynxStatusType.PHOTO
+            showColors = false
+            showTools = false
+            error = null
+        }
+    }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true; error = null }, onError = { message -> error = message }) else error = "Microphone permission is required for a voice Status."
     }
@@ -242,7 +250,9 @@ fun FynxMatureStatusComposerPanel(
                     if (type == FynxStatusType.TEXT) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.TextFields, null, tint = Color.White)
-                            Text("${text.length}/$FYNX_STATUS_MAX_TEXT_LENGTH", color = Color.White, modifier = Modifier.padding(start = 8.dp))
+                            if (text.length >= FYNX_STATUS_MAX_TEXT_LENGTH) {
+                                Text("$FYNX_STATUS_MAX_TEXT_LENGTH/$FYNX_STATUS_MAX_TEXT_LENGTH", color = Color.White, modifier = Modifier.padding(start = 8.dp))
+                            }
                             Spacer(Modifier.weight(1f))
                             var showStatusEmoji by remember { mutableStateOf(false) }
                             Box {
@@ -282,9 +292,8 @@ fun FynxMatureStatusComposerPanel(
                             contentPadding = PaddingValues(horizontal = 8.dp)
                         ) {
                             item { MatureStatusModeButton(Icons.Default.TextFields, "Text", type == FynxStatusType.TEXT, !recording && !publishing) { type = FynxStatusType.TEXT; mediaUri = null; showColors = false; error = null } }
-                            item { MatureStatusModeButton(Icons.Default.Photo, "Photo", type == FynxStatusType.PHOTO, !recording && !publishing) { pickImage.launch(arrayOf("image/*")) } }
+                            item { MatureStatusModeButton(Icons.Default.Photo, "Photo", type == FynxStatusType.PHOTO || type == FynxStatusType.VIDEO, !recording && !publishing) { pickMedia.launch(arrayOf("image/*", "video/*")) } }
                             item { MatureStatusModeButton(Icons.Default.CameraAlt, "Camera", false, !recording && !publishing) { cameraOpen = true; showColors = false; showTools = false; error = null } }
-                            item { MatureStatusModeButton(Icons.Default.Videocam, "Video", type == FynxStatusType.VIDEO, !recording && !publishing) { pickVideo.launch(arrayOf("video/*")) } }
                             item { MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording) { type = FynxStatusType.VOICE; showColors = false; error = null; if (mediaUri == null) if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true }, onError = { message -> error = message }) else micPermission.launch(Manifest.permission.RECORD_AUDIO) } }
                         }
                     }
