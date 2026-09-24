@@ -426,7 +426,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     FynxAvatar(chat.name, resolvedAvatarUri, Modifier.size(40.dp))
                 }
                 Column(Modifier.weight(1f).padding(start = 4.dp).padding(end = 2.dp)) {
-                    Text(chat.name, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = Color.White, maxLines = 1)
+                    Text(chat.name, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
                     Text(
                         when { otherIsTyping -> "typing…"; isOnline -> "online"; else -> "last seen recently" },
                         style = MaterialTheme.typography.bodySmall,
@@ -434,10 +434,10 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         maxLines = 1
                     )
                 }
-                IconButton(onClick = onVoiceCall, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.Call, "Voice call", tint = Color.White, modifier = Modifier.size(23.dp)) }
-                IconButton(onClick = onVideoCall, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.Videocam, "Video call", tint = Color.White, modifier = Modifier.size(23.dp)) }
+                IconButton(onClick = onVoiceCall, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.Call, "Voice call", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp)) }
+                IconButton(onClick = onVideoCall, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.Videocam, "Video call", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp)) }
                 Box {
-                    IconButton(onClick = { showChatMenu = true }, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.MoreVert, "More", tint = Color.White, modifier = Modifier.size(23.dp)) }
+                    IconButton(onClick = { showChatMenu = true }, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.MoreVert, "More", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp)) }
                     DropdownMenu(expanded = showChatMenu, onDismissRequest = { showChatMenu = false }) {
                         DropdownMenuItem(text = { Text("Chat settings") }, onClick = { showChatMenu = false; showChatSettings = true }, leadingIcon = { Icon(Icons.Default.Settings, null) })
                         DropdownMenuItem(text = { Text(if (searchOpen) "Close search" else "Search messages") }, onClick = { showChatMenu = false; searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, leadingIcon = { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, null) })
@@ -631,7 +631,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         }
 
         if (isRecording) {
-            Surface(color = Color(0xFF1D222C), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
+            Surface(color = Color(0xFF1D222C), contentColor = MaterialTheme.colorScheme.onSurface, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Mic, "Recording", tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(8.dp))
