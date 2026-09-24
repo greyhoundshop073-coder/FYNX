@@ -161,6 +161,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var showSettings by remember { mutableStateOf(false) }
     var showTools by remember { mutableStateOf(false) }
     var showMore by remember { mutableStateOf(false) }
+    var groupNotificationsEnabled by remember(groupId) { mutableStateOf(FynxConversationPreferences.groupNotifications(context, groupId)) }
     var showEmojiPanel by remember { mutableStateOf(false) }
     var reactionMessageId by remember { mutableStateOf<String?>(null) }
     var replyToId by remember { mutableStateOf<String?>(null) }
@@ -222,7 +223,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 Modifier
                     .fillMaxWidth()
                     .height(54.dp)
-                    .background(Color(0xFF1F222B).copy(alpha = 0.94f), RoundedCornerShape(18.dp))
+                    .background(Color(0xFF08090D).copy(alpha = 0.98f), RoundedCornerShape(18.dp))
                     .padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -239,6 +240,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         DropdownMenuItem(text = { Text("Members") }, onClick = { showMore = false; showMembers = true }, leadingIcon = { Icon(Icons.Default.Group, null) })
                         DropdownMenuItem(text = { Text("Group tools") }, onClick = { showMore = false; showTools = true }, leadingIcon = { Icon(Icons.Default.Build, null) })
                         DropdownMenuItem(text = { Text("Group settings") }, onClick = { showMore = false; showSettings = true }, leadingIcon = { Icon(Icons.Default.Settings, null) })
+                        DropdownMenuItem(text = { Text(if (groupNotificationsEnabled) "Mute notifications" else "Turn on notifications") }, onClick = { groupNotificationsEnabled = !groupNotificationsEnabled; FynxConversationPreferences.setGroupNotifications(context, groupId, groupNotificationsEnabled); showMore = false }, leadingIcon = { Icon(Icons.Default.Notifications, null) })
                     }
                 }
             }
@@ -345,7 +347,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             }
         }
         if (showEmojiPanel && canSendMessages) { FynxChatEmojiPanel(onEmojiSelected = { emoji -> text += emoji; showEmojiPanel = false }) }
-        Surface(color = Color(0xFF17191F).copy(alpha = 0.98f), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
+        Surface(color = Color(0xFF08090D).copy(alpha = 0.98f), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -364,8 +366,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     singleLine = true,
                     shape = RoundedCornerShape(24.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color(0xFF282B34),
-                        unfocusedContainerColor = Color(0xFF282B34),
+                        focusedContainerColor = Color(0xFF101217),
+                        unfocusedContainerColor = Color(0xFF101217),
                         focusedBorderColor = Color.Transparent,
                         unfocusedBorderColor = Color.Transparent,
                         cursorColor = Color.White,
