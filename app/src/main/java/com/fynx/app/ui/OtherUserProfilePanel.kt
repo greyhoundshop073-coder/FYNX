@@ -107,7 +107,15 @@ fun OtherUserProfilePanel(
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .35f))
                         ) {
                             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                RemoteProfilePhoto(person.profilePhotoMediaId, person.displayName, Modifier.size(80.dp).clip(CircleShape).clickable { if (person.profilePhotoMediaId != null) showProfilePhoto = true })
+                                Box(
+                                    Modifier.size(86.dp)
+                                        .clip(CircleShape)
+                                        .then(if (hasActiveStatus) Modifier.background(Color(0xFF25D366), CircleShape).padding(3.dp) else Modifier)
+                                        .clickable { if (person.profilePhotoMediaId != null) showProfilePhoto = true },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    RemoteProfilePhoto(person.profilePhotoMediaId, person.displayName, Modifier.size(80.dp).clip(CircleShape))
+                                }
                                 Spacer(Modifier.height(12.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
