@@ -18,7 +18,9 @@ discovery = DISCOVERY.read_text(encoding="utf-8")
 required_home = {
     "FynxMediaCache.getOrDownload": "real media cache/download path",
     "MediaMetadataRetriever": "video metadata handling",
-    "MediaController": "native video controls",
+    "FilledIconButton": "FYNX video play/pause control",
+    "Fullscreen": "FYNX video fullscreen control",
+    '"Open video full screen"': "FYNX video fullscreen accessibility action",
     "DisposableEffect(videoView)": "video lifecycle cleanup",
     "stopPlayback()": "video playback cleanup",
     "DisposableEffect(player)": "audio lifecycle cleanup",
@@ -32,6 +34,8 @@ required_home = {
 missing = [label for token, label in required_home.items() if token not in home]
 if missing:
     raise SystemExit("HOME 4F MEDIA RED: missing " + ", ".join(missing))
+if "MediaController" in home:
+    raise SystemExit("HOME 4F MEDIA RED: legacy Android MediaController must not be present in the Home feed")
 
 required_media_cache = [
     'path.startsWith("/api/media/")',
