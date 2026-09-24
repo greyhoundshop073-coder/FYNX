@@ -548,33 +548,12 @@ fun FynxHomeSocialHubPanel(
                                         Text(music.title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
                                         Text(music.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                                     }
-                                    val previewFile = remember(music.id) { mutableStateOf<java.io.File?>(null) }
-                                    LaunchedEffect(music.id) {
-                                        previewFile.value = withContext(Dispatchers.IO) {
-                                            FynxMediaCache.getOrDownload(context, "/api/social/music/catalogue/" + music.id + "/media", "audio")
-                                        }
-                                    }
-                                    val player = remember(music.id, previewFile.value) {
-                                        previewFile.value?.let { file ->
-                                            runCatching { android.media.MediaPlayer().apply { setDataSource(file.absolutePath); prepare() } }.getOrNull()
-                                        }
-                                    }
-                                    DisposableEffect(player) { onDispose { player?.release() } }
-                                    IconButton(onClick = {
-                                        runCatching {
-                                            if (player?.isPlaying == true) {
-                                                player.pause()
-                                                musicPlaying = false
-                                            } else if (player != null) {
-                                                if (player.currentPosition >= player.duration) player.seekTo(0)
-                                                player.start()
-                                                musicPlaying = true
-                                            }
-                                        }
-                                    }, enabled = !posting && player != null) {
-                                        Icon(if (musicPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (musicPlaying) "Pause music" else "Preview music")
-                                    }
-                                    IconButton(onClick = { selectedCatalogueMusic = null; musicPlaying = false }, enabled = !posting) {
+                                    FynxRemoteAudio(
+                                        mediaUrl = "/api/social/music/catalogue/" + music.id + "/media",
+                                        modifier = Modifier.width(120.dp),
+                                        maxDurationMs = 45_000L
+                                    )
+                                                                        IconButton(onClick = { selectedCatalogueMusic = null; musicPlaying = false }, enabled = !posting) {
                                         Icon(Icons.Default.Close, "Remove music")
                                     }
                                 }
