@@ -59,5 +59,5 @@ object FynxDiscoveryClient {
     }
 
     private fun encode(value: String): String = URLEncoder.encode(value.trim(), "UTF-8")
-    private val EVENT_TYPES = setOf("VIEW", "LIKE", "COMMENT", "SHARE", "SAVE", "FOLLOW", "PROFILE_VIEW", "PRODUCT_CLICK", "MESSAGE", "PURCHASE", "NOT_INTERESTED")
+    private val EVENT_TYPES = setOf("VIEW", "LIKE", "COMMENT", "SHARE", "SAVE", "FOLLOW", "PROFILE_VIEW", "PRODUCT_CLICK", "MESSAGE", "PURCHASE", "NOT_INTERESTED","REPORT")
 }
