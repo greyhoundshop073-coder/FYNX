@@ -138,7 +138,7 @@ require('status viewer swipe down closes','totalY > 140f' in timeline and 'onDis
 require('status viewer horizontal swipe navigation','totalX > 120f' in timeline and 'totalX < -120f' in timeline)
 require('status viewer smooth progress segments','LinearProgressIndicator' in timeline and 'segmentIndex < index' in timeline and 'segmentIndex == index -> statusProgress' in timeline)
 require('status viewer timed progress','statusViewerAutoAdvanceMs(status)' in timeline and 'delay(50L)' in timeline)
-require('status viewer reply pauses progress','if (!replyFocused)' in timeline and 'onFocusChanged' in timeline)
+require('status viewer reply pauses progress',('if (!replyFocused)' in timeline or 'if (!replyPaused)' in timeline) and 'onFocusChanged' in timeline)
 require('status interaction controls','viewCount' in timeline and 'likeCount' in timeline and 'Reply to this Status' in timeline)
 require('status emoji reaction controls','EmojiEmotions' in timeline and 'showReactionPicker' in timeline and 'listOf("❤️", "😂", "😮", "😢", "👍", "👏", "🔥", "🎉")' in timeline)
 require('status external share action','FynxShareActions.share(context, FynxShareActions.statusPayload(status))' in timeline and 'fun statusPayload(status: FynxStatus)' in share)
