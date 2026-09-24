@@ -115,14 +115,27 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
         return ""
     label,x,y=control
     run("adb","shell","input","tap",str(x),str(y))
-    # Compose can animate the destination after the tap. For surfaces that have
-    # a stable title, wait for that real title instead of comparing raw XML.
-    # Raw hierarchy strings can legitimately remain similar even when navigation
-    # succeeded because Compose reuses nodes.
+    # Camera/media entry can legitimately trigger an Android runtime permission
+    # dialog before the FYNX surface becomes visible. Handle only that real
+    # system prompt, then continue polling the actual app hierarchy.
     next_xml=""
-    for _ in range(10):
+    for _ in range(16):
         time.sleep(.5)
         next_xml=dump_ui(f"authenticated-{name}.xml")
+        if find_control(next_xml,["While using the app","Only this time"]):
+            permission=find_control(next_xml,["While using the app"])
+            if permission:
+                _,px,py=permission
+                run("adb","shell","input","tap",str(px),str(py))
+                time.sleep(1.0)
+                continue
+        if find_control(next_xml,["Allow FYNX to record audio"]):
+            permission=find_control(next_xml,["While using the app","Only this time"])
+            if permission:
+                _,px,py=permission
+                run("adb","shell","input","tap",str(px),str(py))
+                time.sleep(1.0)
+                continue
         if expected_labels and any(find_control(next_xml,[wanted]) for wanted in expected_labels):
             break
     screenshot(f"authenticated-{name}.png")
