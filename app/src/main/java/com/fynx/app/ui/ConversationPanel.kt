@@ -416,7 +416,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .height(52.dp).background(Color(0xFF20252A)).padding(horizontal = 0.dp),
+                    .height(52.dp).background(Color(0xFF181C24)).padding(horizontal = 0.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
@@ -430,7 +430,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     Text(
                         when { otherIsTyping -> "typing…"; isOnline -> "online"; else -> "last seen recently" },
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF9FA8B0),
+                        color = Color(0xFF9AA4B4),
                         maxLines = 1
                     )
                 }
@@ -452,7 +452,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         if (isNewConversation) {
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
-                color = Color(0xFF20232D).copy(alpha = 0.97f),
+                color = Color(0xFF202532),
                 shape = RoundedCornerShape(14.dp),
                 tonalElevation = 0.dp
             ) {
@@ -523,7 +523,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             Spacer(Modifier.width(6.dp))
                         }
                         Box {
-                            Surface(color = if (message.fromMe) Color(0xFF33434F) else Color(0xFF252A2F), contentColor = Color(0xFFE7EAED), shape = RoundedCornerShape(16.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { menuMessageId = message.id }, onLongClick = { menuMessageId = message.id })) {
+                            Surface(color = if (message.fromMe) Color(0xFF5E44C4) else Color(0xFF1E232D), contentColor = Color(0xFFE1E4EA), shape = RoundedCornerShape(16.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { menuMessageId = message.id }, onLongClick = { menuMessageId = message.id })) {
                             Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
                                 if (message.replyToId != null) {
                                     val replied = messages.firstOrNull { it.id == message.replyToId }
@@ -536,7 +536,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                     }
                                 } else {
                                     if (message.attachmentUri != null) FynxRemoteMedia(mediaUrl = message.attachmentUri, type = message.attachmentType ?: "image", modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp))
-                                    if (message.text.isNotBlank()) SelectionContainer { Text(message.text, color = Color.White) }
+                                    if (message.text.isNotBlank()) SelectionContainer { Text(message.text, color = if (message.fromMe) Color.White else Color(0xFFE1E4EA)) }
                                 }
                                 if (message.edited) Text("Edited", style = MaterialTheme.typography.labelSmall, color = if (message.fromMe) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurfaceVariant)
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
@@ -631,7 +631,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         }
 
         if (isRecording) {
-            Surface(color = Color(0xFF20252A), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
+            Surface(color = Color(0xFF1D222C), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Mic, "Recording", tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(8.dp))
@@ -654,15 +654,15 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     maxLines = 5,
                     shape = RoundedCornerShape(26.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color(0xFF292F34),
-                        unfocusedContainerColor = Color(0xFF292F34),
+                        focusedContainerColor = Color(0xFF1D222C),
+                        unfocusedContainerColor = Color(0xFF1D222C),
                         focusedBorderColor = Color.Transparent,
                         unfocusedBorderColor = Color.Transparent,
                         cursorColor = Color.White,
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White,
-                        focusedPlaceholderColor = Color(0xFF9A9DA8),
-                        unfocusedPlaceholderColor = Color(0xFF9A9DA8)
+                        focusedPlaceholderColor = Color(0xFF707A8A),
+                        unfocusedPlaceholderColor = Color(0xFF707A8A)
                     ),
                     placeholder = { Text(if (editingId == null) "Message..." else "Edit message...") },
                     leadingIcon = {
@@ -703,7 +703,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     if (showAttachmentSheet) {
         ModalBottomSheet(
             onDismissRequest = { showAttachmentSheet = false },
-            containerColor = Color(0xFF20252A),
+            containerColor = Color(0xFF1D222C),
             tonalElevation = 0.dp
         ) {
             Row(
@@ -722,8 +722,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             onClick = action,
                             modifier = Modifier.size(54.dp),
                             shape = androidx.compose.foundation.shape.CircleShape,
-                            color = Color(0xFF2A3137),
-                            contentColor = Color(0xFFE7EAED)
+                            color = Color(0xFF252A34),
+                            contentColor = Color(0xFFE1E4EA)
                         ) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Icon(icon, label, Modifier.size(24.dp))
