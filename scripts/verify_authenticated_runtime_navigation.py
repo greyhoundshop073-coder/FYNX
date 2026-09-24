@@ -85,7 +85,34 @@ def find_control(xml_text:str, labels:list[str]):
         root=ET.fromstring(xml_text)
     except ET.ParseError:
         return None
-    node=_find_control_node(root, wanted)
+
+    # Home intentionally has two real camera entry points: the header camera
+    # opens the post composer, while the in-feed fast camera opens capture
+    # directly. Both expose the same accessibility label. For this journey,
+    # the requested "Open FYNX camera" means the header entry point, so select
+    # the topmost matching clickable ancestor instead of whichever duplicate
+    # happens to appear first in the UI tree.
+    if wanted == ["open fynx camera"]:
+        candidates=[]
+        path=[]
+        def collect(node):
+            path.append(node)
+            if _matches(node, wanted) and _center(node):
+                for ancestor in reversed(path):
+                    if ancestor.attrib.get("clickable","false").lower()=="true" and _center(ancestor):
+                        candidates.append(ancestor)
+                        break
+            for child in list(node):
+                collect(child)
+            path.pop()
+        collect(root)
+        if candidates:
+            node=min(candidates, key=lambda item: (_center(item)[1], _center(item)[0]))
+        else:
+            node=None
+    else:
+        node=_find_control_node(root, wanted)
+
     if node is None:
         return None
     center=_center(node)
