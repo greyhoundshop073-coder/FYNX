@@ -315,8 +315,8 @@ fun GroupChatPanel(
                 }
             }
 
-            Surface(tonalElevation = 3.dp, modifier = Modifier.navigationBarsPadding().imePadding()) {
-                Column(Modifier.fillMaxWidth().padding(8.dp)) {
+            Surface(color = Color(0xFF20252A), tonalElevation = 0.dp, modifier = Modifier.navigationBarsPadding().imePadding()) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp)) {
                     replyTo?.let { replying ->
                         Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -355,25 +355,34 @@ fun GroupChatPanel(
                         }
                     } else {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { picker.launch("image/* video/*") }, modifier = Modifier.size(42.dp)) {
+                                Icon(Icons.Default.Add, "Attachments", tint = Color(0xFFD6DCE1))
+                            }
+                            IconButton(onClick = { showCamera = true }, modifier = Modifier.size(42.dp)) {
+                                Icon(Icons.Default.CameraAlt, "Camera", tint = Color(0xFFD6DCE1))
+                            }
                             OutlinedTextField(
                                 value = text,
                                 onValueChange = { text = it.take(4000) },
                                 modifier = Modifier.weight(1f),
                                 minLines = 1,
                                 maxLines = 5,
-                                shape = RoundedCornerShape(26.dp),
+                                shape = RoundedCornerShape(24.dp),
                                 placeholder = { Text("Message group…") },
-                                leadingIcon = {
-                                    Row {
-                                        IconButton(onClick = { picker.launch("image/* video/*") }, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.AttachFile, "Attach media") }
-                                        IconButton(onClick = { documentPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) }, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.Description, "Attach document") }
-                                        IconButton(onClick = { showCamera = true }, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.PhotoCamera, "FYNX camera") }
-                                    }
-                                },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color(0xFF292F34),
+                                    unfocusedContainerColor = Color(0xFF292F34),
+                                    focusedBorderColor = Color.Transparent,
+                                    unfocusedBorderColor = Color.Transparent
+                                ),
                                 trailingIcon = {
                                     Row {
-                                        IconButton(onClick = { micPermission.launch(Manifest.permission.RECORD_AUDIO) }, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.Mic, "Record voice") }
-                                        IconButton(onClick = { send() }, enabled = text.isNotBlank() || attachment != null, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.Send, "Send") }
+                                        IconButton(onClick = { micPermission.launch(Manifest.permission.RECORD_AUDIO) }, modifier = Modifier.size(42.dp)) {
+                                            Icon(Icons.Default.Mic, "Record voice")
+                                        }
+                                        IconButton(onClick = { send() }, enabled = text.isNotBlank() || attachment != null, modifier = Modifier.size(42.dp)) {
+                                            Icon(Icons.Default.Send, "Send")
+                                        }
                                     }
                                 },
                                 singleLine = false
