@@ -84,6 +84,8 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
         ) e ON e.post_id=p.id
         WHERE p.visibility='PUBLIC'
           AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$1))
+          AND p.author_id<>$1
+          AND NOT EXISTS (SELECT 1 FROM social_follows f WHERE f.follower_id=$1 AND f.followed_id=p.author_id)
           AND NOT EXISTS (SELECT 1 FROM fynx_discovery_events n WHERE n.user_id=$1 AND n.post_id=p.id AND n.event_type='NOT_INTERESTED' AND n.created_at > NOW()-INTERVAL '30 days')
         ORDER BY discovery_score DESC, p.created_at DESC
         LIMIT $2
@@ -93,8 +95,9 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
           id: String(row.id), authorId: String(row.author_id), authorUsername: row.author_username,
           authorDisplayName: row.author_display_name, text: row.text, visibility: row.visibility,
           mediaId: row.media_id == null ? null : String(row.media_id), mediaType: row.media_type || null,
-          mediaUrl: null, timestamp: Number(row.timestamp), likeCount: Number(row.like_count),
+          mediaUrl: row.media_id == null ? null : `/api/social/media/${row.media_id}`, timestamp: Number(row.timestamp), likeCount: Number(row.like_count),
           commentCount: Number(row.comment_count), shareCount: Number(row.share_count), saveCount: Number(row.save_count),
+          likedByCurrentUser: false, followedByCurrentUser: false, isDiscovery: true,
           discoveryScore: Number(row.discovery_score || 0)
         })),
         hasMore: result.rows.length >= limit
