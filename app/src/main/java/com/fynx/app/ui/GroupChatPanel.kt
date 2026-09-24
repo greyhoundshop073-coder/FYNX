@@ -224,11 +224,11 @@ fun GroupChatPanel(
         Column(Modifier.fillMaxSize()) {
             Surface(tonalElevation = 3.dp) {
                 Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                    Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onBack) { Text("‹") }
-                    FynxAvatar(group.name, Modifier.size(42.dp))
+                    IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.ArrowBack, "Back") }
+                    FynxAvatar(group.name, Modifier.size(40.dp))
                     Column(Modifier.weight(1f).padding(start = 10.dp)) {
                         Text(group.name, style = MaterialTheme.typography.titleMedium)
                         Text(
