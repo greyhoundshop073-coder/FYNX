@@ -117,33 +117,6 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             authorPhotos = authorPhotos + resolved
         }
     }
-    fun mergeDiscoveryPosts(base: List<FynxRemoteSocialClient.RemotePost>, suggested: List<FynxRemoteSocialClient.RemotePost>): List<FynxRemoteSocialClient.RemotePost> {
-        val existing = base.map { it.id }.toSet()
-        val clean = suggested.filter { it.id !in existing }.distinctBy { it.id }
-        if (clean.isEmpty()) return base
-        val result = mutableListOf<FynxRemoteSocialClient.RemotePost>()
-        var next = 0
-        base.forEachIndexed { index, post ->
-            result += post
-            if ((index + 1) % 5 == 0 && next < clean.size) result += clean[next++]
-        }
-        while (next < clean.size && result.size < base.size + 3) result += clean[next++]
-        return result
-    }
-    fun hydrateDiscovery() {
-        scope.launch {
-            FynxRemoteSocialClient.discoveryFeed(context, 12).onSuccess { suggested ->
-                if (suggested.posts.isNotEmpty()) {
-                    posts = mergeDiscoveryPosts(posts.filterNot { it.isDiscovery }, suggested.posts)
-                    resolveAuthorPhotos(suggested.posts)
-                    hydrateInteractionStates(suggested.posts)
-                    hydrateReactionStates(suggested.posts)
-                    hydratePostMedia(suggested.posts)
-                }
-            }
-        }
-    }
-
     fun hydratePeopleRecommendations() {
         scope.launch {
             val body = JSONObject().apply { put("name", "get_people_recommendations"); put("arguments", JSONObject()) }.toString()
@@ -197,6 +170,33 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             if (resolved.isNotEmpty()) postMedia = postMedia + resolved
         }
     }
+    fun mergeDiscoveryPosts(base: List<FynxRemoteSocialClient.RemotePost>, suggested: List<FynxRemoteSocialClient.RemotePost>): List<FynxRemoteSocialClient.RemotePost> {
+        val existing = base.map { it.id }.toSet()
+        val clean = suggested.filter { it.id !in existing }.distinctBy { it.id }
+        if (clean.isEmpty()) return base
+        val result = mutableListOf<FynxRemoteSocialClient.RemotePost>()
+        var next = 0
+        base.forEachIndexed { index, post ->
+            result += post
+            if ((index + 1) % 5 == 0 && next < clean.size) result += clean[next++]
+        }
+        while (next < clean.size && result.size < base.size + 3) result += clean[next++]
+        return result
+    }
+    fun hydrateDiscovery() {
+        scope.launch {
+            FynxRemoteSocialClient.discoveryFeed(context, 12).onSuccess { suggested ->
+                if (suggested.posts.isNotEmpty()) {
+                    posts = mergeDiscoveryPosts(posts.filterNot { it.isDiscovery }, suggested.posts)
+                    resolveAuthorPhotos(suggested.posts)
+                    hydrateInteractionStates(suggested.posts)
+                    hydrateReactionStates(suggested.posts)
+                    hydratePostMedia(suggested.posts)
+                }
+            }
+        }
+    }
+
     fun reload(forceRefresh: Boolean = false) {
         val now = System.currentTimeMillis(); if (feedRequestInFlight) return; if (forceRefresh && now - lastFeedRequestAt < FEED_REFRESH_DEBOUNCE_MS) return
         feedRequestInFlight = true; lastFeedRequestAt = now
