@@ -46,6 +46,10 @@ object FynxConversationPreferences {
     fun chatNotifications(context: Context, username: String): Boolean =
         chatBoolean(context, username, "notifications", true)
 
+    fun setChatNotifications(context: Context, username: String, enabled: Boolean) {
+        chat(context, username).edit().putBoolean("notifications_${chatKey(username)}", enabled).apply()
+    }
+
     fun chatMessagePreviews(context: Context, username: String): Boolean =
         chatBoolean(context, username, "previews", true)
 
@@ -85,6 +89,10 @@ object FynxConversationPreferences {
 
     fun groupNotifications(context: Context, groupId: String): Boolean =
         group(context, groupId).getBoolean("notifications", true)
+
+    fun setGroupNotifications(context: Context, groupId: String, enabled: Boolean) {
+        group(context, groupId).edit().putBoolean("notifications", enabled).apply()
+    }
 
     fun groupMuted(context: Context, groupId: String): Boolean =
         group(context, groupId).getBoolean("mute", false)
