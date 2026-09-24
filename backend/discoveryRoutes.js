@@ -7,7 +7,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       CREATE TABLE IF NOT EXISTS fynx_discovery_events (
         id BIGSERIAL PRIMARY KEY,
         user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        event_type TEXT NOT NULL CHECK (event_type IN ('VIEW','LIKE','COMMENT','SHARE','SAVE','FOLLOW','PROFILE_VIEW','PRODUCT_CLICK','MESSAGE','PURCHASE','NOT_INTERESTED')),
+        event_type TEXT NOT NULL CHECK (event_type IN ('VIEW','LIKE','COMMENT','SHARE','SAVE','FOLLOW','PROFILE_VIEW','PRODUCT_CLICK','MESSAGE','PURCHASE','NOT_INTERESTED','REPORT')),
         post_id BIGINT REFERENCES social_posts(id) ON DELETE CASCADE,
         listing_id BIGINT REFERENCES marketplace_listings(id) ON DELETE CASCADE,
         target_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
