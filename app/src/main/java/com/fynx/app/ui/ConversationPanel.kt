@@ -72,6 +72,9 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var searchQuery by remember { mutableStateOf("") }
     var searchOpen by remember { mutableStateOf(false) }
     var menuMessageId by remember { mutableStateOf<String?>(null) }
+    var showForwardDialog by remember { mutableStateOf(false) }
+    var forwardMessageId by remember { mutableStateOf<String?>(null) }
+    var forwardUsername by remember { mutableStateOf("") }
     var showGifts by remember { mutableStateOf(false) }
     var showChatMenu by remember { mutableStateOf(false) }
     var showChatSettings by remember { mutableStateOf(false) }
@@ -525,6 +528,13 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         Box {
                             Surface(color = if (message.fromMe) Color(0xFF5E44C4) else Color(0xFF1E232D), contentColor = Color(0xFFE1E4EA), shape = RoundedCornerShape(16.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { menuMessageId = message.id }, onLongClick = { menuMessageId = message.id })) {
                             Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
+                                if (message.pinned) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
+                                        Icon(Icons.Default.PushPin, contentDescription = "Pinned", tint = if (message.fromMe) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.primary, modifier = Modifier.size(13.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Pinned", style = MaterialTheme.typography.labelSmall, color = if (message.fromMe) Color.White.copy(alpha = 0.82f) else MaterialTheme.colorScheme.primary)
+                                    }
+                                }
                                 if (message.replyToId != null) {
                                     val replied = messages.firstOrNull { it.id == message.replyToId }
                                     Text("Reply: " + (replied?.text?.take(80) ?: "Original message"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 5.dp))
@@ -575,7 +585,33 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                 )
 
                                 DropdownMenuItem(text = { Text("Copy") }, enabled = message.text.isNotBlank(), onClick = { clipboardManager.setText(AnnotatedString(message.text)); menuMessageId = null }, leadingIcon = { Icon(Icons.Default.ContentCopy, null) })
-                                                                                                DropdownMenuItem(text = { Text("Delete") }, onClick = {
+                                DropdownMenuItem(
+                                    text = { Text(if (message.pinned) "Unpin" else "Pin") },
+                                    onClick = {
+                                        menuMessageId = null
+                                        scope.launch {
+                                            FynxProductionMessaging.setPinned(context, message.id, !message.pinned)
+                                                .onSuccess { remote ->
+                                                    currentUserId?.let { myId ->
+                                                        messages = messages.map { existing -> if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing }
+                                                    }
+                                                }
+                                                .onFailure { networkError = it.message ?: "Message pin state could not be changed" }
+                                        }
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.PushPin, null) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Forward") },
+                                    onClick = {
+                                        menuMessageId = null
+                                        forwardMessageId = message.id
+                                        forwardUsername = ""
+                                        showForwardDialog = true
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Forward, null) }
+                                )
+                                DropdownMenuItem(text = { Text("Delete") }, onClick = {
                                     scope.launch {
                                         FynxProductionMessaging.deleteMessage(context, message.id)
                                             .onSuccess {
@@ -740,6 +776,50 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         Dialog(onDismissRequest = { showCamera = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
             Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(initialMode = cameraInitialMode, onCaptured = { uri, type -> attachment = uri; attachmentType = type; showCamera = false }, onDismiss = { showCamera = false }) } }
         }
+    }
+
+    if (showForwardDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!sending) showForwardDialog = false },
+            title = { Text("Forward message") },
+            text = {
+                Column(Modifier.fillMaxWidth()) {
+                    Text("Enter the FYNX username to receive this message.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = forwardUsername,
+                        onValueChange = { forwardUsername = it.removePrefix("@").take(50) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Username") },
+                        placeholder = { Text("@username") },
+                        enabled = !sending
+                    )
+                }
+            },
+            dismissButton = { TextButton(onClick = { showForwardDialog = false }, enabled = !sending) { Text("Cancel") } },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val messageId = forwardMessageId
+                        if (messageId == null || forwardUsername.isBlank() || sending) return@TextButton
+                        sending = true
+                        scope.launch {
+                            FynxProductionMessaging.forwardMessage(context, messageId, forwardUsername)
+                                .onSuccess {
+                                    networkError = null
+                                    showForwardDialog = false
+                                    forwardMessageId = null
+                                    forwardUsername = ""
+                                }
+                                .onFailure { networkError = it.message ?: "Message could not be forwarded" }
+                            sending = false
+                        }
+                    },
+                    enabled = forwardUsername.isNotBlank() && !sending
+                ) { Text(if (sending) "Sending…" else "Forward") }
+            }
+        )
     }
 
     if (showGifts) {
