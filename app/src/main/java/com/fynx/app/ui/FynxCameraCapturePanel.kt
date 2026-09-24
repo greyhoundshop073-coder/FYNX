@@ -59,6 +59,7 @@ import java.io.FileOutputStream
 fun FynxCameraCapturePanel(
     onCaptured: (Uri, String) -> Unit,
     fastCapture: Boolean = false,
+    initialMode: CameraMode = CameraMode.PHOTO,
     onDismiss: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -89,7 +90,7 @@ fun FynxCameraCapturePanel(
     LaunchedEffect(Unit) { if (!hasCamera) permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA)) }
 
     var lens by remember { mutableStateOf(CameraSelector.LENS_FACING_FRONT) }
-    var mode by remember { mutableStateOf(CameraMode.PHOTO) }
+    var mode by remember { mutableStateOf(initialMode) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var videoCapture by remember { mutableStateOf<VideoCapture<Recorder>?>(null) }
     var cameraControl by remember { mutableStateOf<androidx.camera.core.CameraControl?>(null) }
