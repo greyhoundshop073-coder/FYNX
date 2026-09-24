@@ -422,7 +422,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .height(52.dp).background(Color(0xFF181C24)).padding(horizontal = 0.dp),
+                    .height(52.dp).background(Color(0xFF08090D)).padding(horizontal = 0.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
@@ -500,7 +500,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
         if (searchOpen) OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search messages…") })
         pinnedMessage?.let { pinned ->
-            Surface(onClick = { val index = visibleMessages.indexOfFirst { it.id == pinned.id }; if (index >= 0) scope.launch { messageListState.animateScrollToItem(index) } }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), color = Color(0xFF11131A), shape = RoundedCornerShape(12.dp)) {
+            Surface(onClick = { searchQuery = ""; val index = messages.indexOfFirst { it.id == pinned.id }; if (index >= 0) scope.launch { messageListState.animateScrollToItem(index) } }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), color = Color(0xFF090A0F), shape = RoundedCornerShape(12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.PushPin, "Pinned message", tint = Color(0xFF8B7BE8), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) { Text("Pinned message", style = MaterialTheme.typography.labelMedium, color = Color(0xFF9C90F0)); Text(pinned.text.ifBlank { "Media message" }, maxLines = 1, style = MaterialTheme.typography.bodySmall, color = Color(0xFFE6E7EC)) }
@@ -538,7 +538,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             Spacer(Modifier.width(6.dp))
                         }
                         Box {
-                            Surface(color = if (message.fromMe) Color(0xFF5E44C4) else Color(0xFF1E232D), contentColor = Color(0xFFE1E4EA), shape = RoundedCornerShape(16.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { menuMessageId = message.id }, onLongClick = { menuMessageId = message.id })) {
+                            Surface(color = if (message.fromMe) Color(0xFF6246C7) else Color(0xFF12151C), contentColor = Color(0xFFE1E4EA), shape = RoundedCornerShape(16.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { menuMessageId = message.id }, onLongClick = { menuMessageId = message.id })) {
                             Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
                                 if (message.pinned) {
                                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
