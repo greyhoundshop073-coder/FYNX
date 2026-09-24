@@ -47,7 +47,7 @@ object FynxProductionMessaging {
                     }
                     else -> "application/octet-stream"
                 }
-            require(detectedMimeType.startsWith("image/") || detectedMimeType.startsWith("video/") || detectedMimeType.startsWith("audio/")) { "Unsupported media type." }
+            require(detectedMimeType.startsWith("image/") || detectedMimeType.startsWith("video/") || detectedMimeType.startsWith("audio/") || detectedMimeType == "application/pdf" || detectedMimeType == "text/plain" || detectedMimeType == "application/zip" || detectedMimeType == "application/msword" || detectedMimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || detectedMimeType == "application/vnd.ms-excel" || detectedMimeType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || detectedMimeType == "application/vnd.ms-powerpoint" || detectedMimeType == "application/vnd.openxmlformats-officedocument.presentationml.presentation") { "Unsupported document or media type." }
             val prepared: Pair<ByteArray, String> = if (detectedMimeType.startsWith("image/")) prepareImageUpload(context, uri, detectedMimeType) else readMediaBytes(context, uri) to detectedMimeType
             val bytes = prepared.first
             val effectiveMimeType = prepared.second
@@ -141,7 +141,7 @@ object FynxProductionMessaging {
         val cleanText = text.trim()
         if (cleanText.length > MAX_MESSAGE_LENGTH) return Result.failure(IllegalArgumentException("Message is too long. Maximum is 4000 characters."))
         if (cleanText.isBlank() && mediaId == null) return Result.failure(IllegalArgumentException("Message content is required."))
-        if (mediaType != null && mediaType !in setOf("image", "video", "audio")) return Result.failure(IllegalArgumentException("Unsupported message media type."))
+        if (mediaType != null && mediaType !in setOf("image", "video", "audio", "document")) return Result.failure(IllegalArgumentException("Unsupported message media type."))
         if (mediaId == null && mediaType != null) return Result.failure(IllegalArgumentException("Message media is incomplete."))
         if (voiceDurationMs !in 0L..MAX_VOICE_DURATION_MS) return Result.failure(IllegalArgumentException("Voice message duration is invalid."))
         val body = JSONObject().apply { put("recipientUsername", normalizedRecipient); put("text", cleanText); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("voiceDurationMs", voiceDurationMs) }
