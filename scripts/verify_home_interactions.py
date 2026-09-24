@@ -47,8 +47,10 @@ for needle in ('FEED_CACHE_TTL_MS','readCachedFeed(context)','readStaleCachedFee
     require(client, needle, f"offline feed recovery {needle}")
 for needle in ('onCommentCountChanged','expandedReplies','parentCommentId','nextCursor'):
     require(comments_panel, needle, f"comment/reply lifecycle {needle}")
-for needle in ('post.mediaUrl?.let','RemoteSocialMedia','MediaController','VideoView','rememberLazyListState','focusedVideoPostId','playbackActive','setVolume','VolumeOff','VolumeUp'):
+for needle in ('post.mediaUrl?.let','RemoteSocialMedia','VideoView','rememberLazyListState','focusedVideoPostId','playbackActive','setVolume','VolumeOff','VolumeUp','FilledIconButton','Fullscreen','"Open video full screen"'):
     require(home, needle, f"post media behavior {needle}")
+if 'MediaController' in home:
+    raise SystemExit("HOME INTERACTIONS RED: legacy Android MediaController must not compete with FYNX feed controls")
 require(home, 'LazyColumn(state = feedListState', "single feed state owns vertical scrolling")
 require(home, 'snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }', "automatic near-bottom feed pagination")
 for needle in ('onOpenAuthorProfile','FynxRemoteSocialClient.follow','FynxDiscoveryClient.recordEngagement','Intent.ACTION_SEND'):
