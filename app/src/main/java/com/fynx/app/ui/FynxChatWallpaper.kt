@@ -21,7 +21,7 @@ fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, wallpaperOverride
     val wallpaper = wallpaperOverride ?: FynxPreferencesStore.loadChatWallpaper(context)
     val base = when (wallpaper) {
         "Minimal" -> Color(0xFF0B0E14)
-        else -> Color(0xFF0D0E12)
+        else -> Color(0xFF05060A)
     }
     Box(modifier.background(base)) {
         FynxChatDoodlePattern()
@@ -32,7 +32,7 @@ fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, wallpaperOverride
 @Composable
 fun FynxChatDoodlePattern() {
     androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-        val ink = Color(0xFF8A94A6).copy(alpha = 0.085f)
+        val ink = Color(0xFF7268C8).copy(alpha = 0.115f)
         val sw = 0.72.dp.toPx()
         val tileW = 420.dp.toPx()
         val tileH = 520.dp.toPx()
