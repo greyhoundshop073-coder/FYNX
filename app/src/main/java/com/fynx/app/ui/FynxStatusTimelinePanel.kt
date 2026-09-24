@@ -415,7 +415,10 @@ private fun FynxStatusStoryViewer(
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium,
                             maxLines = 4,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                            modifier = Modifier
+                                .heightIn(max = 132.dp)
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
                         )
                     }
                 }
@@ -514,6 +517,7 @@ private fun FynxStatusStoryViewer(
                 // Bottom interaction bar: no counts; reply, reaction, share and send stay above system navigation.
                 Surface(
                     color = Color.Black.copy(alpha = 0.72f),
+                    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
@@ -558,6 +562,7 @@ private fun FynxStatusStoryViewer(
                                 onValueChange = { replyText = it.take(1000) },
                                 modifier = Modifier
                                     .weight(1f)
+                                    .heightIn(min = 52.dp, max = 120.dp)
                                     .onFocusChanged { replyFocused = it.isFocused },
                                 enabled = !replying,
                                 minLines = 1,
