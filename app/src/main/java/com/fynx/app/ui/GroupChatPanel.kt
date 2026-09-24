@@ -46,6 +46,7 @@ fun GroupChatPanel(
     var isNewGroupConversation by remember(group.id) { mutableStateOf(false) }
     var attachment by remember { mutableStateOf<Uri?>(null) }
     var attachmentType by remember { mutableStateOf("image") }
+    var attachmentName by remember { mutableStateOf<String?>(null) }
     var showCamera by remember { mutableStateOf(false) }
     var showWallpaper by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf<MediaRecorder?>(null) }
@@ -75,6 +76,15 @@ fun GroupChatPanel(
         if (uri != null) {
             attachment = uri
             attachmentType = if (context.contentResolver.getType(uri)?.startsWith("video/") == true) "video" else "image"
+            attachmentName = null
+        }
+    }
+
+    val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            attachment = uri
+            attachmentType = "document"
+            attachmentName = uri.lastPathSegment?.substringAfterLast("/")?.takeIf { it.isNotBlank() } ?: "Document"
         }
     }
 
@@ -269,7 +279,13 @@ fun GroupChatPanel(
                                             color = MaterialTheme.colorScheme.primary
                                         )
                                     }
-                                    if (message.attachmentUri != null && message.attachmentType != "audio") {
+                                    if (message.attachmentUri != null && message.attachmentType == "document") {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Description, null, Modifier.size(28.dp))
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("Document", maxLines = 2)
+                                        }
+                                    } else if (message.attachmentUri != null && message.attachmentType != "audio") {
                                         FynxRemoteMedia(
                                             message.attachmentUri,
                                             message.attachmentType ?: "image",
@@ -313,7 +329,7 @@ fun GroupChatPanel(
                     if (attachment != null) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 5.dp)) {
                             Icon(if (attachmentType == "video") Icons.Default.Videocam else Icons.Default.Image, null)
-                            Text(if (attachmentType == "video") "Video ready" else "Photo ready", Modifier.weight(1f))
+                            Text(if (attachmentType == "video") "Video ready" else if (attachmentType == "document") (attachmentName ?: "Document ready") else "Photo ready", Modifier.weight(1f))
                             IconButton(onClick = { attachment = null }) { Icon(Icons.Default.Close, "Remove") }
                         }
                     }
@@ -350,6 +366,7 @@ fun GroupChatPanel(
                                 leadingIcon = {
                                     Row {
                                         IconButton(onClick = { picker.launch("image/* video/*") }, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.AttachFile, "Attach media") }
+                                        IconButton(onClick = { documentPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) }, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.Description, "Attach document") }
                                         IconButton(onClick = { showCamera = true }, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.PhotoCamera, "FYNX camera") }
                                     }
                                 },
