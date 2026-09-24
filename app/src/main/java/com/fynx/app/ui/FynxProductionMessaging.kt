@@ -28,7 +28,7 @@ object FynxProductionMessaging {
         val id: String, val senderId: String, val senderUsername: String? = null, val senderDisplayName: String? = null,
         val recipientId: String, val recipientUsername: String? = null, val recipientDisplayName: String? = null,
         val text: String, val timestamp: Long, val delivered: Boolean, val read: Boolean, val edited: Boolean, val deleted: Boolean,
-        val replyToId: String?, val reaction: String? = null, val mediaId: String? = null, val mediaType: String? = null, val mediaUrl: String? = null, val voiceDurationMs: Long = 0L
+        val replyToId: String?, val reaction: String? = null, val mediaId: String? = null, val mediaType: String? = null, val mediaUrl: String? = null, val voiceDurationMs: Long = 0L, val pinned: Boolean = false
     )
 
     suspend fun history(context: Context, username: String): Result<List<RemoteMessage>> =
@@ -232,7 +232,7 @@ object FynxProductionMessaging {
         reaction = item.optString("reaction").takeIf { it.isNotBlank() },
         replyToId = if (item.isNull("reply_to_id") && item.isNull("replyToId")) null else item.optString("reply_to_id", item.optString("replyToId")).takeIf { it.isNotBlank() },
         mediaId = if (item.isNull("media_id") && item.isNull("mediaId")) null else item.optString("media_id", item.optString("mediaId")).takeIf { it.isNotBlank() }, mediaType = item.optString("media_type", item.optString("mediaType")).takeIf { it.isNotBlank() },
-        mediaUrl = item.optString("mediaUrl").takeIf { it.isNotBlank() }, voiceDurationMs = item.optLong("voiceDurationMs", 0L)
+        mediaUrl = item.optString("mediaUrl").takeIf { it.isNotBlank() }, voiceDurationMs = item.optLong("voiceDurationMs", 0L), pinned = item.optBoolean("pinned", false)
     )
 
     private fun encodePathSegment(value: String): String = java.net.URLEncoder.encode(value.trim().removePrefix("@"), "UTF-8")
