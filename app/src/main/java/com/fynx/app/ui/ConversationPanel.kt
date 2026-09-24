@@ -76,6 +76,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var showChatMenu by remember { mutableStateOf(false) }
     var showChatSettings by remember { mutableStateOf(false) }
     var showEmojiPanel by remember { mutableStateOf(false) }
+    var showAttachmentSheet by remember { mutableStateOf(false) }
+    var cameraInitialMode by remember { mutableStateOf(CameraMode.PHOTO) }
     var reactionMessageId by remember { mutableStateOf<String?>(null) }
     var currentUserId by remember { mutableStateOf<String?>(null) }
     var recipientUserId by remember { mutableStateOf<String?>(null) }
@@ -678,8 +680,15 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         unfocusedPlaceholderColor = Color(0xFF9A9DA8)
                     ),
                     placeholder = { Text(if (editingId == null) "Message..." else "Edit message...") },
-                    leadingIcon = { IconButton(onClick = { showEmojiPanel = !showEmojiPanel }) { Icon(Icons.Default.EmojiEmotions, "Emoji", Modifier.size(22.dp)) } },
+                    leadingIcon = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { showAttachmentSheet = true }) { Icon(Icons.Default.Add, "Attachments", Modifier.size(23.dp)) }
+                            IconButton(onClick = { showEmojiPanel = !showEmojiPanel }) { Icon(Icons.Default.EmojiEmotions, "Emoji", Modifier.size(22.dp)) }
+                        }
+                    },
                     trailingIcon = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { cameraInitialMode = CameraMode.PHOTO; showCamera = true }) { Icon(Icons.Default.CameraAlt, "Camera", Modifier.size(22.dp)) }
                         val voiceMode = text.isBlank() && attachment == null
                         Box(Modifier.size(46.dp).pointerInput(voiceMode, sending) {
                             if (!voiceMode || sending) return@pointerInput
@@ -690,6 +699,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             })
                         }, contentAlignment = Alignment.Center) {
                             Icon(if (voiceMode) Icons.Default.Mic else Icons.Default.Send, if (voiceMode) "Hold to record voice message" else "Send message", Modifier.size(22.dp))
+                        }
                         }
                     },
                     singleLine = false,
@@ -705,9 +715,25 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     }
 
+    if (showAttachmentSheet) {
+        ModalBottomSheet(onDismissRequest = { showAttachmentSheet = false }) {
+            Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 8.dp)) {
+                Text("Attachments", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) { IconButton(onClick = { showAttachmentSheet = false; cameraInitialMode = CameraMode.PHOTO; showCamera = true }) { Icon(Icons.Default.CameraAlt, null) }; Text("Camera") }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) { IconButton(onClick = { showAttachmentSheet = false; mediaPicker.launch(arrayOf("image/*", "video/*")) }) { Icon(Icons.Default.PhotoLibrary, null) }; Text("Photos & videos") }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) { IconButton(onClick = { showAttachmentSheet = false; mediaPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) }) { Icon(Icons.Default.Description, null) }; Text("Document") }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) { IconButton(onClick = { showAttachmentSheet = false; cameraInitialMode = CameraMode.VIDEO; showCamera = true }) { Icon(Icons.Default.Videocam, null) }; Text("Video note") }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+        }
+    }
+
     if (showCamera) {
         Dialog(onDismissRequest = { showCamera = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-            Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(onCaptured = { uri, type -> attachment = uri; attachmentType = type; showCamera = false }, onDismiss = { showCamera = false }) } }
+            Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(initialMode = cameraInitialMode, onCaptured = { uri, type -> attachment = uri; attachmentType = type; showCamera = false }, onDismiss = { showCamera = false }) } }
         }
     }
 
