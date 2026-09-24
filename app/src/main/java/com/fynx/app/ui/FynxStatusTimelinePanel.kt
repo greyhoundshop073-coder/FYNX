@@ -276,6 +276,7 @@ private fun FynxStatusStoryViewer(
     var replyText by remember(statuses, startIndex) { mutableStateOf("") }
     var replying by remember { mutableStateOf(false) }
     var replyFocused by remember { mutableStateOf(false) }
+    val replyPaused = replyFocused || WindowInsets.isImeVisible
     var showReactionPicker by remember { mutableStateOf(false) }
     var showReplyEmojiPicker by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
@@ -307,14 +308,14 @@ private fun FynxStatusStoryViewer(
         refreshInteractions()
     }
 
-    LaunchedEffect(status.id, replyFocused) {
+    LaunchedEffect(status.id, replyPaused) {
         val duration = statusViewerAutoAdvanceMs(status)
         if (duration <= 0L) return@LaunchedEffect
         while (statusProgress < 1f) {
-            if (!replyFocused) statusProgress = (statusProgress + 50f / duration.toFloat()).coerceAtMost(1f)
+            if (!replyPaused) statusProgress = (statusProgress + 50f / duration.toFloat()).coerceAtMost(1f)
             kotlinx.coroutines.delay(50L)
         }
-        if (!replyFocused) moveNext()
+        if (!replyPaused) moveNext()
     }
 
     Dialog(
@@ -405,6 +406,7 @@ private fun FynxStatusStoryViewer(
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
                             .navigationBarsPadding()
+                            .imePadding()
                             .padding(start = 18.dp, end = 18.dp, bottom = 154.dp)
                     ) {
                         Text(
@@ -572,11 +574,33 @@ private fun FynxStatusStoryViewer(
                                     unfocusedPlaceholderColor = Color.White.copy(alpha = 0.72f)
                                 ),
                                 trailingIcon = {
-                                    IconButton(
-                                        onClick = { showReplyEmojiPicker = !showReplyEmojiPicker },
-                                        enabled = !replying
-                                    ) {
-                                        Icon(Icons.Default.EmojiEmotions, "Add emoji", tint = Color.White)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(
+                                            onClick = { showReplyEmojiPicker = !showReplyEmojiPicker },
+                                            enabled = !replying
+                                        ) {
+                                            Icon(Icons.Default.EmojiEmotions, "Add emoji", tint = Color.White)
+                                        }
+                                        IconButton(
+                                            enabled = !replying && replyText.trim().isNotEmpty(),
+                                            onClick = {
+                                                val body = replyText.trim()
+                                                if (body.isEmpty()) return@IconButton
+                                                replying = true
+                                                scope.launch {
+                                                    FynxStatusClient.reply(context, status.id, body)
+                                                        .onSuccess {
+                                                            replyText = ""
+                                                            showReplyEmojiPicker = false
+                                                            refreshInteractions()
+                                                        }
+                                                        .onFailure { interactionError = it.message }
+                                                    replying = false
+                                                }
+                                            }
+                                        ) {
+                                            Icon(Icons.Default.Send, "Send reply", tint = Color.White)
+                                        }
                                     }
                                 }
                             )
@@ -604,26 +628,7 @@ private fun FynxStatusStoryViewer(
                             ) {
                                 Icon(Icons.Default.Share, "Share", tint = Color.White)
                             }
-                            IconButton(
-                                enabled = !replying && replyText.trim().isNotEmpty(),
-                                onClick = {
-                                    val body = replyText.trim()
-                                    if (body.isEmpty()) return@IconButton
-                                    replying = true
-                                    scope.launch {
-                                        FynxStatusClient.reply(context, status.id, body)
-                                            .onSuccess {
-                                                replyText = ""
-                                                showReplyEmojiPicker = false
-                                                refreshInteractions()
-                                            }
-                                            .onFailure { interactionError = it.message }
-                                        replying = false
-                                    }
-                                }
-                            ) {
-                                Icon(Icons.Default.Send, "Send reply", tint = Color.White)
-                            }
+
                         }
 
                         if (showReplyEmojiPicker && !replying) {
@@ -710,8 +715,8 @@ private fun StatusViewerText(status: FynxStatus) {
 
 private fun statusViewerAutoAdvanceMs(status: FynxStatus): Long {
     val base = when (status.type) {
-        FynxStatusType.TEXT -> 5_000L
-        FynxStatusType.PHOTO -> 5_000L
+        FynxStatusType.TEXT -> 7_000L
+        FynxStatusType.PHOTO -> 7_000L
         FynxStatusType.VOICE -> status.voiceDurationMs.coerceIn(1_000L, FYNX_STATUS_MAX_VOICE_DURATION_MS)
         FynxStatusType.VIDEO -> 0L
     }
