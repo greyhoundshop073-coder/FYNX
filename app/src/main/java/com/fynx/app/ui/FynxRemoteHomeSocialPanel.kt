@@ -869,7 +869,6 @@ private fun HomeAuthorStatusDialog(statuses: List<FynxStatus>, onDismiss: () -> 
 
 
 @Composable
-@Composable
 private fun HomePeopleRecommendationsCard(items: List<HomePeopleRecommendation>, onOpenProfile: (String) -> Unit, onDismiss: (String) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
