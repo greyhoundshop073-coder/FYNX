@@ -358,6 +358,9 @@ fun GroupChatPanel(
                             IconButton(onClick = { picker.launch("image/* video/*") }, modifier = Modifier.size(42.dp)) {
                                 Icon(Icons.Default.Add, "Attachments", tint = Color(0xFFD6DCE1))
                             }
+                            IconButton(onClick = { documentPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) }, modifier = Modifier.size(42.dp)) {
+                                Icon(Icons.Default.Description, "Document", tint = Color(0xFFD6DCE1))
+                            }
                             IconButton(onClick = { showCamera = true }, modifier = Modifier.size(42.dp)) {
                                 Icon(Icons.Default.CameraAlt, "Camera", tint = Color(0xFFD6DCE1))
                             }
