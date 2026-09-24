@@ -247,7 +247,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         val pinnedMessage = messages.lastOrNull { it.pinned }
         if (searchOpen) OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search messages…") })
         pinnedMessage?.let { pinned ->
-            Surface(onClick = { val index = visibleMessages.indexOfFirst { it.id == pinned.id }; if (index >= 0) scope.launch { messageListState.animateScrollToItem(index) } }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), color = Color(0xFF0D0F14), shape = RoundedCornerShape(12.dp)) {
+            Surface(onClick = { searchQuery = ""; val index = messages.indexOfFirst { it.id == pinned.id }; if (index >= 0) scope.launch { messageListState.animateScrollToItem(index) } }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), color = Color(0xFF090A0F), shape = RoundedCornerShape(12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.PushPin, "Pinned message", tint = Color(0xFF8B7BE8), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) { Text("Pinned message", style = MaterialTheme.typography.labelMedium, color = Color(0xFF9C90F0)); Text(pinned.text.ifBlank { "Media message" }, maxLines = 1, style = MaterialTheme.typography.bodySmall) }
