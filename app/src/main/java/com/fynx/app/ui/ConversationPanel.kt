@@ -59,6 +59,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var editingId by remember { mutableStateOf<String?>(null) }
     var attachment by remember { mutableStateOf<Uri?>(null) }
     var attachmentType by remember { mutableStateOf<String?>(null) }
+    var attachmentName by remember { mutableStateOf<String?>(null) }
     var showCamera by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
     var isRecordingPaused by remember { mutableStateOf(false) }
@@ -133,17 +134,22 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             mimeType?.startsWith("image/") == true -> {
                 attachment = uri
                 attachmentType = "image"
+                attachmentName = null
                 networkError = null
             }
             mimeType?.startsWith("video/") == true -> {
                 attachment = uri
                 attachmentType = "video"
+                attachmentName = null
                 networkError = null
             }
             else -> {
                 attachment = null
                 attachmentType = null
-                networkError = "Please choose an image or video."
+                attachment = uri
+                attachmentType = "document"
+                attachmentName = uri.lastPathSegment?.substringAfterLast("/")?.takeIf { it.isNotBlank() } ?: "Document"
+                networkError = null
             }
         }
     }
@@ -370,6 +376,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         replyToId = null
                         attachment = null
                         attachmentType = null
+                        attachmentName = null
                     }
                     .onFailure { networkError = it.message ?: "Message could not be sent" }
             }
@@ -442,6 +449,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         DropdownMenuItem(text = { Text(if (searchOpen) "Close search" else "Search messages") }, onClick = { showChatMenu = false; searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, leadingIcon = { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, null) })
                         DropdownMenuItem(text = { Text("Take photo or video") }, onClick = { showChatMenu = false; showCamera = true }, leadingIcon = { Icon(Icons.Default.CameraAlt, null) })
                         DropdownMenuItem(text = { Text("Choose photo or video") }, onClick = { showChatMenu = false; mediaPicker.launch(arrayOf("image/*", "video/*")) }, leadingIcon = { Icon(Icons.Default.AttachFile, null) })
+                        DropdownMenuItem(text = { Text("Choose document") }, onClick = { showChatMenu = false; mediaPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) }, leadingIcon = { Icon(Icons.Default.Description, null) })
                         DropdownMenuItem(text = { Text("Send gift") }, onClick = { showChatMenu = false; showGifts = true }, leadingIcon = { Icon(Icons.Default.CardGiftcard, null) })
                     }
                 }
@@ -534,7 +542,13 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                         Text("Voice message", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 } else {
-                                    if (message.attachmentUri != null) FynxRemoteMedia(mediaUrl = message.attachmentUri, type = message.attachmentType ?: "image", modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp))
+                                    if (message.attachmentUri != null && message.attachmentType == "document") {
+                                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Description, null, tint = Color.White, modifier = Modifier.size(28.dp))
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(attachmentName ?: "Document", color = Color.White, maxLines = 2)
+                                        }
+                                    } else if (message.attachmentUri != null) FynxRemoteMedia(mediaUrl = message.attachmentUri, type = message.attachmentType ?: "image", modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp))
                                     if (message.text.isNotBlank()) SelectionContainer { Text(message.text, color = Color.White) }
                                 }
                                 if (message.edited) Text("Edited", style = MaterialTheme.typography.labelSmall, color = if (message.fromMe) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -622,7 +636,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             )
                         }
                     }
-                    IconButton(onClick = { replyToId = null; editingId = null; attachment = null; attachmentType = null }) {
+                    IconButton(onClick = { replyToId = null; editingId = null; attachment = null; attachmentType = null; attachmentName = null }) {
                         Icon(Icons.Default.Close, "Cancel")
                     }
                 }
