@@ -51,7 +51,7 @@ check("AI integration remains behind the existing security gate", "verify_ai_sec
 # Verify the actual CI ordering rather than requiring the journey script to reference itself.
 journey_step = workflow.find("python3 scripts/verify_fynx_journey.py")
 production_step = workflow.find("python3 scripts/verify_fynx_production.py")
-build_step = workflow.find("Build, test and lint")
+build_step = min((i for i in [workflow.find("Fast build, test and lint"), workflow.find("Full build, test and lint")] if i >= 0), default=-1)
 check("journey and production certification gates remain in the CI chain", journey_step >= 0 and production_step >= 0 and build_step >= 0 and journey_step < build_step and production_step < build_step)
 check("all earlier consolidated gates run before the final Android build", workflow.index("Verify consolidated Phase C security and production readiness") < build_step)
 check("integration continuity gate will execute before build", "verify_phase_d_integration_continuity.py" in workflow and workflow.index("verify_phase_d_integration_continuity.py") < build_step)
