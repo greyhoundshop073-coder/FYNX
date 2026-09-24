@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -78,7 +80,7 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
 
     Surface(color = Color(0xFF0B0E14), contentColor = Color(0xFFE1E4EA), modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding()) {
-        Surface(color = Color(0xFF181C24), contentColor = Color(0xFFE1E4EA), tonalElevation = 0.dp) {
+            Surface(color = Color(0xFF181C24), contentColor = Color(0xFFE1E4EA), tonalElevation = 0.dp) {
             Row(
                 Modifier.fillMaxWidth().statusBarsPadding().height(60.dp).padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -88,6 +90,7 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
                     Text("Chat Settings", style = MaterialTheme.typography.titleLarge, color = Color(0xFFF4F6FA))
                     Text(chatUsername, style = MaterialTheme.typography.bodySmall, color = Color(0xFF9AA4B4), maxLines = 1)
                 }
+            }
             }
         }
 
