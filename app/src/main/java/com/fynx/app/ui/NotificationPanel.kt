@@ -20,7 +20,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.launch
 
 @Composable
-fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit, onNotificationRead: (String) -> Unit = {}, onMarkAllRead: () -> Unit = {}, onNotificationOpen: (FynxNotification) -> Unit = {}) {
+fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit, onNotificationRead: (String) -> Unit = {}, onMarkAllRead: () -> Unit = {}, onUnreadCountChanged: (Int) -> Unit = {}, onNotificationOpen: (FynxNotification) -> Unit = {}) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()

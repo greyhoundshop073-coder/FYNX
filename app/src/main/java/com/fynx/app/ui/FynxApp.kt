@@ -441,11 +441,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                                 scope.launch {
                                     val local = FynxChatStore.loadPreviews(context).firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
                                     val remote = if (local == null) FynxSocialClient.searchUsers(context, normalized).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) } else null
-                                    openChat = local ?: remote?.let { user -> ChatPreview(user.displayName.ifBlank { normalized }, "@" + user.username.removePrefix("@"), "Start a conversation", "Now", user.profilePhotoMediaId?.let { "/api/media/" + it }) }
+                                    openChat = local ?: remote?.let { user -> ChatPreview(name = user.displayName.ifBlank { normalized }, username = "@" + user.username.removePrefix("@"), lastMessage = "Start a conversation", time = "Now", avatarUri = user.profilePhotoMediaId?.let { "/api/media/" + it }) }
                                     if (openChat != null) FynxChatStore.savePreview(context, openChat!!)
                                 }
                             }
                         }
+                        is FynxDeepLinkDestination.Call -> { callTarget = destination.username; callVideo = destination.video; selected = "Calls" }
                         is FynxDeepLinkDestination.Group -> openGroup = destination.id
                         is FynxDeepLinkDestination.Marketplace -> { marketplaceListingId = destination.listingId; selected = "Marketplace" }
                         FynxDeepLinkDestination.Stories -> selected = "Stories"
