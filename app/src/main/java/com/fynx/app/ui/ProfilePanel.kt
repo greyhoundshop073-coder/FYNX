@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,6 +43,8 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
     var photo by remember(session.username) { mutableStateOf(FynxPreferencesStore.loadProfilePhoto(context)) }
     var remotePhotoId by remember(session.username) { mutableStateOf(session.username?.let { FynxProfileRemoteClient.cachedProfilePhotoId(context, it) }) }
     var remoteProfileLoaded by remember(session.username) { mutableStateOf(false) }
+    var remoteVerified by remember(session.username) { mutableStateOf(false) }
+    var showProfilePhoto by remember(session.username) { mutableStateOf(false) }
     var syncing by remember { mutableStateOf(false) }
     var syncError by remember { mutableStateOf<String?>(null) }
     var settings by remember { mutableStateOf(FynxPreferencesStore.loadSettings(context)) }
@@ -75,6 +78,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                 // Once the server responds, its profilePhotoMediaId is authoritative.
                 // Do not resurrect a stale local/cached photo when the server says null.
                 remotePhotoId = remote.profilePhotoMediaId
+                remoteVerified = remote.verified
                 remoteProfileLoaded = true
                 profile = profile.copy(
                     displayName = remote.displayName.ifBlank { profile.displayName },
@@ -140,19 +144,25 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     if (remotePhotoId != null) {
-                        FynxRemoteProfileAvatar(remotePhotoId, profile.displayName, Modifier.size(80.dp).clip(CircleShape))
+                        FynxRemoteProfileAvatar(remotePhotoId, profile.displayName, Modifier.size(80.dp).clip(CircleShape).then(if (remoteVerified) Modifier else Modifier).clickable { showProfilePhoto = true })
                     } else if (!remoteProfileLoaded) {
                         FynxProfileImage(profile.displayName, photo, Modifier.size(80.dp).clip(CircleShape))
                     } else {
                         FynxAvatar(profile.displayName, Modifier.size(80.dp).clip(CircleShape))
                     }
                     Spacer(Modifier.height(10.dp))
-                    Text(
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                        Text(
                         profile.displayName.ifBlank { "FYNX User" },
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center
-                    )
+                        )
+                        if (remoteVerified) {
+                            Spacer(Modifier.width(5.dp))
+                            Icon(Icons.Default.Verified, contentDescription = "Verified FYNX official account", tint = androidx.compose.ui.graphics.Color(0xFF1877F2), modifier = Modifier.size(18.dp))
+                        }
+                    }
                     Text(
                         "@${profile.username.removePrefix("@")}",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -227,16 +237,6 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
             }
         }
         item {
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(surface), border = BorderStroke(1.dp, outline)) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    ProfileInfoRow("Username", "@${profile.username.removePrefix("@")}")
-                    ProfileInfoRow("Profile photo", if (remotePhotoId == null && (remoteProfileLoaded || photo == null)) "Not set" else "Set")
-                    ProfileInfoRow("Account", if (session.state == AuthState.SIGNED_IN) "Signed in" else "Signed out")
-                }
-            }
-        }
-        item {
             Card(onClick = onOpenPrivacy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(surface), border = BorderStroke(1.dp, outline)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) { Text("Privacy & Safety", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("Control who can see your profile, posts, Status and photos", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis) }
@@ -247,6 +247,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
         if (session.state == AuthState.SIGNED_IN) item { OutlinedButton(onClick = { if (onSignOut != null) onSignOut() else { FynxAuthStore.clear(context); (context as? Activity)?.recreate() } }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) { Text("Sign out") } }
     }
     connectionType?.let { type -> ProfileConnectionsDialog(type, connections, connectionsLoading, connectionsError) { connectionType = null } }
+    if (showProfilePhoto && remotePhotoId != null) FynxProfilePhotoViewer(remotePhotoId!!, profile.displayName) { showProfilePhoto = false }
 }
 
 @Composable private fun ProfileStat(label: String, value: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
@@ -260,6 +261,22 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
 }
 
 private fun formatProfileCount(value: Int): String = when { value >= 1_000_000 -> String.format("%.1fM", value / 1_000_000f).replace(".0M", "M"); value >= 1_000 -> String.format("%.1fK", value / 1_000f).replace(".0K", "K"); else -> value.toString() }
+
+@Composable
+private fun FynxProfilePhotoViewer(mediaId: String, name: String, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var bitmap by remember(mediaId) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    LaunchedEffect(mediaId) {
+        val uri = FynxProductionMessaging.cacheRemoteMedia(context, mediaId, "/api/social/media/$mediaId").getOrNull()
+        bitmap = if (uri != null) withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { context.contentResolver.openInputStream(uri).use { android.graphics.BitmapFactory.decodeStream(it) } }.getOrNull() } else null
+    }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
+            if (bitmap != null) androidx.compose.foundation.Image(bitmap!!.asImageBitmap(), contentDescription = "Profile photo", modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
+            else FynxAvatar(name, Modifier.size(120.dp))
+        }
+    }
+}
 
 @Composable private fun ProfileInfoRow(title: String, value: String) { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) { Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f)); Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End, maxLines = 2, overflow = TextOverflow.Ellipsis) } }
 
