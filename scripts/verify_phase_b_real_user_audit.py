@@ -67,7 +67,7 @@ messages = read("backend/server.js")
 
 check("two-real-user status visibility path", "FynxStatusClient.list(context)" in timeline and "expires_at > NOW()" in status_routes)
 check("two-real-user post visibility path", "FynxRemoteSocialClient.feedPage" in home and "visibility" in social_routes)
-check("two-real-user block enforcement", "blocks" in social_routes and "blocks" in status_routes and "NOT EXISTS (SELECT 1 FROM blocks" in messages)
+check("two-real-user block enforcement", "blocks" in social_routes and "blocks" in status_routes and ("NOT EXISTS (SELECT 1 FROM blocks" in messages or "SELECT 1 FROM blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1)" in messages))
 check("production app is not in preview mode", "FYNX_PREVIEW_MODE = false" in app)
 check("signed-in gate protects the production surface", "AuthState.SIGNED_IN" in app)
 check("backend client owns authenticated API access", "hasAccessToken" in client and "Authorization" in client)
