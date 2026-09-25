@@ -160,6 +160,9 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == FynxPreferencesStore.loadChatWallpaper(context) } ?: FynxGlassThemeId.PURE_BLACK
     val glassPalette = fynxGlassPalette(glassThemeId)
     val messageTextSizeSp = FynxConversationPreferences.chatTextSizeSp(context, "group_$groupId")
+    val bubbleTransparency = FynxConversationPreferences.chatBubbleTransparency(context, "group_$groupId")
+    val bubbleLighting = FynxConversationPreferences.chatBubbleLighting(context, "group_$groupId")
+    val bubbleGradient = FynxConversationPreferences.chatBubbleGradient(context, "group_$groupId")
     val scope = rememberCoroutineScope()
     var text by remember { mutableStateOf("") }
     var mentionQuery by remember { mutableStateOf<String?>(null) }
@@ -221,7 +224,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
     }
     if (showSettings && selectedGroup != null) { FynxGroupSettingsPanel(groupId = selectedGroup.id, groupName = selectedGroup.name, isAdmin = isAdmin, onBack = { showSettings = false }); return }
-    FynxChatWallpaperBackground(modifier = Modifier.fillMaxSize()) {
+    FynxChatWallpaperBackground(modifier = Modifier.fillMaxSize(), settingsKey = "group_$groupId") {
     Column(Modifier.fillMaxSize()) {
         Box(
             Modifier
@@ -294,15 +297,15 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             Box {
                             val bubbleShape = RoundedCornerShape(15.dp)
                             val bubbleBrush = if (message.fromMe) {
-                                Brush.horizontalGradient(listOf(glassPalette.outgoingStart, glassPalette.outgoingEnd))
+                                Brush.horizontalGradient(listOf(glassPalette.outgoingStart.copy(alpha = bubbleTransparency), glassPalette.outgoingEnd.copy(alpha = bubbleGradient)))
                             } else {
-                                Brush.linearGradient(listOf(glassPalette.incomingGlass, glassPalette.backgroundMid.copy(alpha = 0.92f)))
+                                Brush.linearGradient(listOf(glassPalette.incomingGlass.copy(alpha = bubbleTransparency), glassPalette.backgroundMid.copy(alpha = (0.55f + bubbleGradient * 0.4f).coerceIn(0.55f, 0.95f))))
                             }
                             Surface(
                                 color = Color.Transparent,
                                 contentColor = glassPalette.messageText,
                                 shape = bubbleShape,
-                                border = BorderStroke(0.7.dp, glassPalette.bubbleRim.copy(alpha = 0.72f)),
+                                border = BorderStroke(0.7.dp, glassPalette.bubbleRim.copy(alpha = (bubbleLighting * bubbleTransparency).coerceIn(0f, 1f))),
                                 tonalElevation = 0.dp,
                                 modifier = Modifier.widthIn(max = 300.dp).background(bubbleBrush, bubbleShape).combinedClickable(onClick = { reactionMessageId = message.id }, onLongClick = { reactionMessageId = message.id })
                             ) {
