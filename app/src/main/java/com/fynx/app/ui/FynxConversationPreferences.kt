@@ -113,6 +113,21 @@ object FynxConversationPreferences {
         chat(context, username).edit().putString("bubblelight_${chatKey(username)}", value.coerceIn(0.25f, 0.90f).toString()).apply()
     }
 
+    fun chatBubbleGradient(context: Context, username: String): Float = chatString(context, username, "bubblegradient", "0.70").toFloatOrNull()?.coerceIn(0f, 1f) ?: 0.70f
+    fun setChatBubbleGradient(context: Context, username: String, value: Float) { chat(context, username).edit().putString("bubblegradient_${chatKey(username)}", value.coerceIn(0f, 1f).toString()).apply() }
+    fun chatDoodleDensity(context: Context, username: String): Float = chatString(context, username, "doodledensity", "1.0").toFloatOrNull()?.coerceIn(0.5f, 1.5f) ?: 1f
+    fun setChatDoodleDensity(context: Context, username: String, value: Float) { chat(context, username).edit().putString("doodledensity_${chatKey(username)}", value.coerceIn(0.5f, 1.5f).toString()).apply() }
+    fun chatDoodleScale(context: Context, username: String): Float = chatString(context, username, "doodlescale", "1.0").toFloatOrNull()?.coerceIn(0.7f, 1.3f) ?: 1f
+    fun setChatDoodleScale(context: Context, username: String, value: Float) { chat(context, username).edit().putString("doodlescale_${chatKey(username)}", value.coerceIn(0.7f, 1.3f).toString()).apply() }
+    fun chatDoodleIntensity(context: Context, username: String): Float = chatString(context, username, "doodleintensity", "1.0").toFloatOrNull()?.coerceIn(0.4f, 1.6f) ?: 1f
+    fun setChatDoodleIntensity(context: Context, username: String, value: Float) { chat(context, username).edit().putString("doodleintensity_${chatKey(username)}", value.coerceIn(0.4f, 1.6f).toString()).apply() }
+    fun chatDoodleLight(context: Context, username: String): Float = chatString(context, username, "doodlelight", "1.0").toFloatOrNull()?.coerceIn(0f, 1.4f) ?: 1f
+    fun setChatDoodleLight(context: Context, username: String, value: Float) { chat(context, username).edit().putString("doodlelight_${chatKey(username)}", value.coerceIn(0f, 1.4f).toString()).apply() }
+    fun chatGradientRotation(context: Context, username: String): Float = chatString(context, username, "gradientrotation", "45").toFloatOrNull()?.coerceIn(0f, 360f) ?: 45f
+    fun setChatGradientRotation(context: Context, username: String, value: Float) { chat(context, username).edit().putString("gradientrotation_${chatKey(username)}", value.coerceIn(0f, 360f).toString()).apply() }
+    fun chatBackgroundGlow(context: Context, username: String): Float = chatString(context, username, "backgroundglow", "1.0").toFloatOrNull()?.coerceIn(0.6f, 1.4f) ?: 1f
+    fun setChatBackgroundGlow(context: Context, username: String, value: Float) { chat(context, username).edit().putString("backgroundglow_${chatKey(username)}", value.coerceIn(0.6f, 1.4f).toString()).apply() }
+
     fun groupNotifications(context: Context, groupId: String): Boolean =
         group(context, groupId).getBoolean("notifications", true)
 
