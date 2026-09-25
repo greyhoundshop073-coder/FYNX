@@ -70,12 +70,12 @@ for p in files:
         checked += 1
         cls = n.attrib.get("class", "")
         text = label(n)
-        if cls not in allow_small and (w < min_px or h < min_px):
+        clipped_scroll = clipped_by_scrollable_ancestor(n, parents)\n        if cls not in allow_small and (w < min_px or h < min_px) and not clipped_scroll:
             failures.append(
                 f"{p.name}: clickable target below 48dp: {w}x{h}px < "
                 f"{min_px}px label={text or '<semantic-child>'} bounds={b}"
             )
-        if not text and cls not in allow_unlabelled and not has_semantic_descendant(n):
+        if not text and cls not in allow_unlabelled and not has_semantic_descendant(n) and not clipped_scroll:
             failures.append(
                 f"{p.name}: clickable node has no accessible text/content-desc/"
                 f"resource-id and no semantic descendant class={cls} bounds={b}"

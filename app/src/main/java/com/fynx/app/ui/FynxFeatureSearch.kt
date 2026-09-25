@@ -22,7 +22,7 @@ fun FynxFeatureSearchField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().heightIn(min = 64.dp),
         singleLine = true,
         placeholder = { Text("Search FYNX tools") },
         leadingIcon = { Text("⌕") }

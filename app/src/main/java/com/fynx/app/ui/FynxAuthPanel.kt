@@ -69,7 +69,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
             // Keep the authentication form anchored to the usable viewport so the IME never clips the primary action.
             verticalArrangement = Arrangement.Top
         ) {
-            if (page == FynxAuthPage.WELCOME || page == FynxAuthPage.LOGIN) {
+            if (page == FynxAuthPage.WELCOME) {
                 Spacer(Modifier.height(18.dp))
                 Text("FYNX", color = Color.White, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold)
                 Spacer(Modifier.height(6.dp))
