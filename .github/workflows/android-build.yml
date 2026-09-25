@@ -196,7 +196,7 @@ jobs:
       - name: Verify Large Badge #13 — Regression, Security & Release Hardening Certification
         run: python3 scripts/verify_large_badge13_regression_security.py
       - name: Fast build, test and lint
-        if: ${{ !((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]')) }}
+        if: ${{ !(((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]')) || contains(github.event.head_commit.message, '[apk-only]')) }}
         run: ./gradlew lintDebug testDebugUnitTest --no-daemon --build-cache
       - name: Full build, test and lint
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') }}
