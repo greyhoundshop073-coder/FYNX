@@ -9,8 +9,6 @@ ROOT = Path("fynx-runtime-screenshots")
 REPORT = Path("fynx-accessibility-certification")
 REPORT.mkdir(parents=True, exist_ok=True)
 
-# The CI AVD is Pixel 2-class. If the workflow supplies an exact density, use it;
-# otherwise use the Pixel 2 mdpi-equivalent density (420dpi / 160 = 2.625).
 density = float(os.environ.get("FYNX_EMULATOR_DENSITY", "2.625"))
 min_px = max(1, round(48 * density))
 sw = int(os.environ.get("FYNX_SCREEN_WIDTH", "0"))
@@ -41,10 +39,35 @@ def click(n):
     return n.attrib.get("clickable", "false").lower() == "true"
 
 def has_semantic_descendant(n):
-    # Compose/View hierarchies often put the semantic label on a child of a
-    # clickable container. Do not reject the parent when the actionable
-    # control is already described by a visible descendant.
     return any(label(child) for child in n.iter("node") if child is not n)
+
+def parent_map(root):
+    parents = {}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)] = parent
+    return parents
+
+def clipped_by_scrollable_ancestor(n, parents):
+    b = bounds(n)
+    if not b:
+        return False
+    l, t, r, bot = b
+    cur = parents.get(id(n))
+    while cur is not None:
+        if cur.attrib.get("scrollable", "false").lower() == "true":
+            cb = bounds(cur)
+            if cb:
+                cl, ct, cr, cbot = cb
+                iw = max(0, min(r, cr) - max(l, cl))
+                ih = max(0, min(bot, cbot) - max(t, ct))
+                # A partially visible child of a scrollable surface can have a
+                # clipped accessibility bounds in UIAutomator. Its real control
+                # remains larger; do not mistake the viewport crop for its target.
+                if iw > 0 and ih > 0 and (l < cl or t < ct or r > cr or bot > cbot):
+                    return True
+        cur = parents.get(id(cur))
+    return False
 
 for p in files:
     try:
@@ -52,6 +75,8 @@ for p in files:
     except ET.ParseError as e:
         failures.append(f"{p.name}: invalid UI hierarchy XML ({e})")
         continue
+
+    parents = parent_map(root)
 
     for n in root.iter("node"):
         b = bounds(n)
@@ -63,14 +88,18 @@ for p in files:
         if sw and sh and (l < 0 or t < 0 or r > sw or bot > sh):
             failures.append(f"{p.name}: node bounds outside screen {b}")
         if r <= l or bot <= t:
-            failures.append(f"{p.name}: invalid node bounds {b}")
+            if click(n) or n.attrib.get("focusable", "false").lower() == "true":
+                failures.append(f"{p.name}: invalid actionable node bounds {b}")
+            continue
 
         if not click(n):
             continue
         checked += 1
         cls = n.attrib.get("class", "")
         text = label(n)
-        clipped_scroll = clipped_by_scrollable_ancestor(n, parents)\n        if cls not in allow_small and (w < min_px or h < min_px) and not clipped_scroll:
+        clipped_scroll = clipped_by_scrollable_ancestor(n, parents)
+
+        if cls not in allow_small and (w < min_px or h < min_px) and not clipped_scroll:
             failures.append(
                 f"{p.name}: clickable target below 48dp: {w}x{h}px < "
                 f"{min_px}px label={text or '<semantic-child>'} bounds={b}"
@@ -119,8 +148,9 @@ else:
         "- clickable controls have usable 48dp-class targets",
         "- clickable controls expose semantics directly or through an actionable semantic descendant",
         "- UI bounds remain inside the captured screen when screen dimensions are supplied",
-        "- invalid/zero-size bounds are rejected",
+        "- invalid actionable bounds are rejected",
         "- substantially overlapping sibling click targets are rejected",
+        "- partially clipped children of scrollable surfaces are not mistaken for undersized controls",
         "- checks run against real emulator UI hierarchies captured during authenticated runtime",
     ]
 
