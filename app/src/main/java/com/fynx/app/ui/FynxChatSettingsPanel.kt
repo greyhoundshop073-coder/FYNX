@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -23,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Slider
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -37,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
@@ -45,6 +48,8 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
     var showClearDialog by rememberSaveable(chatUsername) { mutableStateOf(false) }
     var showResetDialog by rememberSaveable(chatUsername) { mutableStateOf(false) }
     var wallpaper by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatWallpaper(context, chatUsername)) }
+    val textSizeOptions = listOf("Small" to 14f, "Medium" to 16f, "Large" to 18f, "Extra Large" to 20f)
+    var textSize by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatTextSize(context, chatUsername)) }
 
     if (showClearDialog) {
         AlertDialog(
@@ -110,6 +115,36 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
         }
 
         ChatSettingsSection("Appearance", Icons.Default.RestartAlt) {
+            Text("Message text size", style = MaterialTheme.typography.titleMedium)
+            val selectedTextSize = textSizeOptions.firstOrNull { it.first == textSize } ?: textSizeOptions[1]
+            Text(selectedTextSize.first, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Slider(
+                value = selectedTextSize.second,
+                onValueChange = { value ->
+                    val nearest = textSizeOptions.minByOrNull { kotlin.math.abs(it.second - value) }?.first ?: "Medium"
+                    textSize = nearest
+                    FynxConversationPreferences.setChatTextSize(context, chatUsername, nearest)
+                },
+                valueRange = 14f..20f,
+                steps = 2,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Live preview", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    Text("Hello! This is how your messages will look.", fontSize = selectedTextSize.second.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(14.dp)) {
+                            Text("Looks good.", modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), fontSize = selectedTextSize.second.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
+                    Text("The preview updates as you move the slider.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             Text("Chat wallpaper", style = MaterialTheme.typography.titleMedium)
             FynxGlassThemeId.entries.map { it.label }.forEach { option ->
                 Row(
