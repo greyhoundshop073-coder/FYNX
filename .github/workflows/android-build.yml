@@ -301,3 +301,5 @@ jobs:
           name: FYNX-lint-report-${{ github.sha }}
           path: app/build/reports/lint-results-debug.html
           if-no-files-found: ignore
+
+# FYNX runtime certification trigger [full-runtime]
