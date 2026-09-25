@@ -198,7 +198,8 @@ private fun FynxProfilePostTile(post: FynxProfileRemoteClient.ProfilePost, usern
                 FynxRemoteProfileAvatar(
                     mediaId = profilePhotoId,
                     contentDescription = username,
-                    modifier = Modifier.size(20.dp).clip(CircleShape)
+                    modifier = Modifier.size(20.dp).clip(CircleShape),
+                    ownerUsername = username
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(
