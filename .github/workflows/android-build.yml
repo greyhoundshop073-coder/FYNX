@@ -285,7 +285,7 @@ jobs:
           path: fynx-responsive-certification/
           if-no-files-found: warn
       - name: Prepare exact-commit APK artifact
-        if: ${{ success() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]')) }}
+        if: ${{ success() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]')) }}
         run: |
           test -f app/build/outputs/apk/debug/app-debug.apk
           mkdir -p fynx-apk-artifact
@@ -296,7 +296,7 @@ jobs:
         if: ${{ success() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py'))) }}
         run: python3 scripts/verify_large_badge17_full_surface_journeys.py
       - name: Large Badge #16 — APK Commit Runtime Certification
-        if: ${{ success() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]')) }}
+        if: ${{ success() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]')) }}
         env:
           GITHUB_EVENT_HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: python3 scripts/verify_large_badge16_apk_commit_runtime.py
@@ -374,21 +374,21 @@ jobs:
           path: fynx-browserstack-results/
           if-no-files-found: warn
       - name: Upload exact-commit debug APK
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]') }}
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]') }}
         uses: actions/upload-artifact@v4
         with:
           name: FYNX-debug-apk-${{ github.sha }}
           path: fynx-apk-artifact/
           if-no-files-found: error
       - name: Upload latest debug APK alias
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]') }}
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]') }}
         uses: actions/upload-artifact@v4
         with:
           name: FYNX-latest-debug-apk
           path: fynx-apk-artifact/
           if-no-files-found: error
       - name: Upload instrumentation test APK
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]') }}
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]') }}
         uses: actions/upload-artifact@v4
         with:
           name: FYNX-debug-androidTest-apk-${{ github.sha }}
