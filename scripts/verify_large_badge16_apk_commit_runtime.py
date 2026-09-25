@@ -21,7 +21,7 @@ if apk.is_file():
             if not dex: fail.append("APK has no classes*.dex")
             else:
                 dex_text=b"".join(z.read(n) for n in dex).decode("latin1","ignore")
-                expected=["FynxRemoteHomeSocialPanel","GroupChatPanel","FynxStatusComposerPanel","FynxMarketplaceClient","FynxRealtimeClient","FynxCallAudioRouter","FynxAssistant","Create Post"]
+                expected=["FynxRemoteHomeSocialPanel","GroupChatPanel","FynxStatusComposerPanel","FynxMarketplaceClient","FynxRealtimeClient","FynxCallAudioRouter","FynxAiAssistantPanel","Create Post"]
                 missing=[x for x in expected if x not in dex_text]
                 if missing: fail.append("APK DEX is missing expected implementation markers: "+", ".join(missing))
     except Exception as e: fail.append(f"APK is not a readable ZIP/APK: {e}")
