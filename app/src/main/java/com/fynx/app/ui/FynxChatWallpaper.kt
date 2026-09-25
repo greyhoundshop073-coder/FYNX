@@ -32,7 +32,9 @@ fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, wallpaperOverride
 @Composable
 fun FynxChatDoodlePattern(palette: FynxGlassThemePalette? = null) {
     androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-        val ink = Color(0xFF7268C8).copy(alpha = 0.115f)
+        val activePalette = palette ?: fynxGlassPalette(FynxGlassThemeId.PURE_BLACK)
+        val ink = activePalette.doodlePrimary.copy(alpha = if (activePalette.id == FynxGlassThemeId.LIGHT) 0.16f else 0.12f)
+        val reflection = activePalette.doodleHighlight.copy(alpha = 0.055f)
         val sw = 0.72.dp.toPx()
         val tileW = 420.dp.toPx()
         val tileH = 520.dp.toPx()
