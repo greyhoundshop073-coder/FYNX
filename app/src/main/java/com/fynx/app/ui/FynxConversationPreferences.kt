@@ -99,6 +99,20 @@ object FynxConversationPreferences {
         chat(context, username).edit().putString("textsize_${chatKey(username)}", value).apply()
     }
 
+    fun chatBubbleTransparency(context: Context, username: String): Float =
+        chatString(context, username, "bubblealpha", "0.90").toFloatOrNull()?.coerceIn(0.70f, 1f) ?: 0.90f
+
+    fun setChatBubbleTransparency(context: Context, username: String, value: Float) {
+        chat(context, username).edit().putString("bubblealpha_${chatKey(username)}", value.coerceIn(0.70f, 1f).toString()).apply()
+    }
+
+    fun chatBubbleLighting(context: Context, username: String): Float =
+        chatString(context, username, "bubblelight", "0.58").toFloatOrNull()?.coerceIn(0.25f, 0.90f) ?: 0.58f
+
+    fun setChatBubbleLighting(context: Context, username: String, value: Float) {
+        chat(context, username).edit().putString("bubblelight_${chatKey(username)}", value.coerceIn(0.25f, 0.90f).toString()).apply()
+    }
+
     fun groupNotifications(context: Context, groupId: String): Boolean =
         group(context, groupId).getBoolean("notifications", true)
 
