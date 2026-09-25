@@ -15,6 +15,7 @@ on:
       - "docs/**"
       - ".github/workflows/android-build.yml"
       - ".maestro/**"
+      - "visual-baselines/**"
   pull_request:
     branches: ["main"]
     paths:
@@ -29,6 +30,7 @@ on:
       - "docs/**"
       - ".github/workflows/android-build.yml"
       - ".maestro/**"
+      - "visual-baselines/**"
   workflow_dispatch:
     inputs:
       full_runtime:
@@ -224,6 +226,13 @@ jobs:
           test -n "$FYNX_E2E_USERNAME"
           test -n "$FYNX_E2E_PASSWORD"
           echo "Authenticated FYNX visual certification credentials are available."
+      - name: Install visual regression tooling
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+          compare -version
+          identify -version
       - name: Run Android instrumentation tests and capture the real FYNX UI
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') }}
         uses: reactivecircus/android-emulator-runner@v2
@@ -236,13 +245,20 @@ jobs:
           arch: x86_64
           profile: pixel_2
           script: |
-            bash -c 'set +e; mkdir -p fynx-runtime-screenshots fynx-maestro-results; TEST_STATUS=0; ./gradlew connectedDebugAndroidTest --no-daemon --build-cache; TEST_STATUS=$?; python3 scripts/verify_runtime_navigation.py; NAV_STATUS=$?; python3 scripts/verify_authenticated_runtime_navigation.py; AUTH_STATUS=$?; printf "Commit: %s\\nRun: %s\\nInstrumentation exit: %s\\nNavigation exit: %s\\nAuthenticated visual exit: %s\\n" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$TEST_STATUS" "$NAV_STATUS" "$AUTH_STATUS" > fynx-runtime-screenshots/README.txt; if [ "$TEST_STATUS" -ne 0 ]; then exit "$TEST_STATUS"; fi; if [ "$NAV_STATUS" -ne 0 ]; then exit "$NAV_STATUS"; fi; if [ "$AUTH_STATUS" -ne 0 ]; then exit "$AUTH_STATUS"; fi; curl -fsSL "https://get.maestro.mobile.dev" | bash; export PATH="$HOME/.maestro/bin:$PATH"; maestro --version; maestro test .maestro/fynx-launch-and-auth.yaml | tee fynx-maestro-results/maestro.log; MAESTRO_STATUS=$?; printf "Maestro exit: %s\\n" "$MAESTRO_STATUS" > fynx-maestro-results/README.txt; exit "$MAESTRO_STATUS"'
+            bash -c 'set +e; mkdir -p fynx-runtime-screenshots fynx-maestro-results; TEST_STATUS=0; ./gradlew connectedDebugAndroidTest --no-daemon --build-cache; TEST_STATUS=$?; python3 scripts/verify_runtime_navigation.py; NAV_STATUS=$?; python3 scripts/verify_authenticated_runtime_navigation.py; AUTH_STATUS=$?; printf "Commit: %s\\nRun: %s\\nInstrumentation exit: %s\\nNavigation exit: %s\\nAuthenticated visual exit: %s\\n" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$TEST_STATUS" "$NAV_STATUS" "$AUTH_STATUS" > fynx-runtime-screenshots/README.txt; if [ "$TEST_STATUS" -ne 0 ]; then exit "$TEST_STATUS"; fi; if [ "$NAV_STATUS" -ne 0 ]; then exit "$NAV_STATUS"; fi; if [ "$AUTH_STATUS" -ne 0 ]; then exit "$AUTH_STATUS"; fi; python3 scripts/verify_visual_regression.py; VISUAL_STATUS=$?; if [ "$VISUAL_STATUS" -ne 0 ]; then exit "$VISUAL_STATUS"; fi; curl -fsSL "https://get.maestro.mobile.dev" | bash; export PATH="$HOME/.maestro/bin:$PATH"; maestro --version; maestro test .maestro/fynx-launch-and-auth.yaml | tee fynx-maestro-results/maestro.log; MAESTRO_STATUS=$?; printf "Maestro exit: %s\\n" "$MAESTRO_STATUS" > fynx-maestro-results/README.txt; exit "$MAESTRO_STATUS"'
       - name: Upload FYNX runtime screenshots and UI hierarchies
         if: ${{ always() && (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') }}
         uses: actions/upload-artifact@v4
         with:
           name: FYNX-runtime-visual-check-${{ github.sha }}
           path: fynx-runtime-screenshots/
+          if-no-files-found: warn
+      - name: Upload FYNX visual regression evidence
+        if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]')) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: FYNX-visual-regression-${{ github.sha }}
+          path: fynx-visual-regression/
           if-no-files-found: warn
       - name: Prepare exact-commit APK artifact
         if: ${{ success() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.message, '[apk-only]')) }}
