@@ -320,7 +320,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         ) {
                             mainNav.forEach { item ->
                                 NavigationBarItem(
-                                    modifier = Modifier.height(64.dp),
+                                    modifier = Modifier.height(64.dp).semantics { contentDescription = item.label },
                                     selected = selected == item.key,
                                     onClick = { selected = item.key },
                                     icon = {
