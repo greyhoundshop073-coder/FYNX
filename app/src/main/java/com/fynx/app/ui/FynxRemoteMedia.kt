@@ -150,10 +150,63 @@ fun FynxRemoteMedia(
     }
 }
 
+object FynxStatusNavigation {
+    var opener: ((String) -> Unit)? = null
+}
+
+private object FynxStatusPresenceStore {
+    private var loadedAt = 0L
+    private var activeOwners: Set<String> = emptySet()
+
+    suspend fun activeOwners(context: android.content.Context): Set<String> {
+        val now = System.currentTimeMillis()
+        if (now - loadedAt < 30_000L) return activeOwners
+        return FynxStatusClient.list(context).getOrNull()
+            ?.filterNot(FynxStatus::isExpired)
+            ?.map { it.ownerUsername.removePrefix("@").trim().lowercase() }
+            ?.filter { it.isNotBlank() }
+            ?.toSet()
+            ?.also { activeOwners = it; loadedAt = now }
+            ?: activeOwners
+    }
+}
+
 @Composable
-fun FynxRemoteProfileAvatar(mediaId: String?, contentDescription: String?, modifier: Modifier = Modifier) {
-    if (mediaId.isNullOrBlank()) Box(modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Text(contentDescription.orEmpty().trim().firstOrNull()?.uppercase() ?: "F", color = MaterialTheme.colorScheme.onPrimaryContainer) }
-    else FynxRemoteMedia("/api/media/${mediaId.trim()}", "image", modifier.clip(RoundedCornerShape(50)))
+fun FynxRemoteProfileAvatar(
+    mediaId: String?,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    ownerUsername: String? = null
+) {
+    val context = LocalContext.current
+    var hasActiveStatus by remember(ownerUsername) { mutableStateOf(false) }
+    LaunchedEffect(ownerUsername) {
+        val owner = ownerUsername?.removePrefix("@")?.trim()?.lowercase().orEmpty()
+        if (owner.isBlank()) {
+            hasActiveStatus = false
+        } else {
+            while (true) {
+                hasActiveStatus = FynxStatusPresenceStore.activeOwners(context).contains(owner)
+                kotlinx.coroutines.delay(30_000L)
+            }
+        }
+    }
+    val avatar: @Composable () -> Unit = {
+        if (mediaId.isNullOrBlank()) {
+            Box(Modifier.fillMaxSize().clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+                Text(contentDescription.orEmpty().trim().firstOrNull()?.uppercase() ?: "F", color = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
+        } else {
+            FynxRemoteMedia("/api/media/${mediaId.trim()}", "image", Modifier.fillMaxSize().clip(RoundedCornerShape(50)))
+        }
+    }
+    Box(
+        modifier = modifier
+            .then(if (hasActiveStatus) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(50)).padding(2.dp) else Modifier)
+            .clip(RoundedCornerShape(50))
+            .then(if (hasActiveStatus && !ownerUsername.isNullOrBlank() && FynxStatusNavigation.opener != null) Modifier.clickable { FynxStatusNavigation.opener?.invoke(ownerUsername.removePrefix("@").trim()) } else Modifier),
+        contentAlignment = Alignment.Center
+    ) { avatar() }
 }
 
 private sealed interface MediaLoadResult { data class Image(val bitmap: android.graphics.Bitmap) : MediaLoadResult; data class Video(val file: File) : MediaLoadResult }
