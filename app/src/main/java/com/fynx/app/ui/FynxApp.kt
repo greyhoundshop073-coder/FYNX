@@ -70,6 +70,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var aiCaptionDraft by remember { mutableStateOf<String?>(null) }
     var homeCameraRequest by remember { mutableIntStateOf(0) }
     var navigationDirection by remember { mutableIntStateOf(1) }
+    DisposableEffect(Unit) {
+        FynxStatusNavigation.opener = { username -> statusOpenOwner = username; selected = "Stories" }
+        onDispose { if (FynxStatusNavigation.opener != null) FynxStatusNavigation.opener = null }
+    }
 
     DisposableEffect(context) {
         val prefs = context.getSharedPreferences("fynx_preferences", android.content.Context.MODE_PRIVATE)
