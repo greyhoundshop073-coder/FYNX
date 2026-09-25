@@ -1,6 +1,9 @@
 package com.fynx.app.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -129,20 +132,47 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
                 steps = 2,
                 modifier = Modifier.fillMaxWidth()
             )
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(16.dp)
+            val previewTheme = FynxGlassThemeId.entries.firstOrNull { it.label == wallpaper }
+                ?: FynxGlassThemeId.PURE_BLACK
+            val previewPalette = fynxGlassPalette(previewTheme)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(250.dp)
+                    .clip(RoundedCornerShape(18.dp))
             ) {
-                Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Live preview", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                    Text("Hello! This is how your messages will look.", fontSize = selectedTextSize.second.sp)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(14.dp)) {
-                            Text("Looks good.", modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), fontSize = selectedTextSize.second.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                FynxChatWallpaperBackground(wallpaperOverride = wallpaper) {
+                    Column(
+                        Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 12.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            "Live preview",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = previewPalette.doodleHighlight
+                        )
+                        GlassPreviewBubble(
+                            text = "Hello! This is how your messages will look.",
+                            fontSizeSp = selectedTextSize.second,
+                            palette = previewPalette,
+                            outgoing = false
+                        )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            GlassPreviewBubble(
+                                text = "Looks good.",
+                                fontSizeSp = selectedTextSize.second,
+                                palette = previewPalette,
+                                outgoing = true
+                            )
                         }
+                        Text(
+                            "Preview updates instantly with text size and wallpaper.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = previewPalette.messageMuted
+                        )
                     }
-                    Text("The preview updates as you move the slider.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Text("Chat wallpaper", style = MaterialTheme.typography.titleMedium)
@@ -178,6 +208,41 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
         }
 
         HorizontalDivider(Modifier.padding(top = 8.dp))
+    }
+}
+
+@Composable
+private fun GlassPreviewBubble(
+    text: String,
+    fontSizeSp: Float,
+    palette: FynxGlassThemePalette,
+    outgoing: Boolean
+) {
+    val shape = RoundedCornerShape(16.dp)
+    val brush = if (outgoing) {
+        Brush.horizontalGradient(listOf(palette.outgoingStart, palette.outgoingEnd))
+    } else {
+        Brush.linearGradient(listOf(palette.incomingGlass, palette.backgroundMid.copy(alpha = 0.92f)))
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth(if (outgoing) 0.78f else 0.84f)
+            .background(brush, shape)
+            .border(1.dp, palette.bubbleRim.copy(alpha = 0.58f), shape)
+    ) {
+        Column(Modifier.padding(horizontal = 11.dp, vertical = 8.dp)) {
+            Text(
+                text,
+                fontSize = fontSizeSp.sp,
+                color = palette.messageText
+            )
+            Text(
+                if (outgoing) "20:42  ✓✓" else "20:41",
+                style = MaterialTheme.typography.labelSmall,
+                color = palette.messageMuted,
+                modifier = Modifier.align(Alignment.End)
+            )
+        }
     }
 }
 
