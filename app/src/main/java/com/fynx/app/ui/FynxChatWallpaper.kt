@@ -207,8 +207,14 @@ fun FynxChatDoodlePattern(palette: FynxGlassThemePalette? = null) {
             line(p(x + 4f*s, y + 20f*s), p(x + 33f*s, y + 20f*s))
         }
 
-        fun drawMotif(index: Int, x: Float, y: Float, scale: Float) {
-            when (index % 22) {
+        fun drawMotif(index: Int, x: Float, y: Float, scale: Float, theme: FynxGlassThemeId) {
+            val stories = when (theme) {
+                FynxGlassThemeId.PURE_BLACK -> intArrayOf(0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 13, 4, 8, 2, 3, 1, 6, 7, 5, 10, 0)
+                FynxGlassThemeId.AURORA -> intArrayOf(19, 15, 22, 7, 16, 17, 18, 20, 21, 3, 10, 1, 4, 11, 19, 15, 7, 16, 22, 20, 3, 10)
+                FynxGlassThemeId.LIGHT -> intArrayOf(12, 20, 2, 0, 6, 1, 3, 5, 16, 8, 4, 13, 12, 20, 2, 0, 6, 1, 3, 5, 16, 8)
+                FynxGlassThemeId.EMERALD -> intArrayOf(14, 4, 2, 13, 20, 18, 3, 6, 12, 15, 1, 19, 14, 4, 2, 13, 20, 18, 3, 6, 12, 15)
+            }
+            when (stories[index % stories.size]) {
                 0 -> bubble(x, y, scale)
                 1 -> camera(x, y, scale)
                 2 -> phone(x, y, scale)
@@ -230,8 +236,26 @@ fun FynxChatDoodlePattern(palette: FynxGlassThemePalette? = null) {
                 18 -> guitar(x, y, scale)
                 19 -> rocket(x, y, scale)
                 20 -> flowers(x, y, scale)
-                else -> clouds(x, y, scale)
+                21 -> clouds(x, y, scale)
+                else -> smile(x, y, scale)
             }
+        }
+
+        fun fynxMark(x: Float, y: Float, s: Float) {
+            val w = 7f * s
+            val h = 18f * s
+            fun seg(ax: Float, ay: Float, bx: Float, by: Float) = line(p(x + ax, y + ay), p(x + bx, y + by))
+            seg(0f, 0f, 0f, h); seg(0f, 0f, w, 0f); seg(0f, 8f*s, 5f*s, 8f*s)
+            seg(10f*s, 0f, 14f*s, 8f*s); seg(18f*s, 0f, 14f*s, 8f*s); seg(14f*s, 8f*s, 14f*s, h)
+            seg(24f*s, h, 24f*s, 0f); seg(24f*s, 0f, 31f*s, h); seg(31f*s, h, 31f*s, 0f)
+            seg(37f*s, 0f, 44f*s, h); seg(44f*s, 0f, 37f*s, h)
+        }
+
+        fun tinyFillers(x: Float, y: Float, s: Float) {
+            circle(x, y, 1.4f * s)
+            circle(x + 9f*s, y + 5f*s, 0.9f * s)
+            line(p(x + 14f*s, y), p(x + 18f*s, y + 4f*s))
+            line(p(x + 18f*s, y), p(x + 14f*s, y + 4f*s))
         }
 
         val placements = listOf(
@@ -258,8 +282,30 @@ fun FynxChatDoodlePattern(palette: FynxGlassThemePalette? = null) {
                     val px = offsetX + x.dp.toPx()
                     val py = offsetY + y.dp.toPx()
                     withTransform({ rotate(rotation, pivot = p(px, py)) }) {
-                        drawMotif(index + tx * 7 + ty * 11, px, py, scale)
+                        drawMotif(index + tx * 7 + ty * 11, px, py, scale, activePalette.id)
                     }
+                }
+
+                val markX = offsetX + when (activePalette.id) {
+                    FynxGlassThemeId.PURE_BLACK -> 318.dp.toPx()
+                    FynxGlassThemeId.AURORA -> 294.dp.toPx()
+                    FynxGlassThemeId.LIGHT -> 336.dp.toPx()
+                    FynxGlassThemeId.EMERALD -> 306.dp.toPx()
+                }
+                val markY = offsetY + 286.dp.toPx()
+                withTransform({ rotate(-6f + ((tx + ty) and 2) * 3f, pivot = p(markX, markY)) }) {
+                    fynxMark(markX, markY, 0.40f)
+                }
+                val fillers = listOf(
+                    p(offsetX + 54.dp.toPx(), offsetY + 82.dp.toPx()),
+                    p(offsetX + 214.dp.toPx(), offsetY + 92.dp.toPx()),
+                    p(offsetX + 338.dp.toPx(), offsetY + 188.dp.toPx()),
+                    p(offsetX + 72.dp.toPx(), offsetY + 314.dp.toPx()),
+                    p(offsetX + 252.dp.toPx(), offsetY + 300.dp.toPx()),
+                    p(offsetX + 326.dp.toPx(), offsetY + 458.dp.toPx())
+                )
+                fillers.forEachIndexed { i, point ->
+                    tinyFillers(point.x, point.y, 0.70f + (i % 2) * 0.12f)
                 }
             }
         }
