@@ -66,7 +66,8 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(vertical = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            // Keep the authentication form anchored to the usable viewport so the IME never clips the primary action.
+            verticalArrangement = Arrangement.Top
         ) {
             if (page == FynxAuthPage.WELCOME || page == FynxAuthPage.LOGIN) {
                 Spacer(Modifier.height(18.dp))

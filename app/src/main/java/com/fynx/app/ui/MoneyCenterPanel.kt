@@ -56,7 +56,7 @@ fun MoneyCenterPanel() {
         return
     }
 
-    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(16.dp)) {
+    LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(16.dp)) {
         item {
             Text("Money Center 💰", style = MaterialTheme.typography.headlineSmall)
             Text("Everything related to your money is organized here instead of being scattered across the FYNX menu.", color = FynxDesign.TextSecondary)
