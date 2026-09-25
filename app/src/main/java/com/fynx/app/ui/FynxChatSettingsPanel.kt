@@ -84,7 +84,7 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
                 Modifier.fillMaxWidth().statusBarsPadding().height(60.dp).padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBack, modifier = Modifier.size(52.dp)) { Icon(Icons.Default.ArrowBack, "Back", tint = Color(0xFFE1E4EA), modifier = Modifier.size(26.dp)) }
+                IconButton(onClick = onBack, modifier = Modifier.size(52.dp)) { Icon(Icons.Default.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(26.dp)) }
                 Column(Modifier.weight(1f)) {
                     Text("Chat Settings", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
                     Text(chatUsername, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
