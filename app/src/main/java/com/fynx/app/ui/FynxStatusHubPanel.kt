@@ -339,19 +339,36 @@ private fun FynxAddStatusPanel(
             }
         }
 
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 18.dp, vertical = 10.dp)
         ) {
-            Text(
-                "Recents",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
-            )
-            Spacer(Modifier.width(4.dp))
-            Text("▼", style = MaterialTheme.typography.labelMedium)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { recentFilterMenu = true },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    recentFilter,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                )
+                Spacer(Modifier.width(4.dp))
+                Text("▼", style = MaterialTheme.typography.labelMedium)
+            }
+            DropdownMenu(
+                expanded = recentFilterMenu,
+                onDismissRequest = { recentFilterMenu = false }
+            ) {
+                listOf("Recents", "Photos", "Videos").forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = { recentFilter = option; recentFilterMenu = false }
+                    )
+                }
+            }
         }
 
         if (!mediaPermissionGranted) {

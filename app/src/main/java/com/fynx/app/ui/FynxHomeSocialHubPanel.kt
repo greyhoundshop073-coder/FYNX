@@ -520,24 +520,25 @@ fun FynxHomeSocialHubPanel(
                             Text(currentUsername, style = MaterialTheme.typography.titleMedium)
                         }
 
-                        Row(
-                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            ComposerQuickChip("Music", Icons.Default.MusicNote, enabled = !posting && postingAllowed) { showMusicPicker = true; notice = null }
-                            ComposerQuickChip("People", Icons.Default.People, enabled = !posting && postingAllowed) { showPeoplePicker = true }
-                            ComposerQuickChip("Location", Icons.Default.LocationOn, enabled = !posting && postingAllowed) {
-                                val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                                val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                                if (fine || coarse) {
-                                    locationLoading = true
-                                    scope.launch {
-                                        FynxPostLocationClient.currentPlace(context).onSuccess { postLocation = it; notice = null }.onFailure { notice = it.message ?: "Could not determine your location." }
-                                        locationLoading = false
-                                    }
-                                } else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                ComposerQuickChip("Music", Icons.Default.MusicNote, enabled = !posting && postingAllowed) { showMusicPicker = true; notice = null }
+                                ComposerQuickChip("People", Icons.Default.People, enabled = !posting && postingAllowed) { showPeoplePicker = true }
                             }
-                            ComposerQuickChip("Feeling/Activity", Icons.Default.SentimentSatisfied, enabled = !posting && postingAllowed) { showFeelingActivityPicker = true }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                ComposerQuickChip("Location", Icons.Default.LocationOn, enabled = !posting && postingAllowed) {
+                                    val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                    val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                    if (fine || coarse) {
+                                        locationLoading = true
+                                        scope.launch {
+                                            FynxPostLocationClient.currentPlace(context).onSuccess { postLocation = it; notice = null }.onFailure { notice = it.message ?: "Could not determine your location." }
+                                            locationLoading = false
+                                        }
+                                    } else locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                                }
+                                ComposerQuickChip("Feeling/Activity", Icons.Default.SentimentSatisfied, enabled = !posting && postingAllowed) { showFeelingActivityPicker = true }
+                            }
                         }
 
                         selectedCatalogueMusic?.let { music ->

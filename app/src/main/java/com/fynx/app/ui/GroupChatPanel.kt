@@ -224,7 +224,7 @@ fun GroupChatPanel(
         Column(Modifier.fillMaxSize()) {
             Surface(tonalElevation = 3.dp) {
                 Row(
-                    Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp),
+                    Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.ArrowBack, "Back") }
@@ -418,6 +418,15 @@ fun GroupChatPanel(
                         TextButton(onClick = { editMessage = message; editText = message.text; actionMessage = null }, modifier = Modifier.fillMaxWidth()) { Text("Edit message") }
                     }
                     TextButton(onClick = { replyTo = message; actionMessage = null }, modifier = Modifier.fillMaxWidth()) { Text("Reply") }
+                    TextButton(
+                        enabled = message.text.isNotBlank(),
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("FYNX message", message.text))
+                            actionMessage = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Copy") }
                     TextButton(
                         onClick = {
                             scope.launch {

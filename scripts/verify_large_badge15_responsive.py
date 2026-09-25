@@ -19,6 +19,11 @@ for name,(sw,sh) in profiles.items():
             l,t,r,b=map(int,m.groups()); nodes+=1
             if l<0 or t<0 or r>sw or b>sh or r<=l or b<=t: fail.append(f"{p.name}: unsafe bounds {(l,t,r,b)} for {sw}x{sh}")
             if n.attrib.get("clickable","false").lower()=="true" and (r-l)<48 and (b-t)<48: fail.append(f"{p.name}: clickable control smaller than 48px in both dimensions {(r-l,b-t)}")
+        texts = [n.attrib.get("text","").strip() for n in root.iter("node")]
+        content_descs = [n.attrib.get("content-desc","").strip() for n in root.iter("node")]
+        markers = set(texts + content_descs)
+        if not ({"FYNX", "Home", "Chat", "Friends"} & markers):
+            fail.append(f"{p.name}: responsive hierarchy does not contain authenticated FYNX UI markers")
     for p in pngs:
         b=p.read_bytes()
         if b[:8]!=b"\x89PNG\r\n\x1a\n": fail.append(f"{p.name}: invalid PNG signature")

@@ -333,7 +333,7 @@ if not FAILURES:
     for name,labels,expected in (
         ("chat",["Chat"],["Chat"]),
         ("friends",["Friends"],["Friends"]),
-        ("stories",["Stories","Status"],["Status"]),
+        ("stories",["See all"],["Status","Add status","Status"]),
     ):
         before=xml
         after=capture_surface(name,labels,before,expected)
