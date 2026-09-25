@@ -309,8 +309,11 @@ jobs:
           set -euo pipefail
           test -f app/build/outputs/apk/debug/app-debug.apk
           mkdir -p fynx-firebase-test-lab
-          gcloud services list --enabled --project="$GOOGLE_CLOUD_PROJECT" --filter="config.name:(testing.googleapis.com OR toolresults.googleapis.com)" --format="value(config.name)" | tee fynx-firebase-test-lab/enabled-apis.txt
-          test "$(wc -l < fynx-firebase-test-lab/enabled-apis.txt)" -ge 2
+          # Do not require serviceusage.services.list here: the CI identity may be allowed to run Test Lab
+          # while intentionally lacking project-wide service enumeration permission.
+          if ! gcloud services list --enabled --project="$GOOGLE_CLOUD_PROJECT" --filter="config.name:(testing.googleapis.com OR toolresults.googleapis.com)" --format="value(config.name)" > fynx-firebase-test-lab/enabled-apis.txt 2>fynx-firebase-test-lab/api-list-permission.txt; then
+            echo "Service enumeration is unavailable to this CI identity; proceeding to the real Test Lab invocation." | tee fynx-firebase-test-lab/api-list-note.txt
+          fi
           gcloud firebase test android run \
             --project="$GOOGLE_CLOUD_PROJECT" \
             --app="app/build/outputs/apk/debug/app-debug.apk" \
