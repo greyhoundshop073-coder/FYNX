@@ -45,12 +45,20 @@ try:
         time.sleep(1)
         run("adb","shell","am","force-stop",PACKAGE)
         start=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-        time.sleep(1.5)
+        ready=False
+        for _ in range(12):
+            if dump(name):
+                xml= (ROOT/f"responsive-{name}.xml").read_text(encoding="utf-8",errors="replace")
+                markers=("FYNX","Home","Chat","Friends","Status")
+                if any(marker in xml for marker in markers):
+                    ready=True
+                    break
+            time.sleep(1)
         out=ROOT/f"responsive-{name}.png"
         with out.open("wb") as f:
             subprocess.run(["adb","exec-out","screencap","-p"],stdout=f,stderr=subprocess.STDOUT,check=False)
-        if start.returncode!=0 or not out.exists() or out.stat().st_size<1000: fail.append(f"{name}: home launch/screenshot failed")
-        if not dump(name): fail.append(f"{name}: UI hierarchy capture failed")
+        if start.returncode!=0 or not ready: fail.append(f"{name}: authenticated FYNX Home did not become ready before responsive capture")
+        if not out.exists() or out.stat().st_size<1000: fail.append(f"{name}: home screenshot failed")
 finally:
     if original:
         run("adb","shell","wm","size",original)
