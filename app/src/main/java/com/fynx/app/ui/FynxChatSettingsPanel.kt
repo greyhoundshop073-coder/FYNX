@@ -55,6 +55,8 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
     var wallpaper by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatWallpaper(context, chatUsername)) }
     val textSizeOptions = listOf("Small" to 14f, "Medium" to 16f, "Large" to 18f, "Extra Large" to 20f)
     var textSize by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatTextSize(context, chatUsername)) }
+    var bubbleTransparency by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatBubbleTransparency(context, chatUsername)) }
+    var bubbleLighting by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatBubbleLighting(context, chatUsername)) }
 
     if (showClearDialog) {
         AlertDialog(
@@ -177,6 +179,30 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
                     }
                 }
             }
+            Text("Bubble transparency", style = MaterialTheme.typography.titleMedium)
+            Text("${(bubbleTransparency * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Slider(
+                value = bubbleTransparency,
+                onValueChange = {
+                    bubbleTransparency = it
+                    FynxConversationPreferences.setChatBubbleTransparency(context, chatUsername, it)
+                },
+                valueRange = 0.70f..1.0f,
+                steps = 5,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text("Bubble lighting", style = MaterialTheme.typography.titleMedium)
+            Text("${(bubbleLighting * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Slider(
+                value = bubbleLighting,
+                onValueChange = {
+                    bubbleLighting = it
+                    FynxConversationPreferences.setChatBubbleLighting(context, chatUsername, it)
+                },
+                valueRange = 0.25f..0.90f,
+                steps = 6,
+                modifier = Modifier.fillMaxWidth()
+            )
             Text("Chat wallpaper", style = MaterialTheme.typography.titleMedium)
             FynxGlassThemeId.entries.map { it.label }.forEach { option ->
                 Row(
