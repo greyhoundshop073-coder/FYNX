@@ -1,0 +1,9 @@
+appId: com.fynx.app
+---
+- launchApp:
+    clearState: true
+- assertVisible: "FYNX"
+- takeScreenshot: "fynx-launch"
+- assertVisible: "Sign In"
+- assertVisible: "Create Account"
+- takeScreenshot: "fynx-auth-gate"
