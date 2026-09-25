@@ -201,6 +201,11 @@ jobs:
       - name: Full build, test and lint
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.message, '[apk-only]') }}
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
+      - name: Enable Firebase Test Lab required APIs
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') }}
+        run: |
+          gcloud services enable toolresults.googleapis.com testing.googleapis.com --project="$GOOGLE_CLOUD_PROJECT"
+          gcloud services list --enabled --project="$GOOGLE_CLOUD_PROJECT" --filter="name:(toolresults.googleapis.com testing.googleapis.com)" --format="value(name)"
       - name: Run FYNX APK through Firebase Test Lab Robo certification
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') }}
         run: |
