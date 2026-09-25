@@ -208,7 +208,7 @@ jobs:
       - name: Generate FYNX investigation report index
         run: python3 scripts/generate_fynx_investigation_report.py
       - name: Fast build, test and lint
-        if: ${{ !(((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py'))) || contains(github.event.head_commit.message, '[apk-only]')) }}
+        if: ${{ !(((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py') || contains(github.event.head_commit.modified, 'FynxRemoteHomeSocialPanel.kt'))) || contains(github.event.head_commit.message, '[apk-only]')) }}
         run: ./gradlew lintDebug testDebugUnitTest --no-daemon --build-cache
       - name: Full build, test and lint
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]') }}
