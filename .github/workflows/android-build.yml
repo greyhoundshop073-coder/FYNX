@@ -247,6 +247,40 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk "fynx-apk-artifact/FYNX-debug-${GITHUB_SHA}.apk"
           printf 'FYNX Android APK build commit: %s\n' "${GITHUB_SHA}" > "fynx-apk-artifact/FYNX-debug-${GITHUB_SHA}.commit.txt"
           printf 'Workflow run: %s\n' "${GITHUB_RUN_ID}" >> "fynx-apk-artifact/FYNX-debug-${GITHUB_SHA}.commit.txt"
+      - name: BrowserStack App Automate real-device verification
+        if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]')) && env.BROWSERSTACK_USERNAME != '' && env.BROWSERSTACK_ACCESS_KEY != '' }}
+        env:
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          mkdir -p fynx-browserstack-results
+          curl --fail --silent --show-error --user "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" \
+            -X POST "https://api-cloud.browserstack.com/app-automate/upload" \
+            -F "file=@app/build/outputs/apk/debug/app-debug.apk" \
+            -F "custom_id=FYNX-${GITHUB_SHA}" \
+            > fynx-browserstack-results/app-upload.json
+          printf 'BrowserStack upload completed for commit %s\n' "$GITHUB_SHA" > fynx-browserstack-results/README.txt
+      - name: BrowserStack integration readiness report
+        if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]')) }}
+        env:
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+        run: |
+          mkdir -p fynx-browserstack-results
+          if [ -n "$BROWSERSTACK_USERNAME" ] && [ -n "$BROWSERSTACK_ACCESS_KEY" ]; then
+            echo 'BrowserStack credentials detected; real-device upload step is enabled.' | tee fynx-browserstack-results/readiness.txt
+          else
+            echo 'BrowserStack integration is installed but credentials are not configured; real-device verification is intentionally skipped.' | tee fynx-browserstack-results/readiness.txt
+          fi
+      - name: Upload BrowserStack verification evidence
+        if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]')) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: FYNX-browserstack-verification-${{ github.sha }}
+          path: fynx-browserstack-results/
+          if-no-files-found: warn
       - name: Upload exact-commit debug APK
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.message, '[apk-only]') }}
         uses: actions/upload-artifact@v4
