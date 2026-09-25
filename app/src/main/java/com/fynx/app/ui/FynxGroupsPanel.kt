@@ -53,7 +53,6 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
     val context = LocalContext.current
     val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == FynxPreferencesStore.loadChatWallpaper(context) } ?: FynxGlassThemeId.PURE_BLACK
     val glassPalette = fynxGlassPalette(glassThemeId)
-    val messageTextSizeSp = FynxConversationPreferences.chatTextSizeSp(context, "group_$groupId")
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var groups by remember { mutableStateOf(FynxGroupsStore.load(context)) }
