@@ -201,6 +201,32 @@ jobs:
       - name: Full build, test and lint
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.message, '[apk-only]') }}
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
+      - name: Run FYNX APK through Firebase Test Lab Robo certification
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') }}
+        run: |
+          set -o pipefail
+          rm -rf fynx-testlab-results
+          mkdir -p fynx-testlab-results
+          echo "Running Firebase Test Lab Robo certification for commit ${GITHUB_SHA}"
+          gcloud firebase test android models describe MediumPhone.arm --format=json > fynx-testlab-results/device.json
+          gcloud firebase test android run \
+            --type robo \
+            --app app/build/outputs/apk/debug/app-debug.apk \
+            --device model=MediumPhone.arm,version=35,locale=en,orientation=portrait \
+            --timeout 5m \
+            --record-video \
+            --environment-variables clearPackageData=true \
+            --results-dir=fynx-testlab-results \
+            --client-details matrixLabel="FYNX-${GITHUB_SHA}-robo" \
+            2>&1 | tee fynx-testlab-results/testlab.log
+
+      - name: Upload Firebase Test Lab evidence
+        if: always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]'))
+        uses: actions/upload-artifact@v4
+        with:
+          name: FYNX-testlab-robo-${{ github.sha }}
+          path: fynx-testlab-results/
+          if-no-files-found: warn
       - name: Enable KVM for Android emulator tests
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') }}
         run: |
