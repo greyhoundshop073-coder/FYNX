@@ -161,14 +161,18 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
                             text = "Hello! This is how your messages will look.",
                             fontSizeSp = selectedTextSize.second,
                             palette = previewPalette,
-                            outgoing = false
+                            outgoing = false,
+                            transparency = bubbleTransparency,
+                            lighting = bubbleLighting
                         )
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             GlassPreviewBubble(
                                 text = "Looks good.",
                                 fontSizeSp = selectedTextSize.second,
                                 palette = previewPalette,
-                                outgoing = true
+                                outgoing = true,
+                                transparency = bubbleTransparency,
+                                lighting = bubbleLighting
                             )
                         }
                         Text(
@@ -244,7 +248,9 @@ private fun GlassPreviewBubble(
     text: String,
     fontSizeSp: Float,
     palette: FynxGlassThemePalette,
-    outgoing: Boolean
+    outgoing: Boolean,
+    transparency: Float = 0.90f,
+    lighting: Float = 0.58f
 ) {
     val shape = RoundedCornerShape(16.dp)
     val brush = if (outgoing) {
@@ -256,7 +262,7 @@ private fun GlassPreviewBubble(
         modifier = Modifier
             .fillMaxWidth(if (outgoing) 0.78f else 0.84f)
             .background(brush, shape)
-            .border(1.dp, palette.bubbleRim.copy(alpha = 0.58f), shape)
+            .border(1.dp, palette.bubbleRim.copy(alpha = lighting), shape)
     ) {
         Column(Modifier.padding(horizontal = 11.dp, vertical = 8.dp)) {
             Text(
