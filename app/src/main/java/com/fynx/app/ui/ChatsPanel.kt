@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -246,8 +247,6 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                                 }
                             }
                         }
-                    }
-
                     }
 
                     if (!showArchived && normalizedChatSearch.isBlank() && groups.isNotEmpty()) {
