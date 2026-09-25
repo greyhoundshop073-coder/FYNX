@@ -148,7 +148,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     if (remotePhotoId != null) {
-                        FynxRemoteProfileAvatar(remotePhotoId, profile.displayName, Modifier.size(80.dp).clip(CircleShape).then(if (remoteVerified) Modifier else Modifier).clickable { showProfilePhoto = true })
+                        FynxRemoteProfileAvatar(remotePhotoId, profile.displayName, Modifier.size(80.dp).clip(CircleShape).then(if (remoteVerified) Modifier else Modifier).clickable { showProfilePhoto = true }, ownerUsername = profile.username)
                     } else if (!remoteProfileLoaded) {
                         FynxProfileImage(profile.displayName, photo, Modifier.size(80.dp).clip(CircleShape).clickable { showProfilePhoto = true })
                     } else {
