@@ -35,7 +35,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
@@ -78,17 +77,17 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
         )
     }
 
-    Surface(color = Color(0xFF0B0E14), contentColor = Color(0xFFE1E4EA), modifier = Modifier.fillMaxSize()) {
+    Surface(color = MaterialTheme.colorScheme.background, contentColor = MaterialTheme.colorScheme.onBackground, modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding()) {
-            Surface(color = Color(0xFF181C24), contentColor = Color(0xFFE1E4EA), tonalElevation = 0.dp) {
+            Surface(color = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface, tonalElevation = 0.dp) {
             Row(
                 Modifier.fillMaxWidth().statusBarsPadding().height(60.dp).padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack, modifier = Modifier.size(52.dp)) { Icon(Icons.Default.ArrowBack, "Back", tint = Color(0xFFE1E4EA), modifier = Modifier.size(26.dp)) }
                 Column(Modifier.weight(1f)) {
-                    Text("Chat Settings", style = MaterialTheme.typography.titleLarge, color = Color(0xFFF4F6FA))
-                    Text(chatUsername, style = MaterialTheme.typography.bodySmall, color = Color(0xFF9AA4B4), maxLines = 1)
+                    Text("Chat Settings", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+                    Text(chatUsername, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
             }
             }
@@ -159,19 +158,19 @@ private fun ChatSettingsSection(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Text(title, style = MaterialTheme.typography.titleMedium, color = Color(0xFFF4F6FA), modifier = Modifier.padding(start = 10.dp))
+            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(start = 10.dp))
         }
         content()
     }
-    HorizontalDivider(color = Color(0xFF2A303A))
+    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 }
 
 @Composable
 private fun ChatSwitchRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = Color(0xFFE1E4EA))
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color(0xFF9AA4B4))
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }

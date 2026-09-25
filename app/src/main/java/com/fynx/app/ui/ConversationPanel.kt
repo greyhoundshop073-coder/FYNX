@@ -423,11 +423,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .height(52.dp).background(Color(0xFF08090D)).padding(horizontal = 0.dp),
+                    .height(52.dp).background(MaterialTheme.colorScheme.surface).padding(horizontal = 0.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Default.ArrowBack, "Back", tint = Color.White, modifier = Modifier.size(24.dp))
+                    Icon(Icons.Default.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
                 }
                 IconButton(onClick = { onOpenProfile(chat.username) }, modifier = Modifier.size(48.dp)) {
                     FynxAvatar(chat.name, resolvedAvatarUri, Modifier.size(40.dp))
@@ -540,7 +540,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             Spacer(Modifier.width(6.dp))
                         }
                         Box {
-                            Surface(color = if (message.fromMe) Color(0xFF6246C7) else Color(0xFF12151C), contentColor = Color(0xFFE1E4EA), shape = RoundedCornerShape(16.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { menuMessageId = message.id }, onLongClick = { menuMessageId = message.id })) {
+                            Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant, contentColor = if (message.fromMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant, shape = RoundedCornerShape(16.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { menuMessageId = message.id }, onLongClick = { menuMessageId = message.id })) {
                             Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
                                 if (message.pinned) {
                                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
@@ -560,7 +560,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                     }
                                 } else {
                                     if (message.attachmentUri != null) { if (message.attachmentType == "video") { Box(Modifier.size(170.dp).clip(androidx.compose.foundation.shape.CircleShape)) { FynxRemoteMedia(message.attachmentUri, "video", Modifier.fillMaxSize(), rounded = false, loopVideo = true); Surface(color = Color.Black.copy(alpha = 0.46f), shape = androidx.compose.foundation.shape.CircleShape, modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)) { Text("Video note", style = MaterialTheme.typography.labelSmall, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) } } } else FynxRemoteMedia(mediaUrl = message.attachmentUri, type = message.attachmentType ?: "image", modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp)) }
-                                    if (message.text.isNotBlank()) SelectionContainer { Text(message.text, color = if (message.fromMe) Color.White else Color(0xFFE1E4EA)) }
+                                    if (message.text.isNotBlank()) SelectionContainer { Text(message.text, color = if (message.fromMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant) }
                                 }
                                 if (message.edited) Text("Edited", style = MaterialTheme.typography.labelSmall, color = if (message.fromMe) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurfaceVariant)
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
