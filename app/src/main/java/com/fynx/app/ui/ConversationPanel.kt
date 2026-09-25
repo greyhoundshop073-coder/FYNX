@@ -51,6 +51,9 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == FynxConversationPreferences.chatWallpaper(context, chat.username) } ?: FynxGlassThemeId.PURE_BLACK
     val glassPalette = fynxGlassPalette(glassThemeId)
     val messageTextSizeSp = FynxConversationPreferences.chatTextSizeSp(context, chat.username)
+    val bubbleTransparency = FynxConversationPreferences.chatBubbleTransparency(context, chat.username)
+    val bubbleLighting = FynxConversationPreferences.chatBubbleLighting(context, chat.username)
+    val bubbleGradient = FynxConversationPreferences.chatBubbleGradient(context, chat.username)
     val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var recipientProfile by remember(chat.username) { mutableStateOf<FynxProfileRemoteClient.Profile?>(null) }
@@ -417,7 +420,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     FynxChatWallpaperBackground(
         modifier = Modifier.fillMaxSize(),
-        wallpaperOverride = FynxConversationPreferences.chatWallpaper(context, chat.username)
+        wallpaperOverride = FynxConversationPreferences.chatWallpaper(context, chat.username), settingsKey = chat.username
     ) {
     Column(Modifier.fillMaxSize()) {
         Box(
@@ -544,15 +547,15 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         Box {
                             val bubbleShape = RoundedCornerShape(16.dp)
                             val bubbleBrush = if (message.fromMe) {
-                                Brush.horizontalGradient(listOf(glassPalette.outgoingStart, glassPalette.outgoingEnd))
+                                Brush.horizontalGradient(listOf(glassPalette.outgoingStart.copy(alpha = bubbleTransparency), glassPalette.outgoingEnd.copy(alpha = bubbleGradient)))
                             } else {
-                                Brush.linearGradient(listOf(glassPalette.incomingGlass, glassPalette.backgroundMid.copy(alpha = 0.92f)))
+                                Brush.linearGradient(listOf(glassPalette.incomingGlass.copy(alpha = bubbleTransparency), glassPalette.backgroundMid.copy(alpha = (0.55f + bubbleGradient * 0.4f).coerceIn(0.55f, 0.95f))))
                             }
                             Surface(
                                 color = Color.Transparent,
                                 contentColor = glassPalette.messageText,
                                 shape = bubbleShape,
-                                border = BorderStroke(0.7.dp, glassPalette.bubbleRim.copy(alpha = 0.72f)),
+                                border = BorderStroke(0.7.dp, glassPalette.bubbleRim.copy(alpha = (bubbleLighting * bubbleTransparency).coerceIn(0f, 1f))),
                                 tonalElevation = 0.dp,
                                 modifier = Modifier
                                     .widthIn(max = 300.dp)
