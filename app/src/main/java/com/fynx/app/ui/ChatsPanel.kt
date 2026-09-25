@@ -1,6 +1,5 @@
 package com.fynx.app.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -98,7 +97,9 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             OutlinedTextField(
                 value = chatSearch,
                 onValueChange = { chatSearch = it },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
                 singleLine = true,
                 shape = FynxDesign.ControlShape,
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search chats") },
@@ -106,7 +107,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             )
             Spacer(Modifier.height(14.dp))
             if (visibleChats.isEmpty()) {
-                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(if (showArchived) "No archived chats" else if (normalizedChatSearch.isNotBlank()) "No matching chats" else "Messages", style = MaterialTheme.typography.titleLarge)
                         Text(if (showArchived) "Chats you archive will stay here until you restore them." else if (normalizedChatSearch.isNotBlank()) "Try another name, username or message." else "Your private conversations will appear here. Start one with a real FYNX user.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -128,54 +129,128 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                         val pinned = FynxPreferencesStore.isChatPinned(context, chat.username)
                         val muted = FynxPreferencesStore.isChatMuted(context, chat.username)
                         val unread = FynxChatStore.load(context, chat.username).count { !it.fromMe && !it.read }
-                        Card(modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
-                            ListItem(
-                                modifier = Modifier.clickable { onOpenChat(chat) },
-                                headlineContent = { Text(chat.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                leadingContent = {
-                                    if (chat.avatarUri.isNullOrBlank()) FynxAvatar(chat.name, null, Modifier.size(avatarSize))
-                                    else FynxRemoteProfileAvatar(
-                                        mediaId = chat.avatarUri?.substringAfterLast("/api/media/")?.takeIf { it != chat.avatarUri },
-                                        contentDescription = chat.name,
-                                        modifier = Modifier.size(avatarSize)
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenChat(chat) }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (chat.avatarUri.isNullOrBlank()) {
+                                FynxAvatar(chat.name, null, Modifier.size(avatarSize))
+                            } else {
+                                FynxRemoteProfileAvatar(
+                                    mediaId = chat.avatarUri?.substringAfterLast("/api/media/")?.takeIf { it != chat.avatarUri },
+                                    contentDescription = chat.name,
+                                    modifier = Modifier.size(avatarSize)
+                                )
+                            }
+
+                            Spacer(Modifier.width(12.dp))
+
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        chat.name,
+                                        modifier = Modifier.weight(1f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.titleMedium
                                     )
-                                },
-                                supportingContent = {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        if (pinned) Text("Pinned", color = MaterialTheme.colorScheme.primary)
-                                        if (muted) Text("Muted", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text(chat.lastMessage.ifBlank { "No messages yet" }, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    }
-                                },
-                                trailingContent = {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                        Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
-                                            Text(chat.time, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                                            if (unread > 0) {
-                                                Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
-                                                    Text(if (unread > 99) "99+" else unread.toString(), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp), maxLines = 1)
-                                                }
+                                    Text(
+                                        chat.time,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        buildString {
+                                            if (pinned) append("Pinned • ")
+                                            if (muted) append("Muted • ")
+                                            append(chat.lastMessage.ifBlank { "No messages yet" })
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+
+                                    if (unread > 0) {
+                                        Spacer(Modifier.width(8.dp))
+                                        Surface(
+                                            modifier = Modifier.size(22.dp),
+                                            shape = androidx.compose.foundation.shape.CircleShape,
+                                            color = Color(0xFF25D366),
+                                            contentColor = Color.White
+                                        ) {
+                                            Box(
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    if (unread > 99) "99+" else unread.toString(),
+                                                    style = MaterialTheme.typography.labelSmall
+                                                )
                                             }
                                         }
-                                        Box {
-                                            IconButton(onClick = { openMenuFor = chat.username }) { Icon(Icons.Default.MoreVert, contentDescription = "Chat options") }
-                                            DropdownMenu(expanded = openMenuFor == chat.username, onDismissRequest = { openMenuFor = null }) {
-                                                DropdownMenuItem(text = { Text(if (pinned) "Unpin" else "Pin") }, onClick = {
-                                                    FynxPreferencesStore.setChatPinned(context, chat.username, !pinned); openMenuFor = null; refreshChats()
-                                                })
-                                                DropdownMenuItem(text = { Text(if (muted) "Unmute" else "Mute") }, onClick = {
-                                                    FynxPreferencesStore.setChatMuted(context, chat.username, !muted); openMenuFor = null; refreshChats()
-                                                })
-                                                DropdownMenuItem(text = { Text(if (showArchived) "Unarchive" else "Archive") }, onClick = {
-                                                    FynxPreferencesStore.setChatArchived(context, chat.username, !showArchived); openMenuFor = null; refreshChats()
-                                                })
-                                            }
-                                        }
                                     }
-                                },
-                                colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
-                            )
+                                }
+                            }
+
+                            Box {
+                                IconButton(
+                                    onClick = { openMenuFor = chat.username },
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "Chat options")
+                                }
+                                DropdownMenu(
+                                    expanded = openMenuFor == chat.username,
+                                    onDismissRequest = { openMenuFor = null }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text(if (pinned) "Unpin" else "Pin") },
+                                        onClick = {
+                                            FynxPreferencesStore.setChatPinned(context, chat.username, !pinned)
+                                            openMenuFor = null
+                                            refreshChats()
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(if (muted) "Unmute" else "Mute") },
+                                        onClick = {
+                                            FynxPreferencesStore.setChatMuted(context, chat.username, !muted)
+                                            openMenuFor = null
+                                            refreshChats()
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(if (showArchived) "Unarchive" else "Archive") },
+                                        onClick = {
+                                            FynxPreferencesStore.setChatArchived(context, chat.username, !showArchived)
+                                            openMenuFor = null
+                                            refreshChats()
+                                        }
+                                    )
+                                }
+                            }
                         }
+                    }
+
                     }
 
                     if (!showArchived && normalizedChatSearch.isBlank() && groups.isNotEmpty()) {
@@ -193,8 +268,6 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                                 onClick = { onOpenGroup(group.id) },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = FynxDesign.CardShape,
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                             ) {
                                 ListItem(
                                     headlineContent = {
