@@ -10,13 +10,20 @@ if not re.fullmatch(r"[0-9a-f]{40}",sha): fail.append("GITHUB_SHA is missing or 
 if not apk.is_file(): fail.append("debug APK was not produced")
 if not runtime.is_file(): fail.append("runtime certification README is missing")
 apk_sha=""
+apk_bytes=b""
 if apk.is_file():
-    apk_sha=hashlib.sha256(apk.read_bytes()).hexdigest()
+    apk_bytes=apk.read_bytes(); apk_sha=hashlib.sha256(apk_bytes).hexdigest()
     try:
         with zipfile.ZipFile(apk) as z:
             names=set(z.namelist())
             if "AndroidManifest.xml" not in names: fail.append("APK has no AndroidManifest.xml")
-            if not any(n.startswith("classes") and n.endswith(".dex") for n in names): fail.append("APK has no classes*.dex")
+            dex=[n for n in names if n.startswith("classes") and n.endswith(".dex")]
+            if not dex: fail.append("APK has no classes*.dex")
+            else:
+                dex_text=b"".join(z.read(n) for n in dex).decode("latin1","ignore")
+                expected=["FynxRemoteHomeSocialPanel","GroupChatPanel","FynxStatusComposerPanel","FynxMarketplaceClient","FynxRealtimeClient","FynxCallAudioRouter","FynxAssistant","Create Post"]
+                missing=[x for x in expected if x not in dex_text]
+                if missing: fail.append("APK DEX is missing expected implementation markers: "+", ".join(missing))
     except Exception as e: fail.append(f"APK is not a readable ZIP/APK: {e}")
 runtime_text=runtime.read_text(encoding="utf-8",errors="replace") if runtime.is_file() else ""
 if sha and f"Commit: {sha}" not in runtime_text: fail.append("runtime evidence does not identify the exact commit SHA")
