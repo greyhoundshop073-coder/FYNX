@@ -1,4 +1,5 @@
 name: FYNX Android Build # APK-only artifact fix
+# Large Badge 14 certification fixes use full-runtime verification.
 
 on:
   push:
