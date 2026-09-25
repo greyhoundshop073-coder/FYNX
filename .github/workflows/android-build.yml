@@ -310,6 +310,20 @@ jobs:
           name: FYNX-large-badge16-apk-runtime-${{ github.sha }}
           path: fynx-apk-certification/
           if-no-files-found: warn
+      - name: Upload Large Badge #16 evidence
+        if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]')) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: FYNX-large-badge16-apk-runtime-${{ github.sha }}
+          path: fynx-apk-certification/
+          if-no-files-found: warn
+      - name: Upload Large Badge #16 evidence
+        if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]')) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: FYNX-large-badge16-apk-runtime-${{ github.sha }}
+          path: fynx-apk-certification/
+          if-no-files-found: warn
       - name: Firebase Test Lab Robo real-device verification
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) }}
         run: |
