@@ -87,6 +87,18 @@ object FynxConversationPreferences {
     fun chatTextSize(context: Context, username: String): String =
         chatString(context, username, "textsize", "Medium")
 
+    fun chatTextSizeSp(context: Context, username: String): Float = when (chatTextSize(context, username)) {
+        "Small" -> 14f
+        "Medium" -> 16f
+        "Large" -> 18f
+        "Extra Large" -> 20f
+        else -> 16f
+    }
+
+    fun setChatTextSize(context: Context, username: String, value: String) {
+        chat(context, username).edit().putString("textsize_${chatKey(username)}", value).apply()
+    }
+
     fun groupNotifications(context: Context, groupId: String): Boolean =
         group(context, groupId).getBoolean("notifications", true)
 
