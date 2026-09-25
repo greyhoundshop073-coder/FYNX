@@ -894,7 +894,7 @@ private fun HomePeopleRecommendationsCard(items: List<HomePeopleRecommendation>,
                     val isFollowing = key in followedUsers
                     val requestSent = key in friendRequests
                     Column(Modifier.width(154.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Box(Modifier.size(64.dp).clip(CircleShape).clickable { onOpenProfile(person.username) }) { FynxRemoteProfileAvatar(person.photoId, person.displayName, Modifier.fillMaxSize()) }
+                        Box(Modifier.size(64.dp).clip(CircleShape).clickable { onOpenProfile(person.username) }) { FynxRemoteProfileAvatar(person.photoId, person.displayName, Modifier.fillMaxSize(), ownerUsername = person.username) }
                         Text(person.displayName, style = MaterialTheme.typography.labelLarge, maxLines = 1, modifier = Modifier.clickable { onOpenProfile(person.username) })
                         Text("@$key", style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary, maxLines = 1)
                         Text(if (person.mutualFriends > 0) person.mutualFriends.toString() + " mutual friend" + if (person.mutualFriends == 1) "" else "s" else person.reason.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = if (person.mutualFriends > 0) MaterialTheme.colorScheme.primary else FynxDesign.TextSecondary, maxLines = 1)
