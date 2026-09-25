@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Capture the same installed FYNX APK at small/medium/large phone viewports."""
+# Large Badge 15 full-runtime evidence capture.
 from pathlib import Path
 import subprocess, time, re
 
