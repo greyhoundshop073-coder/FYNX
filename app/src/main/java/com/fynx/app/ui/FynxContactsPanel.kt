@@ -158,7 +158,7 @@ fun FynxContactsPanel(
                     Card(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             if (user != null) {
-                                FynxRemoteProfileAvatar(mediaId = user.profilePhotoMediaId, contentDescription = user.displayName.ifBlank { user.username }, modifier = Modifier.size(44.dp))
+                                FynxRemoteProfileAvatar(mediaId = user.profilePhotoMediaId, contentDescription = user.displayName.ifBlank { user.username }, modifier = Modifier.size(44.dp), ownerUsername = user.username)
                             } else {
                                 Icon(Icons.Default.People, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
                             }
