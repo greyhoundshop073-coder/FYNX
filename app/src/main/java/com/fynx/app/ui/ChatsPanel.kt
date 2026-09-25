@@ -137,15 +137,12 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                                 .padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (chat.avatarUri.isNullOrBlank()) {
-                                FynxAvatar(chat.name, null, Modifier.size(avatarSize))
-                            } else {
-                                FynxRemoteProfileAvatar(
-                                    mediaId = chat.avatarUri?.substringAfterLast("/api/media/")?.takeIf { it != chat.avatarUri },
-                                    contentDescription = chat.name,
-                                    modifier = Modifier.size(avatarSize)
-                                )
-                            }
+                            FynxRemoteProfileAvatar(
+                                mediaId = chat.avatarUri?.substringAfterLast("/api/media/")?.takeIf { it != chat.avatarUri },
+                                contentDescription = chat.name,
+                                modifier = Modifier.size(avatarSize),
+                                ownerUsername = chat.username
+                            )
 
                             Spacer(Modifier.width(12.dp))
 
