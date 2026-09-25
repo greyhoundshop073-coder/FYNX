@@ -303,7 +303,24 @@ jobs:
           name: FYNX-large-badge16-apk-runtime-${{ github.sha }}
           path: fynx-apk-certification/
           if-no-files-found: warn
-      - name: BrowserStack App Automate real-device verification
+      - name: Firebase Test Lab Robo real-device verification
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) }}
+        run: |
+          set -euo pipefail
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          mkdir -p fynx-firebase-test-lab
+          gcloud services enable testing.googleapis.com toolresults.googleapis.com --project="$GOOGLE_CLOUD_PROJECT"
+          gcloud firebase test android run \
+            --project="$GOOGLE_CLOUD_PROJECT" \
+            --app="app/build/outputs/apk/debug/app-debug.apk" \
+            --type=robo \
+            --device=model=redfin,version=30 \
+            --timeout=90s \
+            --results-bucket="gs://fynx-f0868-test-lab-results" \
+            --results-dir="fynx-${GITHUB_SHA}" \
+            2>&1 | tee fynx-firebase-test-lab/robo.log
+
+      - name: BrowserStack App Automate real-device Maestro verification
         if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py'))) && env.BROWSERSTACK_USERNAME != '' && env.BROWSERSTACK_ACCESS_KEY != '' }}
         env:
           BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
@@ -312,12 +329,15 @@ jobs:
           set -euo pipefail
           test -f app/build/outputs/apk/debug/app-debug.apk
           mkdir -p fynx-browserstack-results
-          curl --fail --silent --show-error --user "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" \
-            -X POST "https://api-cloud.browserstack.com/app-automate/upload" \
-            -F "file=@app/build/outputs/apk/debug/app-debug.apk" \
-            -F "custom_id=FYNX-${GITHUB_SHA}" \
-            > fynx-browserstack-results/app-upload.json
-          printf 'BrowserStack upload completed for commit %s\n' "$GITHUB_SHA" > fynx-browserstack-results/README.txt
+          bs_app="$(curl --fail --silent --show-error --user "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/app" -F "file=@app/build/outputs/apk/debug/app-debug.apk" -F "custom_id=FYNX-${GITHUB_SHA}")"
+          printf '%s\n' "$bs_app" > fynx-browserstack-results/app-upload.json
+          zip -j fynx-browserstack-results/fynx-maestro-suite.zip .maestro/*.yaml
+          bs_suite="$(curl --fail --silent --show-error --user "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/test-suite" -F "file=@fynx-browserstack-results/fynx-maestro-suite.zip" -F "custom_id=FYNX-Maestro-${GITHUB_SHA}")"
+          printf '%s\n' "$bs_suite" > fynx-browserstack-results/test-suite-upload.json
+          app_url="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["app_url"])' <<<"$bs_app")"
+          suite_url="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["test_suite_url"])' <<<"$bs_suite")"
+          curl --fail --silent --show-error --user "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/android/build" -H "Content-Type: application/json" -d "{\"app\":\"$app_url\",\"testSuite\":\"$suite_url\",\"project\":\"FYNX\",\"devices\":[\"Google Pixel 7-13.0\"],\"networkLogs\":true,\"deviceLogs\":true}" > fynx-browserstack-results/build.json
+          printf 'BrowserStack real-device Maestro execution started for commit %s\n' "$GITHUB_SHA" > fynx-browserstack-results/README.txt
       - name: BrowserStack integration readiness report
         if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py'))) }}
         env:
