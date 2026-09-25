@@ -5,8 +5,8 @@ import os,re,hashlib,zipfile
 OUT=Path("fynx-apk-certification"); OUT.mkdir(exist_ok=True)
 sha=os.environ.get("GITHUB_SHA","").strip(); run=os.environ.get("GITHUB_RUN_ID","").strip()
 message=os.environ.get("GITHUB_EVENT_HEAD_COMMIT_MESSAGE","").strip()
-runtime_required=runtime.is_file()
 apk=Path("app/build/outputs/apk/debug/app-debug.apk"); runtime=Path("fynx-runtime-screenshots/README.txt")
+runtime_required=runtime.is_file()
 fail=[]
 if not re.fullmatch(r"[0-9a-f]{40}",sha): fail.append("GITHUB_SHA is missing or malformed")
 if not apk.is_file(): fail.append("debug APK was not produced")
