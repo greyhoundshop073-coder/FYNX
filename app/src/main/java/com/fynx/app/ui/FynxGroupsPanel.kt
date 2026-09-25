@@ -287,7 +287,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
                         Column(horizontalAlignment = if (message.fromMe) Alignment.End else Alignment.Start) {
                             if (!message.fromMe && !message.senderUsername.isNullOrBlank()) {
-                                Text(message.senderUsername!!, style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 2.dp))
+                                Text(message.senderUsername!!, style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = glassPalette.messageMuted, modifier = Modifier.padding(bottom = 2.dp))
                             }
                             Box {
                             val bubbleShape = RoundedCornerShape(15.dp)
@@ -305,7 +305,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 modifier = Modifier.widthIn(max = 300.dp).background(bubbleBrush, bubbleShape).combinedClickable(onClick = { reactionMessageId = message.id }, onLongClick = { reactionMessageId = message.id })
                             ) {
                                 Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
-                                    if (message.replyToId != null) Text("Reply", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 5.dp))
+                                    if (message.replyToId != null) Text("Reply", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(bottom = 5.dp))
                                 if (message.attachmentUri != null) {
                                     if (message.attachmentType == "audio") FynxRemoteAudio(message.attachmentUri, Modifier.fillMaxWidth())
                                     else if (message.attachmentType == "video") {
@@ -317,7 +317,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 }
                                 if (message.text.isNotBlank() && message.attachmentType != "audio") Text(message.text, color = glassPalette.messageText)
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                                    Text(formatMessageClock(message.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(formatMessageClock(message.timestamp), style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
                                     if (message.fromMe) { Spacer(Modifier.width(4.dp)); Text(if (message.read) "✓✓" else if (message.delivered) "✓✓" else "✓", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                 }
                                 }
