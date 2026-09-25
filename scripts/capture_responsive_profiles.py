@@ -12,12 +12,23 @@ def run(*args):
     return subprocess.run(args,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,check=False,timeout=30)
 
 def dump(name):
+    """Capture UI hierarchy reliably across Android 15 emulator shell output variants."""
     p=ROOT/f"responsive-{name}.xml"
-    r=run("adb","shell","uiautomator","dump","/sdcard/fynx-responsive.xml")
-    if r.returncode!=0: return False
-    raw=subprocess.run(["adb","exec-out","cat","/sdcard/fynx-responsive.xml"],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,check=False).stdout
-    if not raw.startswith(b"<?xml"): return False
-    p.write_bytes(raw); return True
+    remote="/sdcard/fynx-responsive.xml"
+    for _ in range(3):
+        run("adb","shell","uiautomator","dump",remote)
+        pulled=ROOT/f".responsive-{name}.xml"
+        r=run("adb","pull",remote,str(pulled))
+        if r.returncode==0 and pulled.exists():
+            raw=pulled.read_bytes()
+            # adb pull gives the actual XML without the shell's diagnostic text.
+            if raw.lstrip().startswith(b"<?xml"):
+                p.write_bytes(raw)
+                pulled.unlink(missing_ok=True)
+                return True
+        pulled.unlink(missing_ok=True)
+        time.sleep(1)
+    return False
 
 def shot(name):
     with (ROOT/f"responsive-{name}.png").open("wb") as out:
