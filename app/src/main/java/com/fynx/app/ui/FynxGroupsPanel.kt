@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import java.util.UUID
 import kotlinx.coroutines.launch
@@ -48,6 +49,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) -> Unit = {}) {
     val context = LocalContext.current
+    val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == FynxPreferencesStore.loadChatWallpaper(context) } ?: FynxGlassThemeId.PURE_BLACK
+    val glassPalette = fynxGlassPalette(glassThemeId)
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var groups by remember { mutableStateOf(FynxGroupsStore.load(context)) }
@@ -279,16 +282,25 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             } else {
                 items(visibleMessages, key = { it.id }) { message ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
-                        if (!message.fromMe) {
-                            FynxAvatar(message.senderUsername ?: "", senderAvatarUris[message.senderUsername?.trim()], Modifier.size(32.dp))
-                            Spacer(Modifier.width(6.dp))
-                        }
                         Column(horizontalAlignment = if (message.fromMe) Alignment.End else Alignment.Start) {
                             if (!message.fromMe && !message.senderUsername.isNullOrBlank()) {
                                 Text(message.senderUsername!!, style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 2.dp))
                             }
                             Box {
-                            Surface(color = if (message.fromMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant, contentColor = if (message.fromMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant, shape = RoundedCornerShape(15.dp), tonalElevation = 0.dp, modifier = Modifier.widthIn(max = 300.dp).combinedClickable(onClick = { reactionMessageId = message.id }, onLongClick = { reactionMessageId = message.id })) {
+                            val bubbleShape = RoundedCornerShape(15.dp)
+                            val bubbleBrush = if (message.fromMe) {
+                                Brush.horizontalGradient(listOf(glassPalette.outgoingStart, glassPalette.outgoingEnd))
+                            } else {
+                                Brush.linearGradient(listOf(glassPalette.incomingGlass, glassPalette.backgroundMid.copy(alpha = 0.92f)))
+                            }
+                            Surface(
+                                color = Color.Transparent,
+                                contentColor = glassPalette.messageText,
+                                shape = bubbleShape,
+                                border = BorderStroke(0.7.dp, glassPalette.bubbleRim.copy(alpha = 0.72f)),
+                                tonalElevation = 0.dp,
+                                modifier = Modifier.widthIn(max = 300.dp).background(bubbleBrush, bubbleShape).combinedClickable(onClick = { reactionMessageId = message.id }, onLongClick = { reactionMessageId = message.id })
+                            ) {
                                 Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
                                     if (message.replyToId != null) Text("Reply", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 5.dp))
                                 if (message.attachmentUri != null) {
@@ -300,7 +312,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                         }
                                     } else FynxRemoteMedia(message.attachmentUri, message.attachmentType ?: "image", Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp))
                                 }
-                                if (message.text.isNotBlank() && message.attachmentType != "audio") Text(message.text, color = Color.White)
+                                if (message.text.isNotBlank() && message.attachmentType != "audio") Text(message.text, color = glassPalette.messageText)
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                                     Text(formatMessageClock(message.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     if (message.fromMe) { Spacer(Modifier.width(4.dp)); Text(if (message.read) "✓✓" else if (message.delivered) "✓✓" else "✓", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
