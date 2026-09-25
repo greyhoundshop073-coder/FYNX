@@ -202,6 +202,8 @@ jobs:
         run: python3 scripts/verify_large_badge11_product_completeness.py
       - name: Verify Large Badge #13 — Regression, Security & Release Hardening Certification
         run: python3 scripts/verify_large_badge13_regression_security.py
+      - name: Verify external service readiness inventory
+        run: python3 scripts/verify_external_service_inventory.py
       - name: Fast build, test and lint
         if: ${{ !(((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]')) || contains(github.event.head_commit.message, '[apk-only]')) }}
         run: ./gradlew lintDebug testDebugUnitTest --no-daemon --build-cache
@@ -267,6 +269,16 @@ jobs:
           name: FYNX-visual-regression-${{ github.sha }}
           path: fynx-visual-regression/
           if-no-files-found: warn
+      - name: Large Badge #15 — Responsive and Screen-Safety Certification
+        if: ${{ success() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]')) }}
+        run: python3 scripts/verify_large_badge15_responsive.py
+      - name: Upload Large Badge #15 evidence
+        if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]')) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: FYNX-large-badge15-responsive-${{ github.sha }}
+          path: fynx-responsive-certification/
+          if-no-files-found: warn
       - name: Prepare exact-commit APK artifact
         if: ${{ success() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.message, '[apk-only]')) }}
         run: |
@@ -275,6 +287,16 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk "fynx-apk-artifact/FYNX-debug-${GITHUB_SHA}.apk"
           printf 'FYNX Android APK build commit: %s\n' "${GITHUB_SHA}" > "fynx-apk-artifact/FYNX-debug-${GITHUB_SHA}.commit.txt"
           printf 'Workflow run: %s\n' "${GITHUB_RUN_ID}" >> "fynx-apk-artifact/FYNX-debug-${GITHUB_SHA}.commit.txt"
+      - name: Large Badge #16 — APK Commit Runtime Certification
+        if: ${{ success() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.message, '[apk-only]')) }}
+        run: python3 scripts/verify_large_badge16_apk_commit_runtime.py
+      - name: Upload Large Badge #16 evidence
+        if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.message, '[apk-only]')) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: FYNX-large-badge16-apk-runtime-${{ github.sha }}
+          path: fynx-apk-certification/
+          if-no-files-found: warn
       - name: BrowserStack App Automate real-device verification
         if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]')) && env.BROWSERSTACK_USERNAME != '' && env.BROWSERSTACK_ACCESS_KEY != '' }}
         env:
