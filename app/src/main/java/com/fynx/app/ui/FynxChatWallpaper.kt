@@ -16,27 +16,42 @@ import androidx.compose.ui.unit.dp
 private val FynxChatWallpaperOptions = FynxGlassThemeId.entries.map { it.label }
 
 @Composable
-fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, wallpaperOverride: String? = null, content: @Composable BoxScope.() -> Unit) {
+fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, wallpaperOverride: String? = null, settingsKey: String? = null, content: @Composable BoxScope.() -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val wallpaper = wallpaperOverride ?: FynxPreferencesStore.loadChatWallpaper(context)
     val themeId = FynxGlassThemeId.entries.firstOrNull { it.label == wallpaper }
         ?: FynxGlassThemeId.PURE_BLACK
     val palette = fynxGlassPalette(themeId)
+    val key = settingsKey
+    val rotation = if (key != null) FynxConversationPreferences.chatGradientRotation(context, key) else 45f
+    val glow = if (key != null) FynxConversationPreferences.chatBackgroundGlow(context, key) else 1f
+    val angle = Math.toRadians(rotation.toDouble())
+    val dx = kotlin.math.cos(angle).toFloat()
+    val dy = kotlin.math.sin(angle).toFloat()
     val backgroundBrush = Brush.linearGradient(
-        colors = listOf(palette.background, palette.backgroundMid, palette.backgroundGlow)
+        colors = listOf(palette.background, palette.backgroundMid, palette.backgroundGlow.copy(alpha = glow.coerceIn(0.6f, 1.4f))),
+        start = androidx.compose.ui.geometry.Offset(0f, 0f),
+        end = androidx.compose.ui.geometry.Offset(dx * 900f, dy * 900f)
     )
     Box(modifier.background(backgroundBrush)) {
-        FynxChatDoodlePattern(palette)
+        FynxChatDoodlePattern(
+            palette = palette,
+            density = if (key != null) FynxConversationPreferences.chatDoodleDensity(context, key) else 1f,
+            scaleMultiplier = if (key != null) FynxConversationPreferences.chatDoodleScale(context, key) else 1f,
+            intensity = if (key != null) FynxConversationPreferences.chatDoodleIntensity(context, key) else 1f,
+            light = if (key != null) FynxConversationPreferences.chatDoodleLight(context, key) else 1f
+        )
         content()
     }
 }
 
 @Composable
-fun FynxChatDoodlePattern(palette: FynxGlassThemePalette? = null) {
+fun FynxChatDoodlePattern(palette: FynxGlassThemePalette? = null, density: Float = 1f, scaleMultiplier: Float = 1f, intensity: Float = 1f, light: Float = 1f) {
     androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
         val activePalette = palette ?: fynxGlassPalette(FynxGlassThemeId.PURE_BLACK)
-        val ink = activePalette.doodlePrimary.copy(alpha = if (activePalette.id == FynxGlassThemeId.LIGHT) 0.16f else 0.12f)
-        val reflection = activePalette.doodleHighlight.copy(alpha = 0.055f)
+        val baseAlpha = if (activePalette.id == FynxGlassThemeId.LIGHT) 0.16f else 0.12f
+        val ink = activePalette.doodlePrimary.copy(alpha = (baseAlpha * intensity).coerceIn(0.02f, 0.26f))
+        val reflection = activePalette.doodleHighlight.copy(alpha = (0.055f * light).coerceIn(0.01f, 0.10f))
         val sw = 0.72.dp.toPx()
         val tileW = 420.dp.toPx()
         val tileH = 520.dp.toPx()
@@ -273,6 +288,7 @@ fun FynxChatDoodlePattern(palette: FynxGlassThemePalette? = null) {
                 val offsetX = tx * tileW
                 val offsetY = ty * tileH
                 placements.forEachIndexed { index, (x, y, scale) ->
+                    if (index >= (placements.size * density.coerceIn(0.5f, 1.5f)).toInt().coerceAtMost(placements.size)) return@forEachIndexed
                     val rotation = when ((index + tx * 3 + ty * 5) and 3) {
                         0 -> -12f
                         1 -> -4f
@@ -282,7 +298,7 @@ fun FynxChatDoodlePattern(palette: FynxGlassThemePalette? = null) {
                     val px = offsetX + x.dp.toPx()
                     val py = offsetY + y.dp.toPx()
                     withTransform({ rotate(rotation, pivot = p(px, py)) }) {
-                        drawMotif(index + tx * 7 + ty * 11, px, py, scale, activePalette.id)
+                        drawMotif(index + tx * 7 + ty * 11, px, py, scale * scaleMultiplier.coerceIn(0.7f, 1.3f), activePalette.id)
                     }
                 }
 
