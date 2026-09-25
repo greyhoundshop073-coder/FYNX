@@ -248,21 +248,21 @@ jobs:
           printf 'FYNX Android APK build commit: %s\n' "${GITHUB_SHA}" > "fynx-apk-artifact/FYNX-debug-${GITHUB_SHA}.commit.txt"
           printf 'Workflow run: %s\n' "${GITHUB_RUN_ID}" >> "fynx-apk-artifact/FYNX-debug-${GITHUB_SHA}.commit.txt"
       - name: Upload exact-commit debug APK
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.message, '[apk-only]') }}
         uses: actions/upload-artifact@v4
         with:
           name: FYNX-debug-apk-${{ github.sha }}
           path: fynx-apk-artifact/
           if-no-files-found: error
       - name: Upload latest debug APK alias
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.message, '[apk-only]') }}
         uses: actions/upload-artifact@v4
         with:
           name: FYNX-latest-debug-apk
           path: fynx-apk-artifact/
           if-no-files-found: error
       - name: Upload instrumentation test APK
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.message, '[apk-only]') }}
         uses: actions/upload-artifact@v4
         with:
           name: FYNX-debug-androidTest-apk-${{ github.sha }}
