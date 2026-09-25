@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-private val FynxChatWallpaperOptions = listOf("FYNX Default", "Midnight", "Aurora", "Sunrise", "Ocean", "Minimal")
+private val FynxChatWallpaperOptions = FynxGlassThemeId.entries.map { it.label }
 
 @Composable
 fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, wallpaperOverride: String? = null, content: @Composable BoxScope.() -> Unit) {
@@ -30,7 +30,7 @@ fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, wallpaperOverride
 }
 
 @Composable
-fun FynxChatDoodlePattern() {
+fun FynxChatDoodlePattern(palette: FynxGlassThemePalette? = null) {
     androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
         val ink = Color(0xFF7268C8).copy(alpha = 0.115f)
         val sw = 0.72.dp.toPx()
@@ -38,7 +38,7 @@ fun FynxChatDoodlePattern() {
         val tileH = 520.dp.toPx()
 
         fun p(x: Float, y: Float) = androidx.compose.ui.geometry.Offset(x, y)
-        fun line(a: androidx.compose.ui.geometry.Offset, b: androidx.compose.ui.geometry.Offset) = drawLine(ink, a, b, sw)
+        fun line(a: androidx.compose.ui.geometry.Offset, b: androidx.compose.ui.geometry.Offset) { drawLine(ink, a, b, sw); drawLine(reflection, a, b, sw * 2.7f) }
         fun circle(x: Float, y: Float, r: Float) =
             drawCircle(ink, r, p(x, y), style = androidx.compose.ui.graphics.drawscope.Stroke(sw))
 

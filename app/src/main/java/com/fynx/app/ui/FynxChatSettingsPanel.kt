@@ -111,7 +111,7 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
 
         ChatSettingsSection("Appearance", Icons.Default.RestartAlt) {
             Text("Chat wallpaper", style = MaterialTheme.typography.titleMedium)
-            listOf("FYNX Default", "Midnight", "Aurora", "Sunrise", "Ocean", "Minimal").forEach { option ->
+            FynxGlassThemeId.entries.map { it.label }.forEach { option ->
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
