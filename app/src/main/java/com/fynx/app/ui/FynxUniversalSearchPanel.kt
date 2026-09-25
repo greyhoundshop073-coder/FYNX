@@ -90,7 +90,7 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}) {
                     items(people.take(20), key = { "person_${it.id.ifBlank { it.username }}" }) { person ->
                         Card(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f)), shape = FynxDesign.CardShape) {
                             Row(Modifier.fillMaxWidth().padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
-                                FynxRemoteProfileAvatar(person.profilePhotoMediaId, person.displayName.ifBlank { person.username }, Modifier.size(42.dp))
+                                FynxRemoteProfileAvatar(person.profilePhotoMediaId, person.displayName.ifBlank { person.username }, Modifier.size(42.dp), ownerUsername = person.username)
                                 Spacer(Modifier.width(9.dp))
                                 Column(Modifier.weight(1f)) { Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.titleSmall); Text("@${person.username.removePrefix("@")}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                                 OutlinedButton(onClick = { onOpenProfile(person.username) }, shape = FynxDesign.ControlShape) { Text("Profile") }
