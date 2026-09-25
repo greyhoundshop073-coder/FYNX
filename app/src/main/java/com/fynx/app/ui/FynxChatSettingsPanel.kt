@@ -57,6 +57,13 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
     var textSize by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatTextSize(context, chatUsername)) }
     var bubbleTransparency by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatBubbleTransparency(context, chatUsername)) }
     var bubbleLighting by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatBubbleLighting(context, chatUsername)) }
+    var bubbleGradient by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatBubbleGradient(context, chatUsername)) }
+    var doodleDensity by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatDoodleDensity(context, chatUsername)) }
+    var doodleScale by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatDoodleScale(context, chatUsername)) }
+    var doodleIntensity by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatDoodleIntensity(context, chatUsername)) }
+    var doodleLight by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatDoodleLight(context, chatUsername)) }
+    var gradientRotation by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatGradientRotation(context, chatUsername)) }
+    var backgroundGlow by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatBackgroundGlow(context, chatUsername)) }
 
     if (showClearDialog) {
         AlertDialog(
@@ -145,7 +152,7 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
                     .height(250.dp)
                     .clip(RoundedCornerShape(18.dp))
             ) {
-                FynxChatWallpaperBackground(wallpaperOverride = wallpaper) {
+                FynxChatWallpaperBackground(wallpaperOverride = wallpaper, settingsKey = chatUsername) {
                     Column(
                         Modifier
                             .fillMaxSize()
@@ -163,7 +170,8 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
                             palette = previewPalette,
                             outgoing = false,
                             transparency = bubbleTransparency,
-                            lighting = bubbleLighting
+                            lighting = bubbleLighting,
+                            gradient = bubbleGradient
                         )
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             GlassPreviewBubble(
@@ -172,7 +180,8 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
                                 palette = previewPalette,
                                 outgoing = true,
                                 transparency = bubbleTransparency,
-                                lighting = bubbleLighting
+                                lighting = bubbleLighting,
+                                gradient = bubbleGradient
                             )
                         }
                         Text(
@@ -207,6 +216,22 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
                 steps = 6,
                 modifier = Modifier.fillMaxWidth()
             )
+            Text("Bubble gradient", style = MaterialTheme.typography.titleMedium)
+            Text((bubbleGradient * 100).toInt().toString() + "%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Slider(value = bubbleGradient, onValueChange = { bubbleGradient = it; FynxConversationPreferences.setChatBubbleGradient(context, chatUsername, it) }, valueRange = 0f..1f, steps = 9, modifier = Modifier.fillMaxWidth())
+            Text("Doodle density", style = MaterialTheme.typography.titleMedium)
+            Slider(value = doodleDensity, onValueChange = { doodleDensity = it; FynxConversationPreferences.setChatDoodleDensity(context, chatUsername, it) }, valueRange = 0.5f..1.5f, steps = 9, modifier = Modifier.fillMaxWidth())
+            Text("Doodle scale", style = MaterialTheme.typography.titleMedium)
+            Slider(value = doodleScale, onValueChange = { doodleScale = it; FynxConversationPreferences.setChatDoodleScale(context, chatUsername, it) }, valueRange = 0.7f..1.3f, steps = 5, modifier = Modifier.fillMaxWidth())
+            Text("Doodle intensity", style = MaterialTheme.typography.titleMedium)
+            Slider(value = doodleIntensity, onValueChange = { doodleIntensity = it; FynxConversationPreferences.setChatDoodleIntensity(context, chatUsername, it) }, valueRange = 0.4f..1.6f, steps = 5, modifier = Modifier.fillMaxWidth())
+            Text("Doodle light", style = MaterialTheme.typography.titleMedium)
+            Slider(value = doodleLight, onValueChange = { doodleLight = it; FynxConversationPreferences.setChatDoodleLight(context, chatUsername, it) }, valueRange = 0f..1.4f, steps = 6, modifier = Modifier.fillMaxWidth())
+            Text("Background gradient rotation", style = MaterialTheme.typography.titleMedium)
+            Text(gradientRotation.toInt().toString() + "°", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Slider(value = gradientRotation, onValueChange = { gradientRotation = it; FynxConversationPreferences.setChatGradientRotation(context, chatUsername, it) }, valueRange = 0f..360f, steps = 7, modifier = Modifier.fillMaxWidth())
+            Text("Background glow", style = MaterialTheme.typography.titleMedium)
+            Slider(value = backgroundGlow, onValueChange = { backgroundGlow = it; FynxConversationPreferences.setChatBackgroundGlow(context, chatUsername, it) }, valueRange = 0.6f..1.4f, steps = 7, modifier = Modifier.fillMaxWidth())
             Text("Chat wallpaper", style = MaterialTheme.typography.titleMedium)
             FynxGlassThemeId.entries.map { it.label }.forEach { option ->
                 Row(
@@ -250,19 +275,20 @@ private fun GlassPreviewBubble(
     palette: FynxGlassThemePalette,
     outgoing: Boolean,
     transparency: Float = 0.90f,
-    lighting: Float = 0.58f
+    lighting: Float = 0.58f,
+    gradient: Float = 0.70f
 ) {
     val shape = RoundedCornerShape(16.dp)
     val brush = if (outgoing) {
-        Brush.horizontalGradient(listOf(palette.outgoingStart, palette.outgoingEnd))
+        Brush.horizontalGradient(listOf(palette.outgoingStart, palette.outgoingEnd.copy(alpha = gradient.coerceIn(0f, 1f))))
     } else {
-        Brush.linearGradient(listOf(palette.incomingGlass, palette.backgroundMid.copy(alpha = 0.92f)))
+        Brush.linearGradient(listOf(palette.incomingGlass.copy(alpha = transparency), palette.backgroundMid.copy(alpha = (0.55f + gradient * 0.4f).coerceIn(0.55f, 0.95f))))
     }
     Box(
         modifier = Modifier
             .fillMaxWidth(if (outgoing) 0.78f else 0.84f)
             .background(brush, shape)
-            .border(1.dp, palette.bubbleRim.copy(alpha = lighting), shape)
+            .border(1.dp, palette.bubbleRim.copy(alpha = (lighting * transparency).coerceIn(0f, 1f)), shape)
     ) {
         Column(Modifier.padding(horizontal = 11.dp, vertical = 8.dp)) {
             Text(
