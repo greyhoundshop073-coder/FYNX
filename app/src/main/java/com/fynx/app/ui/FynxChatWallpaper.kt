@@ -170,8 +170,41 @@ fun FynxChatDoodlePattern() {
             line(p(x + 10f*s, y + 10f*s), p(x + 16f*s, y + 10f*s))
         }
 
+        fun bicycle(x: Float, y: Float, s: Float) {
+            circle(x + 7f*s, y + 22f*s, 7f*s); circle(x + 29f*s, y + 22f*s, 7f*s)
+            line(p(x + 7f*s, y + 22f*s), p(x + 15f*s, y + 9f*s)); line(p(x + 15f*s, y + 9f*s), p(x + 22f*s, y + 22f*s))
+            line(p(x + 22f*s, y + 22f*s), p(x + 7f*s, y + 22f*s)); line(p(x + 15f*s, y + 9f*s), p(x + 26f*s, y + 9f*s))
+            line(p(x + 26f*s, y + 9f*s), p(x + 29f*s, y + 22f*s))
+        }
+        fun map(x: Float, y: Float, s: Float) {
+            line(p(x, y + 5f*s), p(x + 15f*s, y)); line(p(x + 15f*s, y), p(x + 31f*s, y + 6f*s))
+            line(p(x, y + 5f*s), p(x, y + 28f*s)); line(p(x + 15f*s, y), p(x + 15f*s, y + 23f*s))
+            line(p(x + 31f*s, y + 6f*s), p(x + 31f*s, y + 30f*s)); line(p(x, y + 28f*s), p(x + 15f*s, y + 23f*s)); line(p(x + 15f*s, y + 23f*s), p(x + 31f*s, y + 30f*s))
+        }
+        fun palette(x: Float, y: Float, s: Float) {
+            circle(x + 15f*s, y + 15f*s, 15f*s); circle(x + 9f*s, y + 10f*s, 2f*s); circle(x + 18f*s, y + 7f*s, 2f*s); circle(x + 23f*s, y + 15f*s, 2f*s)
+        }
+        fun bulb(x: Float, y: Float, s: Float) {
+            circle(x + 12f*s, y + 10f*s, 9f*s); line(p(x + 6f*s, y + 17f*s), p(x + 18f*s, y + 17f*s)); line(p(x + 8f*s, y + 23f*s), p(x + 16f*s, y + 23f*s))
+        }
+        fun guitar(x: Float, y: Float, s: Float) {
+            circle(x + 10f*s, y + 18f*s, 7f*s); circle(x + 19f*s, y + 12f*s, 5f*s)
+            line(p(x + 15f*s, y + 14f*s), p(x + 31f*s, y)); line(p(x + 31f*s, y), p(x + 34f*s, y + 3f*s))
+        }
+        fun rocket(x: Float, y: Float, s: Float) {
+            drawRoundRect(ink, p(x + 8f*s, y + 2f*s), androidx.compose.ui.geometry.Size(13f*s, 30f*s), androidx.compose.ui.geometry.CornerRadius(8f*s, 8f*s), style = androidx.compose.ui.graphics.drawscope.Stroke(sw))
+            circle(x + 14.5f*s, y + 10f*s, 2f*s); line(p(x + 8f*s, y + 25f*s), p(x + 2f*s, y + 31f*s)); line(p(x + 21f*s, y + 25f*s), p(x + 27f*s, y + 31f*s))
+        }
+        fun flowers(x: Float, y: Float, s: Float) {
+            line(p(x + 10f*s, y + 10f*s), p(x + 10f*s, y + 32f*s)); circle(x + 10f*s, y + 8f*s, 4f*s); circle(x + 5f*s, y + 8f*s, 4f*s); circle(x + 15f*s, y + 8f*s, 4f*s); line(p(x + 10f*s, y + 32f*s), p(x + 4f*s, y + 38f*s)); line(p(x + 10f*s, y + 32f*s), p(x + 17f*s, y + 37f*s))
+        }
+        fun clouds(x: Float, y: Float, s: Float) {
+            circle(x + 9f*s, y + 14f*s, 7f*s); circle(x + 18f*s, y + 10f*s, 9f*s); circle(x + 28f*s, y + 15f*s, 7f*s)
+            line(p(x + 4f*s, y + 20f*s), p(x + 33f*s, y + 20f*s))
+        }
+
         fun drawMotif(index: Int, x: Float, y: Float, scale: Float) {
-            when (index % 14) {
+            when (index % 22) {
                 0 -> bubble(x, y, scale)
                 1 -> camera(x, y, scale)
                 2 -> phone(x, y, scale)
@@ -185,7 +218,15 @@ fun FynxChatDoodlePattern() {
                 10 -> video(x, y, scale)
                 11 -> headphones(x, y, scale)
                 12 -> coffee(x, y, scale)
-                else -> link(x, y, scale)
+                13 -> link(x, y, scale)
+                14 -> bicycle(x, y, scale)
+                15 -> map(x, y, scale)
+                16 -> palette(x, y, scale)
+                17 -> bulb(x, y, scale)
+                18 -> guitar(x, y, scale)
+                19 -> rocket(x, y, scale)
+                20 -> flowers(x, y, scale)
+                else -> clouds(x, y, scale)
             }
         }
 

@@ -101,7 +101,15 @@ private fun FynxGroupDoodlePattern(){
             line(Offset(x+25*s,y+10*s),Offset(x+14*s,y+18*s)); line(Offset(x+25*s,y+10*s),Offset(x+36*s,y+18*s))
             line(Offset(x+14*s,y+18*s),Offset(x+18*s,y+31*s)); line(Offset(x+36*s,y+18*s),Offset(x+32*s,y+31*s)); line(Offset(x+18*s,y+31*s),Offset(x+32*s,y+31*s))
         }
-        val icons=listOf<(Float,Float)->Unit>({x,y->people(x,y,.85f)},{x,y->bubble(x,y,.82f)},{x,y->link(x,y,.9f)},{x,y->handshake(x,y,.82f)},{x,y->groupCircle(x,y,.82f)},{x,y->camera(x,y,.88f)},{x,y->house(x,y,.86f)},{x,y->coffee(x,y,.92f)},{x,y->soccer(x,y,.82f)})
+        fun bicycle(x:Float,y:Float,s:Float){ circle(x+7*s,y+22*s,7*s); circle(x+29*s,y+22*s,7*s); line(Offset(x+7*s,y+22*s),Offset(x+15*s,y+9*s)); line(Offset(x+15*s,y+9*s),Offset(x+22*s,y+22*s)); line(Offset(x+22*s,y+22*s),Offset(x+7*s,y+22*s)); line(Offset(x+15*s,y+9*s),Offset(x+26*s,y+9*s)); line(Offset(x+26*s,y+9*s),Offset(x+29*s,y+22*s)) }
+        fun map(x:Float,y:Float,s:Float){ line(Offset(x,y+5*s),Offset(x+15*s,y)); line(Offset(x+15*s,y),Offset(x+31*s,y+6*s)); line(Offset(x,y+5*s),Offset(x,y+28*s)); line(Offset(x+15*s,y),Offset(x+15*s,y+23*s)); line(Offset(x+31*s,y+6*s),Offset(x+31*s,y+30*s)); line(Offset(x,y+28*s),Offset(x+15*s,y+23*s)); line(Offset(x+15*s,y+23*s),Offset(x+31*s,y+30*s)) }
+        fun palette(x:Float,y:Float,s:Float){ circle(x+15*s,y+15*s,15*s); circle(x+9*s,y+10*s,2*s); circle(x+18*s,y+7*s,2*s); circle(x+23*s,y+15*s,2*s) }
+        fun bulb(x:Float,y:Float,s:Float){ circle(x+12*s,y+10*s,9*s); line(Offset(x+6*s,y+17*s),Offset(x+18*s,y+17*s)); line(Offset(x+8*s,y+23*s),Offset(x+16*s,y+23*s)) }
+        fun guitar(x:Float,y:Float,s:Float){ circle(x+10*s,y+18*s,7*s); circle(x+19*s,y+12*s,5*s); line(Offset(x+15*s,y+14*s),Offset(x+31*s,y)); line(Offset(x+31*s,y),Offset(x+34*s,y+3*s)) }
+        fun rocket(x:Float,y:Float,s:Float){ drawRoundRect(color=ink,topLeft=Offset(x+8*s,y+2*s),size=Size(13*s,30*s),cornerRadius=CornerRadius(8*s,8*s),style=Stroke(width=sw)); circle(x+14.5f*s,y+10*s,2*s); line(Offset(x+8*s,y+25*s),Offset(x+2*s,y+31*s)); line(Offset(x+21*s,y+25*s),Offset(x+27*s,y+31*s)) }
+        fun flowers(x:Float,y:Float,s:Float){ line(Offset(x+10*s,y+10*s),Offset(x+10*s,y+32*s)); circle(x+10*s,y+8*s,4*s); circle(x+5*s,y+8*s,4*s); circle(x+15*s,y+8*s,4*s); line(Offset(x+10*s,y+32*s),Offset(x+4*s,y+38*s)); line(Offset(x+10*s,y+32*s),Offset(x+17*s,y+37*s)) }
+        fun clouds(x:Float,y:Float,s:Float){ circle(x+9*s,y+14*s,7*s); circle(x+18*s,y+10*s,9*s); circle(x+28*s,y+15*s,7*s); line(Offset(x+4*s,y+20*s),Offset(x+33*s,y+20*s)) }
+        val icons=listOf<(Float,Float)->Unit>({x,y->people(x,y,.85f)},{x,y->bubble(x,y,.82f)},{x,y->link(x,y,.9f)},{x,y->handshake(x,y,.82f)},{x,y->groupCircle(x,y,.82f)},{x,y->camera(x,y,.88f)},{x,y->house(x,y,.86f)},{x,y->coffee(x,y,.92f)},{x,y->soccer(x,y,.82f)},{x,y->bicycle(x,y,.82f)},{x,y->map(x,y,.82f)},{x,y->palette(x,y,.78f)},{x,y->bulb(x,y,.82f)},{x,y->guitar(x,y,.82f)},{x,y->rocket(x,y,.82f)},{x,y->flowers(x,y,.82f)},{x,y->clouds(x,y,.82f)})
         var row=0; var y=-55f
         while(y<size.height+cellH){
             var col=0; var x=if(row%2==0)-38f else -133f
