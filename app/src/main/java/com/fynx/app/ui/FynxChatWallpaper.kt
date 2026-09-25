@@ -19,12 +19,14 @@ private val FynxChatWallpaperOptions = FynxGlassThemeId.entries.map { it.label }
 fun FynxChatWallpaperBackground(modifier: Modifier = Modifier, wallpaperOverride: String? = null, content: @Composable BoxScope.() -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val wallpaper = wallpaperOverride ?: FynxPreferencesStore.loadChatWallpaper(context)
-    val base = when (wallpaper) {
-        "Minimal" -> Color(0xFF0B0E14)
-        else -> Color(0xFF05060A)
-    }
-    Box(modifier.background(base)) {
-        FynxChatDoodlePattern()
+    val themeId = FynxGlassThemeId.entries.firstOrNull { it.label == wallpaper }
+        ?: FynxGlassThemeId.PURE_BLACK
+    val palette = fynxGlassPalette(themeId)
+    val backgroundBrush = Brush.linearGradient(
+        colors = listOf(palette.background, palette.backgroundMid, palette.backgroundGlow)
+    )
+    Box(modifier.background(backgroundBrush)) {
+        FynxChatDoodlePattern(palette)
         content()
     }
 }
