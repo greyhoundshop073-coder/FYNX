@@ -217,7 +217,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = { selected = "Profile"; openProfileSettings = false }, modifier = Modifier.semantics { contentDescription = "Open FYNX profile" }) {
-                            if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(40.dp))
+                            if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(40.dp), ownerUsername = authSession.username)
                             else FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp))
                         }
                         Row(
