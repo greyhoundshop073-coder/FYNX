@@ -338,7 +338,22 @@ jobs:
           app_url="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["app_url"])' <<<"$bs_app")"
           suite_url="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["test_suite_url"])' <<<"$bs_suite")"
           curl --fail --silent --show-error --user "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/android/build" -H "Content-Type: application/json" -d "{\"app\":\"$app_url\",\"testSuite\":\"$suite_url\",\"project\":\"FYNX\",\"devices\":[\"Google Pixel 7-13.0\"],\"networkLogs\":true,\"deviceLogs\":true}" > fynx-browserstack-results/build.json
-          printf 'BrowserStack real-device Maestro execution started for commit %s\n' "$GITHUB_SHA" > fynx-browserstack-results/README.txt
+          build_id="$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("build_id") or d.get("id") or "")' < fynx-browserstack-results/build.json)"
+          test -n "$build_id"
+          printf 'BrowserStack build id: %s\n' "$build_id" | tee fynx-browserstack-results/README.txt
+          status="unknown"
+          for attempt in $(seq 1 30); do
+            curl --fail --silent --show-error --user "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" "https://api-cloud.browserstack.com/app-automate/maestro/v2/android/build/$build_id" > fynx-browserstack-results/build-status-$attempt.json
+            status="$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(str(d.get("status") or d.get("build_status") or d.get("state") or "").lower())' < fynx-browserstack-results/build-status-$attempt.json)"
+            echo "BrowserStack poll $attempt: $status"
+            case "$status" in
+              passed|pass|completed|success) exit 0 ;;
+              failed|fail|error|errored) exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "BrowserStack build did not reach a terminal pass/fail state within the polling window." >&2
+          exit 1
       - name: BrowserStack integration readiness report
         if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py'))) }}
         env:
