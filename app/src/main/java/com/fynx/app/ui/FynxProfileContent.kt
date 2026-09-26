@@ -13,7 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Image as ImageIcon
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ShoppingBag
@@ -74,7 +74,7 @@ fun FynxProfileContentSection(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             listOf(
-                "All" to Icons.Default.Image,
+                "All" to ImageIcon,
                 "Videos" to Icons.Default.PlayArrow,
                 "Photos" to Icons.Default.Image,
                 "Audio" to Icons.Default.MusicNote,
