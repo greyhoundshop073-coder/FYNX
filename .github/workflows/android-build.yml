@@ -173,6 +173,8 @@ jobs:
         run: python3 scripts/verify_home_post_reactions.py
       - name: Verify Home multi-media integrity
         run: python3 scripts/verify_home_multimedia_posts.py
+      - name: Verify Badge B — Bottom and keyboard safety
+        run: python3 scripts/verify_badge_b_bottom_keyboard_safety.py
       - name: Verify Large Badge #2 — Real Social Creation & Connection
         run: python3 scripts/verify_large_badge2_social_creation_connection.py
       - name: Verify Large Badge #3 — Full Major-Surface Integration Audit
