@@ -53,7 +53,6 @@ fun OtherUserProfilePanel(
     var loading by remember(username) { mutableStateOf(true) }
     var error by remember(username) { mutableStateOf<String?>(null) }
     var following by remember(username) { mutableStateOf(false) }
-    var hasActiveStatus by remember(username) { mutableStateOf(false) }
     var busy by remember(username) { mutableStateOf(false) }
     var reportOpen by remember(username) { mutableStateOf(false) }
     var reportReason by remember(username) { mutableStateOf("Safety or spam") }
@@ -69,8 +68,7 @@ fun OtherUserProfilePanel(
             error = null
             FynxProfileRemoteClient.get(context, username)
                 .onSuccess { loaded -> profile = loaded; following = loaded.followedByCurrentUser }
-            FynxStatusClient.list(context).onSuccess { statuses -> hasActiveStatus = statuses.any { !it.isExpired() && it.ownerUsername.equals(username, true) } }
-                .onFailure { error = it.message ?: "Unable to load this profile." }
+            if (profile == null) error = "Unable to load this profile."
             loading = false
         }
     }
@@ -123,12 +121,15 @@ fun OtherUserProfilePanel(
                             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Box(
                                     Modifier.size(86.dp)
-                                        .clip(CircleShape)
-                                        .then(if (hasActiveStatus) Modifier.background(Color(0xFF25D366), CircleShape).padding(3.dp) else Modifier)
                                         .clickable { if (person.profilePhotoMediaId != null) showProfilePhoto = true },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    FynxRemoteProfileAvatar(mediaId = person.profilePhotoMediaId, contentDescription = person.displayName, modifier = Modifier.size(80.dp).clip(CircleShape), ownerUsername = person.username)
+                                    FynxRemoteProfileAvatar(
+                                        mediaId = person.profilePhotoMediaId,
+                                        contentDescription = person.displayName,
+                                        modifier = Modifier.size(80.dp).clip(CircleShape),
+                                        ownerUsername = person.username
+                                    )
                                 }
                                 Spacer(Modifier.height(12.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
