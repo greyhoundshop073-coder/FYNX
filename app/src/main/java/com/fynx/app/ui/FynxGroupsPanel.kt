@@ -256,7 +256,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp)) }
                 Box(Modifier.size(40.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
                     if (selectedGroup?.groupPhotoMediaId.isNullOrBlank()) {
-                        Box(Modifier.fillMaxSize().background(Color(0xFF353842)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Group, "Group", tint = Color(0xFFD8DAE3)) }
+                        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Icon(Icons.Default.Group, "Group", tint = MaterialTheme.colorScheme.primary) }
                     } else {
                         FynxRemoteProfileAvatar(selectedGroup?.groupPhotoMediaId, groupTitle, Modifier.fillMaxSize())
                     }
