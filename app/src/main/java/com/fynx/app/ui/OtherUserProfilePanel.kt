@@ -60,6 +60,8 @@ fun OtherUserProfilePanel(
     var reportDetails by remember(username) { mutableStateOf("") }
     var reportMessage by remember(username) { mutableStateOf<String?>(null) }
     var showProfilePhoto by remember(username) { mutableStateOf(false) }
+    var profileMenuOpen by remember(username) { mutableStateOf(false) }
+    var blockConfirmOpen by remember(username) { mutableStateOf(false) }
 
     fun loadProfile() {
         scope.launch {
@@ -82,7 +84,19 @@ fun OtherUserProfilePanel(
         ) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") }
             Text("Profile", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            TextButton(enabled = !busy, onClick = { reportMessage = null; reportOpen = true }) { Text("⋮") }
+            Box {
+                IconButton(enabled = !busy, onClick = { profileMenuOpen = true }) { Text("⋮", style = MaterialTheme.typography.titleLarge) }
+                DropdownMenu(expanded = profileMenuOpen, onDismissRequest = { profileMenuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Report profile") },
+                        onClick = { profileMenuOpen = false; reportMessage = null; reportOpen = true }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Block @${username.removePrefix("@")}") },
+                        onClick = { profileMenuOpen = false; blockConfirmOpen = true }
+                    )
+                }
+            }
         }
         when {
             loading && profile == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -174,6 +188,8 @@ fun OtherUserProfilePanel(
                                             Spacer(Modifier.width(6.dp))
                                             Text("Message")
                                         }
+                                    } else {
+                                        Text("Messaging unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f).padding(horizontal = 6.dp), textAlign = TextAlign.Center)
                                     }
                                 }
                             }
@@ -189,6 +205,26 @@ fun OtherUserProfilePanel(
 
     if (showProfilePhoto && profile?.profilePhotoMediaId != null) {
         ProfilePhotoViewerDialog(profile!!.profilePhotoMediaId!!, profile!!.displayName) { showProfilePhoto = false }
+    }
+
+    if (blockConfirmOpen && profile != null) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) blockConfirmOpen = false },
+            title = { Text("Block @${profile!!.username}") },
+            text = { Text("They will no longer be able to view your profile or interact with you through FYNX. You can unblock them later from Friends & People.") },
+            confirmButton = {
+                TextButton(enabled = !busy, onClick = {
+                    scope.launch {
+                        busy = true
+                        FynxSocialClient.block(context, profile!!.username)
+                            .onSuccess { blockConfirmOpen = false; onBack() }
+                            .onFailure { error = it.message ?: "This account could not be blocked." }
+                        busy = false
+                    }
+                }) { Text("Block") }
+            },
+            dismissButton = { TextButton(enabled = !busy, onClick = { blockConfirmOpen = false }) { Text("Cancel") } }
+        )
     }
 
     if (reportOpen && profile != null) {
