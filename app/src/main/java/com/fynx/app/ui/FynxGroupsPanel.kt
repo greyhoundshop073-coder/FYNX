@@ -535,7 +535,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                FynxAvatar(username, senderAvatarUris[username], Modifier.size(30.dp))
+                                FynxAvatar(username, senderAvatarUris[username], Modifier.size(30.dp), ownerUsername = username)
                                 Spacer(Modifier.width(8.dp))
                                 Text("@$username", color = Color.White, modifier = Modifier.weight(1f))
                             }
