@@ -9,7 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.IosShare
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -66,7 +66,7 @@ fun FynxConversationMomentsSheet(
                 IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close") }
             }
 
-            Text("\${selected.size}/12 selected", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Text("${selected.size}/12 selected", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
 
             if (selectable.isEmpty()) {
                 Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -118,7 +118,7 @@ fun FynxConversationMomentsSheet(
                     enabled = selected.isNotEmpty(),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Icon(Icons.Default.IosShare, null); Spacer(Modifier.width(6.dp)); Text("Share")
+                    Icon(Icons.Default.Share, null); Spacer(Modifier.width(6.dp)); Text("Share")
                 }
             }
 
