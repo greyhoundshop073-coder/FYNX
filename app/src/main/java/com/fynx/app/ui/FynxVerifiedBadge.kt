@@ -29,13 +29,26 @@ fun FynxVerifiedBadge(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun FynxAvatar(name: String, modifier: Modifier = Modifier) {
-    FynxAvatarContent(name, null, modifier)
+fun FynxAvatar(name: String, modifier: Modifier = Modifier, ownerUsername: String? = null) {
+    if (!ownerUsername.isNullOrBlank()) {
+        FynxRemoteProfileAvatar(mediaId = null, contentDescription = name, modifier = modifier, ownerUsername = ownerUsername)
+    } else {
+        FynxAvatarContent(name, null, modifier)
+    }
 }
 
 @Composable
-fun FynxAvatar(name: String, avatarUri: String?, modifier: Modifier = Modifier) {
-    FynxAvatarContent(name, avatarUri, modifier)
+fun FynxAvatar(name: String, avatarUri: String?, modifier: Modifier = Modifier, ownerUsername: String? = null) {
+    if (!ownerUsername.isNullOrBlank()) {
+        FynxRemoteProfileAvatar(
+            mediaId = avatarUri?.substringAfterLast("/api/media/")?.takeIf { it != avatarUri },
+            contentDescription = name,
+            modifier = modifier,
+            ownerUsername = ownerUsername
+        )
+    } else {
+        FynxAvatarContent(name, avatarUri, modifier)
+    }
 }
 
 @Composable
