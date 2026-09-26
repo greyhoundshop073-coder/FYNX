@@ -400,10 +400,23 @@ private fun FynxStatusStoryViewer(
                     }
 
                     // Tap zones for previous/next status without adding visible controls.
+                    // Keep the centre of the viewer available for the real media controls
+                    // (video play/pause and voice/music controls). Navigation tap zones live
+                    // only on the left and right edges so they cannot swallow playback taps.
                     Row(Modifier.fillMaxSize()) {
-                        Box(Modifier.weight(0.30f).fillMaxHeight().clickable(enabled = index > 0) { if (index > 0) index-- })
-                        Spacer(Modifier.weight(0.40f).fillMaxHeight())
-                        Box(Modifier.weight(0.30f).fillMaxHeight().clickable(enabled = index < statuses.lastIndex) { if (index < statuses.lastIndex) index++ })
+                        Box(
+                            Modifier
+                                .weight(0.25f)
+                                .fillMaxHeight()
+                                .clickable(enabled = index > 0) { if (index > 0) index-- }
+                        )
+                        Spacer(Modifier.weight(0.50f).fillMaxHeight())
+                        Box(
+                            Modifier
+                                .weight(0.25f)
+                                .fillMaxHeight()
+                                .clickable(enabled = index < statuses.lastIndex) { if (index < statuses.lastIndex) index++ }
+                        )
                     }
                 }
 
