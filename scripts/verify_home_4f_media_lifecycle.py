@@ -27,7 +27,6 @@ required_home = {
     "player.release()": "audio resource release",
     "FynxRemoteProfileAvatar": "real author identity media",
     "MaterialTheme.colorScheme": "theme-aware Home presentation",
-    'Icon(Icons.Default.Refresh, "Refresh feed")': "refresh accessibility action",
     'label = "Share"': "share accessibility action",
 }
 
