@@ -40,6 +40,7 @@ check("settings screen reads persisted appearance and accent", "FynxPreferencesS
 check("five Appearance options are selectable", all(option in read("app/src/main/java/com/fynx/app/ui/FynxChatWallpaper.kt") for option in ["System", "Light", "Charcoal Black", "Dark", "Black AMOLED"]))
 check("Charcoal Black is a real Appearance option", "Charcoal Black" in read("app/src/main/java/com/fynx/app/ui/FynxChatWallpaper.kt") and 'appearance == "Charcoal Black"' in read("app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt"))
 check("Black AMOLED is a true black Appearance state", 'appearance == "Black AMOLED"' in read("app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt") and "AmoledBackground = Color.Black" in read("app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt"))
+check("Black AMOLED keeps white primary text", "AmoledTextPrimary = Color.White" in read("app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt"))
 check("deep-link parser covers core notification destinations", all(token in deep_link for token in ["FynxDeepLinkDestination.Profile", "FynxDeepLinkDestination.Chat", "FynxDeepLinkDestination.Group", "FynxDeepLinkDestination.Marketplace", "FynxDeepLinkDestination.Stories", "FynxDeepLinkDestination.Money"]))
 check("deep-link parser rejects unrelated hosts", "if(!isFynxScheme&&!isFynxWeb)return null" in deep_link)
 check("main activity registers notification token only for signed-in account", "registerNotificationTokenIfSignedIn" in main and "AuthState.SIGNED_IN" in main)
