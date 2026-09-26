@@ -24,6 +24,7 @@ check("profile visibility is server enforced", "row.profile_visibility==='Everyo
 check("blocked users cannot access profiles", "FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1)" in profile and "this profile is unavailable" in profile)
 check("post visibility is server enforced on profile posts", "row.posts_visibility==='Everyone'" in profile and "posts are private" in profile)
 check("profile posts enforce per-post audience and mutual block visibility", "p.visibility='PUBLIC'" in profile and "p.visibility='FRIENDS_ONLY'" in profile and "p.visibility='SELECTED_PEOPLE'" in profile and "social_post_audience" in profile and "blocks b" in profile)
+check("profile post counts use the same visibility boundary", "const postCount=postVisible?" in profile and "SELECT COUNT(*)::int AS count FROM social_posts p" in profile and "p.visibility='SELECTED_PEOPLE'" in profile)
 check("follower/following counts are self-only", "const followerCount=self?" in profile and "const followingCount=self?" in profile and "connectionsVisible:self" in profile)
 check("follower list endpoint is scoped to authenticated user", "app.get('/api/social/me/followers'" in profile and "WHERE f.followed_id=$1" in profile)
 check("following list endpoint is scoped to authenticated user", "app.get('/api/social/me/following'" in profile and "WHERE f.follower_id=$1" in profile)
