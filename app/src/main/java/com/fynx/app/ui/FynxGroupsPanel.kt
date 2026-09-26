@@ -216,7 +216,7 @@ private fun FynxGroupPulseSheet(
                         maxLines = 3
                     )
                     latest?.senderUsername?.let {
-                        Text("@\${it.removePrefix("@")}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("@${it.removePrefix("@")}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
