@@ -76,7 +76,7 @@ fun FynxProfileContentSection(
             listOf(
                 "All" to ImageIcon,
                 "Videos" to Icons.Default.PlayArrow,
-                "Photos" to Icons.Default.Image,
+                "Photos" to ImageIcon,
                 "Audio" to Icons.Default.MusicNote,
                 "Marketplace" to Icons.Default.ShoppingBag
             ).forEach { (label, icon) ->
@@ -131,28 +131,39 @@ fun FynxProfileContentSection(
                     "Marketplace" -> "No marketplace items yet"
                     else -> "No content yet"
                 }, Modifier.fillMaxWidth().padding(vertical = 28.dp), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else if (selectedTab == "Marketplace") {
-                val columns = 2
-                val marketItems = gridItems.filterIsInstance<FynxProfileGridItem.MarketItem>()
-                val rows = (marketItems.size + columns - 1) / columns
+            } else if (selectedTab == "Videos" || selectedTab == "Photos" || selectedTab == "Audio" || selectedTab == "Marketplace") {
+                val columns = 3
+                val rows = (gridItems.size + columns - 1) / columns
+                val tileWidthDp = (context.resources.configuration.screenWidthDp - 4) / columns
+                val tileHeightDp = (tileWidthDp * 4) / 3
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(columns),
-                    modifier = Modifier.fillMaxWidth().height((rows * 232 + (rows - 1).coerceAtLeast(0) * 8).dp),
+                    modifier = Modifier.fillMaxWidth().height((rows * tileHeightDp + (rows - 1).coerceAtLeast(0) * 2).dp),
                     userScrollEnabled = false,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(1.dp),
+                    verticalArrangement = Arrangement.spacedBy(1.dp)
                 ) {
-                    items(marketItems.size, key = { index -> "market:" + marketItems[index].listing.id }) { index ->
-                        val item = marketItems[index]
-                        FynxProfileMarketplaceTile(item.listing) { selectedListing = item.listing }
+                    items(gridItems.size, key = { index ->
+                        when (val item = gridItems[index]) {
+                            is FynxProfileGridItem.PostItem -> "post:" + item.post.id
+                            is FynxProfileGridItem.MarketItem -> "market:" + item.listing.id
+                        }
+                    }) { index ->
+                        when (val item = gridItems[index]) {
+                            is FynxProfileGridItem.PostItem ->
+                                FynxProfileMediaGridTile(item.post) { selectedPost = item.post }
+                            is FynxProfileGridItem.MarketItem ->
+                                FynxProfileMarketplaceGridTile(item.listing) { selectedListing = item.listing }
+                        }
                     }
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    gridItems.filterIsInstance<FynxProfileGridItem.PostItem>().forEach { item -> FynxProfilePostFeedCard(item.post, username) { selectedPost = item.post } }
+                    gridItems.filterIsInstance<FynxProfileGridItem.PostItem>().forEach { item ->
+                        FynxProfilePostFeedCard(item.post, username) { selectedPost = item.post }
+                    }
                 }
-            }
-        }
+            }        }
     }
 
     selectedPost?.let { post ->
@@ -342,7 +353,7 @@ private fun FynxProfilePostFeedCard(post: FynxProfileRemoteClient.ProfilePost, u
                                 Text("Tap to listen", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
                             }
                         }
-                        FynxRemoteMedia(post.mediaUrl ?: post.mediaId?.let { "/api/social/media/" + it }, post.mediaType ?: "audio", Modifier.fillMaxWidth().height(64.dp), autoPlay = false, playbackActive = true)
+                        FynxRemoteMedia(mediaUrl, post.mediaType ?: "audio", Modifier.fillMaxWidth().height(64.dp), autoPlay = false, playbackActive = true)
                     }
                 } else {
                     val mediaModifier = when {
@@ -360,6 +371,60 @@ private fun FynxProfilePostFeedCard(post: FynxProfileRemoteClient.ProfilePost, u
         }
     }
 }
+@Composable
+private fun FynxProfileMediaGridTile(post: FynxProfileRemoteClient.ProfilePost, onOpen: () -> Unit) {
+    val mediaUrl = post.mediaUrl ?: post.mediaId?.let { "/api/social/media/" + it }
+    val type = post.mediaType?.lowercase().orEmpty()
+    Box(Modifier.fillMaxWidth().aspectRatio(3f / 4f).clickable(onClick = onOpen)
+        .background(MaterialTheme.colorScheme.surfaceVariant)) {
+        if (type.contains("audio")) {
+            Image(painter = painterResource(com.fynx.app.R.drawable.ic_fynx_logo),
+                contentDescription = "FYNX audio post",
+                modifier = Modifier.fillMaxSize().padding(24.dp))
+            Box(Modifier.align(Alignment.BottomStart).padding(7.dp).size(32.dp)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = .88f), CircleShape),
+                contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.MusicNote, contentDescription = "Play audio", tint = MaterialTheme.colorScheme.primary)
+            }
+        } else if (!mediaUrl.isNullOrBlank()) {
+            FynxRemoteMedia(mediaUrl = mediaUrl, type = post.mediaType ?: "auto",
+                modifier = Modifier.fillMaxSize(), autoPlay = false, playbackActive = false)
+            if (type.contains("video")) {
+                Box(Modifier.align(Alignment.BottomStart).padding(7.dp).size(32.dp)
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = .88f), CircleShape),
+                    contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = "Play video", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+        } else {
+            Text(post.text.ifBlank { "Post" }, Modifier.align(Alignment.Center).padding(10.dp),
+                maxLines = 6, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+@Composable
+private fun FynxProfileMarketplaceGridTile(listing: FynxMarketplaceClient.Listing, onOpen: () -> Unit) {
+    Box(Modifier.fillMaxWidth().aspectRatio(3f / 4f).clickable(onClick = onOpen)
+        .background(MaterialTheme.colorScheme.surfaceVariant)) {
+        if (listing.mediaIds.isNotEmpty()) {
+            FynxRemoteMedia(mediaUrl = FynxMarketplaceClient.mediaUrl(LocalContext.current, listing.mediaIds.first()),
+                type = "auto", modifier = Modifier.fillMaxSize())
+        } else {
+            Icon(Icons.Default.ShoppingBag, contentDescription = "Marketplace",
+                modifier = Modifier.align(Alignment.Center).size(34.dp), tint = MaterialTheme.colorScheme.primary)
+        }
+        Column(Modifier.align(Alignment.BottomStart).fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = .82f)).padding(7.dp)) {
+            Text(listing.title, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(listing.currency + " " + String.format(Locale.US, "%,.0f", listing.price),
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1)
+        }
+    }
+}
+
 @Composable
 private fun FynxProfileMarketplaceTile(listing: FynxMarketplaceClient.Listing, onOpen: () -> Unit) {
     Card(Modifier.fillMaxWidth().clickable(onClick = onOpen),
