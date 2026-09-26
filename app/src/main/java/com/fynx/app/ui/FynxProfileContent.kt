@@ -294,8 +294,8 @@ private fun SoulPill(
 ) {
     val pillModifier = modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .55f))
-        .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
         .padding(10.dp)
+        .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
     Column(pillModifier) {
         Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
         Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
