@@ -6,7 +6,8 @@ data class GroupChat(
     val description: String = "",
     val memberUsernames: List<String> = emptyList(),
     val adminUsernames: List<String> = emptyList(),
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val groupPhotoMediaId: String? = null
 )
 
 fun GroupChat.isAdmin(username: String): Boolean = username in adminUsernames
