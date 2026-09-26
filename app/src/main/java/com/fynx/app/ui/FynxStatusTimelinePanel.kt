@@ -59,7 +59,16 @@ fun FynxStatusTimelinePanel(
     var error by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<FynxStatus?>(null) }
     var refreshKey by remember { mutableIntStateOf(0) }
+    var viewerDisplayName by remember(username) { mutableStateOf(username) }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(username) {
+        if (username.isNotBlank()) {
+            FynxProfileRemoteClient.get(context, username).onSuccess { profile ->
+                viewerDisplayName = profile.displayName.ifBlank { username }
+            }
+        }
+    }
 
     fun refresh() {
         scope.launch {
@@ -112,7 +121,7 @@ fun FynxStatusTimelinePanel(
             item {
                 StatusHomeRow(
                     ownerUsername = username,
-                    ownerDisplayName = username,
+                    ownerDisplayName = viewerDisplayName,
                     status = myStatus,
                     isMe = true,
                     onClick = { if (myStatus != null) selected = myStatus else onCreateClick() },
