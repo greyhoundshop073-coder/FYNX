@@ -99,6 +99,39 @@ def find_control(xml_text:str, labels:list[str]):
     rid=(node.attrib.get("resource-id") or "").strip()
     return text or desc or rid,center[0],center[1]
 
+def tap_first_message_if_present(xml_text:str, name:str="message-tap")->str:
+    """Tap the first real clickable message bubble without fabricating test data."""
+    if not xml_text: return ""
+    try: root=ET.fromstring(xml_text)
+    except ET.ParseError: return ""
+    excluded={"chat","messages","groups","friends","stories","more","features","search","settings","back","send","message actions"}
+    candidates=[]; path=[]
+    def walk(node):
+        path.append(node)
+        text=(node.attrib.get("text") or "").strip()
+        if text and text.lower() not in excluded and node.attrib.get("visible-to-user","true").lower()!="false":
+            for ancestor in reversed(path):
+                if ancestor.attrib.get("clickable","false").lower()=="true" and _center(ancestor):
+                    center=_center(ancestor)
+                    if 150 <= center[1] <= 1700:
+                        candidates.append((center[1],ancestor))
+                    break
+        for child in list(node): walk(child)
+        path.pop()
+    walk(root)
+    if not candidates: return ""
+    _,node=min(candidates,key=lambda item:item[0])
+    x,y=_center(node)
+    run("adb","shell","input","tap",str(x),str(y)); time.sleep(1.0)
+    after=dump_ui(f"{name}-after-tap.xml")
+    if not after:
+        FAILURES.append(name+" caused the authenticated app to exit or lose its UI")
+        return ""
+    if find_control(after,["Message actions"]):
+        return after
+    FAILURES.append(name+" did not open message actions")
+    return after
+
 def find_edit_fields(xml_text:str):
     fields=[]
     for node in nodes(xml_text):
@@ -224,6 +257,9 @@ if not FAILURES:
                 import shutil
                 source=ROOT/"authenticated-chat.png"; recent=ROOT/"authenticated-chat-recent.png"
                 if source.exists(): shutil.copyfile(source,recent); report.append("- PASS explicit Recent Chats screenshot artifact")
+                message_after=tap_first_message_if_present(after)
+                if message_after:
+                    report.append("- PASS tapping a real authenticated message keeps the app alive and opens Message actions")
         else: FAILURES.append("authenticated Home -> "+name)
         run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
         xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-reset.xml") or xml
