@@ -93,7 +93,7 @@ check(
     and "FynxMarketplaceClient.listings(context, username, \"\")" in profile_content
     and "sellerUsername.equals(username, ignoreCase = true)" in profile_content
     and "GridCells.Fixed(columns)" in profile_content
-    and "val columns = 2" in profile_content
+    and "val columns = 3" in profile_content
 )
 check(
     "profile has no fabricated Business content or repost/likes tabs",
@@ -110,6 +110,7 @@ check(
     and "ic_fynx_logo" in profile_content
     and "aspectRatio(9f / 16f)" in profile_content
     and "aspectRatio(4f / 5f)" in profile_content
+    and "aspectRatio(3f / 4f)" in profile_content
     and "selectedListing = item.listing" in profile_content
 )
 
