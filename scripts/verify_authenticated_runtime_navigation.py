@@ -105,7 +105,7 @@ def tap_first_message_if_present(xml_text:str, name:str="message-tap")->str:
     if not xml_text: return ""
     try: root=ET.fromstring(xml_text)
     except ET.ParseError: return ""
-    excluded={"chat","messages","groups","friends","stories","more","features","search","settings","back","send","message actions"}
+    excluded={"chat","messages","groups","friends","stories","more","features","search","settings","back","send","message actions","archived","create group"}
     candidates=[]; path=[]
     def walk(node):
         path.append(node)
