@@ -519,11 +519,11 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         if (canSendMessages && mentionSuggestions.isNotEmpty()) {
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                color = Color(0xFF08090D),
+                color = glassPalette.backgroundMid.copy(alpha = 0.98f),
                 shape = RoundedCornerShape(14.dp)
             ) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Text("Mention a member", modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp), color = Color(0xFF9C90F0), style = MaterialTheme.typography.labelMedium)
+                    Text("Mention a member", modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp), color = glassPalette.doodleSecondary, style = MaterialTheme.typography.labelMedium)
                     mentionSuggestions.forEach { username ->
                         TextButton(
                             onClick = {
@@ -537,14 +537,14 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 FynxAvatar(username, senderAvatarUris[username], Modifier.size(30.dp), ownerUsername = username)
                                 Spacer(Modifier.width(8.dp))
-                                Text("@$username", color = Color.White, modifier = Modifier.weight(1f))
+                                Text("@$username", color = glassPalette.messageText, modifier = Modifier.weight(1f))
                             }
                         }
                     }
                 }
             }
         }
-        Surface(color = Color(0xFF08090D).copy(alpha = 0.98f), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
+        Surface(color = glassPalette.backgroundMid.copy(alpha = 0.98f), contentColor = glassPalette.messageText, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -563,15 +563,15 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     singleLine = true,
                     shape = RoundedCornerShape(24.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color(0xFF101217),
-                        unfocusedContainerColor = Color(0xFF101217),
+                        focusedContainerColor = glassPalette.incomingGlass,
+                        unfocusedContainerColor = glassPalette.incomingGlass,
                         focusedBorderColor = Color.Transparent,
                         unfocusedBorderColor = Color.Transparent,
-                        cursorColor = Color.White,
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedPlaceholderColor = Color(0xFF9A9DA8),
-                        unfocusedPlaceholderColor = Color(0xFF9A9DA8)
+                        cursorColor = glassPalette.bubbleRim,
+                        focusedTextColor = glassPalette.messageText,
+                        unfocusedTextColor = glassPalette.messageText,
+                        focusedPlaceholderColor = glassPalette.messageMuted,
+                        unfocusedPlaceholderColor = glassPalette.messageMuted
                     ),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = {
