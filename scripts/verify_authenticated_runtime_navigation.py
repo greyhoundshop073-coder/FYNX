@@ -100,7 +100,7 @@ def find_control(xml_text:str, labels:list[str]):
     return text or desc or rid,center[0],center[1]
 
 def tap_first_message_if_present(xml_text:str, name:str="message-tap")->str:
-    """Tap the first real clickable message bubble without fabricating test data."""
+    """Tap a real message bubble only; never mistake empty-state/navigation cards for a message."""
     if not xml_text: return ""
     try: root=ET.fromstring(xml_text)
     except ET.ParseError: return ""
@@ -112,15 +112,24 @@ def tap_first_message_if_present(xml_text:str, name:str="message-tap")->str:
         if text and text.lower() not in excluded and node.attrib.get("visible-to-user","true").lower()!="false":
             for ancestor in reversed(path):
                 if ancestor.attrib.get("clickable","false").lower()=="true" and _center(ancestor):
+                    left_top,right_bottom=ancestor.attrib.get("bounds","").split("][",1)
+                    left,top=map(int,left_top.strip("[]").split(","))
+                    right,bottom=map(int,right_bottom.strip("[]").split(","))
+                    width,height=right-left,bottom-top
                     center=_center(ancestor)
-                    if 150 <= center[1] <= 1700:
-                        candidates.append((center[1],ancestor))
+                    # Real message bubbles are compact conversation items. Ignore
+                    # full-width navigation/empty-state cards and floating actions.
+                    if 180 <= width <= 700 and 45 <= height <= 420 and 200 <= center[1] <= 1700:
+                        candidates.append((center[1],width*height,ancestor))
                     break
         for child in list(node): walk(child)
         path.pop()
     walk(root)
-    if not candidates: return ""
-    _,node=min(candidates,key=lambda item:item[0])
+    if not candidates:
+        # A real test account may legitimately have no conversation messages.
+        # Do not fabricate data or treat an empty-state card as a message tap.
+        return ""
+    _,_,node=min(candidates,key=lambda item:(item[0],item[1]))
     x,y=_center(node)
     run("adb","shell","input","tap",str(x),str(y)); time.sleep(1.0)
     after=dump_ui(f"{name}-after-tap.xml")
@@ -131,7 +140,6 @@ def tap_first_message_if_present(xml_text:str, name:str="message-tap")->str:
         return after
     FAILURES.append(name+" did not open message actions")
     return after
-
 def find_edit_fields(xml_text:str):
     fields=[]
     for node in nodes(xml_text):
