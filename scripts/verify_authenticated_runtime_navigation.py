@@ -143,6 +143,43 @@ def tap_first_message_if_present(xml_text:str, name:str="message-tap")->str:
         return after
     FAILURES.append(name+" did not open message actions")
     return after
+def tap_first_real_chat_or_group_if_present(xml_text:str, name:str)->str:
+    """Open the first real conversation/group row without fabricating application data."""
+    if not xml_text: return ""
+    try: root=ET.fromstring(xml_text)
+    except ET.ParseError: return ""
+    excluded={"chat","messages","groups","friends","stories","more","features","search","settings","back","send","archived","create group","new group","all chats","phone contacts"}
+    candidates=[]; path=[]
+    def walk(node):
+        path.append(node)
+        text=(node.attrib.get("text") or "").strip()
+        if text and text.lower() not in excluded and node.attrib.get("visible-to-user","true").lower()!="false":
+            for ancestor in reversed(path):
+                if ancestor.attrib.get("clickable","false").lower()=="true" and _center(ancestor):
+                    bounds=ancestor.attrib.get("bounds","")
+                    try:
+                        left_top,right_bottom=bounds.split("][",1)
+                        left,top=map(int,left_top.strip("[]").split(","))
+                        right,bottom=map(int,right_bottom.strip("[]").split(","))
+                        width,height=right-left,bottom-top
+                        cx,cy=_center(ancestor)
+                        if 250 <= width <= 1080 and 50 <= height <= 190 and 120 <= cy <= 1750:
+                            candidates.append((cy,width*height,ancestor))
+                    except (ValueError,IndexError):
+                        pass
+                    break
+        for child in list(node): walk(child)
+        path.pop()
+    walk(root)
+    if not candidates: return ""
+    _,_,node=min(candidates,key=lambda item:(item[0],item[1]))
+    x,y=_center(node)
+    run("adb","shell","input","tap",str(x),str(y)); time.sleep(1.5)
+    after=dump_ui(f"{name}-after-open.xml")
+    if not after:
+        FAILURES.append(name+" caused the authenticated app to exit or lose its UI")
+    return after
+
 def find_edit_fields(xml_text:str):
     fields=[]
     for node in nodes(xml_text):
@@ -268,11 +305,31 @@ if not FAILURES:
                 import shutil
                 source=ROOT/"authenticated-chat.png"; recent=ROOT/"authenticated-chat-recent.png"
                 if source.exists(): shutil.copyfile(source,recent); report.append("- PASS explicit Recent Chats screenshot artifact")
-                message_after=tap_first_message_if_present(after)
-                if message_after:
-                    report.append("- PASS tapping a real authenticated message keeps the app alive and opens Message actions")
-                elif MESSAGE_TAP_SKIPPED:
-                    report.append("- PASS message-action test not run because the authenticated account has no real conversation message; no test data was fabricated")
+                conversation_after=tap_first_real_chat_or_group_if_present(after,"private-chat-entry")
+                if conversation_after:
+                    report.append("- PASS opening the first real private chat keeps the authenticated app alive")
+                    message_after=tap_first_message_if_present(conversation_after)
+                    if message_after:
+                        report.append("- PASS tapping a real authenticated message keeps the app alive and opens Message actions")
+                    elif MESSAGE_TAP_SKIPPED:
+                        report.append("- PASS message-action test not run because the opened real conversation has no real message; no test data was fabricated")
+                else:
+                    report.append("- PASS private-chat entry test skipped because the authenticated account has no real private conversation; no test data was fabricated")
+                run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
+                reset=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-chat-group-reset.xml") or xml
+                groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Groups"])
+                if groups_xml:
+                    groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["Groups","New group"])
+                    if groups_tab:
+                        group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
+                        if group_after:
+                            report.append("- PASS opening the first real group chat keeps the authenticated app alive")
+                        else:
+                            report.append("- PASS group-chat entry test skipped because the authenticated account has no real group; no test data was fabricated")
+                    else:
+                        report.append("- PASS group-chat entry test skipped because the Groups tab was not available in the authenticated chat surface")
+                else:
+                    report.append("- PASS group-chat entry test skipped because the authenticated Chat surface was unavailable after reset")
         else: FAILURES.append("authenticated Home -> "+name)
         run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
         xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-reset.xml") or xml
