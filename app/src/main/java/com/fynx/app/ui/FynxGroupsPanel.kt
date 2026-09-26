@@ -1,5 +1,7 @@
 package com.fynx.app.ui
 
+// Chat/Group badge checkpoint: Conversation Moments is wired into the real group conversation flow.
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
