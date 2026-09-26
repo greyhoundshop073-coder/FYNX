@@ -466,28 +466,28 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .height(52.dp).background(MaterialTheme.colorScheme.surface).padding(horizontal = 0.dp),
+                    .height(52.dp).background(glassPalette.backgroundMid.copy(alpha = 0.98f)).padding(horizontal = 0.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Default.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
+                    Icon(Icons.Default.ArrowBack, "Back", tint = glassPalette.messageText, modifier = Modifier.size(24.dp))
                 }
                 IconButton(onClick = { onOpenProfile(chat.username) }, modifier = Modifier.size(48.dp)) {
                     FynxRemoteProfileAvatar(mediaId = resolvedAvatarUri?.substringAfterLast("/api/media/")?.takeIf { it != resolvedAvatarUri }, contentDescription = chat.name, modifier = Modifier.size(48.dp), ownerUsername = chat.username)
                 }
                 Column(Modifier.weight(1f).padding(start = 4.dp).padding(end = 2.dp)) {
-                    Text(chat.name, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                    Text(chat.name, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = glassPalette.messageText, maxLines = 1)
                     Text(
                         when { otherIsTyping -> "typing…"; isOnline -> "online"; else -> "last seen recently" },
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF9AA4B4),
+                        color = glassPalette.messageMuted,
                         maxLines = 1
                     )
                 }
-                IconButton(onClick = onVoiceCall, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Call, "Voice call", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp)) }
-                IconButton(onClick = onVideoCall, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Videocam, "Video call", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp)) }
+                IconButton(onClick = onVoiceCall, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Call, "Voice call", tint = glassPalette.messageText, modifier = Modifier.size(23.dp)) }
+                IconButton(onClick = onVideoCall, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Videocam, "Video call", tint = glassPalette.messageText, modifier = Modifier.size(23.dp)) }
                 Box {
-                    IconButton(onClick = { showChatMenu = true }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.MoreVert, "More", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp)) }
+                    IconButton(onClick = { showChatMenu = true }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.MoreVert, "More", tint = glassPalette.messageText, modifier = Modifier.size(23.dp)) }
                     DropdownMenu(expanded = showChatMenu, onDismissRequest = { showChatMenu = false }) {
                         DropdownMenuItem(text = { Text("Catch Me Up") }, onClick = { showChatMenu = false; showCatchMeUp = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })
                         DropdownMenuItem(text = { Text("Conversation Moments") }, onClick = { showChatMenu = false; showConversationMoments = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })
@@ -524,7 +524,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                 sending = false
                             }
                         }
-                    ) { Text("Add Contact", color = Color(0xFFB8C9FF), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
+                    ) { Text("Add Contact", color = glassPalette.doodleSecondary, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
                     Spacer(Modifier.weight(1f))
                     TextButton(
                         enabled = !sending,
@@ -537,9 +537,9 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                 sending = false
                             }
                         }
-                    ) { Text("Block User", color = Color(0xFFFF8B98), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
+                    ) { Text("Block User", color = MaterialTheme.colorScheme.error, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
                     IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                        Icon(Icons.Default.Close, "Close", tint = Color(0xFF9FA3AF), modifier = Modifier.size(22.dp))
+                        Icon(Icons.Default.Close, "Close", tint = glassPalette.messageMuted, modifier = Modifier.size(22.dp))
                     }
                 }
             }
