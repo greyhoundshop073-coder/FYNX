@@ -61,8 +61,12 @@ if "CommentsDialog" in home:
     raise SystemExit("HOME INTERACTIONS RED: legacy competing CommentsDialog detected")
 if 'Text("Save")' in home or 'Text("Repost")' in home:
     raise SystemExit("HOME INTERACTIONS RED: fake Save/Repost feed controls detected")
-for needle in ('MaterialTheme.colorScheme','FynxDesign.LargeCardShape','key = "feed_header"','key = "feed_loading"','key = "feed_error"','key = "feed_empty"','key = "feed_load_more"','"Refresh feed"','"Create Post"','"Like"','"Comment"','"Post options"','onDismissRequest =','enabled = !feedRequestInFlight','enabled = !loadingMore && !feedRequestInFlight'):
+for needle in ('MaterialTheme.colorScheme','FynxDesign.LargeCardShape','key = "feed_header"','key = "feed_loading"','key = "feed_loading_more"','key = "feed_error"','key = "feed_empty"','"Create Post"','"Like"','"Comment"','"Post options"','onDismissRequest =','enabled = !feedRequestInFlight'):
     require(home, needle, f"Home 4F polish/integration surface {needle}")
+if 'feed_load_more' in home or 'Load more posts' in home:
+    raise SystemExit("HOME INTERACTIONS RED: Home feed must load the next page automatically; manual Load more control remains")
+if '"Refresh feed"' in home:
+    raise SystemExit("HOME INTERACTIONS RED: Home feed must not expose a manual refresh button")
 require(home, 'text = { Text(if (interactionState.saved) "Remove from saved" else "Save post") }', "Home 4F save state label")
 require(home, 'label = if (interactionState.reposted) "Reposted" else "Repost"', "Home 4F repost state label")
 if 'contentDescription = null' not in home and 'Icon(Icons.Default.ShoppingBag, null)' not in home:
