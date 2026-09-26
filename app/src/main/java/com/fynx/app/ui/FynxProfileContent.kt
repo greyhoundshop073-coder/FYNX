@@ -13,7 +13,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Image as ImageIcon
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ShoppingBag
@@ -74,12 +73,12 @@ fun FynxProfileContentSection(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             listOf(
-                "All" to ImageIcon,
-                "Videos" to Icons.Default.PlayArrow,
-                "Photos" to ImageIcon,
-                "Audio" to Icons.Default.MusicNote,
-                "Marketplace" to Icons.Default.ShoppingBag
-            ).forEach { (label, icon) ->
+                "All",
+                "Videos",
+                "Photos",
+                "Audio",
+                "Marketplace"
+            ).forEach { label ->
                 val selected = selectedTab == label
                 Column(
                     Modifier.clip(RoundedCornerShape(12.dp))
@@ -88,9 +87,6 @@ fun FynxProfileContentSection(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(icon, contentDescription = label, modifier = Modifier.size(17.dp),
-                            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.width(5.dp))
                         Text(label,
                             color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.labelLarge,
