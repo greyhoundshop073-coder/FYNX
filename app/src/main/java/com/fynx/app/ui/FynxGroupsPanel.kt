@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -168,6 +169,7 @@ private fun FynxCreateGroupDialog(onDismiss: () -> Unit, onCreate: (String, Stri
 }
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FynxGroupPulseSheet(
     group: FynxGroup,

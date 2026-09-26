@@ -117,13 +117,7 @@ fun FynxProfileContentSection(
                     "Photos" -> photoPosts.forEach { add(FynxProfileGridItem.PostItem(it)) }
                     "Audio" -> audioPosts.forEach { add(FynxProfileGridItem.PostItem(it)) }
                     "Marketplace" -> marketplace.forEach { add(FynxProfileGridItem.MarketItem(it)) }
-                    else -> {
-                        val max = maxOf(posts.size, marketplace.size)
-                        for (i in 0 until max) {
-                            if (i < posts.size) add(FynxProfileGridItem.PostItem(posts[i]))
-                            if (i < marketplace.size) add(FynxProfileGridItem.MarketItem(marketplace[i]))
-                        }
-                    }
+                    else -> posts.forEach { add(FynxProfileGridItem.PostItem(it)) }
                 }
             }
 
