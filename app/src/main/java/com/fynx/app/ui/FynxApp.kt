@@ -229,8 +229,14 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { homeCameraRequest++ }) {
+                        IconButton(onClick = { homeCameraRequest++ }, modifier = Modifier.semantics { contentDescription = "Open FYNX camera" }) {
                             Icon(Icons.Default.CameraAlt, "Open FYNX camera")
+                        }
+                        IconButton(
+                            onClick = { selected = "Profile"; openProfileSettings = true },
+                            modifier = Modifier.semantics { contentDescription = "Open FYNX settings" }
+                        ) {
+                            Icon(Icons.Default.Settings, "Open FYNX settings")
                         }
                         BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
                             IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
