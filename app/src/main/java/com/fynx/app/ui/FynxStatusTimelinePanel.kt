@@ -213,7 +213,7 @@ private fun StatusAvatar(
     Box(modifier.size(58.dp)) {
         Box(Modifier.fillMaxSize().border(2.dp, MaterialTheme.colorScheme.primary, CircleShape).padding(3.dp)) {
             if (!avatarId.isNullOrBlank()) {
-                FynxRemoteProfileAvatar(avatarId, ownerDisplayName, Modifier.fillMaxSize().clip(CircleShape))
+                FynxRemoteProfileAvatar(avatarId, ownerDisplayName, Modifier.fillMaxSize().clip(CircleShape), ownerUsername = ownerUsername)
             } else {
                 Box(Modifier.fillMaxSize().clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
                     Text(ownerDisplayName.take(1).uppercase(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
