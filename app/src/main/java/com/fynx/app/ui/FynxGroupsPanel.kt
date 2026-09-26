@@ -241,7 +241,13 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp)) }
-                Box(Modifier.size(40.dp).clip(CircleShape).background(Color(0xFF353842)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Group, "Group", tint = Color(0xFFD8DAE3)) }
+                Box(Modifier.size(40.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
+                    if (selectedGroup?.groupPhotoMediaId.isNullOrBlank()) {
+                        Box(Modifier.fillMaxSize().background(Color(0xFF353842)), contentAlignment = Alignment.Center) { Icon(Icons.Default.Group, "Group", tint = Color(0xFFD8DAE3)) }
+                    } else {
+                        FynxRemoteProfileAvatar(selectedGroup?.groupPhotoMediaId, groupTitle, Modifier.fillMaxSize())
+                    }
+                }
                 Column(Modifier.weight(1f).padding(start = 10.dp)) {
                     Text(groupTitle, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
                     Text("${selectedGroup?.members?.size ?: 0} members", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
