@@ -259,7 +259,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         if (latest != null) {
             val previewText = when {
                 latest.voiceUri != null -> "Voice message"
-                latest.attachmentUri != null && latest.text.isBlank() -> if (latest.attachmentType == "video") "Video" else "Photo"
+                latest.attachmentUri != null && latest.text.isBlank() -> when (latest.attachmentType) { "video_note" -> "Video note"; "video" -> "Video"; "audio" -> "Voice message"; else -> "Photo" }
                 else -> latest.text
             }
             FynxChatStore.savePreview(context, chat.copy(lastMessage = previewText, time = formatChatTime(latest.timestamp)))
@@ -362,7 +362,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     fun submitComposer() {
         val value = text.trim()
-        if (value.isBlank() || sending) return
+        if (value.isBlank() && attachment == null || sending) return
         sending = true
         scope.launch {
             if (editingId != null) {
@@ -591,7 +591,16 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                         Text("Voice message", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 } else {
-                                    if (message.attachmentUri != null) { if (message.attachmentType == "video") { Box(Modifier.size(170.dp).clip(androidx.compose.foundation.shape.CircleShape)) { FynxRemoteMedia(message.attachmentUri, "video", Modifier.fillMaxSize(), rounded = false, loopVideo = true); Surface(color = Color.Black.copy(alpha = 0.46f), shape = androidx.compose.foundation.shape.CircleShape, modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)) { Text("Video note", style = MaterialTheme.typography.labelSmall, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) } } } else FynxRemoteMedia(mediaUrl = message.attachmentUri, type = message.attachmentType ?: "image", modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp)) }
+                                    if (message.attachmentUri != null) {
+                                        if (message.attachmentType == "video_note") {
+                                            Box(Modifier.size(170.dp).clip(androidx.compose.foundation.shape.CircleShape)) {
+                                                FynxRemoteMedia(message.attachmentUri, "video", Modifier.fillMaxSize(), rounded = false, loopVideo = true)
+                                                Surface(color = Color.Black.copy(alpha = 0.46f), shape = androidx.compose.foundation.shape.CircleShape, modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)) { Text("Video note", style = MaterialTheme.typography.labelSmall, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
+                                            }
+                                        } else {
+                                            FynxRemoteMedia(mediaUrl = message.attachmentUri, type = message.attachmentType ?: "image", modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp))
+                                        }
+                                    }
                                     if (message.text.isNotBlank()) SelectionContainer { Text(message.text, color = glassPalette.messageText, fontSize = messageTextSizeSp.sp) }
                                 }
                                 if (message.edited) Text("Edited", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
@@ -691,7 +700,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         Text(
                             when {
                                 editingId != null -> "Editing message"
-                                attachment != null -> "Attachment ready to send"
+                                attachment != null -> if (attachmentType == "video_note") "Video note ready to send" else "Attachment ready to send"
                                 else -> "Replying to message"
                             },
                             style = MaterialTheme.typography.labelMedium
@@ -820,7 +829,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     if (showCamera) {
         Dialog(onDismissRequest = { showCamera = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-            Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(initialMode = cameraInitialMode, videoNoteMode = videoNoteMode, onCaptured = { uri, type -> attachment = uri; attachmentType = type; videoNoteMode = false; showCamera = false }, onDismiss = { videoNoteMode = false; showCamera = false }) } }
+            Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(initialMode = cameraInitialMode, videoNoteMode = videoNoteMode, onCaptured = { uri, type -> attachment = uri; attachmentType = if (videoNoteMode && type == "video") "video_note" else type; videoNoteMode = false; showCamera = false }, onDismiss = { videoNoteMode = false; showCamera = false }) } }
         }
     }
 
