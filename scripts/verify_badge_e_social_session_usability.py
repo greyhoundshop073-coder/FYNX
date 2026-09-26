@@ -12,8 +12,8 @@ def read(name):
 
 home = read("FynxRemoteHomeSocialPanel.kt")
 app = read("FynxApp.kt")
-conversation = read("FynxConversationPanel.kt")
-group = read("FynxGroupChatPanel.kt")
+conversation = read("ConversationPanel.kt")
+group = read("GroupChatPanel.kt")
 profile = read("ProfilePanel.kt")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8", errors="replace")
 
