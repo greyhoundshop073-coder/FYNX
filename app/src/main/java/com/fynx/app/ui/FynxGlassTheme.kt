@@ -54,7 +54,6 @@ fun fynxGlassPalette(id: FynxGlassThemeId): FynxGlassThemePalette = when (id) {
         Color(0xFF10231F), Color(0xFF0A5D4B), Color(0xFF119D84), Color(0xFF76F5D8),
         Color(0xFFF4FFFB), Color(0xFFB8D8CE)
     )
-}
     FynxGlassThemeId.SUNSET -> FynxGlassThemePalette(
         id, Color(0xFF180A04), Color(0xFF3A1608), Color(0xFF7A2E12),
         Color(0xFFF97316), Color(0xFFFB7185), Color(0xFFFBBF24),
