@@ -958,9 +958,9 @@ private fun FynxCatchMeUpSheet(
             Text("Catch Me Up", style = MaterialTheme.typography.titleLarge)
             Text("A quick view of the real conversation with $title", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FynxPulseStat("Messages", messages.size.toString(), Modifier.weight(1f))
-                FynxPulseStat("Media", mediaCount.toString(), Modifier.weight(1f))
-                FynxPulseStat("Questions", questionCount.toString(), Modifier.weight(1f))
+                FynxCatchUpStat("Messages", messages.size.toString(), Modifier.weight(1f))
+                FynxCatchUpStat("Media", mediaCount.toString(), Modifier.weight(1f))
+                FynxCatchUpStat("Questions", questionCount.toString(), Modifier.weight(1f))
             }
             if (waitingForReply && latestIncoming != null) {
                 Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)) {
@@ -989,6 +989,16 @@ private fun FynxCatchMeUpSheet(
             }
             Text("This summary uses only messages already in this conversation; it does not create sample content.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun FynxCatchUpStat(label: String, value: String, modifier: Modifier = Modifier) {
+    Surface(modifier, shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
