@@ -26,7 +26,7 @@ object FynxGroupsStore {
                             add(FynxGroupMember(member.optString("username"), runCatching { FynxGroupRole.valueOf(member.optString("role")) }.getOrDefault(FynxGroupRole.MEMBER)))
                         }
                     }
-                    add(FynxGroup(item.optString("id"), item.optString("name"), item.optString("description"), runCatching { FynxGroupVisibility.valueOf(item.optString("visibility")) }.getOrDefault(FynxGroupVisibility.PRIVATE), item.optString("ownerUsername"), parsedMembers))
+                    add(FynxGroup(item.optString("id"), item.optString("name"), item.optString("description"), runCatching { FynxGroupVisibility.valueOf(item.optString("visibility")) }.getOrDefault(FynxGroupVisibility.PRIVATE), item.optString("ownerUsername"), parsedMembers, item.optString("groupPhotoMediaId").ifBlank { null }))
                 }
             }.filter { FynxGroupsBatch1.validate(it).isEmpty() }
         }.getOrElse { emptyList() }
@@ -37,7 +37,7 @@ object FynxGroupsStore {
         groups.forEach { group ->
             array.put(JSONObject().apply {
                 put("id", group.id); put("name", group.name); put("description", group.description)
-                put("visibility", group.visibility.name); put("ownerUsername", group.ownerUsername)
+                put("visibility", group.visibility.name); put("ownerUsername", group.ownerUsername); put("groupPhotoMediaId", group.groupPhotoMediaId ?: "")
                 put("members", JSONArray().apply { group.members.forEach { member -> put(JSONObject().apply { put("username", member.username); put("role", member.role.name) }) } })
             })
         }
