@@ -547,7 +547,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                         Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f), contentColor = MaterialTheme.colorScheme.onSurfaceVariant, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth().widthIn(max = 340.dp)) {
                             Column(Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                FynxAvatar(chat.name, resolvedAvatarUri, Modifier.size(64.dp))
+                                FynxAvatar(chat.name, resolvedAvatarUri, Modifier.size(64.dp), ownerUsername = chat.username)
                                 Spacer(Modifier.height(14.dp))
                                 Text("No messages here yet…", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                                 Spacer(Modifier.height(5.dp))
