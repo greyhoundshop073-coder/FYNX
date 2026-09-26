@@ -339,6 +339,15 @@ if not FAILURES:
         after=capture_surface(name,labels,before,expected)
         if after:
             report.append(f"- PASS authenticated Home -> {name} screenshot/UI hierarchy")
+            if name == "chat":
+                # Keep an explicitly named copy for the Recent Chats board so the
+                # downloadable visual artifact is easy to identify before APK use.
+                import shutil
+                source = ROOT/"authenticated-chat.png"
+                recent = ROOT/"authenticated-chat-recent.png"
+                if source.exists():
+                    shutil.copyfile(source, recent)
+                    report.append("- PASS explicit Recent Chats screenshot artifact")
         else:
             FAILURES.append("authenticated Home -> "+name)
         # Reset the process between journeys. Chat can keep an open panel even
