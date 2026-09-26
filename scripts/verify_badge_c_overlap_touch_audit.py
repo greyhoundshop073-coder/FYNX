@@ -12,8 +12,7 @@ def read(name):
     return p.read_text(encoding="utf-8", errors="replace")
 
 files = list(UI.glob("*.kt"))
-all_ui = "
-".join(p.read_text(encoding="utf-8", errors="replace") for p in files)
+all_ui = "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in files)
 
 required = [
     "FynxApp.kt", "FynxRemoteHomeSocialPanel.kt", "FynxHomeSocialHubPanel.kt",
