@@ -88,7 +88,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var showGifts by remember { mutableStateOf(false) }
     var showChatMenu by remember { mutableStateOf(false) }
     var showChatSettings by remember { mutableStateOf(false) }
-    var showCatchMeUp by remember { mutableStateOf(false) }
+    var showCatchMeUp by remember { mutableStateOf(false) }\n    var showConversationMoments by remember { mutableStateOf(false) }
     var chatNotificationsEnabled by remember(chat.username) { mutableStateOf(FynxConversationPreferences.chatNotifications(context, chat.username)) }
     var showEmojiPanel by remember { mutableStateOf(false) }
     var showAttachmentSheet by remember { mutableStateOf(false) }
@@ -467,7 +467,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 Box {
                     IconButton(onClick = { showChatMenu = true }, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.MoreVert, "More", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp)) }
                     DropdownMenu(expanded = showChatMenu, onDismissRequest = { showChatMenu = false }) {
-                        DropdownMenuItem(text = { Text("Catch Me Up") }, onClick = { showChatMenu = false; showCatchMeUp = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })
+                        DropdownMenuItem(text = { Text("Catch Me Up") }, onClick = { showChatMenu = false; showCatchMeUp = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })\n                        DropdownMenuItem(text = { Text("Conversation Moments") }, onClick = { showChatMenu = false; showConversationMoments = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })
                         DropdownMenuItem(text = { Text("Chat settings") }, onClick = { showChatMenu = false; showChatSettings = true }, leadingIcon = { Icon(Icons.Default.Settings, null) })
                         DropdownMenuItem(text = { Text(if (chatNotificationsEnabled) "Mute notifications" else "Turn on notifications") }, onClick = { chatNotificationsEnabled = !chatNotificationsEnabled; FynxConversationPreferences.setChatNotifications(context, chat.username, chatNotificationsEnabled); showChatMenu = false }, leadingIcon = { Icon(Icons.Default.Notifications, null) })
                         DropdownMenuItem(text = { Text(if (searchOpen) "Close search" else "Search messages") }, onClick = { showChatMenu = false; searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, leadingIcon = { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, null) })
