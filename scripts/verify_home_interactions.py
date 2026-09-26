@@ -41,7 +41,7 @@ for needle in ("suspend fun comments(context: Context, id: String)","suspend fun
     require_normalized(client, needle, f"existing social client API {needle}")
 for needle in ('Icons.Default.Favorite','Icons.Default.ChatBubbleOutline','Icons.Default.Bookmark','Icons.Default.BookmarkBorder','Icons.Default.Repeat','Icons.Default.MoreHoriz','interactionBusy','feedRequestInFlight','lastFeedRequestAt','FEED_REFRESH_DEBOUNCE_MS','posts = posts.filterNot { it.id == id }','deletePost = null','AlertDialog(','sharePost(context, post)'):
     require(home, needle, f"Home reliability surface {needle}")
-for needle in ('feedPage(context, limit = 20, offset = 0','feedPage(context, limit = 20, offset = posts.size','val existing = posts.map { it.id }.toSet()','filterNot { it.id in existing }','if (!loading && hasMore)'):
+for needle in ('feedPage(context, limit = 20, offset = 0','feedPage(context, limit = 20, offset = posts.size','val existing = posts.map { it.id }.toSet()','filterNot { it.id in existing }','lastVisibleIndex >= totalItems - 6','!loadingMore && !feedRequestInFlight','loadMore()'):
     require(home, needle, f"feed recovery/pagination {needle}")
 for needle in ('FEED_CACHE_TTL_MS','readCachedFeed(context)','readStaleCachedFeed(context)','if (safeOffset == 0 && remote.isFailure)'):
     require(client, needle, f"offline feed recovery {needle}")
