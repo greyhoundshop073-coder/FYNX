@@ -94,8 +94,21 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
                 items(visible, key = { it.id }) { group ->
                     Card(onClick = { onOpenGroup(group.id) }, modifier = Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Group, "Group", tint = MaterialTheme.colorScheme.primary)
+                            Box(Modifier.size(48.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
+                                if (group.groupPhotoMediaId.isNullOrBlank()) {
+                                    Box(
+                                        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primaryContainer),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Group, "Group", tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                } else {
+                                    FynxRemoteProfileAvatar(
+                                        mediaId = group.groupPhotoMediaId,
+                                        fallback = group.name,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
                             }
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
