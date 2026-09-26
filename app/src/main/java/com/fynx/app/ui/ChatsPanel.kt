@@ -212,7 +212,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                             Box {
                                 IconButton(
                                     onClick = { openMenuFor = chat.username },
-                                    modifier = Modifier.size(40.dp)
+                                    modifier = Modifier.size(48.dp)
                                 ) {
                                     Icon(Icons.Default.MoreVert, contentDescription = "Chat options")
                                 }
