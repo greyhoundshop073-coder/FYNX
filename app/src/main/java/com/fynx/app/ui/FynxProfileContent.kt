@@ -82,8 +82,8 @@ fun FynxProfileContentSection(
                 val selected = selectedTab == label
                 Column(
                     Modifier.clip(RoundedCornerShape(12.dp))
-                        .clickable { selectedTab = label }
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                        .clickable { selectedTab = label },
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
