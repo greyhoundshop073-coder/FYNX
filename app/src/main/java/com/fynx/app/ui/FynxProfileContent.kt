@@ -147,7 +147,8 @@ fun FynxProfileContentSection(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(marketItems.size, key = { index -> "market:" + marketItems[index].listing.id }) { index ->
-                        FynxProfileMarketplaceTile(marketItems[index].listing) { selectedListing = marketItems[index].listing }
+                        val item = marketItems[index]
+                        FynxProfileMarketplaceTile(item.listing) { selectedListing = item.listing }
                     }
                 }
             } else {
