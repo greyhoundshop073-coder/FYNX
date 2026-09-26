@@ -188,8 +188,6 @@ fun OtherUserProfilePanel(
                                             Spacer(Modifier.width(6.dp))
                                             Text("Message")
                                         }
-                                    } else {
-                                        Text("Messaging unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f).padding(horizontal = 6.dp), textAlign = TextAlign.Center)
                                     }
                                 }
                             }

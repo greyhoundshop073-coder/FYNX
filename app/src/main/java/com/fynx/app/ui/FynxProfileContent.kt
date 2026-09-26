@@ -61,7 +61,11 @@ fun FynxProfileContentSection(
     }
 
     Column(Modifier.fillMaxWidth()) {
-        FynxMySoulSection(posts = posts)
+        FynxMySoulSection(
+            posts = posts,
+            onOpenLatest = { posts.firstOrNull()?.let { selectedPost = it } },
+            onOpenAudio = { audioPosts.firstOrNull()?.let { selectedPost = it } }
+        )
         Spacer(Modifier.height(14.dp))
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -240,7 +244,11 @@ private fun FynxProfilePostTile(post: FynxProfileRemoteClient.ProfilePost, usern
 }
 
 @Composable
-private fun FynxMySoulSection(posts: List<FynxProfileRemoteClient.ProfilePost>) {
+private fun FynxMySoulSection(
+    posts: List<FynxProfileRemoteClient.ProfilePost>,
+    onOpenLatest: () -> Unit = {},
+    onOpenAudio: () -> Unit = {}
+) {
     val latest = posts.firstOrNull()
     val audio = posts.firstOrNull { it.mediaType?.lowercase()?.contains("audio") == true }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -248,24 +256,43 @@ private fun FynxMySoulSection(posts: List<FynxProfileRemoteClient.ProfilePost>) 
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .18f))) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("FYNX Moment", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text(latest?.text?.ifBlank { "Your latest FYNX post" } ?: "Share something that represents you right now.", style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                SoulPill(
+                    title = "Latest FYNX post",
+                    value = latest?.text?.ifBlank { "Open your latest post" } ?: "No post yet",
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = if (latest != null) onOpenLatest else null
+                )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SoulPill("Today I Am…", if (latest == null) "Not set" else "From your latest post", Modifier.weight(1f))
-                    SoulPill("My World", "Add interests", Modifier.weight(1f))
+                    SoulPill("Today I Am…", if (latest == null) "Not set" else "From latest post", Modifier.weight(1f))
+                    SoulPill("My World", "Not set", Modifier.weight(1f))
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SoulPill("Keep This", "Choose a post", Modifier.weight(1f))
-                    SoulPill("My Sound", if (audio != null) "Audio post" else "No audio yet", Modifier.weight(1f))
+                    SoulPill("Keep This", "Not pinned", Modifier.weight(1f))
+                    SoulPill(
+                        "My Sound",
+                        if (audio != null) "Open audio post" else "No audio yet",
+                        Modifier.weight(1f),
+                        onClick = if (audio != null) onOpenAudio else null
+                    )
                 }
                 Text("A Little About Me", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                Text("Your profile bio stays the source of truth here.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Text("Your profile bio remains the source of truth.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
 }
 @Composable
-private fun SoulPill(title: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .55f)).padding(10.dp)) {
+private fun SoulPill(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
+) {
+    val pillModifier = modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .55f))
+        .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+        .padding(10.dp)
+    Column(pillModifier) {
         Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
         Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
