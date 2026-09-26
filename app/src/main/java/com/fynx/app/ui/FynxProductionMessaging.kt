@@ -141,7 +141,7 @@ object FynxProductionMessaging {
         val cleanText = text.trim()
         if (cleanText.length > MAX_MESSAGE_LENGTH) return Result.failure(IllegalArgumentException("Message is too long. Maximum is 4000 characters."))
         if (cleanText.isBlank() && mediaId == null) return Result.failure(IllegalArgumentException("Message content is required."))
-        if (mediaType != null && mediaType !in setOf("image", "video", "audio", "document")) return Result.failure(IllegalArgumentException("Unsupported message media type."))
+        if (mediaType != null && mediaType !in setOf("image", "video", "video_note", "audio", "document")) return Result.failure(IllegalArgumentException("Unsupported message media type."))
         if (mediaId == null && mediaType != null) return Result.failure(IllegalArgumentException("Message media is incomplete."))
         if (voiceDurationMs !in 0L..MAX_VOICE_DURATION_MS) return Result.failure(IllegalArgumentException("Voice message duration is invalid."))
         val body = JSONObject().apply { put("recipientUsername", normalizedRecipient); put("text", cleanText); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("voiceDurationMs", voiceDurationMs) }
