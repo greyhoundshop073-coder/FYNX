@@ -163,7 +163,8 @@ private object FynxStatusPresenceStore {
     suspend fun activeOwners(context: android.content.Context): Set<String> {
         val now = System.currentTimeMillis()
         if (now - loadedAt < 30_000L) return activeOwners
-        return FynxStatusClient.list(context).getOrNull()
+        return runCatching { FynxStatusClient.list(context).getOrNull() }
+            .getOrNull()
             ?.filterNot(FynxStatus::isExpired)
             ?.map { it.ownerUsername.removePrefix("@").trim().lowercase() }
             ?.filter { it.isNotBlank() }
