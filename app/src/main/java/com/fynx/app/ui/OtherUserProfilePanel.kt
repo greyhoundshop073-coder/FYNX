@@ -154,7 +154,7 @@ fun OtherUserProfilePanel(
                                 }
                                 Spacer(Modifier.height(16.dp))
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    if (hasActiveStatus) OutlinedButton(enabled = !busy, onClick = { onOpenStatus(person.username) }, modifier = Modifier.weight(0.75f), shape = RoundedCornerShape(22.dp)) { Text("Status") }
+                                    
                                     Button(
                                         enabled = !busy,
                                         onClick = {

@@ -6,7 +6,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
 
-object FynxProfileRemoteClient {
+object FynxProfileRemoteClient {\n    // Server-authoritative messaging permission follows the profile relationship state.
     data class Profile(val id:String,val username:String,val displayName:String,val bio:String,val country:String,val verified:Boolean,val profilePhotoMediaId:String?,val activityVisible:Boolean,val relationship:String,val pendingRequestId:String?=null,val viewerSentRequest:Boolean,val viewerReceivedRequest:Boolean,val followedByCurrentUser:Boolean,val mutualFriends:Int,val postCount:Int,val followerCount:Int?=null,val followingCount:Int?=null,val connectionsVisible:Boolean=false,val canMessage:Boolean=false)
     data class ProfilePost(val id:String,val text:String,val visibility:String,val mediaId:String?,val mediaType:String?,val mediaUrl:String?,val timestamp:Long,val likeCount:Int,val commentCount:Int)
     data class ConnectionUser(val id:String,val username:String,val displayName:String)

@@ -135,15 +135,9 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
 
     val surface = MaterialTheme.colorScheme.surface
     val outline = MaterialTheme.colorScheme.outline.copy(alpha = .45f)
-    LazyColumn(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
         item {
-            Card(
-                Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = surface),
-                border = BorderStroke(1.dp, outline)
-            ) {
-                Column(
+            Column(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -230,7 +224,6 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                         }
                     }
                 }
-            }
         }
         item {
             session.username?.takeIf { it.isNotBlank() }?.let { username ->
