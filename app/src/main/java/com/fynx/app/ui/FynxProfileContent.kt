@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -23,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -130,12 +132,12 @@ fun FynxProfileContentSection(
                     else -> "No content yet"
                 }, Modifier.fillMaxWidth().padding(vertical = 28.dp), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else if (selectedTab == "Marketplace") {
-                val columns = if (LocalContext.current.resources.configuration.screenWidthDp < 360) 2 else 3
+                val columns = 2
                 val marketItems = gridItems.filterIsInstance<FynxProfileGridItem.MarketItem>()
                 val rows = (marketItems.size + columns - 1) / columns
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(columns),
-                    modifier = Modifier.fillMaxWidth().height((rows * 184 + (rows - 1).coerceAtLeast(0) * 8).dp),
+                    modifier = Modifier.fillMaxWidth().height((rows * 232 + (rows - 1).coerceAtLeast(0) * 8).dp),
                     userScrollEnabled = false,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -312,21 +314,43 @@ private fun FynxProfilePostFeedCard(post: FynxProfileRemoteClient.ProfilePost, u
             if (post.text.isNotBlank()) Text(post.text, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge)
             if (!mediaUrl.isNullOrBlank()) {
                 if (type.contains("audio")) {
-                    Column(Modifier.fillMaxWidth().padding(16.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(64.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.MusicNote, contentDescription = "Audio post", tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(30.dp))
+                            Box(
+                                Modifier.size(82.dp)
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    painter = painterResource(com.fynx.app.R.drawable.ic_fynx_logo),
+                                    contentDescription = "FYNX audio post",
+                                    modifier = Modifier.size(58.dp)
+                                )
                             }
-                            Spacer(Modifier.width(12.dp))
+                            Spacer(Modifier.width(14.dp))
                             Column(Modifier.weight(1f)) {
-                                Text("AUDIO POST", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                Text("FYNX AUDIO", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                                 Text("Voice / audio recording", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                                Text("Tap to listen", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
                             }
                         }
-                        FynxRemoteMedia(mediaUrl, post.mediaType ?: "audio", Modifier.fillMaxWidth().height(64.dp), autoPlay = false, playbackActive = true)
+                        FynxRemoteMedia(post.mediaUrl ?: post.mediaId?.let { "/api/social/media/" + it }, post.mediaType ?: "audio", Modifier.fillMaxWidth().height(64.dp), autoPlay = false, playbackActive = true)
                     }
                 } else {
-                    FynxRemoteMedia(mediaUrl, post.mediaType ?: "auto", Modifier.fillMaxWidth(), autoPlay = false, playbackActive = true)
+                    val mediaModifier = when {
+                        type.contains("video") -> Modifier.fillMaxWidth().aspectRatio(9f / 16f)
+                        type.contains("image") || type.contains("photo") -> Modifier.fillMaxWidth().aspectRatio(4f / 5f)
+                        else -> Modifier.fillMaxWidth()
+                    }
+                    FynxRemoteMedia(mediaUrl, post.mediaType ?: "auto", mediaModifier, autoPlay = false, playbackActive = true)
                 }
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -338,7 +362,7 @@ private fun FynxProfilePostFeedCard(post: FynxProfileRemoteClient.ProfilePost, u
 }
 @Composable
 private fun FynxProfileMarketplaceTile(listing: FynxMarketplaceClient.Listing, onOpen: () -> Unit) {
-    Card(Modifier.fillMaxWidth().height(184.dp).clickable(onClick = onOpen),
+    Card(Modifier.fillMaxWidth().clickable(onClick = onOpen),
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .22f)),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {

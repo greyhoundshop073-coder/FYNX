@@ -93,7 +93,7 @@ check(
     and "FynxMarketplaceClient.listings(context, username, \"\")" in profile_content
     and "sellerUsername.equals(username, ignoreCase = true)" in profile_content
     and "GridCells.Fixed(columns)" in profile_content
-    and "val columns = if (LocalContext.current.resources.configuration.screenWidthDp < 360) 2 else 3" in profile_content
+    and "val columns = 2" in profile_content
 )
 check(
     "profile has no fabricated Business content or repost/likes tabs",
@@ -107,6 +107,9 @@ check(
     and "FynxProfileMarketplaceDetails" in profile_content
     and "FynxMarketplaceClient.mediaUrl" in profile_content
     and "selectedPost = item.post" in profile_content
+    and "ic_fynx_logo" in profile_content
+    and "aspectRatio(9f / 16f)" in profile_content
+    and "aspectRatio(4f / 5f)" in profile_content
     and "selectedListing = item.listing" in profile_content
 )
 
