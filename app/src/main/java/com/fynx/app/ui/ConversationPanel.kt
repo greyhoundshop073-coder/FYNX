@@ -547,11 +547,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
         if (searchOpen) OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search messages…") })
         pinnedMessage?.let { pinned ->
-            Surface(onClick = { searchQuery = ""; val index = messages.indexOfFirst { it.id == pinned.id }; if (index >= 0) scope.launch { messageListState.animateScrollToItem(index) } }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), color = Color(0xFF090A0F), shape = RoundedCornerShape(12.dp)) {
+            Surface(onClick = { searchQuery = ""; val index = messages.indexOfFirst { it.id == pinned.id }; if (index >= 0) scope.launch { messageListState.animateScrollToItem(index) } }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), color = glassPalette.backgroundMid.copy(alpha = 0.96f), contentColor = glassPalette.messageText, shape = RoundedCornerShape(12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.PushPin, "Pinned message", tint = Color(0xFF8B7BE8), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
-                    Column(Modifier.weight(1f)) { Text("Pinned message", style = MaterialTheme.typography.labelMedium, color = Color(0xFF9C90F0)); Text(pinned.text.ifBlank { "Media message" }, maxLines = 1, style = MaterialTheme.typography.bodySmall, color = Color(0xFFE6E7EC)) }
-                    Icon(Icons.Default.ChevronRight, "Open pinned message", tint = Color(0xFF8A8F9A))
+                    Icon(Icons.Default.PushPin, "Pinned message", tint = glassPalette.doodleSecondary, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) { Text("Pinned message", style = MaterialTheme.typography.labelMedium, color = glassPalette.doodleSecondary); Text(pinned.text.ifBlank { "Media message" }, maxLines = 1, style = MaterialTheme.typography.bodySmall, color = glassPalette.messageText) }
+                    Icon(Icons.Default.ChevronRight, "Open pinned message", tint = glassPalette.messageMuted)
                 }
             }
         }
@@ -602,14 +602,14 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             Column(Modifier.padding(horizontal = if (mediaOnly) 0.dp else 9.dp, vertical = if (mediaOnly) 0.dp else 5.dp)) {
                                 if (message.pinned) {
                                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
-                                        Icon(Icons.Default.PushPin, contentDescription = "Pinned", tint = if (message.fromMe) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.primary, modifier = Modifier.size(13.dp))
+                                        Icon(Icons.Default.PushPin, contentDescription = "Pinned", tint = if (message.fromMe) glassPalette.messageText.copy(alpha = 0.9f) else glassPalette.doodleSecondary, modifier = Modifier.size(13.dp))
                                         Spacer(Modifier.width(4.dp))
                                         Text("Pinned", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
                                     }
                                 }
                                 if (message.replyToId != null) {
                                     val replied = messages.firstOrNull { it.id == message.replyToId }
-                                    Text("Reply: " + (replied?.text?.take(80) ?: "Original message"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 5.dp))
+                                    Text("Reply: " + (replied?.text?.take(80) ?: "Original message"), style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(bottom = 5.dp))
                                 }
                                 if (message.voiceUri != null) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -621,7 +621,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                         if (message.attachmentType == "video_note") {
                                             Box(Modifier.size(170.dp).clip(androidx.compose.foundation.shape.CircleShape)) {
                                                 FynxRemoteMedia(message.attachmentUri, "video", Modifier.fillMaxSize(), rounded = false, loopVideo = true)
-                                                Surface(color = Color.Black.copy(alpha = 0.46f), shape = androidx.compose.foundation.shape.CircleShape, modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)) { Text("Video note", style = MaterialTheme.typography.labelSmall, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
+                                                Surface(color = glassPalette.background.copy(alpha = 0.62f), contentColor = glassPalette.messageText, shape = androidx.compose.foundation.shape.CircleShape, modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)) { Text("Video note", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageText, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
                                             }
                                         } else {
                                             FynxRemoteMedia(mediaUrl = message.attachmentUri, type = message.attachmentType ?: "image", modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp))
