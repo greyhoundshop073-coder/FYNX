@@ -427,6 +427,10 @@ fun FynxChatDoodlePattern(palette: FynxGlassThemePalette? = null, density: Float
                     FynxGlassThemeId.AURORA -> 294.dp.toPx()
                     FynxGlassThemeId.LIGHT -> 336.dp.toPx()
                     FynxGlassThemeId.EMERALD -> 306.dp.toPx()
+                    FynxGlassThemeId.SUNSET -> 320.dp.toPx()
+                    FynxGlassThemeId.ROSE -> 298.dp.toPx()
+                    FynxGlassThemeId.GOLDEN -> 324.dp.toPx()
+                    FynxGlassThemeId.TURQUOISE -> 300.dp.toPx()
                 }
                 val markY = offsetY + 286.dp.toPx()
                 withTransform({ rotate(-6f + ((tx + ty) and 2) * 3f, pivot = p(markX, markY)) }) {
