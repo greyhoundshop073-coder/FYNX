@@ -21,7 +21,7 @@ data class ChatMessage(
     val reaction: String? = null,
     val edited: Boolean = false,
     val attachmentUri: String? = null,
-    val attachmentType: String? = null,
+    val attachmentType: String? = null, // image | video | video_note | audio | document
     val voiceUri: String? = null,
     val voiceDurationMs: Long = 0L,
     val mediaId: String? = null,
