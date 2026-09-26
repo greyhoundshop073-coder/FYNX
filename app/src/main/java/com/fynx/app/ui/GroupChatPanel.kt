@@ -228,7 +228,7 @@ fun GroupChatPanel(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.ArrowBack, "Back") }
-                    FynxAvatar(group.name, Modifier.size(40.dp))
+                    if (group.groupPhotoMediaId.isNullOrBlank()) FynxAvatar(group.name, Modifier.size(40.dp)) else FynxRemoteProfileAvatar(group.groupPhotoMediaId, group.name, Modifier.size(40.dp))
                     Column(Modifier.weight(1f).padding(start = 10.dp)) {
                         Text(group.name, style = MaterialTheme.typography.titleMedium)
                         Text(
@@ -525,7 +525,7 @@ private fun FynxFirstGroupContactIntro(group: GroupChat) {
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            FynxAvatar(group.name, Modifier.size(58.dp))
+            if (group.groupPhotoMediaId.isNullOrBlank()) FynxAvatar(group.name, Modifier.size(58.dp)) else FynxRemoteProfileAvatar(group.groupPhotoMediaId, group.name, Modifier.size(58.dp))
             Spacer(Modifier.height(8.dp))
             Text(group.name, style = MaterialTheme.typography.titleMedium)
             Text(

@@ -270,7 +270,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                                         Text(group.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     },
                                     leadingContent = {
-                                        FynxAvatar(group.name, modifier = Modifier.size(avatarSize))
+                                        if (group.groupPhotoMediaId.isNullOrBlank()) FynxAvatar(group.name, modifier = Modifier.size(avatarSize)) else FynxRemoteProfileAvatar(group.groupPhotoMediaId, group.name, modifier = Modifier.size(avatarSize))
                                     },
                                     supportingContent = {
                                         Text(
