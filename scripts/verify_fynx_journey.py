@@ -152,6 +152,16 @@ check("protected marketplace transaction backend remains present", (ROOT / "back
 check("Send a Gift remains connected to conversations", "GiftsPanel" in conversation and "showGifts" in conversation and "onGiftSelected" in gifts)
 check("owner/admin client exposes server controls", all(x in admin for x in ["dashboard", "admins", "setAccountStatus", "grantAdmin", "revokeAdmin"]))
 check("removed AI image/video generation is not reintroduced", "image generation" not in app.lower() and "video generation" not in app.lower())
+# Final integration regression guards: preserve the agreed Home/content rules while the
+# remaining implementation is consolidated into the final badge.
+status_timeline = read("app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt")
+status_composer = read("app/src/main/java/com/fynx/app/ui/FynxMatureStatusComposerPanel.kt")
+post_client = read("app/src/main/java/com/fynx/app/ui/FynxMultiMediaPostClient.kt")
+check("Home does not put Settings back into the Home Create surface", '"Settings"' not in create_menu and "Settings" not in home_panel)
+check("Status remains a vertical WhatsApp-style list", "LazyColumn(" in status_timeline and 'Text("Recent updates"' in status_timeline and "StatusHomeRow(" in status_timeline)
+check("Status composer uses the real profile identity", "FynxProfileRemoteClient.get(context, username)" in status_composer and "displayName = profile.displayName" in status_composer)
+check("Status music stays catalogue-only and persists real metadata", all(x in status_composer for ["selectedMusic?.id", "selectedMusic?.title", "selectedMusic?.artist", "selectedMusic?.durationMs"]))
+check("Posts reject local music uploads and publish catalogue music metadata", 'require(music == null) { "Local music uploads are disabled.' in post_client and all(x in post_client for ["musicMediaId", "musicTitle", "musicArtist", "musicDurationMs"]))
 secret_pattern = re.compile(r"sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}")
 all_text = "\n".join(read(p) for p in ["app/src/main/java/com/fynx/app/ui/FynxApp.kt", "app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt"])
 check("no common API secret pattern in client files", not secret_pattern.search(all_text))
