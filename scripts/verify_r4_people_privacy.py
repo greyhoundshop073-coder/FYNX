@@ -23,6 +23,7 @@ check("profile routes use authenticated JWT", "const auth = (req,res,next)" in p
 check("profile visibility is server enforced", "row.profile_visibility==='Everyone'" in profile and "row.profile_visibility==='My friends'&&friends" in profile)
 check("blocked users cannot access profiles", "FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1)" in profile and "this profile is unavailable" in profile)
 check("post visibility is server enforced on profile posts", "row.posts_visibility==='Everyone'" in profile and "posts are private" in profile)
+check("profile posts enforce per-post audience and mutual block visibility", "p.visibility='PUBLIC'" in profile and "p.visibility='FRIENDS_ONLY'" in profile and "p.visibility='SELECTED_PEOPLE'" in profile and "social_post_audience" in profile and "blocks b" in profile)
 check("follower/following counts are self-only", "const followerCount=self?" in profile and "const followingCount=self?" in profile and "connectionsVisible:self" in profile)
 check("follower list endpoint is scoped to authenticated user", "app.get('/api/social/me/followers'" in profile and "WHERE f.followed_id=$1" in profile)
 check("following list endpoint is scoped to authenticated user", "app.get('/api/social/me/following'" in profile and "WHERE f.follower_id=$1" in profile)
@@ -44,6 +45,8 @@ check("accepted friend actions are authenticated", "UPDATE friendships SET statu
 check("blocking removes active friendship", "INSERT INTO blocks (blocker_id, blocked_id)" in social and "DELETE FROM friendships WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)" in social)
 check("reverse friend requests are additionally hardened before route", "reversePending" in social_hardening and "friend request already pending" in social_hardening)
 # Other-user profiles may show real follower/following COUNTS. The private connection MEMBER LISTS remain self-only.
+check("other-user profile has direct report and block safety actions", "Report profile" in other_profile and "Block @" in other_profile and "FynxSocialClient.block" in other_profile and "blockConfirmOpen" in other_profile)
+check("other-user profile explains unavailable messaging", "Messaging unavailable" in other_profile)
 check(
     "other-user profile exposes counts but not connection member lists",
     "ProfileCount(\"Followers\"" in other_profile
