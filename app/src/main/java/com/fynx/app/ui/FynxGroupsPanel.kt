@@ -105,7 +105,7 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
                                 } else {
                                     FynxRemoteProfileAvatar(
                                         mediaId = group.groupPhotoMediaId,
-                                        fallback = group.name,
+                                        contentDescription = group.name,
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }
