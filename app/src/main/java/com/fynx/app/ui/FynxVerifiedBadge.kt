@@ -7,16 +7,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -36,11 +30,9 @@ fun FynxVerifiedBadge(modifier: Modifier = Modifier) {
 
 @Composable
 fun FynxAvatar(name: String, modifier: Modifier = Modifier, ownerUsername: String? = null) {
-    var remoteMediaId by remember(ownerUsername) { mutableStateOf<String?>(null) }
-    LaunchedEffect(ownerUsername) {
-        val normalized = ownerUsername?.removePrefix("@")?.trim().orEmpty()
-        if (normalized.isBlank()) remoteMediaId = null
-        else remoteMediaId = FynxProfileRemoteClient.get(LocalContext.current, normalized).getOrNull()?.profilePhotoMediaId
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val remoteMediaId = ownerUsername?.takeIf { it.isNotBlank() }?.let {
+        FynxProfileRemoteClient.cachedProfilePhotoId(context, it)
     }
     if (!ownerUsername.isNullOrBlank()) {
         FynxRemoteProfileAvatar(mediaId = remoteMediaId, contentDescription = name, modifier = modifier, ownerUsername = ownerUsername)
