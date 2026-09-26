@@ -191,37 +191,48 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     }
 
     LaunchedEffect(chat.username) {
-        currentUserId = FynxBackendClient.currentUserId(context).getOrNull()
         val normalizedUsername = chat.username.removePrefix("@").trim()
-        val searchedUser = FynxSocialClient.searchUsers(context, normalizedUsername)
-            .getOrNull()?.firstOrNull { it.username.equals(normalizedUsername, true) }
-        recipientUserId = searchedUser?.id
-        recipientCreatedAt = searchedUser?.createdAt
-        FynxProfileRemoteClient.get(context, normalizedUsername)
-            .onSuccess { profile ->
-                recipientProfile = profile
-                remoteProfileLoaded = true
-            }
-        FynxProductionMessaging.history(context, normalizedUsername)
-            .onSuccess { remoteMessages ->
-                isNewConversation = remoteMessages.isEmpty()
-                val myId = currentUserId
-                if (myId != null) messages = remoteMessages.map { remote ->
-                    FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
-                        if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
+        if (normalizedUsername.isBlank()) {
+            networkError = "This conversation has no valid username."
+            return@LaunchedEffect
+        }
+        runCatching {
+            currentUserId = FynxBackendClient.currentUserId(context).getOrNull()
+            val searchedUser = FynxSocialClient.searchUsers(context, normalizedUsername)
+                .getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalizedUsername, true) }
+            recipientUserId = searchedUser?.id
+            recipientCreatedAt = searchedUser?.createdAt
+            FynxProfileRemoteClient.get(context, normalizedUsername)
+                .onSuccess { profile ->
+                    recipientProfile = profile
+                    remoteProfileLoaded = true
+                }
+            FynxProductionMessaging.history(context, normalizedUsername)
+                .onSuccess { remoteMessages ->
+                    isNewConversation = remoteMessages.isEmpty()
+                    val myId = currentUserId
+                    if (myId != null) messages = remoteMessages.map { remote ->
+                        FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
+                            if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
+                        }
+                    }
+                    val unread = remoteMessages.filter { it.recipientId == myId && !it.read }.map { it.id }
+                    if (unread.isNotEmpty()) {
+                        realtimeClient.sendRead(unread)
+                        scope.launch { FynxProductionMessaging.markRead(context, unread) }
                     }
                 }
-                val unread = remoteMessages.filter { it.recipientId == myId && !it.read }.map { it.id }
-                if (unread.isNotEmpty()) {
-                    realtimeClient.sendRead(unread)
-                    scope.launch { FynxProductionMessaging.markRead(context, unread) }
+                .onFailure {
+                    isNewConversation = false
+                    networkError = it.message ?: "Unable to load messages"
                 }
+            if (!recipientUserId.isNullOrBlank() && !currentUserId.isNullOrBlank()) {
+                realtimeClient.connect()
             }
-            .onFailure {
-                isNewConversation = false
-                networkError = it.message ?: "Unable to load messages"
-            }
-        realtimeClient.connect()
+        }.onFailure {
+            networkError = it.message ?: "Unable to initialize this conversation."
+            isNewConversation = false
+        }
     }
 
     LaunchedEffect(text, recipientUserId) {
