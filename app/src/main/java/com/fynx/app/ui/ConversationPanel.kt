@@ -473,7 +473,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     Icon(Icons.Default.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
                 }
                 IconButton(onClick = { onOpenProfile(chat.username) }, modifier = Modifier.size(48.dp)) {
-                    FynxRemoteProfileAvatar(mediaId = resolvedAvatarUri?.substringAfterLast("/api/media/")?.takeIf { it != resolvedAvatarUri }, contentDescription = chat.name, modifier = Modifier.size(40.dp), ownerUsername = chat.username)
+                    FynxRemoteProfileAvatar(mediaId = resolvedAvatarUri?.substringAfterLast("/api/media/")?.takeIf { it != resolvedAvatarUri }, contentDescription = chat.name, modifier = Modifier.size(48.dp), ownerUsername = chat.username)
                 }
                 Column(Modifier.weight(1f).padding(start = 4.dp).padding(end = 2.dp)) {
                     Text(chat.name, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
@@ -484,10 +484,10 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         maxLines = 1
                     )
                 }
-                IconButton(onClick = onVoiceCall, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.Call, "Voice call", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp)) }
-                IconButton(onClick = onVideoCall, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.Videocam, "Video call", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp)) }
+                IconButton(onClick = onVoiceCall, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Call, "Voice call", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp)) }
+                IconButton(onClick = onVideoCall, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Videocam, "Video call", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp)) }
                 Box {
-                    IconButton(onClick = { showChatMenu = true }, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.MoreVert, "More", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp)) }
+                    IconButton(onClick = { showChatMenu = true }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.MoreVert, "More", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp)) }
                     DropdownMenu(expanded = showChatMenu, onDismissRequest = { showChatMenu = false }) {
                         DropdownMenuItem(text = { Text("Catch Me Up") }, onClick = { showChatMenu = false; showCatchMeUp = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })
                         DropdownMenuItem(text = { Text("Conversation Moments") }, onClick = { showChatMenu = false; showConversationMoments = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })
@@ -538,7 +538,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             }
                         }
                     ) { Text("Block User", color = Color(0xFFFF8B98), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
-                    IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
+                    IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                         Icon(Icons.Default.Close, "Close", tint = Color(0xFF9FA3AF), modifier = Modifier.size(22.dp))
                     }
                 }
@@ -613,7 +613,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                 }
                                 if (message.voiceUri != null) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(onClick = { playVoice(message) }, modifier = Modifier.size(36.dp)) { Icon(if (playingVoiceId == message.id) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (playingVoiceId == message.id) "Pause voice message" else "Play voice message", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                        IconButton(onClick = { playVoice(message) }, modifier = Modifier.size(48.dp)) { Icon(if (playingVoiceId == message.id) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (playingVoiceId == message.id) "Pause voice message" else "Play voice message", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                                         Text("Voice message", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 } else {
@@ -646,7 +646,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                                     .onSuccess { remote -> currentUserId?.let { myId -> messages = messages.map { existing -> if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing } } }
                                                     .onFailure { networkError = it.message ?: "Reaction could not be saved" }
                                             }
-                                        }, modifier = Modifier.size(34.dp), contentPadding = PaddingValues(0.dp)) { Text(emoji, style = MaterialTheme.typography.titleMedium) }
+                                        }, modifier = Modifier.size(48.dp), contentPadding = PaddingValues(0.dp)) { Text(emoji, style = MaterialTheme.typography.titleMedium) }
                                     }
                                 }
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
@@ -792,7 +792,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { videoNoteMode = false; cameraInitialMode = CameraMode.PHOTO; showCamera = true }) { Icon(Icons.Default.CameraAlt, "Camera", Modifier.size(22.dp)) }
                         val voiceMode = text.isBlank() && attachment == null
-                        Box(Modifier.size(46.dp).pointerInput(voiceMode, sending) {
+                        Box(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).pointerInput(voiceMode, sending) {
                             if (!voiceMode || sending) return@pointerInput
                             detectTapGestures(onPress = {
                                 startRecording()
