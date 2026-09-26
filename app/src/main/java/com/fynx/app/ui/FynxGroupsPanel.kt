@@ -167,6 +167,90 @@ private fun FynxCreateGroupDialog(onDismiss: () -> Unit, onCreate: (String, Stri
     )
 }
 
+
+@Composable
+private fun FynxGroupPulseSheet(
+    group: FynxGroup,
+    messages: List<ChatMessage>,
+    onDismiss: () -> Unit,
+    onOpenPinned: () -> Unit
+) {
+    val latest = messages.lastOrNull()
+    val pinned = messages.lastOrNull { it.pinned }
+    val activePeople = messages.mapNotNull { it.senderUsername?.trim()?.takeIf { name -> name.isNotBlank() } }.distinct().size
+    val sharedMedia = messages.count { it.attachmentUri != null || it.attachmentType in setOf("image", "video", "video_note", "audio", "document") }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
+        Column(
+            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) { Icon(Icons.Default.Group, "Group Pulse", tint = MaterialTheme.colorScheme.primary) }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Group Pulse", style = MaterialTheme.typography.titleLarge)
+                    Text("\${group.name} • live from this conversation", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FynxPulseStat("Members", group.members.size.toString(), Modifier.weight(1f))
+                FynxPulseStat("Active", activePeople.toString(), Modifier.weight(1f))
+                FynxPulseStat("Media", sharedMedia.toString(), Modifier.weight(1f))
+            }
+            Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("Latest activity", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        latest?.text?.takeIf { it.isNotBlank() } ?: when (latest?.attachmentType) {
+                            "video_note" -> "Video note"
+                            "video" -> "Video"
+                            "image" -> "Photo"
+                            "audio" -> "Voice message"
+                            "document" -> "Document"
+                            else -> "No messages yet"
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 3
+                    )
+                    latest?.senderUsername?.let {
+                        Text("@\${it.removePrefix("@")}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            if (pinned != null) {
+                Surface(onClick = onOpenPinned, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)) {
+                    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.PushPin, "Pinned", tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(9.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Pinned message", style = MaterialTheme.typography.labelLarge)
+                            Text(pinned.text.ifBlank { "Media message" }, maxLines = 2, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Icon(Icons.Default.ChevronRight, "Open pinned message", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            } else {
+                Text("Nothing is pinned yet. Pin an important message so the group can find it quickly.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text("Pulse uses the group's real members and conversation activity; it does not create sample content.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun FynxPulseStat(label: String, value: String, modifier: Modifier = Modifier) {
+    Surface(modifier, shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
 @Composable
 fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@preview", onBack: () -> Unit) {
     val context = LocalContext.current
@@ -187,6 +271,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var showSettings by remember { mutableStateOf(false) }
     var showTools by remember { mutableStateOf(false) }
     var showMore by remember { mutableStateOf(false) }
+    var showPulse by remember { mutableStateOf(false) }
     var groupNotificationsEnabled by remember(groupId) { mutableStateOf(FynxConversationPreferences.groupNotifications(context, groupId)) }
     var showEmojiPanel by remember { mutableStateOf(false) }
     var reactionMessageId by remember { mutableStateOf<String?>(null) }
@@ -236,6 +321,16 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             messageListState.animateScrollToItem(lastIndex)
         }
     }
+
+    if (showPulse && selectedGroup != null) {
+        FynxGroupPulseSheet(group = selectedGroup, messages = messages, onDismiss = { showPulse = false }) {
+            showPulse = false
+            val pinned = messages.lastOrNull { it.pinned }
+            val index = pinned?.let { p -> messages.indexOfFirst { it.id == p.id } } ?: -1
+            if (index >= 0) scope.launch { messageListState.animateScrollToItem(index) }
+        }
+    }
+
     if (showSettings && selectedGroup != null) { FynxGroupSettingsPanel(groupId = selectedGroup.id, groupName = selectedGroup.name, isAdmin = isAdmin, onBack = { currentGroup = FynxGroupsStore.load(context).firstOrNull { it.id == groupId }; showSettings = false }); return }
     FynxChatWallpaperBackground(modifier = Modifier.fillMaxSize(), settingsKey = "group_$groupId") {
     Column(Modifier.fillMaxSize()) {
@@ -269,6 +364,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 Box {
                     IconButton(onClick = { showMore = true }, enabled = selectedGroup != null, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.MoreVert, "More", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp)) }
                     DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+                        DropdownMenuItem(text = { Text("Group Pulse") }, onClick = { showMore = false; showPulse = true }, leadingIcon = { Icon(Icons.Default.Group, null) })
                         DropdownMenuItem(text = { Text("Members") }, onClick = { showMore = false; showMembers = true }, leadingIcon = { Icon(Icons.Default.Group, null) })
                         DropdownMenuItem(text = { Text("Group tools") }, onClick = { showMore = false; showTools = true }, leadingIcon = { Icon(Icons.Default.Build, null) })
                         DropdownMenuItem(text = { Text("Group settings") }, onClick = { showMore = false; showSettings = true }, leadingIcon = { Icon(Icons.Default.Settings, null) })
