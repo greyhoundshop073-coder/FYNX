@@ -55,22 +55,27 @@ def _matches(node, wanted:list[str]) -> bool:
     return any(label in hay for label in wanted)
 
 def _find_control_node(root, wanted:list[str]):
-    path=[]
-    def walk(node):
-        path.append(node)
-        if _matches(node, wanted) and _center(node):
-            return list(path)
-        for child in list(node):
-            found=walk(child)
-            if found: return found
-        path.pop()
-        return None
-    matched_path=walk(root)
-    if not matched_path: return None
-    for node in reversed(matched_path):
-        if node.attrib.get("clickable","false").lower()=="true" and _center(node):
+    # Prefer exact text/content-description/resource-id matches before substring
+    # matches. This prevents a feed item such as "Friends post" from stealing
+    # the tap intended for the bottom-navigation item "Friends".
+    exact=[]; partial=[]
+    for node in root.iter("node"):
+        if not _center(node): continue
+        text=(node.attrib.get("text") or "").strip().lower()
+        desc=(node.attrib.get("content-desc") or "").strip().lower()
+        rid=(node.attrib.get("resource-id") or "").strip().lower()
+        for label in wanted:
+            if label == text or label == desc or label == rid:
+                exact.append(node); break
+            if label in text or label in desc or label in rid:
+                partial.append(node); break
+    candidates=exact or partial
+    if not candidates: return None
+    # Prefer a clickable candidate; otherwise use the semantic node itself.
+    for node in candidates:
+        if node.attrib.get("clickable","false").lower()=="true":
             return node
-    return matched_path[-1]
+    return candidates[0]
 
 def find_control(xml_text:str, labels:list[str]):
     if not xml_text: return None
