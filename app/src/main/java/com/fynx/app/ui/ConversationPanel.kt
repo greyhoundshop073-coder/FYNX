@@ -102,6 +102,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var isNewConversation by remember(chat.username) { mutableStateOf(false) }
     var isOnline by remember(chat.username) { mutableStateOf(chat.online) }
     var otherIsTyping by remember(chat.username) { mutableStateOf(false) }
+    var realtimeState by remember(chat.username) { mutableStateOf(FynxRealtimeClient.State.DISCONNECTED) }
     var networkError by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
     var typingSent by remember { mutableStateOf(false) }
@@ -122,6 +123,26 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     FynxInChatSound.play(context)
                     realtimeClient.acknowledgeMessage(remote.id)
                     scope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
+                }
+            },
+            onStateChanged = { state ->
+                realtimeState = state
+                if (state == FynxRealtimeClient.State.CONNECTED && !currentUserId.isNullOrBlank()) {
+                    scope.launch {
+                        FynxProductionMessaging.history(context, chat.username.removePrefix("@"))
+                            .onSuccess { remoteMessages ->
+                                val myId = currentUserId ?: return@onSuccess
+                                val authoritative = remoteMessages.map { remote ->
+                                    FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
+                                        if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
+                                    }
+                                }
+                                val byId = (messages + authoritative).associateBy { it.id }
+                                messages = byId.values.sortedBy { it.timestamp }
+                                networkError = null
+                            }
+                            .onFailure { error -> networkError = error.message ?: "Conversation refresh failed" }
+                    }
                 }
             },
             onEvent = { event ->
