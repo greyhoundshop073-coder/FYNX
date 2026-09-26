@@ -636,420 +636,118 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                 }
                             }
                             }
-) {
-                                Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    listOf("❤️","😂","👍","🙏","🔥","😮","😢","👏").forEach { emoji ->
-                                        TextButton(onClick = {
-                                            menuMessageId = null
-                                            scope.launch {
-                                                FynxProductionMessaging.reactToMessage(context, message.id, if (message.reaction == emoji) null else emoji)
-                                                    .onSuccess { remote -> currentUserId?.let { myId -> messages = messages.map { existing -> if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing } } }
-                                                    .onFailure { networkError = it.message ?: "Reaction could not be saved" }
-                                            }
-                                        }, modifier = Modifier.size(48.dp), contentPadding = PaddingValues(0.dp)) { Text(emoji, style = MaterialTheme.typography.titleMedium) }
-                                    }
-                                }
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
-                                DropdownMenuItem(text = { Text("Reply") }, onClick = { replyToId = message.id; menuMessageId = null }, leadingIcon = { Icon(Icons.Default.Reply, null) })
-                                DropdownMenuItem(
-                                    text = { Text("Edit") },
-                                    enabled = message.fromMe && message.text.isNotBlank() && !message.text.equals("Message deleted", true),
-                                    onClick = {
-                                        text = message.text
-                                        editingId = message.id
-                                        replyToId = null
-                                        attachment = null
-                                        attachmentType = null
-                                        menuMessageId = null
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Edit, null) }
-                                )
-
-                                DropdownMenuItem(text = { Text("Copy") }, enabled = message.text.isNotBlank(), onClick = { clipboardManager.setText(AnnotatedString(message.text)); menuMessageId = null }, leadingIcon = { Icon(Icons.Default.ContentCopy, null) })
-                                DropdownMenuItem(
-                                    text = { Text(if (message.pinned) "Unpin" else "Pin") },
-                                    onClick = {
-                                        menuMessageId = null
-                                        scope.launch {
-                                            FynxProductionMessaging.setPinned(context, message.id, !message.pinned)
-                                                .onSuccess { remote ->
-                                                    currentUserId?.let { myId ->
-                                                        messages = messages.map { existing -> if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing }
-                                                    }
-                                                }
-                                                .onFailure { networkError = it.message ?: "Message pin state could not be changed" }
-                                        }
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.PushPin, null) }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Forward") },
-                                    onClick = {
-                                        menuMessageId = null
-                                        forwardMessageId = message.id
-                                        forwardUsername = ""
-                                        showForwardDialog = true
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Forward, null) }
-                                )
-                                DropdownMenuItem(text = { Text("Delete") }, onClick = {
-                                    scope.launch {
-                                        FynxProductionMessaging.deleteMessage(context, message.id)
-                                            .onSuccess {
-                                                messages = messages.map { existing -> if (existing.id == message.id) existing.copy(text = "Message deleted", attachmentUri = null, attachmentType = null, voiceUri = null, mediaId = null) else existing }
-                                                menuMessageId = null
-                                            }
-                                            .onFailure { networkError = it.message ?: "Message could not be deleted" }
-                                    }
-                                }, leadingIcon = { Icon(Icons.Default.Delete, null) })
-                            }
                         }
                     }                }
             }
         }
 
-        if (showEmojiPanel) {
-            FynxChatEmojiPanel(onEmojiSelected = { emoji ->
-                text += emoji
-                showEmojiPanel = false
-            })
-        }
-
-        if (replyToId != null || editingId != null || attachment != null) {
-            Surface(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            when {
-                                editingId != null -> "Editing message"
-                                attachment != null -> if (attachmentType == "video_note") "Video note ready to send" else "Attachment ready to send"
-                                else -> "Replying to message"
-                            },
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                        if (replyToId != null) {
-                            val replied = messages.firstOrNull { it.id == replyToId }
-                            Text(
-                                replied?.text?.takeIf { it.isNotBlank() } ?: "Original message",
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                    IconButton(onClick = { replyToId = null; editingId = null; attachment = null; attachmentType = null }) {
-                        Icon(Icons.Default.Close, "Cancel")
-                    }
-                }
-            }
-        }
-
-        if (isRecording) {
-            Surface(color = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Mic, "Recording", tint = MaterialTheme.colorScheme.error)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Recording ${recordingElapsed / 1000L}s", Modifier.weight(1f))
-                    TextButton(onClick = { cancelRecording() }) { Text("Cancel") }
-                    Button(onClick = { stopRecording() }, enabled = !sending) { Text("Send") }
-                }
-            }
-        } else Surface(color = Color(0xFF08090D), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Spacer(Modifier.width(2.dp))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    modifier = Modifier.weight(1f),
-                    minLines = 1,
-                    maxLines = 5,
-                    shape = RoundedCornerShape(26.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        cursorColor = MaterialTheme.colorScheme.primary,
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    placeholder = { Text(if (editingId == null) "Message..." else "Edit message...") },
-                    leadingIcon = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { showAttachmentSheet = true }) { Icon(Icons.Default.Add, "Attachments", Modifier.size(23.dp)) }
-                            IconButton(onClick = { showEmojiPanel = !showEmojiPanel }) { Icon(Icons.Default.EmojiEmotions, "Emoji", Modifier.size(22.dp)) }
-                        }
-                    },
-                    trailingIcon = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { videoNoteMode = false; cameraInitialMode = CameraMode.PHOTO; showCamera = true }) { Icon(Icons.Default.CameraAlt, "Camera", Modifier.size(22.dp)) }
-                        val voiceMode = text.isBlank() && attachment == null
-                        Box(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).pointerInput(voiceMode, sending) {
-                            if (!voiceMode || sending) return@pointerInput
-                            detectTapGestures(onPress = {
-                                startRecording()
-                                tryAwaitRelease()
-                                if (isRecording) stopRecording()
-                            })
-                        }, contentAlignment = Alignment.Center) {
-                            Icon(if (voiceMode) Icons.Default.Mic else Icons.Default.Send, if (voiceMode) "Hold to record voice message" else "Send message", Modifier.size(22.dp))
-                        }
-                        }
-                    },
-                    singleLine = false,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = {
-                        if (text.isNotBlank() && !sending) submitComposer()
-                    })
-                )
-                Spacer(Modifier.width(2.dp))
-            }
-        }
-    }
-
-    }
-
-    if (showAttachmentSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showAttachmentSheet = false },
-            containerColor = MaterialTheme.colorScheme.surface,
-            tonalElevation = 0.dp
-        ) {
-            Row(
-                Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                val items = listOf(
-                    Triple("Camera", Icons.Default.CameraAlt) { showAttachmentSheet = false; cameraInitialMode = CameraMode.PHOTO; showCamera = true },
-                    Triple("Gallery", Icons.Default.PhotoLibrary) { showAttachmentSheet = false; mediaPicker.launch(arrayOf("image/*", "video/*")) },
-                    Triple("Document", Icons.Default.Description) { showAttachmentSheet = false; mediaPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) },
-                    Triple("Video note", Icons.Default.Videocam) { showAttachmentSheet = false; videoNoteMode = true; cameraInitialMode = CameraMode.VIDEO; showCamera = true }
-                )
-                items.forEach { (label, icon, action) ->
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Surface(
-                            onClick = action,
-                            modifier = Modifier.size(54.dp),
-                            shape = androidx.compose.foundation.shape.CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        ) {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Icon(icon, label, Modifier.size(24.dp))
-                            }
-                        }
-                        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                    }
-                }
-            }
-        }
-    }
-
-    if (showCamera) {
-        Dialog(onDismissRequest = { showCamera = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-            Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(initialMode = cameraInitialMode, videoNoteMode = videoNoteMode, onCaptured = { uri, type -> attachment = uri; attachmentType = if (videoNoteMode && type == "video") "video_note" else type; videoNoteMode = false; showCamera = false }, onDismiss = { videoNoteMode = false; showCamera = false }) } }
-        }
-    }
-
-    if (showForwardDialog) {
-        AlertDialog(
-            onDismissRequest = { if (!sending) showForwardDialog = false },
-            title = { Text("Forward message") },
-            text = {
-                Column(Modifier.fillMaxWidth()) {
-                    Text("Enter the FYNX username to receive this message.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = forwardUsername,
-                        onValueChange = { forwardUsername = it.removePrefix("@").take(50) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        label = { Text("Username") },
-                        placeholder = { Text("@username") },
-                        enabled = !sending
-                    )
-                }
-            },
-            dismissButton = { TextButton(onClick = { showForwardDialog = false }, enabled = !sending) { Text("Cancel") } },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val messageId = forwardMessageId
-                        if (messageId == null || forwardUsername.isBlank() || sending) return@TextButton
-                        sending = true
-                        scope.launch {
-                            FynxProductionMessaging.forwardMessage(context, messageId, forwardUsername)
-                                .onSuccess {
-                                    networkError = null
-                                    showForwardDialog = false
-                                    forwardMessageId = null
-                                    forwardUsername = ""
-                                }
-                                .onFailure { networkError = it.message ?: "Message could not be forwarded" }
-                            sending = false
-                        }
-                    },
-                    enabled = forwardUsername.isNotBlank() && !sending
-                ) { Text(if (sending) "Sending…" else "Forward") }
-            }
-        )
-    }
-
-    if (showCatchMeUp) {
-        FynxCatchMeUpSheet(messages = messages, title = chat.name, onDismiss = { showCatchMeUp = false })
-    }
-
-    if (showGifts) {
-        AlertDialog(onDismissRequest = { showGifts = false }, title = { Text("Send a gift") }, text = { Column(Modifier.fillMaxWidth().heightIn(max = 420.dp)) { GiftsPanel(recipientName = chat.name, onGiftSelected = { showGifts = false }) } }, confirmButton = { TextButton(onClick = { showGifts = false }) { Text("Close") } })
-    }
-}
-
-private fun formatMessageClock(timestamp: Long): String {
-    if (timestamp <= 0L) return "Now"
-    return java.time.Instant.ofEpochMilli(timestamp).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm", java.util.Locale.getDefault()))
-}
-
-@Composable
-private fun FynxFirstContactIntro(profile: FynxProfileRemoteClient.Profile?, createdAt: String?, fallbackName: String, fallbackUsername: String, fallbackAvatarUri: String?) {
-    val displayName = profile?.displayName?.takeIf { it.isNotBlank() } ?: fallbackName
-    val username = profile?.username?.takeIf { it.isNotBlank() } ?: fallbackUsername.removePrefix("@")
-    val country = profile?.country?.trim().orEmpty()
-    val joined = createdAt?.let(::formatJoinedMonth)
-    Column(Modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        FynxAvatar(displayName, profile?.profilePhotoMediaId ?: fallbackAvatarUri, Modifier.size(54.dp), ownerUsername = username)
-        Spacer(Modifier.height(7.dp))
-        Text(displayName, style = MaterialTheme.typography.titleSmall)
-        Text("@$username", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (country.isNotBlank() || joined != null) {
-            Spacer(Modifier.height(3.dp))
-            Text(listOfNotNull(country.takeIf { it.isNotBlank() }, joined?.let { "Joined FYNX $it" }).joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Spacer(Modifier.height(12.dp))
-        HorizontalDivider(Modifier.fillMaxWidth(0.72f), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
-        Spacer(Modifier.height(9.dp))
-        Text("You’re starting a new conversation", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-private fun formatJoinedMonth(createdAt: String): String? = runCatching {
-    Instant.parse(createdAt).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
-}.getOrNull()
-
-private fun formatRecordingTime(milliseconds: Long): String {
-    val totalSeconds = milliseconds / 1000L
-    return "%02d:%02d".format(totalSeconds / 60L, totalSeconds % 60L)
-}
-
-private fun formatChatTime(timestamp: Long): String {
-    val elapsed = System.currentTimeMillis() - timestamp
-    return when {
-        elapsed < 60_000L -> "Now"
-        elapsed < 3_600_000L -> "${elapsed / 60_000L}m"
-        elapsed < 86_400_000L -> "${elapsed / 3_600_000L}h"
-        else -> "${elapsed / 86_400_000L}d"
-    }
-}
-
-@Suppress("DEPRECATION")
-private fun createCompatibleMediaRecorder(context: android.content.Context): MediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun FynxCatchMeUpSheet(
-    messages: List<ChatMessage>,
-    title: String,
-    onDismiss: () -> Unit
-) {
-    val recent = messages.sortedByDescending { it.timestamp }.take(4)
-    val mediaCount = messages.count { it.attachmentUri != null || it.attachmentType in setOf("image", "video", "video_note", "audio", "document") }
-    val questionCount = messages.count { it.text.trim().endsWith("?") }
-    val latestIncoming = messages.asReversed().firstOrNull { !it.fromMe && it.text.isNotBlank() }
-    var waitingForReply = false
-    messages.sortedBy { it.timestamp }.forEach { if (it.fromMe) waitingForReply = false else if (it.text.isNotBlank()) waitingForReply = true }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
-        Column(
-            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("Catch Me Up", style = MaterialTheme.typography.titleLarge)
-            Text("A quick view of the real conversation with $title", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FynxCatchUpStat("Messages", messages.size.toString(), Modifier.weight(1f))
-                FynxCatchUpStat("Media", mediaCount.toString(), Modifier.weight(1f))
-                FynxCatchUpStat("Questions", questionCount.toString(), Modifier.weight(1f))
-            }
-            if (waitingForReply && latestIncoming != null) {
-                Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Text("May need your reply", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                        Text(latestIncoming.text, style = MaterialTheme.typography.bodyLarge, maxLines = 4)
-                    }
-                }
-            }
-            Text("Recent activity", style = MaterialTheme.typography.titleSmall)
-            if (recent.isEmpty()) Text("No messages yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            else recent.forEach { message ->
-                Text(
-                    (if (message.fromMe) "You: " else "${message.senderName ?: message.senderUsername ?: "Member"}: ") +
-                        (message.text.takeIf { it.isNotBlank() } ?: when (message.attachmentType) {
-                            "video_note" -> "Video note"
-                            "video" -> "Video"
-                            "image" -> "Photo"
-                            "audio" -> "Voice message"
-                            "document" -> "Document"
-                            else -> "Message"
-                        }),
-                    maxLines = 2,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-            Text("This summary uses only messages already in this conversation; it does not create sample content.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(8.dp))
-        }
-    }
-}
-
-@Composable
-private fun FynxCatchUpStat(label: String, value: String, modifier: Modifier = Modifier) {
-    Surface(modifier, shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-        Column(Modifier.padding(horizontal = 10.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
         val selectedMessage = menuMessageId?.let { id -> messages.firstOrNull { it.id == id } }
         selectedMessage?.let { message ->
             ModalBottomSheet(onDismissRequest = { menuMessageId = null }) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Column(
+                    Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
                     Text("Message actions", style = MaterialTheme.typography.titleLarge)
-                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
                         listOf("❤️","😂","👍","🙏","🔥","😮","😢","👏").forEach { emoji ->
-                            TextButton(onClick = {
-                                menuMessageId = null
-                                scope.launch { FynxProductionMessaging.reactToMessage(context, message.id, if (message.reaction == emoji) null else emoji).onSuccess { remote -> currentUserId?.let { myId -> messages = messages.map { existing -> if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing } } }.onFailure { networkError = it.message ?: "Reaction could not be saved" } }
-                            }, modifier = Modifier.size(48.dp), contentPadding = PaddingValues(0.dp)) { Text(emoji, style = MaterialTheme.typography.titleMedium) }
+                            TextButton(
+                                onClick = {
+                                    menuMessageId = null
+                                    scope.launch {
+                                        FynxProductionMessaging.reactToMessage(
+                                            context,
+                                            message.id,
+                                            if (message.reaction == emoji) null else emoji
+                                        ).onSuccess { remote ->
+                                            currentUserId?.let { myId ->
+                                                messages = messages.map { existing ->
+                                                    if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing
+                                                }
+                                            }
+                                        }.onFailure { networkError = it.message ?: "Reaction could not be saved" }
+                                    }
+                                },
+                                modifier = Modifier.size(48.dp),
+                                contentPadding = PaddingValues(0.dp)
+                            ) { Text(emoji, style = MaterialTheme.typography.titleMedium) }
                         }
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
-                    TextButton(onClick = { replyToId = message.id; menuMessageId = null }, modifier = Modifier.fillMaxWidth()) { Text("Reply") }
-                    TextButton(enabled = message.fromMe && message.text.isNotBlank() && !message.text.equals("Message deleted", true), onClick = { text = message.text; editingId = message.id; replyToId = null; attachment = null; attachmentType = null; menuMessageId = null }, modifier = Modifier.fillMaxWidth()) { Text("Edit") }
-                    TextButton(enabled = message.text.isNotBlank(), onClick = { clipboardManager.setText(AnnotatedString(message.text)); menuMessageId = null }, modifier = Modifier.fillMaxWidth()) { Text("Copy") }
-                    TextButton(onClick = { menuMessageId = null; scope.launch { FynxProductionMessaging.setPinned(context, message.id, !message.pinned).onSuccess { remote -> currentUserId?.let { myId -> messages = messages.map { existing -> if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing } } }.onFailure { networkError = it.message ?: "Message pin state could not be changed" } } }, modifier = Modifier.fillMaxWidth()) { Text(if (message.pinned) "Unpin" else "Pin") }
-                    TextButton(onClick = { menuMessageId = null; forwardMessageId = message.id; forwardUsername = ""; showForwardDialog = true }, modifier = Modifier.fillMaxWidth()) { Text("Forward") }
-                    TextButton(onClick = { scope.launch { FynxProductionMessaging.deleteMessage(context, message.id).onSuccess { messages = messages.map { existing -> if (existing.id == message.id) existing.copy(text = "Message deleted", attachmentUri = null, attachmentType = null, voiceUri = null, mediaId = null) else existing }; menuMessageId = null }.onFailure { networkError = it.message ?: "Message could not be deleted" } } }, modifier = Modifier.fillMaxWidth()) { Text("Delete") }
+                    TextButton(
+                        onClick = { replyToId = message.id; menuMessageId = null },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Reply") }
+                    TextButton(
+                        enabled = message.fromMe && message.text.isNotBlank() && !message.text.equals("Message deleted", true),
+                        onClick = {
+                            text = message.text
+                            editingId = message.id
+                            replyToId = null
+                            attachment = null
+                            attachmentType = null
+                            menuMessageId = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Edit") }
+                    TextButton(
+                        enabled = message.text.isNotBlank(),
+                        onClick = { clipboardManager.setText(AnnotatedString(message.text)); menuMessageId = null },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Copy") }
+                    TextButton(
+                        onClick = {
+                            menuMessageId = null
+                            scope.launch {
+                                FynxProductionMessaging.setPinned(context, message.id, !message.pinned)
+                                    .onSuccess { remote ->
+                                        currentUserId?.let { myId ->
+                                            messages = messages.map { existing ->
+                                                if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing
+                                            }
+                                        }
+                                    }
+                                    .onFailure { networkError = it.message ?: "Message pin state could not be changed" }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (message.pinned) "Unpin" else "Pin") }
+                    TextButton(
+                        onClick = {
+                            menuMessageId = null
+                            forwardMessageId = message.id
+                            forwardUsername = ""
+                            showForwardDialog = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Forward") }
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                FynxProductionMessaging.deleteMessage(context, message.id)
+                                    .onSuccess {
+                                        messages = messages.map { existing ->
+                                            if (existing.id == message.id) existing.copy(
+                                                text = "Message deleted",
+                                                attachmentUri = null,
+                                                attachmentType = null,
+                                                voiceUri = null,
+                                                mediaId = null
+                                            ) else existing
+                                        }
+                                        menuMessageId = null
+                                    }
+                                    .onFailure { networkError = it.message ?: "Message could not be deleted" }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Delete") }
                     Spacer(Modifier.height(12.dp))
                 }
             }
         }
-
         if (showEmojiPanel) {
             FynxChatEmojiPanel(onEmojiSelected = { emoji ->
                 text += emoji
