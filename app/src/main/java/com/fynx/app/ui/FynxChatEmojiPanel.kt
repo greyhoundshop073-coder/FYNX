@@ -43,7 +43,7 @@ fun FynxChatEmojiPanel(modifier: Modifier = Modifier, onEmojiSelected: (String) 
             }
             LazyVerticalGrid(columns = GridCells.Fixed(8), modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 300.dp), contentPadding = PaddingValues(4.dp)) {
                 items(emojis) { emoji ->
-                    Box(Modifier.padding(2.dp).aspectRatio(1f).clickable {
+                    Box(Modifier.padding(2.dp).sizeIn(minWidth = 48.dp, minHeight = 48.dp).aspectRatio(1f).clickable {
                         recent = listOf(emoji) + recent.filterNot { it == emoji }.take(31)
                         onEmojiSelected(emoji)
                     }) { Text(emoji, style = MaterialTheme.typography.headlineSmall) }
