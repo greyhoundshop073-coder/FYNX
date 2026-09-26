@@ -182,6 +182,10 @@ fun FynxRemoteProfileAvatar(
     ownerUsername: String? = null
 ) {
     val context = LocalContext.current
+    // Resolve a known person photo from the existing cache when the caller has no media id.
+    val resolvedMediaId = mediaId?.takeIf { it.isNotBlank() } ?: ownerUsername
+        ?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
+        ?.let { FynxProfileRemoteClient.cachedProfilePhotoId(context, it) }
     var hasActiveStatus by remember(ownerUsername) { mutableStateOf(false) }
     LaunchedEffect(ownerUsername) {
         val owner = ownerUsername?.removePrefix("@")?.trim()?.lowercase().orEmpty()
@@ -195,12 +199,12 @@ fun FynxRemoteProfileAvatar(
         }
     }
     val avatar: @Composable () -> Unit = {
-        if (mediaId.isNullOrBlank()) {
+        if (resolvedMediaId.isNullOrBlank()) {
             Box(Modifier.fillMaxSize().clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
                 Text(contentDescription.orEmpty().trim().firstOrNull()?.uppercase() ?: "F", color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
         } else {
-            FynxRemoteMedia("/api/media/${mediaId.trim()}", "image", Modifier.fillMaxSize().clip(RoundedCornerShape(50)))
+            FynxRemoteMedia("/api/media/${resolvedMediaId.trim()}", "image", Modifier.fillMaxSize().clip(RoundedCornerShape(50)))
         }
     }
     Box(
