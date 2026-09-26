@@ -108,7 +108,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var typingSent by remember { mutableStateOf(false) }
     var stopRecordingAction: (() -> Unit)? = null
 
-    val realtimeClient = remember(chat.username) {
+    val realtimeClient = remember(chat.username, currentUserId, recipientUserId, resolvedAvatarUri) {
         FynxRealtimeClient(
             context = context,
             onMessage = { remote ->
@@ -213,7 +213,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         }
     }
 
-    LaunchedEffect(chat.username) {
+    LaunchedEffect(chat.username, currentUserId, recipientUserId, resolvedAvatarUri) {
         val normalizedUsername = chat.username.removePrefix("@").trim()
         if (normalizedUsername.isBlank()) {
             networkError = "This conversation has no valid username."
@@ -797,7 +797,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     Button(onClick = { stopRecording() }, enabled = !sending) { Text("Send") }
                 }
             }
-        } else Surface(color = Color(0xFF08090D), contentColor = Color.White, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
+        } else Surface(color = glassPalette.backgroundMid.copy(alpha = 0.98f), contentColor = glassPalette.messageText, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -811,15 +811,15 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     maxLines = 5,
                     shape = RoundedCornerShape(26.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        focusedContainerColor = glassPalette.incomingGlass,
+                        unfocusedContainerColor = glassPalette.incomingGlass,
                         focusedBorderColor = Color.Transparent,
                         unfocusedBorderColor = Color.Transparent,
-                        cursorColor = MaterialTheme.colorScheme.primary,
-                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                        focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        cursorColor = glassPalette.bubbleRim,
+                        focusedTextColor = glassPalette.messageText,
+                        unfocusedTextColor = glassPalette.messageText,
+                        focusedPlaceholderColor = glassPalette.messageMuted,
+                        unfocusedPlaceholderColor = glassPalette.messageMuted
                     ),
                     placeholder = { Text(if (editingId == null) "Message..." else "Edit message...") },
                     leadingIcon = {
