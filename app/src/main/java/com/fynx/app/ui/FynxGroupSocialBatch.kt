@@ -57,7 +57,7 @@ fun FynxGroupMediaPicker(context: Context, onMediaSelected: (Uri, String) -> Uni
 }
 
 @Composable
-fun FynxGroupCameraPicker(context: Context, onMediaSelected: (Uri, String) -> Unit) {
+fun FynxGroupCameraPicker(context: Context, videoNoteMode: Boolean = false, onMediaSelected: (Uri, String) -> Unit) {
     var openCamera by remember { mutableStateOf(false) }
     var uploading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -69,7 +69,9 @@ fun FynxGroupCameraPicker(context: Context, onMediaSelected: (Uri, String) -> Un
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Box(Modifier.fillMaxSize().safeDrawingPadding()) {
                     FynxCameraCapturePanel(
-                        onCaptured = { uri, type -> onMediaSelected(uri, type); openCamera = false },
+                        initialMode = if (videoNoteMode) CameraMode.VIDEO else CameraMode.PHOTO,
+                        videoNoteMode = videoNoteMode,
+                        onCaptured = { uri, type -> onMediaSelected(uri, if (videoNoteMode && type == "video") "video_note" else type); openCamera = false },
                         onDismiss = { if (!uploading) openCamera = false }
                     )
                 }
@@ -79,7 +81,7 @@ fun FynxGroupCameraPicker(context: Context, onMediaSelected: (Uri, String) -> Un
 }
 
 @Composable
-fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (String) -> Unit, onMedia: (Uri) -> Unit, onStoryShare: () -> Unit) {
+fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (String) -> Unit, onMedia: (Uri, String) -> Unit, onStoryShare: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var showFriends by remember { mutableStateOf(false) }
@@ -88,7 +90,7 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (St
     var selectedMedia by remember { mutableStateOf<Uri?>(null) }
     var mediaType by remember { mutableStateOf("image") }
     val friends = remember { FynxFriendsStore(context).load().filter { it.isFriend } }
-    fun handleCaptured(uri: Uri, type: String) { selectedMedia = uri; mediaType = type; onMedia(uri) }
+    fun handleCaptured(uri: Uri, type: String) { selectedMedia = uri; mediaType = type; onMedia(uri, type) }
 
     if (showFriends) {
         AlertDialog(onDismissRequest = { showFriends = false }, title = { Text("Invite friends") }, text = {
@@ -117,6 +119,7 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (St
                 OutlinedButton(onClick = { showFriends = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.PersonAdd, null); Spacer(Modifier.width(8.dp)); Text("Invite friends") }
                 OutlinedButton(onClick = onStoryShare, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Share, null); Spacer(Modifier.width(8.dp)); Text("Share a story to group") }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Group camera", modifier = Modifier.weight(1f)); FynxGroupCameraPicker(context) { uri, type -> handleCaptured(uri, type) } }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Video note", modifier = Modifier.weight(1f)); FynxGroupCameraPicker(context, videoNoteMode = true) { uri, type -> handleCaptured(uri, type) } }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Group media", modifier = Modifier.weight(1f)); FynxGroupMediaPicker(context) { uri, type -> handleCaptured(uri, type) } }
                 if (selectedMedia != null) Text(if (mediaType == "video") "Video selected for secure group upload." else "Photo selected for secure group upload.", style = MaterialTheme.typography.bodySmall)
                 Text("Group media uses the authenticated FYNX media pipeline and is persisted with the group message.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
