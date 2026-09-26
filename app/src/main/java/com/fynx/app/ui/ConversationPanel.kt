@@ -88,6 +88,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var showGifts by remember { mutableStateOf(false) }
     var showChatMenu by remember { mutableStateOf(false) }
     var showChatSettings by remember { mutableStateOf(false) }
+    var showCatchMeUp by remember { mutableStateOf(false) }
     var chatNotificationsEnabled by remember(chat.username) { mutableStateOf(FynxConversationPreferences.chatNotifications(context, chat.username)) }
     var showEmojiPanel by remember { mutableStateOf(false) }
     var showAttachmentSheet by remember { mutableStateOf(false) }
@@ -466,6 +467,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 Box {
                     IconButton(onClick = { showChatMenu = true }, modifier = Modifier.size(44.dp)) { Icon(Icons.Default.MoreVert, "More", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(23.dp)) }
                     DropdownMenu(expanded = showChatMenu, onDismissRequest = { showChatMenu = false }) {
+                        DropdownMenuItem(text = { Text("Catch Me Up") }, onClick = { showChatMenu = false; showCatchMeUp = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })
                         DropdownMenuItem(text = { Text("Chat settings") }, onClick = { showChatMenu = false; showChatSettings = true }, leadingIcon = { Icon(Icons.Default.Settings, null) })
                         DropdownMenuItem(text = { Text(if (chatNotificationsEnabled) "Mute notifications" else "Turn on notifications") }, onClick = { chatNotificationsEnabled = !chatNotificationsEnabled; FynxConversationPreferences.setChatNotifications(context, chat.username, chatNotificationsEnabled); showChatMenu = false }, leadingIcon = { Icon(Icons.Default.Notifications, null) })
                         DropdownMenuItem(text = { Text(if (searchOpen) "Close search" else "Search messages") }, onClick = { showChatMenu = false; searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, leadingIcon = { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, null) })
@@ -878,6 +880,10 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         )
     }
 
+    if (showCatchMeUp) {
+        FynxCatchMeUpSheet(messages = messages, title = chat.name, onDismiss = { showCatchMeUp = false })
+    }
+
     if (showGifts) {
         AlertDialog(onDismissRequest = { showGifts = false }, title = { Text("Send a gift") }, text = { Column(Modifier.fillMaxWidth().heightIn(max = 420.dp)) { GiftsPanel(recipientName = chat.name, onGiftSelected = { showGifts = false }) } }, confirmButton = { TextButton(onClick = { showGifts = false }) { Text("Close") } })
     }
@@ -931,3 +937,58 @@ private fun formatChatTime(timestamp: Long): String {
 
 @Suppress("DEPRECATION")
 private fun createCompatibleMediaRecorder(context: android.content.Context): MediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FynxCatchMeUpSheet(
+    messages: List<ChatMessage>,
+    title: String,
+    onDismiss: () -> Unit
+) {
+    val recent = messages.sortedByDescending { it.timestamp }.take(4)
+    val mediaCount = messages.count { it.attachmentUri != null || it.attachmentType in setOf("image", "video", "video_note", "audio", "document") }
+    val questionCount = messages.count { it.text.trim().endsWith("?") }
+    val latestIncoming = messages.asReversed().firstOrNull { !it.fromMe && it.text.isNotBlank() }
+    var waitingForReply = false
+    messages.sortedBy { it.timestamp }.forEach { if (it.fromMe) waitingForReply = false else if (it.text.isNotBlank()) waitingForReply = true }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
+        Column(
+            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("Catch Me Up", style = MaterialTheme.typography.titleLarge)
+            Text("A quick view of the real conversation with $title", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FynxPulseStat("Messages", messages.size.toString(), Modifier.weight(1f))
+                FynxPulseStat("Media", mediaCount.toString(), Modifier.weight(1f))
+                FynxPulseStat("Questions", questionCount.toString(), Modifier.weight(1f))
+            }
+            if (waitingForReply && latestIncoming != null) {
+                Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text("May need your reply", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        Text(latestIncoming.text, style = MaterialTheme.typography.bodyLarge, maxLines = 4)
+                    }
+                }
+            }
+            Text("Recent activity", style = MaterialTheme.typography.titleSmall)
+            if (recent.isEmpty()) Text("No messages yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            else recent.forEach { message ->
+                Text(
+                    (if (message.fromMe) "You: " else "${message.senderName ?: message.senderUsername ?: "Member"}: ") +
+                        (message.text.takeIf { it.isNotBlank() } ?: when (message.attachmentType) {
+                            "video_note" -> "Video note"
+                            "video" -> "Video"
+                            "image" -> "Photo"
+                            "audio" -> "Voice message"
+                            "document" -> "Document"
+                            else -> "Message"
+                        }),
+                    maxLines = 2,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            Text("This summary uses only messages already in this conversation; it does not create sample content.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
