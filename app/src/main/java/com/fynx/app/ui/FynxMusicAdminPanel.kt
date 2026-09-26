@@ -191,6 +191,7 @@ fun FynxMusicAdminPanel() {
                 }
             }
         }
+    }
     pendingRemoval?.let { track ->
         AlertDialog(
             onDismissRequest = { pendingRemoval = null },
