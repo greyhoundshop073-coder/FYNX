@@ -188,6 +188,14 @@ fun OtherUserProfilePanel(
                                             Spacer(Modifier.width(6.dp))
                                             Text("Message")
                                         }
+                                    } else {
+                                        Text(
+                                            "Messaging unavailable • available when you both follow each other",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                                            textAlign = TextAlign.Center
+                                        )
                                     }
                                 }
                             }
