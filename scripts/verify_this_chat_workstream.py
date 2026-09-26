@@ -21,6 +21,11 @@ r5b_verifier = read('scripts/verify_r5b_status.py')
 fcm_verifier = read('scripts/verify_fcm_notifications.py')
 ai_security = read('scripts/verify_ai_security.py')
 media_privacy = read('backend/mediaPrivacy.js')
+glass_theme = read('app/src/main/java/com/fynx/app/ui/FynxGlassTheme.kt')
+glass_wallpaper = read('app/src/main/java/com/fynx/app/ui/FynxChatWallpaper.kt')
+chat_settings = read('app/src/main/java/com/fynx/app/ui/FynxChatSettingsPanel.kt')
+group_panel = read('app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt')
+conversation = read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt')
 
 # This gate verifies the shared media/notification/AI integration owned by this workstream.
 check('remote media uses the authenticated central downloader', 'FynxBackendClient.downloadToFile' in remote_media and 'MAX_REMOTE_MEDIA_BYTES' in remote_media)
@@ -39,6 +44,11 @@ check('R5B audio verifier recognizes the shared renderer', 'def contains_remote_
 check('media privacy guard remains installed', 'app.use("/api/media", mediaGuard)' in media_privacy)
 check('FCM notification gate remains present', 'notification deep-link routing' in fcm_verifier and 'FCM verification GREEN' in fcm_verifier)
 check('AI security gate remains present', 'AI provider key stays server-side' in ai_security and 'AI security gate GREEN' in ai_security)
+check('Chat/Group glass theme catalog contains all eight approved themes', all(label in glass_theme for label in ['Pure Black Glass', 'Aurora Glass', 'Light Glass', 'Deep Emerald Glass', 'Sunset Glass', 'Rose Glass', 'Golden Glass', 'Turquoise Glass']))
+check('Chat wallpaper resolves every glass theme through the shared palette', 'FynxGlassThemeId.entries.firstOrNull' in glass_wallpaper and 'fynxGlassPalette(themeId)' in glass_wallpaper)
+check('Chat settings exposes the complete glass theme catalog', 'FynxGlassThemeId.entries.map { it.label }' in chat_settings)
+check('Group chat uses the shared themed wallpaper runtime', 'FynxChatWallpaperBackground' in group_panel and 'glassPalette' in group_panel)
+check('Private conversation uses the shared themed wallpaper runtime', 'FynxChatWallpaperBackground' in conversation and 'glassPalette' in conversation)
 
 client_sources = '\n'.join(str(p.read_text(encoding='utf-8')) for p in (ROOT / 'app/src/main/java/com/fynx/app/ui').glob('*.kt'))
 check('this chat adds no obvious client API secrets', not re.search(r'sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}', client_sources))
