@@ -132,8 +132,19 @@ fun FynxProfileContentSection(
                     else -> "No content yet"
                 }, Modifier.fillMaxWidth().padding(vertical = 28.dp), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else if (selectedTab == "Marketplace") {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    gridItems.filterIsInstance<FynxProfileGridItem.MarketItem>().forEach { item -> FynxProfileMarketplaceTile(item.listing) { selectedListing = item.listing } }
+                val columns = if (LocalContext.current.resources.configuration.screenWidthDp < 360) 2 else 3
+                val marketItems = gridItems.filterIsInstance<FynxProfileGridItem.MarketItem>()
+                val rows = (marketItems.size + columns - 1) / columns
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(columns),
+                    modifier = Modifier.fillMaxWidth().height((rows * 184 + (rows - 1).coerceAtLeast(0) * 8).dp),
+                    userScrollEnabled = false,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(marketItems.size, key = { index -> "market:" + marketItems[index].listing.id }) { index ->
+                        FynxProfileMarketplaceTile(marketItems[index].listing) { selectedListing = marketItems[index].listing }
+                    }
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
