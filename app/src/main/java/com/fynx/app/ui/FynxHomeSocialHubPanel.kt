@@ -745,7 +745,7 @@ fun FynxHomeSocialHubPanel(
                         else audienceFriends.forEach { friend ->
                             val checked = friend.id in selectedAudienceIds
                             Row(
-                                Modifier.fillMaxWidth().clickable { selectedAudienceIds = if (checked) selectedAudienceIds - friend.id else selectedAudienceIds + friend.id }.padding(vertical = 6.dp),
+                                Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable { selectedAudienceIds = if (checked) selectedAudienceIds - friend.id else selectedAudienceIds + friend.id },
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Checkbox(checked = checked, onCheckedChange = { value -> selectedAudienceIds = if (value) selectedAudienceIds + friend.id else selectedAudienceIds - friend.id })
