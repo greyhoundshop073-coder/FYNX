@@ -222,12 +222,103 @@ fun FynxChatDoodlePattern(palette: FynxGlassThemePalette? = null, density: Float
             line(p(x + 4f*s, y + 20f*s), p(x + 33f*s, y + 20f*s))
         }
 
+        fun sun(x: Float, y: Float, s: Float) {
+            circle(x + 14f*s, y + 14f*s, 7f*s)
+            for (i in 0 until 8) {
+                val a = Math.toRadians((i * 45).toDouble())
+                line(p(x + (14f + kotlin.math.cos(a).toFloat() * 11f)*s, y + (14f + kotlin.math.sin(a).toFloat() * 11f)*s),
+                     p(x + (14f + kotlin.math.cos(a).toFloat() * 16f)*s, y + (14f + kotlin.math.sin(a).toFloat() * 16f)*s))
+            }
+        }
+        fun plane(x: Float, y: Float, s: Float) {
+            line(p(x, y + 14f*s), p(x + 34f*s, y + 14f*s))
+            line(p(x + 12f*s, y + 14f*s), p(x + 20f*s, y + 5f*s))
+            line(p(x + 12f*s, y + 14f*s), p(x + 20f*s, y + 23f*s))
+            line(p(x + 26f*s, y + 14f*s), p(x + 31f*s, y + 8f*s))
+        }
+        fun palm(x: Float, y: Float, s: Float) {
+            line(p(x + 15f*s, y + 32f*s), p(x + 16f*s, y + 12f*s))
+            line(p(x + 16f*s, y + 12f*s), p(x + 7f*s, y + 5f*s))
+            line(p(x + 16f*s, y + 12f*s), p(x + 16f*s, y + 2f*s))
+            line(p(x + 16f*s, y + 12f*s), p(x + 25f*s, y + 4f*s))
+            line(p(x + 16f*s, y + 12f*s), p(x + 28f*s, y + 11f*s))
+        }
+        fun suitcase(x: Float, y: Float, s: Float) {
+            drawRoundRect(ink, p(x + 2f*s, y + 7f*s), androidx.compose.ui.geometry.Size(26f*s, 24f*s),
+                androidx.compose.ui.geometry.CornerRadius(4f*s, 4f*s), style = androidx.compose.ui.graphics.drawscope.Stroke(sw))
+            line(p(x + 10f*s, y + 7f*s), p(x + 10f*s, y + 2f*s)); line(p(x + 10f*s, y + 2f*s), p(x + 20f*s, y + 2f*s)); line(p(x + 20f*s, y + 2f*s), p(x + 20f*s, y + 7f*s))
+            line(p(x + 15f*s, y + 7f*s), p(x + 15f*s, y + 31f*s))
+        }
+        fun compass(x: Float, y: Float, s: Float) {
+            circle(x + 15f*s, y + 15f*s, 14f*s); circle(x + 15f*s, y + 15f*s, 2f*s)
+            line(p(x + 15f*s, y + 4f*s), p(x + 22f*s, y + 22f*s)); line(p(x + 22f*s, y + 22f*s), p(x + 15f*s, y + 15f*s))
+        }
+        fun gift(x: Float, y: Float, s: Float) {
+            drawRoundRect(ink, p(x + 2f*s, y + 10f*s), androidx.compose.ui.geometry.Size(28f*s, 20f*s),
+                androidx.compose.ui.geometry.CornerRadius(3f*s, 3f*s), style = androidx.compose.ui.graphics.drawscope.Stroke(sw))
+            line(p(x + 16f*s, y + 10f*s), p(x + 16f*s, y + 30f*s)); line(p(x + 2f*s, y + 16f*s), p(x + 30f*s, y + 16f*s))
+            circle(x + 12f*s, y + 7f*s, 4f*s); circle(x + 20f*s, y + 7f*s, 4f*s)
+        }
+        fun people(x: Float, y: Float, s: Float) {
+            circle(x + 10f*s, y + 8f*s, 5f*s); circle(x + 25f*s, y + 8f*s, 5f*s)
+            line(p(x + 2f*s, y + 28f*s), p(x + 18f*s, y + 28f*s)); line(p(x + 17f*s, y + 28f*s), p(x + 33f*s, y + 28f*s))
+            line(p(x + 10f*s, y + 13f*s), p(x + 7f*s, y + 27f*s)); line(p(x + 25f*s, y + 13f*s), p(x + 28f*s, y + 27f*s))
+        }
+        fun trophy(x: Float, y: Float, s: Float) {
+            drawRoundRect(ink, p(x + 8f*s, y + 3f*s), androidx.compose.ui.geometry.Size(14f*s, 17f*s),
+                androidx.compose.ui.geometry.CornerRadius(3f*s, 3f*s), style = androidx.compose.ui.graphics.drawscope.Stroke(sw))
+            line(p(x + 8f*s, y + 7f*s), p(x + 2f*s, y + 7f*s)); line(p(x + 2f*s, y + 7f*s), p(x + 2f*s, y + 14f*s)); line(p(x + 2f*s, y + 14f*s), p(x + 8f*s, y + 14f*s))
+            line(p(x + 22f*s, y + 7f*s), p(x + 28f*s, y + 7f*s)); line(p(x + 28f*s, y + 7f*s), p(x + 28f*s, y + 14f*s)); line(p(x + 28f*s, y + 14f*s), p(x + 22f*s, y + 14f*s))
+            line(p(x + 15f*s, y + 20f*s), p(x + 15f*s, y + 27f*s)); line(p(x + 8f*s, y + 28f*s), p(x + 22f*s, y + 28f*s))
+        }
+        fun crown(x: Float, y: Float, s: Float) {
+            line(p(x + 2f*s, y + 7f*s), p(x + 7f*s, y + 23f*s)); line(p(x + 7f*s, y + 23f*s), p(x + 25f*s, y + 23f*s)); line(p(x + 25f*s, y + 23f*s), p(x + 30f*s, y + 7f*s))
+            line(p(x + 2f*s, y + 7f*s), p(x + 10f*s, y + 14f*s)); line(p(x + 10f*s, y + 14f*s), p(x + 16f*s, y + 5f*s)); line(p(x + 16f*s, y + 5f*s), p(x + 22f*s, y + 14f*s)); line(p(x + 22f*s, y + 14f*s), p(x + 30f*s, y + 7f*s))
+        }
+        fun medal(x: Float, y: Float, s: Float) {
+            line(p(x + 9f*s, y), p(x + 9f*s, y + 10f*s)); line(p(x + 21f*s, y), p(x + 21f*s, y + 10f*s))
+            circle(x + 15f*s, y + 20f*s, 10f*s); star(x + 10f*s, y + 15f*s, 0.45f*s)
+        }
+        fun confetti(x: Float, y: Float, s: Float) {
+            line(p(x + 4f*s, y + 4f*s), p(x + 9f*s, y + 12f*s)); line(p(x + 18f*s, y), p(x + 14f*s, y + 10f*s))
+            line(p(x + 28f*s, y + 5f*s), p(x + 21f*s, y + 14f*s)); line(p(x + 7f*s, y + 24f*s), p(x + 13f*s, y + 18f*s)); line(p(x + 25f*s, y + 25f*s), p(x + 20f*s, y + 18f*s))
+        }
+        fun fireworks(x: Float, y: Float, s: Float) {
+            circle(x + 16f*s, y + 16f*s, 3f*s)
+            for (i in 0 until 8) {
+                val a = Math.toRadians((i * 45).toDouble())
+                line(p(x + (16f + kotlin.math.cos(a).toFloat()*7f)*s, y + (16f + kotlin.math.sin(a).toFloat()*7f)*s),
+                     p(x + (16f + kotlin.math.cos(a).toFloat()*14f)*s, y + (16f + kotlin.math.sin(a).toFloat()*14f)*s))
+            }
+        }
+        fun waves(x: Float, y: Float, s: Float) {
+            line(p(x, y + 8f*s), p(x + 7f*s, y + 4f*s)); line(p(x + 7f*s, y + 4f*s), p(x + 14f*s, y + 8f*s)); line(p(x + 14f*s, y + 8f*s), p(x + 21f*s, y + 4f*s)); line(p(x + 21f*s, y + 4f*s), p(x + 28f*s, y + 8f*s))
+            line(p(x, y + 18f*s), p(x + 7f*s, y + 14f*s)); line(p(x + 7f*s, y + 14f*s), p(x + 14f*s, y + 18f*s)); line(p(x + 14f*s, y + 18f*s), p(x + 21f*s, y + 14f*s)); line(p(x + 21f*s, y + 14f*s), p(x + 28f*s, y + 18f*s))
+        }
+        fun boat(x: Float, y: Float, s: Float) {
+            line(p(x + 3f*s, y + 17f*s), p(x + 29f*s, y + 17f*s)); line(p(x + 3f*s, y + 17f*s), p(x + 8f*s, y + 25f*s)); line(p(x + 8f*s, y + 25f*s), p(x + 24f*s, y + 25f*s)); line(p(x + 24f*s, y + 25f*s), p(x + 29f*s, y + 17f*s))
+            line(p(x + 16f*s, y + 17f*s), p(x + 16f*s, y + 3f*s)); line(p(x + 16f*s, y + 3f*s), p(x + 25f*s, y + 13f*s)); line(p(x + 25f*s, y + 13f*s), p(x + 16f*s, y + 13f*s))
+        }
+        fun shell(x: Float, y: Float, s: Float) {
+            circle(x + 14f*s, y + 16f*s, 12f*s)
+            for (i in 0 until 5) line(p(x + (6f+i*4f)*s, y + 8f*s), p(x + (8f+i*3f)*s, y + 25f*s))
+        }
+        fun fish(x: Float, y: Float, s: Float) {
+            line(p(x + 4f*s, y + 15f*s), p(x + 18f*s, y + 7f*s)); line(p(x + 18f*s, y + 7f*s), p(x + 29f*s, y + 15f*s)); line(p(x + 29f*s, y + 15f*s), p(x + 18f*s, y + 23f*s)); line(p(x + 18f*s, y + 23f*s), p(x + 4f*s, y + 15f*s))
+            line(p(x + 4f*s, y + 15f*s), p(x, y + 8f*s)); line(p(x, y + 8f*s), p(x, y + 22f*s)); line(p(x, y + 22f*s), p(x + 4f*s, y + 15f*s))
+            circle(x + 22f*s, y + 13f*s, 1.2f*s)
+        }
+
         fun drawMotif(index: Int, x: Float, y: Float, scale: Float, theme: FynxGlassThemeId) {
             val stories = when (theme) {
                 FynxGlassThemeId.PURE_BLACK -> intArrayOf(0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 13, 4, 8, 2, 3, 1, 6, 7, 5, 10, 0)
                 FynxGlassThemeId.AURORA -> intArrayOf(19, 15, 22, 7, 16, 17, 18, 20, 21, 3, 10, 1, 4, 11, 19, 15, 7, 16, 22, 20, 3, 10)
                 FynxGlassThemeId.LIGHT -> intArrayOf(12, 20, 2, 0, 6, 1, 3, 5, 16, 8, 4, 13, 12, 20, 2, 0, 6, 1, 3, 5, 16, 8)
                 FynxGlassThemeId.EMERALD -> intArrayOf(14, 4, 2, 13, 20, 18, 3, 6, 12, 15, 1, 19, 14, 4, 2, 13, 20, 18, 3, 6, 12, 15)
+                FynxGlassThemeId.SUNSET -> intArrayOf(23, 24, 25, 27, 28, 29, 30, 31, 32, 33, 0, 1, 23, 24, 25, 27, 28, 29, 30, 31, 32, 33)
+                FynxGlassThemeId.ROSE -> intArrayOf(26, 6, 23, 34, 16, 8, 3, 20, 7, 26, 6, 23, 34, 16, 8, 3, 20, 7)
+                FynxGlassThemeId.GOLDEN -> intArrayOf(27, 28, 29, 30, 31, 32, 33, 7, 10, 26, 27, 28, 29, 30, 31, 32, 33, 7, 10, 26)
+                FynxGlassThemeId.TURQUOISE -> intArrayOf(35, 36, 37, 38, 39, 21, 15, 19, 24, 35, 36, 37, 38, 39, 21, 15, 19, 24)
             }
             when (stories[index % stories.size]) {
                 0 -> bubble(x, y, scale)
@@ -252,6 +343,23 @@ fun FynxChatDoodlePattern(palette: FynxGlassThemePalette? = null, density: Float
                 19 -> rocket(x, y, scale)
                 20 -> flowers(x, y, scale)
                 21 -> clouds(x, y, scale)
+                23 -> sun(x, y, scale)
+                24 -> plane(x, y, scale)
+                25 -> palm(x, y, scale)
+                26 -> gift(x, y, scale)
+                27 -> trophy(x, y, scale)
+                28 -> crown(x, y, scale)
+                29 -> medal(x, y, scale)
+                30 -> confetti(x, y, scale)
+                31 -> fireworks(x, y, scale)
+                32 -> waves(x, y, scale)
+                33 -> boat(x, y, scale)
+                34 -> people(x, y, scale)
+                35 -> shell(x, y, scale)
+                36 -> fish(x, y, scale)
+                37 -> compass(x, y, scale)
+                38 -> suitcase(x, y, scale)
+                39 -> waves(x, y, scale)
                 else -> smile(x, y, scale)
             }
         }
@@ -281,14 +389,26 @@ fun FynxChatDoodlePattern(palette: FynxGlassThemePalette? = null, density: Float
             Triple(118f, 470f, 0.62f), Triple(270f, 486f, 0.68f)
         )
 
+        val extraPlacements = listOf(
+            Triple(18f, 74f, 0.46f), Triple(118f, 52f, 0.48f), Triple(218f, 38f, 0.44f),
+            Triple(346f, 74f, 0.50f), Triple(72f, 196f, 0.46f), Triple(190f, 204f, 0.48f),
+            Triple(328f, 250f, 0.44f), Triple(104f, 328f, 0.48f), Triple(238f, 382f, 0.46f),
+            Triple(314f, 344f, 0.44f), Triple(18f, 438f, 0.46f), Triple(166f, 430f, 0.44f)
+        )
+        val isExpandedTheme = activePalette.id == FynxGlassThemeId.SUNSET ||
+            activePalette.id == FynxGlassThemeId.ROSE ||
+            activePalette.id == FynxGlassThemeId.GOLDEN ||
+            activePalette.id == FynxGlassThemeId.TURQUOISE
+        val activePlacements = if (isExpandedTheme) placements + extraPlacements else placements
+
         val tilesX = (size.width / tileW).toInt() + 2
         val tilesY = (size.height / tileH).toInt() + 2
         for (tx in -1 until tilesX) {
             for (ty in -1 until tilesY) {
                 val offsetX = tx * tileW
                 val offsetY = ty * tileH
-                placements.forEachIndexed { index, (x, y, scale) ->
-                    if (index >= (placements.size * density.coerceIn(0.5f, 1.5f)).toInt().coerceAtMost(placements.size)) return@forEachIndexed
+                activePlacements.forEachIndexed { index, (x, y, scale) ->
+                    if (index >= (activePlacements.size * density.coerceIn(0.5f, 1.5f)).toInt().coerceAtMost(activePlacements.size)) return@forEachIndexed
                     val rotation = when ((index + tx * 3 + ty * 5) and 3) {
                         0 -> -12f
                         1 -> -4f
