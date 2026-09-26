@@ -434,7 +434,8 @@ private fun FynxProfileMarketplaceTile(listing: FynxMarketplaceClient.Listing, o
             ) {
                 FynxAvatar(
                     listing.sellerDisplayName.ifBlank { listing.sellerUsername },
-                    Modifier.size(20.dp).clip(CircleShape)
+                    Modifier.size(20.dp).clip(CircleShape),
+                    ownerUsername = listing.sellerUsername
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(
@@ -508,7 +509,16 @@ private fun FynxProfileMarketplaceDetails(
                 Text(listing.currency + " " + String.format(Locale.US, "%,.2f", listing.price),
                     style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
                 if (listing.description.isNotBlank()) Text(listing.description)
-                Text("Seller: " + listing.sellerDisplayName.ifBlank { listing.sellerUsername })
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    FynxRemoteProfileAvatar(
+                        mediaId = null,
+                        contentDescription = listing.sellerDisplayName.ifBlank { listing.sellerUsername },
+                        modifier = Modifier.size(32.dp).clip(CircleShape),
+                        ownerUsername = listing.sellerUsername
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Seller: " + listing.sellerDisplayName.ifBlank { listing.sellerUsername })
+                }
                 if (listing.storeName.isNotBlank()) Text("Store: " + listing.storeName)
                 Text(listing.quantity.toString() + " available • " + listing.condition)
                 if (listing.location.isNotBlank()) Text("Location: " + listing.location)
