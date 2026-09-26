@@ -126,7 +126,7 @@ fun GiftsPanel(
                         colors = CardDefaults.cardColors(containerColor = if (selectedRecipient?.username == person.username) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
                     ) {
                         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            FynxAvatar(person.username, Modifier.size(38.dp))
+                            FynxAvatar(person.displayName.ifBlank { person.username }, Modifier.size(38.dp), ownerUsername = person.username)
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) { Text(person.displayName, style = MaterialTheme.typography.titleSmall); Text(person.username, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                             if (selectedRecipient?.username == person.username) Text("✓", color = MaterialTheme.colorScheme.primary)
