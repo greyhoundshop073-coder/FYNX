@@ -40,7 +40,14 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
     val auth = remember(context) { FynxAuthStore.load(context) }
     val username = auth.username?.removePrefix("@").orEmpty().ifBlank { "preview" }
-    val displayName = username.ifBlank { "You" }
+    var displayName by remember(username) { mutableStateOf(username.ifBlank { "You" }) }
+    LaunchedEffect(username) {
+        if (username.isNotBlank() && username != "preview") {
+            FynxProfileRemoteClient.get(context, username).onSuccess { profile ->
+                displayName = profile.displayName.ifBlank { username }
+            }
+        }
+    }
     var type by remember { mutableStateOf(FynxStatusType.TEXT) }
     var text by remember { mutableStateOf("") }
     var mediaUri by remember { mutableStateOf<Uri?>(null) }
@@ -48,7 +55,15 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
     var foreground by remember { mutableLongStateOf(0xFFFFFFFF) }
     var font by remember { mutableStateOf(FynxStatusTextFont.CLASSIC) }
     var alignment by remember { mutableIntStateOf(1) }
-    var audience by remember { mutableStateOf(FynxStatusAudience.EVERYONE) }
+    var audience by remember {
+        mutableStateOf(
+            runCatching {
+                FynxStatusAudience.valueOf(
+                    FynxPreferencesStore.loadVisibility(context, "status_audience", FynxStatusAudience.EVERYONE.name)
+                )
+            }.getOrDefault(FynxStatusAudience.EVERYONE)
+        )
+    }
     var preview by remember { mutableStateOf(false) }
     var publishing by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }

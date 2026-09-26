@@ -74,7 +74,14 @@ fun FynxMatureStatusComposerPanel(
     val scope = rememberCoroutineScope()
     val auth = remember(context) { FynxAuthStore.load(context) }
     val username = auth.username?.removePrefix("@").orEmpty().ifBlank { "preview" }
-    val displayName = username.ifBlank { "You" }
+    var displayName by remember(username) { mutableStateOf(username.ifBlank { "You" }) }
+    LaunchedEffect(username) {
+        if (username.isNotBlank() && username != "preview") {
+            FynxProfileRemoteClient.get(context, username).onSuccess { profile ->
+                displayName = profile.displayName.ifBlank { username }
+            }
+        }
+    }
     var type by remember(initialType) { mutableStateOf(initialType ?: FynxStatusType.TEXT) }
     var text by remember { mutableStateOf("") }
     var mediaUri by remember(initialMediaUri) { mutableStateOf(initialMediaUri) }
