@@ -323,6 +323,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 }
                             }
                             Box {
+                            val mediaOnly = message.attachmentUri != null && message.text.isBlank() && message.attachmentType in setOf("image", "video", "video_note")
                             val bubbleShape = RoundedCornerShape(15.dp)
                             val bubbleBrush = if (message.fromMe) {
                                 Brush.horizontalGradient(listOf(glassPalette.outgoingStart.copy(alpha = bubbleTransparency), glassPalette.outgoingEnd.copy(alpha = bubbleGradient)))
@@ -332,12 +333,14 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             Surface(
                                 color = Color.Transparent,
                                 contentColor = glassPalette.messageText,
-                                shape = bubbleShape,
-                                border = BorderStroke(0.7.dp, glassPalette.bubbleRim.copy(alpha = (bubbleLighting * bubbleTransparency).coerceIn(0f, 1f))),
+                                shape = if (mediaOnly) RoundedCornerShape(0.dp) else bubbleShape,
+                                border = if (mediaOnly) null else BorderStroke(0.7.dp, glassPalette.bubbleRim.copy(alpha = (bubbleLighting * bubbleTransparency).coerceIn(0f, 1f))),
                                 tonalElevation = 0.dp,
-                                modifier = Modifier.widthIn(max = 300.dp).background(bubbleBrush, bubbleShape).combinedClickable(onClick = { reactionMessageId = message.id }, onLongClick = { reactionMessageId = message.id })
+                                modifier = Modifier.widthIn(max = 300.dp)
+                                    .then(if (mediaOnly) Modifier else Modifier.background(bubbleBrush, bubbleShape))
+                                    .combinedClickable(onClick = { reactionMessageId = message.id }, onLongClick = { reactionMessageId = message.id })
                             ) {
-                                Column(Modifier.padding(horizontal = 9.dp, vertical = 5.dp)) {
+                                Column(Modifier.padding(horizontal = if (mediaOnly) 0.dp else 9.dp, vertical = if (mediaOnly) 0.dp else 5.dp)) {
                                     if (message.replyToId != null) Text("Reply", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(bottom = 5.dp))
                                 if (message.attachmentUri != null) {
                                     if (message.attachmentType == "audio") FynxRemoteAudio(message.attachmentUri, Modifier.fillMaxWidth())
