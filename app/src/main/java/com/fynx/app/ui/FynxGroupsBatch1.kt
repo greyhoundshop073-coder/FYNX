@@ -15,7 +15,8 @@ data class FynxGroup(
     val description: String,
     val visibility: FynxGroupVisibility,
     val ownerUsername: String,
-    val members: List<FynxGroupMember> = emptyList()
+    val members: List<FynxGroupMember> = emptyList(),
+    val groupPhotoMediaId: String? = null
 )
 
 object FynxGroupsBatch1 {
