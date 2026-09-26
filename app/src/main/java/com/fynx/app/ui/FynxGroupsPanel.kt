@@ -274,6 +274,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var showTools by remember { mutableStateOf(false) }
     var showMore by remember { mutableStateOf(false) }
     var showPulse by remember { mutableStateOf(false) }
+    var showCatchMeUp by remember { mutableStateOf(false) }
     var groupNotificationsEnabled by remember(groupId) { mutableStateOf(FynxConversationPreferences.groupNotifications(context, groupId)) }
     var showEmojiPanel by remember { mutableStateOf(false) }
     var reactionMessageId by remember { mutableStateOf<String?>(null) }
@@ -366,6 +367,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 Box {
                     IconButton(onClick = { showMore = true }, enabled = selectedGroup != null, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.MoreVert, "More", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp)) }
                     DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+                        DropdownMenuItem(text = { Text("Catch Me Up") }, onClick = { showMore = false; showCatchMeUp = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })
                         DropdownMenuItem(text = { Text("Group Pulse") }, onClick = { showMore = false; showPulse = true }, leadingIcon = { Icon(Icons.Default.Group, null) })
                         DropdownMenuItem(text = { Text("Members") }, onClick = { showMore = false; showMembers = true }, leadingIcon = { Icon(Icons.Default.Group, null) })
                         DropdownMenuItem(text = { Text("Group tools") }, onClick = { showMore = false; showTools = true }, leadingIcon = { Icon(Icons.Default.Build, null) })
@@ -628,6 +630,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     }
     selectedGroup?.let { groupForDialogs ->
         if (showMembers) FynxGroupMembersDialog(groupForDialogs, currentUsername, { showMembers = false }) { updated -> if (FynxGroupsStore.updateGroup(context, updated)) { currentGroup = updated; scope.launch { FynxGroupRemoteClient.syncGroup(context, updated).onFailure { syncMessage = it.message } } } }
+        if (showCatchMeUp) FynxCatchMeUpSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showCatchMeUp = false })
         if (showTools) FynxGroupSocialDialog(groupForDialogs, { showTools = false }, onInvite = { username ->
             if (!canAddMembers) syncMessage = "Adding members is disabled in Group Settings." else {
                 val updated = if (groupForDialogs.members.any { it.username.equals(username, true) }) groupForDialogs else groupForDialogs.copy(members = groupForDialogs.members + FynxGroupMember(username))
@@ -721,4 +724,60 @@ private fun FynxGroupSettingsDialog(groupId: String, onDismiss: () -> Unit) {
             if (data.state.blockedUsernames.isNotEmpty()) Text("Blocked: ${data.state.blockedUsernames.joinToString()}", style = MaterialTheme.typography.bodySmall)
         }
     }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FynxCatchMeUpSheet(
+    messages: List<ChatMessage>,
+    title: String,
+    onDismiss: () -> Unit
+) {
+    val recent = messages.sortedByDescending { it.timestamp }.take(4)
+    val mediaCount = messages.count { it.attachmentUri != null || it.attachmentType in setOf("image", "video", "video_note", "audio", "document") }
+    val questionCount = messages.count { it.text.trim().endsWith("?") }
+    val latestIncoming = messages.asReversed().firstOrNull { !it.fromMe && it.text.isNotBlank() }
+    var waitingForReply = false
+    messages.sortedBy { it.timestamp }.forEach { if (it.fromMe) waitingForReply = false else if (it.text.isNotBlank()) waitingForReply = true }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
+        Column(
+            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("Catch Me Up", style = MaterialTheme.typography.titleLarge)
+            Text("A quick view of the real conversation with $title", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FynxPulseStat("Messages", messages.size.toString(), Modifier.weight(1f))
+                FynxPulseStat("Media", mediaCount.toString(), Modifier.weight(1f))
+                FynxPulseStat("Questions", questionCount.toString(), Modifier.weight(1f))
+            }
+            if (waitingForReply && latestIncoming != null) {
+                Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text("May need your reply", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        Text(latestIncoming.text, style = MaterialTheme.typography.bodyLarge, maxLines = 4)
+                    }
+                }
+            }
+            Text("Recent activity", style = MaterialTheme.typography.titleSmall)
+            if (recent.isEmpty()) Text("No messages yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            else recent.forEach { message ->
+                Text(
+                    (if (message.fromMe) "You: " else "${message.senderName ?: message.senderUsername ?: "Member"}: ") +
+                        (message.text.takeIf { it.isNotBlank() } ?: when (message.attachmentType) {
+                            "video_note" -> "Video note"
+                            "video" -> "Video"
+                            "image" -> "Photo"
+                            "audio" -> "Voice message"
+                            "document" -> "Document"
+                            else -> "Message"
+                        }),
+                    maxLines = 2,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            Text("This summary uses only messages already in this conversation; it does not create sample content.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+        }
+    }
 }
