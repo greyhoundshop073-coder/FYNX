@@ -396,7 +396,7 @@ fun SettingsPanel(
                 item { SettingsActionCard("Read receipts", if (settings.readReceipts) "On • managed in Chat settings" else "Off • managed in Chat settings") { showChatPersonalization = true } }
                 item { SettingsActionCard("Story replies", if (settings.storyReplies) "On • managed in Privacy & Safety" else "Off • managed in Privacy & Safety") { onOpenPrivacy() } }
             }
-            if (visible("Appearance", "Light, Charcoal Black, Dark, System theme")) {
+            if (visible("Appearance", "Light, Charcoal Black, Dark, Black AMOLED, System theme")) {
                 item { SettingsSectionTitle("Appearance") }
                 item { SettingsActionCard("Appearance", appearance) { showAppearance = true } }
                 item { SettingsActionCard("Colors & accent", accent.name) { showColors = true } }
