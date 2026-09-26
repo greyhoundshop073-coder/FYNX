@@ -35,6 +35,7 @@ fun FynxMusicAdminPanel() {
     var loading by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
+    var pendingRemoval by remember { mutableStateOf<FynxAdminClient.MusicTrack?>(null) }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -173,20 +174,49 @@ fun FynxMusicAdminPanel() {
                                 )
                             }
                             if (track.active) {
+                                TextButton(onClick = { pendingRemoval = track }, enabled = !loading) { Text("Remove") }
+                            } else {
                                 TextButton(onClick = {
                                     loading = true
                                     scope.launch {
-                                        FynxAdminClient.removeMusicTrack(context, track.id)
-                                            .onSuccess { status = "Track removed from the user catalogue."; refresh++ }
-                                            .onFailure { status = it.message ?: "Track removal failed." }
+                                        FynxAdminClient.setMusicTrackActive(context, track.id, true)
+                                            .onSuccess { status = "Track restored to the FYNX catalogue."; refresh++ }
+                                            .onFailure { status = it.message ?: "Track restore failed." }
                                         loading = false
                                     }
-                                }) { Text("Remove") }
+                                }, enabled = !loading) { Text("Restore") }
                             }
                         }
                     }
                 }
             }
         }
+    pendingRemoval?.let { track ->
+        AlertDialog(
+            onDismissRequest = { pendingRemoval = null },
+            title = { Text("Remove music?") },
+            text = {
+                Text("Remove “${track.title}” from the FYNX music catalogue? Existing posts keep their saved music metadata, but the track will no longer be available for new selections.")
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !loading,
+                    onClick = {
+                        val id = track.id
+                        pendingRemoval = null
+                        loading = true
+                        scope.launch {
+                            FynxAdminClient.removeMusicTrack(context, id)
+                                .onSuccess { status = "Track removed from the FYNX catalogue."; refresh++ }
+                                .onFailure { status = it.message ?: "Track removal failed." }
+                            loading = false
+                        }
+                    }
+                ) { Text("Remove") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRemoval = null }, enabled = !loading) { Text("Cancel") }
+            }
+        )
     }
 }

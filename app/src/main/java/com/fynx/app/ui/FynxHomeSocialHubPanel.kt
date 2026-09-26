@@ -94,6 +94,7 @@ fun FynxHomeSocialHubPanel(
     var locationLoading by remember { mutableStateOf(false) }
     var selectedCatalogueMusic by remember { mutableStateOf<FynxMusicCatalogueTrack?>(null) }
     var musicPlaying by remember { mutableStateOf(false) }
+    var musicPreviewId by remember { mutableStateOf<Long?>(null) }
     var showMusicPicker by remember { mutableStateOf(false) }
     var musicSearch by remember { mutableStateOf("") }
     var musicCatalogue by remember { mutableStateOf<List<FynxMusicCatalogueTrack>>(emptyList()) }
@@ -234,27 +235,42 @@ fun FynxHomeSocialHubPanel(
                             )
                         } else {
                             musicCatalogue.forEach { track ->
-                                TextButton(
-                                    onClick = {
-                                        selectedCatalogueMusic = track
-                                        musicPlaying = false
-                                        showMusicPicker = false
-                                        musicSearch = ""
-                                        notice = null
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
+                                Card(Modifier.fillMaxWidth()) {
                                     Row(
-                                        Modifier.fillMaxWidth(),
+                                        Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary)
                                         Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
                                             Text(track.title.ifBlank { "Untitled" }, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                                             Text(track.artist.ifBlank { "FYNX" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                            Text(
+                                                "${track.durationMs.coerceAtLeast(0L) / 60000}:${((track.durationMs.coerceAtLeast(0L) / 1000L) % 60).toString().padStart(2, '0')}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
                                         }
-                                        Text("${track.durationMs.coerceAtLeast(0L) / 60000}:${((track.durationMs.coerceAtLeast(0L) / 1000L) % 60).toString().padStart(2, '0')}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        if (musicPreviewId == track.id) {
+                                            FynxRemoteAudio(
+                                                mediaUrl = "/api/social/music/catalogue/" + track.id + "/media",
+                                                modifier = Modifier.width(108.dp),
+                                                maxDurationMs = track.durationMs.coerceAtLeast(1_000L)
+                                            )
+                                            TextButton(onClick = { musicPreviewId = null }) { Text("Stop") }
+                                        } else {
+                                            TextButton(onClick = { musicPreviewId = track.id }) { Text("Preview") }
+                                        }
+                                        Button(
+                                            onClick = {
+                                                selectedCatalogueMusic = track
+                                                musicPlaying = false
+                                                musicPreviewId = null
+                                                showMusicPicker = false
+                                                musicSearch = ""
+                                                notice = null
+                                            }
+                                        ) { Text("Add") }
                                     }
                                 }
                             }
@@ -552,7 +568,7 @@ fun FynxHomeSocialHubPanel(
                                     FynxRemoteAudio(
                                         mediaUrl = "/api/social/music/catalogue/" + music.id + "/media",
                                         modifier = Modifier.width(120.dp),
-                                        maxDurationMs = 45_000L
+                                        maxDurationMs = music.durationMs.coerceAtLeast(1_000L)
                                     )
                                                                         IconButton(onClick = { selectedCatalogueMusic = null; musicPlaying = false }, enabled = !posting) {
                                         Icon(Icons.Default.Close, "Remove music")

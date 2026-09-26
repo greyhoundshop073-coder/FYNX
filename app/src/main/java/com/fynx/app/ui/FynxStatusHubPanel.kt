@@ -74,6 +74,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null) {
     var statusMusicSearch by remember { mutableStateOf("") }
     var statusMusicCatalogue by remember { mutableStateOf<List<FynxMusicCatalogueTrack>>(emptyList()) }
     var statusMusicLoading by remember { mutableStateOf(false) }
+    var statusMusicPreviewId by remember { mutableStateOf<Long?>(null) }
 
     fun openCapturedStatus(uri: Uri, type: String) {
         selectedInitialMedia = FynxRecentMedia(uri = uri, isVideo = type == "video", dateAddedSeconds = System.currentTimeMillis() / 1000L)
@@ -163,23 +164,28 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null) {
                                     Text("No FYNX music is published yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 } else {
                                     statusMusicCatalogue.forEach { track ->
-                                        TextButton(
-                                            onClick = {
-                                                selectedStatusMusic = track
-                                                showStatusMusicPicker = false
-                                                statusMusicSearch = ""
-                                                addStatusOpen = false
-                                                composing = true
-                                            },
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Card(Modifier.fillMaxWidth()) {
+                                            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary)
                                                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
                                                     Text(track.title.ifBlank { "Untitled" }, maxLines = 1)
                                                     Text(track.artist.ifBlank { "FYNX" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                                    Text(track.durationMs.div(60000).toString() + ":" + ((track.durationMs.div(1000) % 60).toString().padStart(2, '0')), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 }
-                                                Text(track.durationMs.div(60000).toString() + ":" + ((track.durationMs.div(1000) % 60).toString().padStart(2, '0')), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                if (statusMusicPreviewId == track.id) {
+                                                    FynxRemoteAudio("/api/social/music/catalogue/" + track.id + "/media", Modifier.width(108.dp), track.durationMs.coerceAtLeast(1_000L))
+                                                    TextButton(onClick = { statusMusicPreviewId = null }) { Text("Stop") }
+                                                } else {
+                                                    TextButton(onClick = { statusMusicPreviewId = track.id }) { Text("Preview") }
+                                                }
+                                                Button(onClick = {
+                                                    selectedStatusMusic = track
+                                                    statusMusicPreviewId = null
+                                                    showStatusMusicPicker = false
+                                                    statusMusicSearch = ""
+                                                    addStatusOpen = false
+                                                    composing = true
+                                                }) { Text("Add") }
                                             }
                                         }
                                     }

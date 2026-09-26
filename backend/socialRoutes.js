@@ -389,7 +389,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const artist = typeof req.body?.artist === 'string' ? req.body.artist.trim().slice(0, 120) : '';
       const durationMs = Math.max(0, Math.min(Number(req.body?.durationMs) || 0, 86400000));
       const category = typeof req.body?.category === 'string' ? req.body.category.trim().slice(0, 60) || 'FYNX' : 'FYNX';
-      if (!Number.isSafeInteger(mediaId) || mediaId < 1 || !title) return res.status(400).json({ error: 'audio media, title and artist are required' });
+      if (!Number.isSafeInteger(mediaId) || mediaId < 1 || !title || !artist) return res.status(400).json({ error: 'audio media, title and artist are required' });
       const media = await pool.query('SELECT id,mime_type,owner_id FROM message_media WHERE id=$1', [mediaId]);
       if (!media.rows[0] || String(media.rows[0].owner_id) !== String(req.user.sub) || !String(media.rows[0].mime_type || '').toLowerCase().startsWith('audio/')) {
         return res.status(403).json({ error: 'music media must be an audio file owned by the authorized admin' });
@@ -437,6 +437,23 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     } catch (error) {
       console.error('admin music catalogue', error);
       return res.status(500).json({ error: 'music catalogue lookup failed' });
+    }
+  });
+
+  app.patch('/api/admin/social/music/catalogue/:id', auth, async (req, res) => {
+    try {
+      const role = await fynxMusicAdminRole(req.user.sub);
+      if (role !== 'OWNER') return res.status(403).json({ error: 'FYNX owner access required for music management' });
+      await ensureSocialSchema();
+      const id = Number(req.params.id);
+      const active = req.body?.active === true;
+      if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: 'invalid music track' });
+      const result = await pool.query('UPDATE fynx_music_catalogue SET active=$2 WHERE id=$1 RETURNING id,active', [id, active]);
+      if (!result.rows[0]) return res.status(404).json({ error: 'music track not found' });
+      return res.json({ ok: true, active: Boolean(result.rows[0].active) });
+    } catch (error) {
+      console.error('admin music catalogue status', error);
+      return res.status(500).json({ error: 'music catalogue status update failed' });
     }
   });
 

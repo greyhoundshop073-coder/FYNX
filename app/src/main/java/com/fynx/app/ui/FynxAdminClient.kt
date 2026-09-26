@@ -110,6 +110,13 @@ object FynxAdminClient {
     suspend fun removeMusicTrack(context: Context, trackId: String): Result<Unit> =
         FynxBackendClient.delete(context, "/api/admin/social/music/catalogue/" + encode(trackId)).map { Unit }
 
+    suspend fun setMusicTrackActive(context: Context, trackId: String, active: Boolean): Result<Unit> =
+        FynxBackendClient.patchJson(
+            context,
+            "/api/admin/social/music/catalogue/" + encode(trackId),
+            JSONObject().put("active", active).toString()
+        ).map { Unit }
+
     suspend fun marketplaceProtectionCases(context: Context, status: String? = null): Result<List<ProtectionCase>> {
         val path = if (status.isNullOrBlank()) "/api/admin/marketplace/protection/cases" else "/api/admin/marketplace/protection/cases?status=${encode(status.trim().uppercase())}"
         return FynxBackendClient.get(context, path).mapCatching { raw ->
