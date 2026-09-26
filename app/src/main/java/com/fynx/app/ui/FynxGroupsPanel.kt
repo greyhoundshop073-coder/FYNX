@@ -275,7 +275,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var showTools by remember { mutableStateOf(false) }
     var showMore by remember { mutableStateOf(false) }
     var showPulse by remember { mutableStateOf(false) }
-    var showCatchMeUp by remember { mutableStateOf(false) }
+    var showCatchMeUp by remember { mutableStateOf(false) }\n    var showConversationMoments by remember { mutableStateOf(false) }
     var groupNotificationsEnabled by remember(groupId) { mutableStateOf(FynxConversationPreferences.groupNotifications(context, groupId)) }
     var showEmojiPanel by remember { mutableStateOf(false) }
     var reactionMessageId by remember { mutableStateOf<String?>(null) }
@@ -368,7 +368,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 Box {
                     IconButton(onClick = { showMore = true }, enabled = selectedGroup != null, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.MoreVert, "More", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp)) }
                     DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
-                        DropdownMenuItem(text = { Text("Catch Me Up") }, onClick = { showMore = false; showCatchMeUp = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })
+                        DropdownMenuItem(text = { Text("Catch Me Up") }, onClick = { showMore = false; showCatchMeUp = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })\n                        DropdownMenuItem(text = { Text("Conversation Moments") }, onClick = { showMore = false; showConversationMoments = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })
                         DropdownMenuItem(text = { Text("Group Pulse") }, onClick = { showMore = false; showPulse = true }, leadingIcon = { Icon(Icons.Default.Group, null) })
                         DropdownMenuItem(text = { Text("Members") }, onClick = { showMore = false; showMembers = true }, leadingIcon = { Icon(Icons.Default.Group, null) })
                         DropdownMenuItem(text = { Text("Group tools") }, onClick = { showMore = false; showTools = true }, leadingIcon = { Icon(Icons.Default.Build, null) })
@@ -631,7 +631,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     }
     selectedGroup?.let { groupForDialogs ->
         if (showMembers) FynxGroupMembersDialog(groupForDialogs, currentUsername, { showMembers = false }) { updated -> if (FynxGroupsStore.updateGroup(context, updated)) { currentGroup = updated; scope.launch { FynxGroupRemoteClient.syncGroup(context, updated).onFailure { syncMessage = it.message } } } }
-        if (showCatchMeUp) FynxCatchMeUpSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showCatchMeUp = false })
+        if (showCatchMeUp) FynxCatchMeUpSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showCatchMeUp = false })\n        if (showConversationMoments) FynxConversationMomentsSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showConversationMoments = false })
         if (showTools) FynxGroupSocialDialog(groupForDialogs, { showTools = false }, onInvite = { username ->
             if (!canAddMembers) syncMessage = "Adding members is disabled in Group Settings." else {
                 val updated = if (groupForDialogs.members.any { it.username.equals(username, true) }) groupForDialogs else groupForDialogs.copy(members = groupForDialogs.members + FynxGroupMember(username))
