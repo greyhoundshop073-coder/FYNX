@@ -505,7 +505,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         if (isNewConversation) {
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
-                color = Color(0xFF08090D),
+                color = glassPalette.backgroundMid.copy(alpha = 0.92f),
                 shape = RoundedCornerShape(14.dp),
                 tonalElevation = 0.dp
             ) {
