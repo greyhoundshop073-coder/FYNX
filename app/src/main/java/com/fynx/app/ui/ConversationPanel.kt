@@ -903,7 +903,7 @@ private fun FynxFirstContactIntro(profile: FynxProfileRemoteClient.Profile?, cre
     val country = profile?.country?.trim().orEmpty()
     val joined = createdAt?.let(::formatJoinedMonth)
     Column(Modifier.fillMaxWidth().padding(vertical = 10.dp, horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        FynxAvatar(displayName, profile?.profilePhotoMediaId ?: fallbackAvatarUri, Modifier.size(54.dp))
+        FynxAvatar(displayName, profile?.profilePhotoMediaId ?: fallbackAvatarUri, Modifier.size(54.dp), ownerUsername = username)
         Spacer(Modifier.height(7.dp))
         Text(displayName, style = MaterialTheme.typography.titleSmall)
         Text("@$username", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
