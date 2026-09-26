@@ -356,13 +356,13 @@ fun GroupChatPanel(
                         }
                     } else {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { picker.launch("image/* video/*") }, modifier = Modifier.size(42.dp)) {
+                            IconButton(onClick = { picker.launch("image/* video/*") }, modifier = Modifier.size(48.dp)) {
                                 Icon(Icons.Default.Add, "Attachments", tint = Color(0xFFD6DCE1))
                             }
-                            IconButton(onClick = { documentPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) }, modifier = Modifier.size(42.dp)) {
+                            IconButton(onClick = { documentPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) }, modifier = Modifier.size(48.dp)) {
                                 Icon(Icons.Default.Description, "Document", tint = Color(0xFFD6DCE1))
                             }
-                            IconButton(onClick = { showCamera = true }, modifier = Modifier.size(42.dp)) {
+                            IconButton(onClick = { showCamera = true }, modifier = Modifier.size(48.dp)) {
                                 Icon(Icons.Default.CameraAlt, "Camera", tint = Color(0xFFD6DCE1))
                             }
                             OutlinedTextField(
@@ -381,10 +381,10 @@ fun GroupChatPanel(
                                 ),
                                 trailingIcon = {
                                     Row {
-                                        IconButton(onClick = { micPermission.launch(Manifest.permission.RECORD_AUDIO) }, modifier = Modifier.size(42.dp)) {
+                                        IconButton(onClick = { micPermission.launch(Manifest.permission.RECORD_AUDIO) }, modifier = Modifier.size(48.dp)) {
                                             Icon(Icons.Default.Mic, "Record voice")
                                         }
-                                        IconButton(onClick = { send() }, enabled = text.isNotBlank() || attachment != null, modifier = Modifier.size(42.dp)) {
+                                        IconButton(onClick = { send() }, enabled = text.isNotBlank() || attachment != null, modifier = Modifier.size(48.dp)) {
                                             Icon(Icons.Default.Send, "Send")
                                         }
                                     }
