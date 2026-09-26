@@ -450,7 +450,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     Icon(Icons.Default.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
                 }
                 IconButton(onClick = { onOpenProfile(chat.username) }, modifier = Modifier.size(48.dp)) {
-                    FynxAvatar(chat.name, resolvedAvatarUri, Modifier.size(40.dp))
+                    FynxRemoteProfileAvatar(mediaId = resolvedAvatarUri?.substringAfterLast("/api/media/")?.takeIf { it != resolvedAvatarUri }, contentDescription = chat.name, modifier = Modifier.size(40.dp), ownerUsername = chat.username)
                 }
                 Column(Modifier.weight(1f).padding(start = 4.dp).padding(end = 2.dp)) {
                     Text(chat.name, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)

@@ -292,7 +292,16 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
                         Column(horizontalAlignment = if (message.fromMe) Alignment.End else Alignment.Start) {
                             if (!message.fromMe && !message.senderUsername.isNullOrBlank()) {
-                                Text(message.senderUsername!!, style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = glassPalette.messageMuted, modifier = Modifier.padding(bottom = 2.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 3.dp)) {
+                                    FynxRemoteProfileAvatar(
+                                        mediaId = senderAvatarUris[message.senderUsername],
+                                        contentDescription = message.senderUsername,
+                                        modifier = Modifier.size(28.dp),
+                                        ownerUsername = message.senderUsername
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(message.senderUsername!!, style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = glassPalette.messageMuted)
+                                }
                             }
                             Box {
                             val bubbleShape = RoundedCornerShape(15.dp)

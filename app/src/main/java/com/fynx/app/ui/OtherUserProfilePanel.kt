@@ -114,7 +114,7 @@ fun OtherUserProfilePanel(
                                         .clickable { if (person.profilePhotoMediaId != null) showProfilePhoto = true },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    RemoteProfilePhoto(person.profilePhotoMediaId, person.displayName, Modifier.size(80.dp).clip(CircleShape))
+                                    FynxRemoteProfileAvatar(mediaId = person.profilePhotoMediaId, contentDescription = person.displayName, modifier = Modifier.size(80.dp).clip(CircleShape), ownerUsername = person.username)
                                 }
                                 Spacer(Modifier.height(12.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
