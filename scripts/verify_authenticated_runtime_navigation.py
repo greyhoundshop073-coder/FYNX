@@ -377,9 +377,9 @@ if not FAILURES:
             for _ in range(20):
                 if find_control(feature_xml,target_labels): return feature_xml
                 if direction=="up":
-                    run("adb","shell","input","swipe","540","1660","540","1120","350")
+                    run("adb","shell","input","swipe","540","900","540","420","350")
                 else:
-                    run("adb","shell","input","swipe","540","900","540","1450","350")
+                    run("adb","shell","input","swipe","540","420","540","900","350")
                 time.sleep(.45)
                 feature_xml=dump_ui(f"authenticated-features-{direction}.xml")
         return feature_xml if find_control(feature_xml,target_labels) else ""
