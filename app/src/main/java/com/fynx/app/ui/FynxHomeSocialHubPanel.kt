@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -107,6 +108,7 @@ fun FynxHomeSocialHubPanel(
     var audienceLoading by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     var posting by remember { mutableStateOf(false) }
+    var showComposerPreview by remember { mutableStateOf(false) }
     var networkLevel by remember { mutableStateOf(FynxNetworkQuality.current(context)) }
 
     LaunchedEffect(Unit) {
@@ -409,6 +411,7 @@ fun FynxHomeSocialHubPanel(
     fun clearComposer() {
         if (!posting) {
             showComposer = false
+            showComposerPreview = false
             capturedUris = emptyList()
             capturedTypes = emptyList()
             selectedVisualIndex = 0
@@ -429,6 +432,7 @@ fun FynxHomeSocialHubPanel(
 
     fun finishComposerAfterSuccess() {
         showComposer = false
+        showComposerPreview = false
         capturedUris = emptyList()
         capturedTypes = emptyList()
         selectedVisualIndex = 0
@@ -593,19 +597,33 @@ fun FynxHomeSocialHubPanel(
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 260.dp, max = 420.dp)
-                                .padding(top = 8.dp)
+                                .heightIn(min = 190.dp, max = 420.dp)
+                                .padding(top = 4.dp)
                                 .background(
-                                    color = textBackground?.let { Color(it.color) } ?: MaterialTheme.colorScheme.background,
-                                    shape = RoundedCornerShape(18.dp)
+                                    color = textBackground?.let { Color(it.color) } ?: Color.Transparent,
+                                    shape = RoundedCornerShape(0.dp)
                                 )
-                                .padding(horizontal = 2.dp, vertical = 8.dp),
+                                .padding(horizontal = if (textBackground != null) 18.dp else 0.dp, vertical = 14.dp),
                             enabled = !posting && postingAllowed,
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(color = textBackground?.let { Color(it.foregroundColor) } ?: MaterialTheme.colorScheme.onBackground),
+                            textStyle = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 22.sp,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                lineHeight = 30.sp,
+                                color = textBackground?.let { Color(it.foregroundColor) } ?: MaterialTheme.colorScheme.onBackground,
+                                textAlign = if (textBackground != null) androidx.compose.ui.text.style.TextAlign.Center else androidx.compose.ui.text.style.TextAlign.Start
+                            ),
                             decorationBox = { innerTextField ->
-                                Box(Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 2.dp)) {
+                                Box(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
                                     if (text.isEmpty()) {
-                                        Text("What's on your mind?", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(
+                                            "What's on your mind?",
+                                            style = MaterialTheme.typography.titleLarge.copy(
+                                                fontSize = 22.sp,
+                                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                                lineHeight = 30.sp
+                                            ),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                     innerTextField()
                                 }
@@ -629,10 +647,7 @@ fun FynxHomeSocialHubPanel(
                                         label = { Text(option.label) },
                                         leadingIcon = {
                                             Box(
-                                                Modifier
-                                                    .size(18.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Color(option.color))
+                                                Modifier.size(18.dp).clip(CircleShape).background(Color(option.color))
                                             )
                                         }
                                     )
@@ -646,55 +661,99 @@ fun FynxHomeSocialHubPanel(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             ComposerAction("Photo", Icons.Default.Image, { gallery.launch(
-                                    PickVisualMediaRequest(
-                                        ActivityResultContracts.PickVisualMedia.ImageAndVideo
-                                    )
-                                ) }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                            ) }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
                             ComposerAction("Video/Camera", Icons.Default.VideoLibrary, { cameraOpenedFromComposer = true; showComposer = false; showCamera = true }, !posting && postingAllowed && capturedUris.size < 4, Modifier.weight(1f), compact = true)
                             ComposerAction("Voice", Icons.Default.Mic, { if (capturedUris.isNotEmpty()) notice = "Voice posts must contain only one audio recording. Remove the current media first." else { showComposer = false; showVoiceRecorder = true } }, !posting && postingAllowed && capturedUris.isEmpty(), Modifier.weight(1f), compact = true)
                             ComposerAction("Marketplace", Icons.Default.Storefront, { showComposer = false; onOpenMarketplace() }, !posting && postingAllowed, Modifier.weight(1f), compact = true)
                         }
 
+                        if (text.isNotBlank() || capturedUris.isNotEmpty() || selectedCatalogueMusic != null) {
+                            TextButton(
+                                onClick = { showComposerPreview = true },
+                                enabled = !posting,
+                                modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
+                            ) {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("View as post")
+                            }
+                        }
+
                         if (capturedUris.isNotEmpty()) {
-                            Card(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    val audioCount = capturedTypes.count { it == "audio" }
-                                    val visualItems = capturedUris.mapIndexedNotNull { index, uri ->
-                                        capturedTypes.getOrNull(index)?.takeIf { it == "image" || it == "video" }?.let { type -> Triple(index, uri, type) }
-                                    }
-                                    val selectedVisual = visualItems.getOrNull(selectedVisualIndex.coerceIn(0, (visualItems.size - 1).coerceAtLeast(0)))
-                                    Text("Attached media", style = MaterialTheme.typography.titleMedium)
-                                    Text("Up to 4 items per FYNX post.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
-                                    if (selectedVisual != null) {
-                                        Box(Modifier.fillMaxWidth().heightIn(min = 150.dp, max = 280.dp)) {
-                                            if (selectedVisual.third == "video") {
-                                                AndroidView(factory = { VideoView(it).apply { setVideoURI(selectedVisual.second); setOnPreparedListener { player -> player.isLooping = true; start() } } }, update = { view -> if (view.tag != selectedVisual.second.toString()) { view.tag = selectedVisual.second.toString(); view.setVideoURI(selectedVisual.second); view.start() } }, modifier = Modifier.fillMaxSize())
-                                            } else {
-                                                AndroidView(factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.FIT_CENTER } }, update = { view -> view.setImageURI(selectedVisual.second) }, modifier = Modifier.fillMaxSize())
-                                            }
+                            val audioCount = capturedTypes.count { it == "audio" }
+                            val visualItems = capturedUris.mapIndexedNotNull { index, uri ->
+                                capturedTypes.getOrNull(index)?.takeIf { it == "image" || it == "video" }?.let { type -> Triple(index, uri, type) }
+                            }
+                            val selectedVisual = visualItems.getOrNull(selectedVisualIndex.coerceIn(0, (visualItems.size - 1).coerceAtLeast(0)))
+
+                            Column(
+                                Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                if (selectedVisual != null) {
+                                    Box(
+                                        Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 320.dp).clip(RoundedCornerShape(12.dp))
+                                    ) {
+                                        if (selectedVisual.third == "video") {
+                                            AndroidView(
+                                                factory = { VideoView(it).apply { setVideoURI(selectedVisual.second); setOnPreparedListener { player -> player.isLooping = true; start() } } },
+                                                update = { view ->
+                                                    if (view.tag != selectedVisual.second.toString()) {
+                                                        view.tag = selectedVisual.second.toString()
+                                                        view.setVideoURI(selectedVisual.second)
+                                                        view.start()
+                                                    }
+                                                },
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        } else {
+                                            AndroidView(
+                                                factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.FIT_CENTER } },
+                                                update = { view -> view.setImageURI(selectedVisual.second) },
+                                                modifier = Modifier.fillMaxSize()
+                                            )
                                         }
                                     }
-                                    if (visualItems.size > 1) {
-                                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            visualItems.forEachIndexed { visualIndex, (_, uri, type) ->
-                                                Box(Modifier.size(76.dp).clickable(enabled = !posting && !false) { selectedVisualIndex = visualIndex }) {
-                                                    Card(Modifier.fillMaxSize()) {
-                                                        if (type == "video") {
-                                                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(Icons.Default.VideoLibrary, "Video ${visualIndex + 1}", modifier = Modifier.size(28.dp)) }
-                                                        } else {
-                                                            AndroidView(factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.CENTER_CROP } }, update = { view -> view.setImageURI(uri) }, modifier = Modifier.fillMaxSize())
+                                }
+                                if (visualItems.size > 1) {
+                                    Row(
+                                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        visualItems.forEachIndexed { visualIndex, (_, uri, type) ->
+                                            Box(Modifier.size(72.dp).clickable(enabled = !posting) { selectedVisualIndex = visualIndex }) {
+                                                Box(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))) {
+                                                    if (type == "video") {
+                                                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                            Icon(Icons.Default.VideoLibrary, "Video " + (visualIndex + 1), modifier = Modifier.size(28.dp))
                                                         }
+                                                    } else {
+                                                        AndroidView(
+                                                            factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.CENTER_CROP } },
+                                                            update = { view -> view.setImageURI(uri) },
+                                                            modifier = Modifier.fillMaxSize()
+                                                        )
                                                     }
-                                                    IconButton(onClick = { removeCapturedUri(uri) }, enabled = !posting && !false, modifier = Modifier.align(Alignment.TopEnd).size(48.dp)) { Icon(Icons.Default.Close, "Remove media") }
+                                                }
+                                                IconButton(onClick = { removeCapturedUri(uri) }, enabled = !posting, modifier = Modifier.align(Alignment.TopEnd).size(44.dp)) {
+                                                    Icon(Icons.Default.Close, "Remove media")
                                                 }
                                             }
                                         }
-                                    } else if (visualItems.size == 1) {
-                                        TextButton(onClick = { removeCapturedUri(visualItems.first().second) }, enabled = !posting && !false) { Icon(Icons.Default.Close, null); Spacer(Modifier.width(4.dp)); Text("Remove photo/video") }
                                     }
-                                    Text("${capturedUris.size} item${if (capturedUris.size == 1) "" else "s"} ready${if (audioCount > 0) " • $audioCount audio" else ""}", color = MaterialTheme.colorScheme.primary)
-                                    Text("Preview before publishing. Select any thumbnail to inspect it, or remove media you don't want to post.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                } else if (visualItems.size == 1) {
+                                    TextButton(onClick = { removeCapturedUri(visualItems.first().second) }, enabled = !posting) {
+                                        Icon(Icons.Default.Close, null)
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Remove photo/video")
+                                    }
                                 }
+                                Text(
+                                    capturedUris.size.toString() + " item" + if (capturedUris.size == 1) "" else "s" + " ready" +
+                                        if (audioCount > 0) " • " + audioCount + " audio" else "",
+                                    color = MaterialTheme.colorScheme.primary
+                                )
                             }
                         }
 
@@ -766,6 +825,84 @@ fun FynxHomeSocialHubPanel(
                 ) { Text("Done") }
             }
         )
+    }
+
+    if (showComposerPreview) {
+        Dialog(
+            onDismissRequest = { showComposerPreview = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Post preview", style = MaterialTheme.typography.titleLarge)
+                        TextButton(onClick = { showComposerPreview = false }) { Text("Back to edit") }
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(currentUsername, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                        Spacer(Modifier.width(8.dp))
+                        Text("• " + audience.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (text.isNotBlank()) {
+                        Text(
+                            text,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(textBackground?.let { Color(it.color) } ?: Color.Transparent, RoundedCornerShape(0.dp))
+                                .padding(horizontal = if (textBackground != null) 18.dp else 0.dp, vertical = 10.dp),
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 22.sp,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                lineHeight = 30.sp,
+                                color = textBackground?.let { Color(it.foregroundColor) } ?: MaterialTheme.colorScheme.onBackground,
+                                textAlign = if (textBackground != null) androidx.compose.ui.text.style.TextAlign.Center else androidx.compose.ui.text.style.TextAlign.Start
+                            )
+                        )
+                    }
+                    val previewVisuals = capturedUris.mapIndexedNotNull { index, uri ->
+                        capturedTypes.getOrNull(index)?.takeIf { it == "image" || it == "video" }?.let { type -> Triple(index, uri, type) }
+                    }
+                    val previewVisual = previewVisuals.getOrNull(selectedVisualIndex.coerceIn(0, (previewVisuals.size - 1).coerceAtLeast(0)))
+                    if (previewVisual != null) {
+                        Box(Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 420.dp).clip(RoundedCornerShape(12.dp))) {
+                            if (previewVisual.third == "video") {
+                                AndroidView(
+                                    factory = { VideoView(it).apply { setVideoURI(previewVisual.second); setOnPreparedListener { player -> player.isLooping = true; start() } } },
+                                    update = { view -> if (view.tag != previewVisual.second.toString()) { view.tag = previewVisual.second.toString(); view.setVideoURI(previewVisual.second); view.start() } },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                AndroidView(
+                                    factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.FIT_CENTER } },
+                                    update = { view -> view.setImageURI(previewVisual.second) },
+                                    modifier = Modifier.fillMaxWidth().wrapContentHeight()
+                                )
+                            }
+                        }
+                    }
+                    selectedCatalogueMusic?.let {
+                        Text("♫ " + it.title + " • " + it.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                    }
+                    postLocation?.let {
+                        Text("📍 " + it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    selectedFeelingActivity?.let {
+                        Text(it.icon + " " + it.label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text("This is how your post content will be arranged before you publish.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
     }
 
     if (showVoiceRecorder) {
