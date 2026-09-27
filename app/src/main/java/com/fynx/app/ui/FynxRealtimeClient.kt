@@ -51,6 +51,25 @@ class FynxRealtimeClient(
     @Volatile private var socketCreationInProgress = false
     @Volatile private var socketBeingCreated: WebSocket? = null
 
+    // OkHttp invokes WebSocket callbacks off the main thread. Compose state owned by
+    // Chat/Calls must be updated on the main thread; otherwise navigation can crash
+    // even though the transport itself reports a normal failure.
+    private fun emitState(state: State) {
+        reconnectHandler.post {
+            if (!manuallyClosed) onStateChanged(state)
+        }
+    }
+    private fun emitMessage(message: FynxProductionMessaging.RemoteMessage) {
+        reconnectHandler.post {
+            if (!manuallyClosed) onMessage(message)
+        }
+    }
+    private fun emitEvent(event: Event) {
+        reconnectHandler.post {
+            if (!manuallyClosed) onEvent(event)
+        }
+    }
+
     fun connect() {
         // Never let a synchronous transport/device failure terminate Chat or Group entry.
         manuallyClosed = false
