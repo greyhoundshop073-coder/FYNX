@@ -52,11 +52,23 @@ class FynxRealtimeClient(
     @Volatile private var socketBeingCreated: WebSocket? = null
 
     fun connect() {
+        // Never let a synchronous transport/device failure terminate Chat or Group entry.
         manuallyClosed = false
         reconnectAttempt = 0
         reconnectHandler.removeCallbacksAndMessages(null)
-        registerNetworkCallback()
-        connectInternal()
+        runCatching {
+            registerNetworkCallback()
+            connectInternal()
+        }.onFailure {
+            synchronized(socketCreationLock) {
+                socketCreationInProgress = false
+                socketBeingCreated = null
+                socket = null
+                socketAccountKey = null
+            }
+            onStateChanged(State.FAILED)
+            if (isSocketStillAuthorized()) scheduleReconnect()
+        }
     }
     private fun registerNetworkCallback() {
         val manager = connectivityManager ?: return
@@ -91,7 +103,7 @@ class FynxRealtimeClient(
         runCatching { manager?.unregisterNetworkCallback(callback) }
     }
     /** Do not require Android's VALIDATED bit; OkHttp must be allowed to prove actual reachability. */
-    private fun hasUsableNetwork(): Boolean = FynxBackendClient.isNetworkAvailable(context)
+    private fun hasUsableNetwork(): Boolean = runCatching { FynxBackendClient.isNetworkAvailable(context) }.getOrDefault(false)
     private fun currentAccountKey(): String? = FynxAuthStore.accountStorageKey(context)
     private fun isSocketStillAuthorized(expectedAccountKey: String? = socketAccountKey): Boolean = !expectedAccountKey.isNullOrBlank() && expectedAccountKey == currentAccountKey() && FynxBackendClient.hasAccessToken(context)
     private fun bindPendingQueueToAccount(accountKey: String) {
