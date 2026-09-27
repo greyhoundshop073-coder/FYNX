@@ -1,6 +1,7 @@
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'node:crypto';
+import { queueFynxNotification } from './notificationPush.js';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
@@ -143,7 +144,20 @@ export function registerStatusInteractionRoutes({ app }) {
       if (!status) return res.status(404).json({ error: 'status not found or not visible' });
       const existing = await pool.query('SELECT 1 FROM status_likes WHERE status_id=$1 AND user_id=$2 LIMIT 1', [id, req.user.sub]);
       if (existing.rows[0]) await pool.query('DELETE FROM status_likes WHERE status_id=$1 AND user_id=$2', [id, req.user.sub]);
-      else await pool.query('INSERT INTO status_likes(status_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [id, req.user.sub]);
+      else {
+        await pool.query('INSERT INTO status_likes(status_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [id, req.user.sub]);
+        if (String(status.owner_id) !== String(req.user.sub)) {
+          await queueFynxNotification(pool, {
+            userId: status.owner_id,
+            type: 'REACTION',
+            title: 'New Status like',
+            message: `${req.user.username || 'Someone'} liked your Status.`,
+            targetId: id,
+            sourceUsername: req.user.username || null,
+            route: `fynx://status/${id}`
+          });
+        }
+      }
       return res.json({ liked: !existing.rows[0] });
     } catch (error) {
       console.error('status like', error);
@@ -166,6 +180,17 @@ export function registerStatusInteractionRoutes({ app }) {
       }
       await pool.query(`INSERT INTO status_reactions(status_id,user_id,reaction) VALUES($1,$2,$3)
         ON CONFLICT(status_id,user_id) DO UPDATE SET reaction=EXCLUDED.reaction, created_at=NOW()`, [id, req.user.sub, reaction]);
+      if (String(status.owner_id) !== String(req.user.sub)) {
+        await queueFynxNotification(pool, {
+          userId: status.owner_id,
+          type: 'REACTION',
+          title: 'New Status reaction',
+          message: `${req.user.username || 'Someone'} reacted ${reaction} to your Status.`,
+          targetId: id,
+          sourceUsername: req.user.username || null,
+          route: `fynx://status/${id}`
+        });
+      }
       return res.json({ reaction });
     } catch (error) {
       console.error('status reaction', error);
@@ -183,7 +208,23 @@ export function registerStatusInteractionRoutes({ app }) {
       if (!status) return res.status(404).json({ error: 'status not found or not visible' });
       const replyId = randomUUID();
       await pool.query('INSERT INTO status_replies(id,status_id,sender_id,body) VALUES($1,$2,$3,$4)', [replyId, id, req.user.sub, body]);
-      return res.json({ replyId, sent: true });
+      if (String(status.owner_id) !== String(req.user.sub)) {
+        // A Status reply is also a real private-chat message. Keep the existing
+        // status_replies record for Status history while making the reply visible
+        // in the owner's normal conversation surface.
+        await pool.query(`INSERT INTO messages(sender_id,recipient_id,text,created_at)
+          VALUES($1,$2,$3,NOW())`, [req.user.sub, status.owner_id, body]);
+        await queueFynxNotification(pool, {
+          userId: status.owner_id,
+          type: 'COMMENT',
+          title: 'New Status reply',
+          message: `${req.user.username || 'Someone'} replied to your Status.`,
+          targetId: id,
+          sourceUsername: req.user.username || null,
+          route: `fynx://status/${id}`
+        });
+      }
+      return res.json({ replyId, sent: true, deliveredToChat: String(status.owner_id) !== String(req.user.sub) });
     } catch (error) {
       console.error('status reply', error);
       return res.status(500).json({ error: 'status reply failed' });
