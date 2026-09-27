@@ -562,7 +562,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
             if (isNewConversation && searchQuery.isBlank()) {
                 item(key = "fynx_first_contact_intro") {
-                    FynxFirstContactIntro(recipientProfile, recipientCreatedAt, chat.name, chat.username, chat.avatarUri)
+                    FynxFirstContactIntro(glassPalette, recipientProfile, recipientCreatedAt, chat.name, chat.username, chat.avatarUri)
                 }
             }
             if (visibleMessages.isEmpty() && searchQuery.isBlank()) {
@@ -960,7 +960,7 @@ private fun formatMessageClock(timestamp: Long): String {
 }
 
 @Composable
-private fun FynxFirstContactIntro(profile: FynxProfileRemoteClient.Profile?, createdAt: String?, fallbackName: String, fallbackUsername: String, fallbackAvatarUri: String?) {
+private fun FynxFirstContactIntro(glassPalette: FynxGlassThemePalette, profile: FynxProfileRemoteClient.Profile?, createdAt: String?, fallbackName: String, fallbackUsername: String, fallbackAvatarUri: String?) {
     val displayName = profile?.displayName?.takeIf { it.isNotBlank() } ?: fallbackName
     val username = profile?.username?.takeIf { it.isNotBlank() } ?: fallbackUsername.removePrefix("@")
     val country = profile?.country?.trim().orEmpty()
