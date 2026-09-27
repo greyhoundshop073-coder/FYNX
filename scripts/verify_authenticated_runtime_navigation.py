@@ -67,9 +67,22 @@ def _matches(node, wanted:list[str]) -> bool:
 
 def _find_control_node(root, wanted:list[str]):
     # Prefer exact text/content-description/resource-id matches before substring
-    # matches. This prevents a feed item such as "Friends post" from stealing
-    # the tap intended for the bottom-navigation item "Friends".
+    # matches. Compose may expose a label on a descendant while the actual
+    # click target is its clickable ancestor, so promote that ancestor.
     exact=[]; partial=[]
+    parents={}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)] = parent
+    def promote(node):
+        if node.attrib.get("clickable","false").lower()=="true":
+            return node
+        cur=parents.get(id(node))
+        while cur is not None:
+            if cur.attrib.get("clickable","false").lower()=="true" and _center(cur):
+                return cur
+            cur=parents.get(id(cur))
+        return node
     for node in root.iter("node"):
         if not _center(node): continue
         text=(node.attrib.get("text") or "").strip().lower()
@@ -77,12 +90,11 @@ def _find_control_node(root, wanted:list[str]):
         rid=(node.attrib.get("resource-id") or "").strip().lower()
         for label in wanted:
             if label == text or label == desc or label == rid:
-                exact.append(node); break
+                exact.append(promote(node)); break
             if label in text or label in desc or label in rid:
-                partial.append(node); break
+                partial.append(promote(node)); break
     candidates=exact or partial
     if not candidates: return None
-    # Prefer a clickable candidate; otherwise use the semantic node itself.
     for node in candidates:
         if node.attrib.get("clickable","false").lower()=="true":
             return node
@@ -313,7 +325,7 @@ if not FAILURES:
     run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-camera-reset.xml") or xml
 
-    for name,labels,expected in (("chat",["Chat"],["Chat"]),("friends",["Friends"],["Friends"]),("stories",["See all"],["Status","Add status","Status"])):
+    for name,labels,expected in (("chat",["Chat"],["Chat"]),("friends",["Friends"],["Friends"]),("stories",["Open Stories","See all"],["Status","Add status","Status"])):
         after=capture_surface(name,labels,xml,expected)
         if after:
             report.append(f"- PASS authenticated Home -> {name} screenshot/UI hierarchy")
