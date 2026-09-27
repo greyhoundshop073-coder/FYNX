@@ -137,7 +137,7 @@ fun FynxVisibleUpdatesPanel(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Status", Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                    TextButton(onClick = onOpenStories, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) { Text("See all") }
+                    TextButton(onClick = onOpenStories, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp), modifier = Modifier.semantics { contentDescription = "Open Stories" }) { Text("See all") }
                 }
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
