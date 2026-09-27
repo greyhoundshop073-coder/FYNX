@@ -121,29 +121,62 @@ fun GroupChatPanel(
     }
 
     LaunchedEffect(group.id) {
-        if (FynxBackendClient.hasAccessToken(context)) {
-            syncing = true
-            if (isAdmin) {
-                val remoteGroup = FynxGroup(
-                    group.id,
-                    group.name,
-                    group.description,
-                    FynxGroupVisibility.PRIVATE,
-                    group.adminUsernames.firstOrNull() ?: currentUsername,
-                    group.memberUsernames.map {
-                        FynxGroupMember(it, if (it in group.adminUsernames) FynxGroupRole.ADMIN else FynxGroupRole.MEMBER)
-                    }
-                )
-                FynxGroupRemoteClient.syncGroup(context, remoteGroup).onFailure { error = it.message }
-            }
+        if (!FynxBackendClient.hasAccessToken(context)) return@LaunchedEffect
+
+        // Group chat does not have a websocket channel yet. Keep the existing
+        // authoritative REST path, but refresh it while this screen is alive so
+        // a group opened on one device can receive messages sent from another
+        // without requiring the user to leave and re-enter the group.
+        syncing = true
+        if (isAdmin) {
+            val remoteGroup = FynxGroup(
+                group.id,
+                group.name,
+                group.description,
+                FynxGroupVisibility.PRIVATE,
+                group.adminUsernames.firstOrNull() ?: currentUsername,
+                group.memberUsernames.map {
+                    FynxGroupMember(it, if (it in group.adminUsernames) FynxGroupRole.ADMIN else FynxGroupRole.MEMBER)
+                }
+            )
+            FynxGroupRemoteClient.syncGroup(context, remoteGroup).onFailure { error = it.message }
+        }
+
+        suspend fun refreshGroupMessages(showError: Boolean) {
             FynxGroupRemoteClient.loadMessages(context, group.id)
                 .onSuccess { remote ->
-                    messages = remote.map { FynxGroupRemoteClient.toChatMessage(it, currentUsername, FynxBackendClient.baseUrl(context)) }
+                    val remoteMessages = remote.map {
+                        FynxGroupRemoteClient.toChatMessage(
+                            it,
+                            currentUsername,
+                            FynxBackendClient.baseUrl(context)
+                        )
+                    }
+                    // Preserve an optimistic message until the server can see it,
+                    // while replacing any message whose authoritative server row exists.
+                    val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
+                    val pendingLocal = messages.filter { it.id !in remoteIds }
+                    messages = (remoteMessages + pendingLocal)
+                        .distinctBy { it.id }
+                        .sortedBy { it.timestamp }
                     saveGroupMessages(context, group.id, messages)
-                    isNewGroupConversation = remote.isEmpty()
+                    isNewGroupConversation = remoteMessages.isEmpty() && messages.isEmpty()
+                    if (showError) error = null
                 }
-                .onFailure { error = it.message; isNewGroupConversation = false }
-            syncing = false
+                .onFailure {
+                    if (showError) {
+                        error = it.message
+                        isNewGroupConversation = false
+                    }
+                }
+        }
+
+        refreshGroupMessages(showError = true)
+        syncing = false
+
+        while (true) {
+            kotlinx.coroutines.delay(10_000)
+            refreshGroupMessages(showError = false)
         }
     }
 
