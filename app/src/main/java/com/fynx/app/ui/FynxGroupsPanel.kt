@@ -310,39 +310,51 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     }
     LaunchedEffect(groupId, currentGroup?.id) {
         val selected = currentGroup ?: return@LaunchedEffect
-
-        suspend fun refreshGroupMessages(showError: Boolean) {
-            FynxGroupRemoteClient.loadMessages(context, groupId)
-                .onSuccess { remote ->
-                    val remoteMessages = remote.map {
-                        FynxGroupRemoteClient.toChatMessage(it, currentUsername, FynxBackendClient.baseUrl(context))
+        runCatching {
+            suspend fun refreshGroupMessages(showError: Boolean) {
+                FynxGroupRemoteClient.loadMessages(context, groupId)
+                    .onSuccess { remote ->
+                        val remoteMessages = remote.mapNotNull { item ->
+                            runCatching {
+                                FynxGroupRemoteClient.toChatMessage(
+                                    item,
+                                    currentUsername,
+                                    FynxBackendClient.baseUrl(context)
+                                )
+                            }.getOrNull()
+                        }
+                        val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
+                        val pendingLocal = messages.filter { it.id !in remoteIds }
+                        messages = (remoteMessages + pendingLocal)
+                            .distinctBy { it.id }
+                            .sortedBy { it.timestamp }
+                        runCatching { FynxChatStore.save(context, "group_$groupId", messages) }
+                            .onFailure { if (showError) syncMessage = it.message ?: "Unable to save local group messages." }
+                        if (showError) syncMessage = null
                     }
-                    val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
-                    val pendingLocal = messages.filter { it.id !in remoteIds }
-                    messages = (remoteMessages + pendingLocal)
-                        .distinctBy { it.id }
-                        .sortedBy { it.timestamp }
-                    FynxChatStore.save(context, "group_$groupId", messages)
-                    if (showError) syncMessage = null
-                }
-                .onFailure {
-                    if (showError && FynxBackendClient.hasAccessToken(context)) {
-                        syncMessage = it.message ?: "Unable to sync group messages."
+                    .onFailure {
+                        if (showError && FynxBackendClient.hasAccessToken(context)) {
+                            syncMessage = it.message ?: "Unable to sync group messages."
+                        }
                     }
-                }
-        }
-
-        FynxGroupRemoteClient.syncGroup(context, selected)
-            .onFailure {
-                if (FynxBackendClient.hasAccessToken(context)) syncMessage = it.message
             }
 
-        refreshGroupMessages(showError = true)
+            FynxGroupRemoteClient.syncGroup(context, selected)
+                .onFailure {
+                    if (FynxBackendClient.hasAccessToken(context)) syncMessage = it.message
+                }
 
-        while (true) {
-            kotlinx.coroutines.delay(10_000)
+            refreshGroupMessages(showError = true)
+
+            while (kotlinx.coroutines.currentCoroutineContext().isActive) {
+                kotlinx.coroutines.delay(10_000)
+                if (FynxBackendClient.hasAccessToken(context)) {
+                    refreshGroupMessages(showError = false)
+                }
+            }
+        }.onFailure {
             if (FynxBackendClient.hasAccessToken(context)) {
-                refreshGroupMessages(showError = false)
+                syncMessage = it.message ?: "Group conversation could not be loaded safely."
             }
         }
     }
