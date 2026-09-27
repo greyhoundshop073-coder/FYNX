@@ -148,12 +148,12 @@ class FynxRealtimeClient(
         }
         if (!hasUsableNetwork()) {
             synchronized(socketCreationLock) { socketCreationInProgress = false; socketBeingCreated = null }
-            onStateChanged(State.DISCONNECTED); scheduleReconnect(); return
+            emitState(State.DISCONNECTED); scheduleReconnect(); return
         }
         val token = FynxBackendClient.accessToken(context)
         if (token.isNullOrBlank() || accountKey.isNullOrBlank()) {
             synchronized(socketCreationLock) { socketCreationInProgress = false; socketBeingCreated = null }
-            onStateChanged(State.FAILED); return
+            emitState(State.FAILED); return
         }
         bindPendingQueueToAccount(accountKey)
         val httpBase = FynxBackendClient.baseUrl(context)
@@ -163,7 +163,7 @@ class FynxRealtimeClient(
         }
         val encodedToken = URLEncoder.encode(token, Charsets.UTF_8.name())
         val wsUrl = "wss://${httpBase.removePrefix("https://")}/realtime?token=$encodedToken"
-        onStateChanged(State.CONNECTING)
+        emitState(State.CONNECTING)
         socketAccountKey = accountKey
         val newSocket: WebSocket = try {
             client.newWebSocket(Request.Builder().url(wsUrl).build(), object : WebSocketListener() {
@@ -174,22 +174,22 @@ class FynxRealtimeClient(
                         if (socketBeingCreated === webSocket) socketBeingCreated = null
                     }
                     if (manuallyClosed || !belongsToCurrentAccount(webSocket)) { webSocket.close(1000, "FYNX socket replaced"); return }
-                    reconnectAttempt = 0; onStateChanged(State.CONNECTED); flushPending(webSocket)
+                    reconnectAttempt = 0; emitState(State.CONNECTED); flushPending(webSocket)
                 }
                 override fun onMessage(webSocket: WebSocket, text: String) {
                     if (!belongsToCurrentAccount(webSocket)) { webSocket.close(1000, "FYNX socket replaced"); return }
                     runCatching { val root = JSONObject(text); when (root.optString("type")) {
-                        "message" -> root.optJSONObject("message")?.let { onMessage(FynxProductionMessaging.fromJson(it)) }
-                        "message_status" -> onEvent(Event.MessageStatus(root.optString("messageId"), when (root.optString("status")) { "read" -> Status.READ; "delivered" -> Status.DELIVERED; else -> Status.SENT }))
-                        "typing" -> onEvent(Event.Typing(root.optString("userId"), root.optBoolean("isTyping")))
-                        "presence" -> onEvent(Event.Presence(root.optString("userId"), root.optBoolean("online")))
+                        "message" -> root.optJSONObject("message")?.let { emitMessage(FynxProductionMessaging.fromJson(it)) }
+                        "message_status" -> emitEvent(Event.MessageStatus(root.optString("messageId"), when (root.optString("status")) { "read" -> Status.READ; "delivered" -> Status.DELIVERED; else -> Status.SENT }))
+                        "typing" -> emitEvent(Event.Typing(root.optString("userId"), root.optBoolean("isTyping"))
+                        "presence" -> emitEvent(Event.Presence(root.optString("userId"), root.optBoolean("online"))
                         "call" -> parseCallEvent(root)?.let { callEvent ->
                             if (callEvent.signalType == "invite") {
                                 val caller = callEvent.fromUsername?.removePrefix("@").orEmpty().ifBlank { callEvent.fromUserId }
                                 val kind = if (callEvent.callType == "video") "Video call" else "Voice call"
                                 FynxNotificationFoundation.show(context, FynxNotificationFoundation.MESSAGES_CHANNEL, callEvent.callId.hashCode(), "Incoming $kind 📞", "@$caller is calling you.", stableKey = "incoming-call:${callEvent.callId}")
                             }
-                            onEvent(callEvent)
+                            emitEvent(callEvent)
                         }
                     } }
                 }
@@ -212,9 +212,9 @@ class FynxRealtimeClient(
                     val current = socket === webSocket
                     if (current) { socket = null; socketAccountKey = null }
                     if (!current || manuallyClosed) return
-                    if (FynxCallTransportHardening.isAuthFailure(response?.code)) { FynxAuthStore.clear(context); onStateChanged(State.FAILED); return }
-                    if (!isSocketStillAuthorized(accountKey)) { onStateChanged(State.FAILED); return }
-                    onStateChanged(State.FAILED); scheduleReconnect(accountKey)
+                    if (FynxCallTransportHardening.isAuthFailure(response?.code)) { FynxAuthStore.clear(context); emitState(State.FAILED); return }
+                    if (!isSocketStillAuthorized(accountKey)) { emitState(State.FAILED); return }
+                    emitState(State.FAILED); scheduleReconnect(accountKey)
                 }
             })
         } catch (_: Throwable) {
