@@ -367,20 +367,34 @@ if not FAILURES:
         if not feature_xml: return ""
         if target_labels is None: return feature_xml
 
-        # Features is a real LazyColumn. The Money Tools card is below the
-        # initial viewport and its rendered subtitle is "Money Center" (with a
-        # currency emoji in the heading). UIAutomator can expose either the
-        # heading or subtitle depending on Compose semantics merging. Search
-        # both strings and scroll in short increments in both directions so a
-        # long CI frame cannot skip over the target card.
+        # Prefer the feature hub's own search field for deterministic CI navigation.
+        # Money is a real registered feature, but LazyColumn viewport scrolling can
+        # skip the middle of a long list on the emulator. Searching the existing
+        # feature index does not create data or bypass the real UI destination.
+        search=find_control(feature_xml,["Search FYNX tools"])
+        if search:
+            _,sx,sy=search
+            run("adb","shell","input","tap",str(sx),str(sy)); time.sleep(.2)
+            result=input_text("Money")
+            if result.returncode==0:
+                time.sleep(.8)
+                feature_xml=dump_ui("authenticated-features-money-search.xml")
+                if find_control(feature_xml,target_labels): return feature_xml
+                run("adb","shell","input","keyevent","KEYCODE_CTRL_A")
+                run("adb","shell","input","keyevent","KEYCODE_DEL")
+                time.sleep(.4)
+                feature_xml=dump_ui("authenticated-features-search-cleared.xml")
+
+        # Fallback: short, bounded LazyColumn scrolls in both directions.
+        # Check after every gesture rather than flinging through the middle.
         for direction in ("up","down"):
-            for _ in range(20):
+            for _ in range(8):
                 if find_control(feature_xml,target_labels): return feature_xml
                 if direction=="up":
-                    run("adb","shell","input","swipe","540","900","540","420","350")
+                    run("adb","shell","input","swipe","540","1100","540","700","700")
                 else:
-                    run("adb","shell","input","swipe","540","420","540","900","350")
-                time.sleep(.45)
+                    run("adb","shell","input","swipe","540","700","540","1100","700")
+                time.sleep(.6)
                 feature_xml=dump_ui(f"authenticated-features-{direction}.xml")
         return feature_xml if find_control(feature_xml,target_labels) else ""
 
