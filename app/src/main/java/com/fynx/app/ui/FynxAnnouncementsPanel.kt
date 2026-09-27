@@ -71,7 +71,7 @@ fun FynxAdminControlCenterPanel() {
         }
     }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
+    Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("Owner / Admin Control Center", style = MaterialTheme.typography.headlineSmall); Spacer(Modifier.height(8.dp))
         if (loading) CircularProgressIndicator() else if (dashboard == null) Text(error ?: "Admin access required.", color = MaterialTheme.colorScheme.error) else {
             val d = dashboard!!
