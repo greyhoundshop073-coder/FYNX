@@ -89,13 +89,25 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     LaunchedEffect(deepLinkDestination) {
         when (val destination = deepLinkDestination) {
             is FynxDeepLinkDestination.Invite -> { inviteCode = destination.code; selected = "Invite" }
-            FynxDeepLinkDestination.Home -> selected = "Home"
-            is FynxDeepLinkDestination.Profile -> { profileUser = destination.username; selected = "Home" }
+            FynxDeepLinkDestination.Home -> {
+                openChat = null
+                openGroup = null
+                profileUser = null
+                selected = "Home"
+            }
+            is FynxDeepLinkDestination.Profile -> {
+                openChat = null
+                openGroup = null
+                profileUser = destination.username
+                selected = "Home"
+            }
             is FynxDeepLinkDestination.Chat -> {
                 val normalized = destination.username.removePrefix("@").trim()
                 if (normalized.isNotBlank()) {
                     val local = FynxChatStore.loadPreviews(context).firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
                     val remote = if (local == null) FynxSocialClient.searchUsers(context, normalized).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) } else null
+                    openGroup = null
+                    profileUser = null
                     openChat = local ?: remote?.let { user -> ChatPreview(name = user.displayName.ifBlank { normalized }, username = user.username.removePrefix("@").let { "@$it" }, lastMessage = "Start a conversation", time = "Now", avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }) }
                     if (openChat != null) FynxChatStore.savePreview(context, openChat!!)
                 }
@@ -111,8 +123,18 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     selected = "Calls"
                 }
             }
-            is FynxDeepLinkDestination.Group -> openGroup = destination.id
-            is FynxDeepLinkDestination.Marketplace -> { marketplaceListingId = destination.listingId; selected = "Marketplace" }
+            is FynxDeepLinkDestination.Group -> {
+                openChat = null
+                profileUser = null
+                openGroup = destination.id
+            }
+            is FynxDeepLinkDestination.Marketplace -> {
+                openChat = null
+                openGroup = null
+                profileUser = null
+                marketplaceListingId = destination.listingId
+                selected = "Marketplace"
+            }
             FynxDeepLinkDestination.Stories -> selected = "Stories"
             FynxDeepLinkDestination.Money -> selected = "Money Tools"
             null -> Unit
