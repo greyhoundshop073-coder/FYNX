@@ -22,6 +22,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -39,6 +41,9 @@ fun GroupChatPanel(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val groupAppearance = FynxConversationPreferences.groupAppearance(context, group.id)
+    val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == groupAppearance } ?: FynxGlassThemeId.PURE_BLACK
+    val glassPalette = fynxGlassPalette(glassThemeId)
     val isAdmin = group.isAdmin(currentUsername)
     var newMember by remember { mutableStateOf("") }
     var description by remember { mutableStateOf(group.description) }
@@ -220,24 +225,24 @@ fun GroupChatPanel(
         saveGroupMessages(context, group.id, messages)
     }
 
-    FynxGroupWallpaperBackground(group.id, Modifier.fillMaxSize()) {
+    FynxGroupWallpaperBackground(group.id, Modifier.fillMaxSize(), wallpaperOverride = groupAppearance.takeIf { it != "FYNX Default" }, settingsKey = group.id) {
         Column(Modifier.fillMaxSize()) {
-            Surface(tonalElevation = 3.dp) {
+            Surface(color = glassPalette.backgroundMid.copy(alpha = 0.98f), contentColor = glassPalette.messageText, tonalElevation = 0.dp, modifier = Modifier.statusBarsPadding()) {
                 Row(
                     Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.ArrowBack, "Back") }
+                    IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.ArrowBack, "Back", tint = glassPalette.messageText) }
                     if (group.groupPhotoMediaId.isNullOrBlank()) FynxAvatar(group.name, Modifier.size(40.dp)) else FynxRemoteProfileAvatar(group.groupPhotoMediaId, group.name, Modifier.size(40.dp))
                     Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                        Text(group.name, style = MaterialTheme.typography.titleMedium)
+                        Text(group.name, style = MaterialTheme.typography.titleMedium, color = glassPalette.messageText)
                         Text(
                             "${group.memberUsernames.size} members${if (syncing) " • Syncing…" else ""}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = glassPalette.messageMuted
                         )
                     }
-                    IconButton(onClick = { showWallpaper = true }) { Icon(Icons.Default.Wallpaper, "Group wallpaper") }
+                    IconButton(onClick = { showWallpaper = true }) { Icon(Icons.Default.Wallpaper, "Group wallpaper", tint = glassPalette.messageText) }
                 }
             }
 
@@ -267,7 +272,8 @@ fun GroupChatPanel(
                     ) {
                         Box {
                             Surface(
-                                color = if (message.fromMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                                color = if (message.fromMe) glassPalette.outgoingStart.copy(alpha = 0.92f) else glassPalette.incomingGlass.copy(alpha = 0.96f),
+                                contentColor = glassPalette.messageText,
                                 shape = RoundedCornerShape(18.dp),
                                 modifier = Modifier.widthIn(max = 330.dp)
                             ) {
@@ -309,14 +315,14 @@ fun GroupChatPanel(
                                 onClick = { actionMessage = message },
                                 modifier = Modifier.size(48.dp).align(if (message.fromMe) Alignment.TopEnd else Alignment.TopStart)
                             ) {
-                                Icon(Icons.Default.MoreVert, "Message actions", Modifier.size(22.dp))
+                                Icon(Icons.Default.MoreVert, "Message actions", Modifier.size(22.dp), tint = glassPalette.messageText)
                             }
                         }
                     }
                 }
             }
 
-            Surface(color = Color(0xFF20252A), tonalElevation = 0.dp, modifier = Modifier.navigationBarsPadding().imePadding()) {
+            Surface(color = glassPalette.backgroundMid.copy(alpha = 0.98f), contentColor = glassPalette.messageText, tonalElevation = 0.dp, modifier = Modifier.navigationBarsPadding().imePadding()) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp)) {
                     replyTo?.let { replying ->
                         Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -357,13 +363,13 @@ fun GroupChatPanel(
                     } else {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = { picker.launch("image/* video/*") }, modifier = Modifier.size(48.dp)) {
-                                Icon(Icons.Default.Add, "Attachments", tint = Color(0xFFD6DCE1))
+                                Icon(Icons.Default.Add, "Attachments", tint = glassPalette.messageText)
                             }
                             IconButton(onClick = { documentPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) }, modifier = Modifier.size(48.dp)) {
-                                Icon(Icons.Default.Description, "Document", tint = Color(0xFFD6DCE1))
+                                Icon(Icons.Default.Description, "Document", tint = glassPalette.messageText)
                             }
                             IconButton(onClick = { showCamera = true }, modifier = Modifier.size(48.dp)) {
-                                Icon(Icons.Default.CameraAlt, "Camera", tint = Color(0xFFD6DCE1))
+                                Icon(Icons.Default.CameraAlt, "Camera", tint = glassPalette.messageText)
                             }
                             OutlinedTextField(
                                 value = text,
@@ -374,18 +380,22 @@ fun GroupChatPanel(
                                 shape = RoundedCornerShape(24.dp),
                                 placeholder = { Text("Message group…") },
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = Color(0xFF292F34),
-                                    unfocusedContainerColor = Color(0xFF292F34),
+                                    focusedContainerColor = glassPalette.incomingGlass,
+                                    unfocusedContainerColor = glassPalette.incomingGlass,
+                                    focusedTextColor = glassPalette.messageText,
+                                    unfocusedTextColor = glassPalette.messageText,
+                                    focusedPlaceholderColor = glassPalette.messageMuted,
+                                    unfocusedPlaceholderColor = glassPalette.messageMuted,
                                     focusedBorderColor = Color.Transparent,
                                     unfocusedBorderColor = Color.Transparent
                                 ),
                                 trailingIcon = {
                                     Row {
                                         IconButton(onClick = { micPermission.launch(Manifest.permission.RECORD_AUDIO) }, modifier = Modifier.size(48.dp)) {
-                                            Icon(Icons.Default.Mic, "Record voice")
+                                            Icon(Icons.Default.Mic, "Record voice", tint = glassPalette.messageText)
                                         }
                                         IconButton(onClick = { send() }, enabled = text.isNotBlank() || attachment != null, modifier = Modifier.size(48.dp)) {
-                                            Icon(Icons.Default.Send, "Send")
+                                            Icon(Icons.Default.Send, "Send", tint = glassPalette.messageText)
                                         }
                                     }
                                 },
