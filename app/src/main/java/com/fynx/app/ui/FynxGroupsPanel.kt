@@ -341,7 +341,9 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
 
         while (true) {
             kotlinx.coroutines.delay(10_000)
-            refreshGroupMessages(showError = false)
+            if (FynxBackendClient.hasAccessToken(context)) {
+                refreshGroupMessages(showError = false)
+            }
         }
     }
     LaunchedEffect(messages.size, searchQuery) {
