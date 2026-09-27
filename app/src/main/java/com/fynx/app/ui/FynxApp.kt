@@ -12,7 +12,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -34,7 +33,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -365,25 +363,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 // screen and making phone controls/composers unnecessarily cramped.
                 .padding(vertical = 6.dp)
                 .then(if (selected == "Home") Modifier else Modifier.navigationBarsPadding())
-            Box(
-                screenContentModifier.pointerInput(selected) {
-                    var drag = 0f
-                    detectHorizontalDragGestures(
-                        onDragStart = { drag = 0f },
-                        onHorizontalDrag = { _, amount -> drag += amount },
-                        onDragEnd = {
-                            if (kotlin.math.abs(drag) >= 80f) {
-                                val next = if (drag < 0) (mainIndex + 1).coerceAtMost(mainNav.lastIndex)
-                                else (mainIndex - 1).coerceAtLeast(0)
-                                if (next != mainIndex) {
-                                    navigationDirection = if (next > mainIndex) 1 else -1
-                                    selected = mainNav[next].key
-                                }
-                            }
-                        }
-                    )
-                }
-            ) {
+            Box(screenContentModifier) {
                 AnimatedContent(
                     targetState = selected,
                     transitionSpec = {
