@@ -310,12 +310,39 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     }
     LaunchedEffect(groupId, currentGroup?.id) {
         val selected = currentGroup ?: return@LaunchedEffect
-        FynxGroupRemoteClient.syncGroup(context, selected).onFailure { if (FynxBackendClient.hasAccessToken(context)) syncMessage = it.message }
-        FynxGroupRemoteClient.loadMessages(context, groupId).onSuccess { remote ->
-            messages = remote.map { FynxGroupRemoteClient.toChatMessage(it, currentUsername, FynxBackendClient.baseUrl(context)) }
-            FynxChatStore.save(context, "group_$groupId", messages)
-            syncMessage = null
-        }.onFailure { if (FynxBackendClient.hasAccessToken(context)) syncMessage = it.message ?: "Unable to sync group messages." }
+
+        suspend fun refreshGroupMessages(showError: Boolean) {
+            FynxGroupRemoteClient.loadMessages(context, groupId)
+                .onSuccess { remote ->
+                    val remoteMessages = remote.map {
+                        FynxGroupRemoteClient.toChatMessage(it, currentUsername, FynxBackendClient.baseUrl(context))
+                    }
+                    val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
+                    val pendingLocal = messages.filter { it.id !in remoteIds }
+                    messages = (remoteMessages + pendingLocal)
+                        .distinctBy { it.id }
+                        .sortedBy { it.timestamp }
+                    FynxChatStore.save(context, "group_$groupId", messages)
+                    if (showError) syncMessage = null
+                }
+                .onFailure {
+                    if (showError && FynxBackendClient.hasAccessToken(context)) {
+                        syncMessage = it.message ?: "Unable to sync group messages."
+                    }
+                }
+        }
+
+        FynxGroupRemoteClient.syncGroup(context, selected)
+            .onFailure {
+                if (FynxBackendClient.hasAccessToken(context)) syncMessage = it.message
+            }
+
+        refreshGroupMessages(showError = true)
+
+        while (true) {
+            kotlinx.coroutines.delay(10_000)
+            refreshGroupMessages(showError = false)
+        }
     }
     LaunchedEffect(messages.size, searchQuery) {
         if (messages.isEmpty()) return@LaunchedEffect
