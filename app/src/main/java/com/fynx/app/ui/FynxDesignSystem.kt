@@ -15,10 +15,16 @@ import androidx.compose.ui.unit.dp
 import java.time.LocalTime
 
 /** Central visual language for FYNX. */
-enum class FynxAccent(val primary: Color, val secondary: Color) {
-    Blue(Color(0xFF2F8CFF), Color(0xFF22C7F2)),
-    Purple(Color(0xFF7C5CFF), Color(0xFFB18CFF)),
-    Charcoal(Color(0xFF37474F), Color(0xFF607D8B))
+enum class FynxAccent(
+    val primary: Color,
+    val secondary: Color,
+    /** Mature companion tone used sparingly for tertiary accents and reflective depth. */
+    val companion: Color
+) {
+    // Keep the established FYNX identity colors unchanged.
+    Blue(Color(0xFF2F8CFF), Color(0xFF22C7F2), Color(0xFFB7A36A)),
+    Purple(Color(0xFF7C5CFF), Color(0xFFB18CFF), Color(0xFFA4778A)),
+    Charcoal(Color(0xFF37474F), Color(0xFF607D8B), Color(0xFF8A9499))
 }
 
 object FynxDesign {
@@ -36,6 +42,19 @@ object FynxDesign {
     val LightTextSecondary = Color(0xFF5E6B78)
     val LightOutline = Color(0xFFD2DAE5)
     val LightSelectedContainer = Color(0xFFE4EFFC)
+    // Subtle neutral/reflective tones: deliberately restrained so light mode stays white.
+    val BlueLightCompanionContainer = Color(0xFFF2EBDD)
+    val BlueDarkCompanionContainer = Color(0xFF3A3324)
+    val PurpleLightCompanionContainer = Color(0xFFF3E7EC)
+    val PurpleDarkCompanionContainer = Color(0xFF3A2B32)
+    val CharcoalLightCompanionContainer = Color(0xFFE7EBED)
+    val CharcoalDarkCompanionContainer = Color(0xFF2C3235)
+    val BlueLightOutlineVariant = Color(0xFFE1EAF6)
+    val PurpleLightOutlineVariant = Color(0xFFECE3E8)
+    val CharcoalLightOutlineVariant = Color(0xFFDCE1E3)
+    val BlueDarkOutlineVariant = Color(0xFF3A4A5D)
+    val PurpleDarkOutlineVariant = Color(0xFF4A3F4A)
+    val CharcoalDarkOutlineVariant = Color(0xFF394146)
     val CharcoalBackground = Color(0xFF1F2428)
     val CharcoalSurface = Color(0xFF272D32)
     val CharcoalSurfaceRaised = Color(0xFF31383E)
@@ -99,6 +118,8 @@ fun FynxTheme(
             onPrimary = onAccent,
             secondary = effectiveAccent.secondary,
             onSecondary = if (effectiveAccent.secondary.luminance() > 0.5f) Color.Black else Color.White,
+            tertiary = effectiveAccent.companion,
+            onTertiary = if (effectiveAccent.companion.luminance() > 0.5f) Color.Black else Color.White,
             background = when { amoled -> FynxDesign.AmoledBackground; charcoal -> FynxDesign.CharcoalBackground; else -> FynxDesign.Background },
             onBackground = when { amoled -> FynxDesign.AmoledTextPrimary; charcoal -> FynxDesign.CharcoalTextPrimary; else -> FynxDesign.TextPrimary },
             surface = when { amoled -> FynxDesign.AmoledSurface; charcoal -> FynxDesign.CharcoalSurface; else -> FynxDesign.Surface },
@@ -113,7 +134,25 @@ fun FynxTheme(
             surfaceContainerHighest = when { amoled -> FynxDesign.AmoledSurfaceRaised; charcoal -> FynxDesign.CharcoalSurfaceRaised; else -> FynxDesign.SurfaceRaised },
             surfaceDim = when { amoled -> FynxDesign.AmoledBackground; charcoal -> FynxDesign.CharcoalBackground; else -> FynxDesign.Background },
             surfaceBright = when { amoled -> FynxDesign.AmoledSurfaceRaised; charcoal -> FynxDesign.CharcoalSurfaceRaised; else -> FynxDesign.SurfaceRaised },
-            surfaceTint = effectiveAccent.primary
+            surfaceTint = effectiveAccent.primary,
+            tertiaryContainer = when {
+                amoled -> FynxDesign.AmoledSelectedContainer
+                charcoal -> FynxDesign.CharcoalDarkCompanionContainer
+                effectiveAccent == FynxAccent.Purple -> FynxDesign.PurpleDarkCompanionContainer
+                effectiveAccent == FynxAccent.Blue -> FynxDesign.BlueDarkCompanionContainer
+                else -> FynxDesign.CharcoalDarkCompanionContainer
+            },
+            onTertiaryContainer = when {
+                amoled -> FynxDesign.AmoledTextPrimary
+                else -> Color.White
+            },
+            outlineVariant = when {
+                amoled -> FynxDesign.AmoledOutline
+                charcoal -> FynxDesign.CharcoalDarkOutlineVariant
+                effectiveAccent == FynxAccent.Purple -> FynxDesign.PurpleDarkOutlineVariant
+                effectiveAccent == FynxAccent.Blue -> FynxDesign.BlueDarkOutlineVariant
+                else -> FynxDesign.CharcoalDarkOutlineVariant
+            }
         )
     } else {
         lightColorScheme(
@@ -121,6 +160,14 @@ fun FynxTheme(
             onPrimary = onAccent,
             secondary = effectiveAccent.secondary,
             onSecondary = if (effectiveAccent.secondary.luminance() > 0.5f) Color.Black else Color.White,
+            tertiary = effectiveAccent.companion,
+            onTertiary = if (effectiveAccent.companion.luminance() > 0.5f) Color.Black else Color.White,
+            tertiaryContainer = when (effectiveAccent) {
+                FynxAccent.Blue -> FynxDesign.BlueLightCompanionContainer
+                FynxAccent.Purple -> FynxDesign.PurpleLightCompanionContainer
+                FynxAccent.Charcoal -> FynxDesign.CharcoalLightCompanionContainer
+            },
+            onTertiaryContainer = Color(0xFF20252A),
             background = Color(0xFFF8F9FB),
             onBackground = Color(0xFF11161B),
             surface = Color.White,
@@ -134,7 +181,13 @@ fun FynxTheme(
             surfaceContainerHigh = Color(0xFFF0F2F5),
             surfaceContainerHighest = Color(0xFFE7EBEF),
             surfaceDim = Color(0xFFE1E5E9),
-            surfaceBright = Color.White
+            surfaceBright = Color.White,
+            surfaceTint = effectiveAccent.primary,
+            outlineVariant = when (effectiveAccent) {
+                FynxAccent.Blue -> FynxDesign.BlueLightOutlineVariant
+                FynxAccent.Purple -> FynxDesign.PurpleLightOutlineVariant
+                FynxAccent.Charcoal -> FynxDesign.CharcoalLightOutlineVariant
+            }
         )
     }
     MaterialTheme(
