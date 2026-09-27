@@ -41,10 +41,12 @@ for label, path, needles in checks:
         print(f"PASS: {label}")
 
 comments = read("app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt")
-if "Row(Modifier.fillMaxWidth().navigationBarsPadding().imePadding()" in comments:
-    failures.append("Home comments: known double-inset composer pattern returned")
+if "Column(Modifier.fillMaxSize().imePadding())" in comments:
+    failures.append("Home comments: parent still owns IME padding; composer positioning can drift")
+elif "Row(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 10.dp, vertical = 6.dp)" in comments:
+    print("PASS: Home comments composer owns navigation + IME insets directly")
 else:
-    print("PASS: Home comments avoids the known double-IME-padding pattern")
+    failures.append("Home comments: expected direct navigation + IME composer inset handling is missing")
 
 for path in (
     "app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt",
