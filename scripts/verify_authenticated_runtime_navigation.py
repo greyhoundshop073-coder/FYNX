@@ -263,6 +263,16 @@ def find_username_near_control(xml_text:str, labels:list[str])->str:
             cur=parents.get(id(cur))
     return ""
 
+def first_username_in_xml(xml_text:str)->str:
+    if not xml_text: return ""
+    try: root=ET.fromstring(xml_text)
+    except ET.ParseError: return ""
+    for node in root.iter("node"):
+        value=(node.attrib.get("text") or "").strip()
+        if re.fullmatch(r"@?[A-Za-z0-9_.-]{2,80}", value):
+            return value
+    return ""
+
 def first_local_group_id()->str:
     result=run("adb","shell","run-as",PACKAGE,"cat","shared_prefs/fynx_groups_store.xml")
     if result.returncode != 0: return ""
@@ -409,6 +419,7 @@ if not FAILURES:
                 import shutil
                 source=ROOT/"authenticated-chat.png"; recent=ROOT/"authenticated-chat-recent.png"
                 if source.exists(): shutil.copyfile(source,recent); report.append("- PASS explicit Recent Chats screenshot artifact")
+                private_chat_username=first_username_in_xml(after)
                 conversation_after=tap_first_real_chat_or_group_if_present(after,"private-chat-entry")
                 alive, crashlog = capture_runtime_log("private-chat-process.log")
                 screenshot("private-chat-after-open.png")
@@ -423,6 +434,12 @@ if not FAILURES:
                         report.append("- PASS message-action test not run because the opened real conversation has no real message; no test data was fabricated")
                 else:
                     report.append("- PASS private-chat entry test skipped because the authenticated account has no real private conversation; no test data was fabricated")
+                if private_chat_username:
+                    route_username=private_chat_username.removeprefix("@").strip()
+                    if route_username:
+                        exercise_notification_route("fynx://chat/" + route_username, "private-chat")
+                else:
+                    report.append("- PASS private-chat notification-route test skipped because no real chat participant identifier was visible; no test data was fabricated")
                 run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
                 reset=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-chat-group-reset.xml") or xml
                 groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Groups"])
@@ -441,6 +458,8 @@ if not FAILURES:
                                 exercise_notification_route("fynx://group/" + group_id, "group-chat")
                         else:
                             report.append("- PASS group-chat entry test skipped because the authenticated account has no real group; no test data was fabricated")
+                        if group_after and not group_id:
+                            report.append("- PASS group notification-route test skipped because the real group ID could not be read from the authenticated app store; no test data was fabricated")
                     else:
                         report.append("- PASS group-chat entry test skipped because the Groups tab was not available in the authenticated chat surface")
                 else:
