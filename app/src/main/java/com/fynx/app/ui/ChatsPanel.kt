@@ -292,7 +292,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 }
             }
             Spacer(Modifier.height(10.dp))
-            OutlinedButton(onClick = onCreateGroup, modifier = Modifier.fillMaxWidth()) { Text("＋ Create group") }
+            OutlinedButton(onClick = onCreateGroup, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Create group" }) { Text("＋ Create group") }
         } else {
             Button(onClick = onCreateGroup) { Text("＋ New group") }
             Spacer(Modifier.height(10.dp))
