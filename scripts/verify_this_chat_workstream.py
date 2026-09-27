@@ -24,7 +24,7 @@ media_privacy = read('backend/mediaPrivacy.js')
 glass_theme = read('app/src/main/java/com/fynx/app/ui/FynxGlassTheme.kt')
 glass_wallpaper = read('app/src/main/java/com/fynx/app/ui/FynxChatWallpaper.kt')
 chat_settings = read('app/src/main/java/com/fynx/app/ui/FynxChatSettingsPanel.kt')
-group_panel = read('app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt')
+group_panel = read('app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt')
 conversation = read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt')
 
 # This gate verifies the shared media/notification/AI integration owned by this workstream.
