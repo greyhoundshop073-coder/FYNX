@@ -975,7 +975,7 @@ private fun FynxFirstContactIntro(profile: FynxProfileRemoteClient.Profile?, cre
             Text(listOfNotNull(country.takeIf { it.isNotBlank() }, joined?.let { "Joined FYNX $it" }).joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.height(12.dp))
-        HorizontalDivider(Modifier.fillMaxWidth(0.72f), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+        HorizontalDivider(Modifier.fillMaxWidth(0.72f), color = glassPalette.bubbleRim.copy(alpha = 0.55f))
         Spacer(Modifier.height(9.dp))
         Text("You’re starting a new conversation", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
