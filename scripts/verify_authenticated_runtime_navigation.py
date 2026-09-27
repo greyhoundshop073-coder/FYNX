@@ -375,7 +375,7 @@ if not FAILURES:
         if search:
             _,sx,sy=search
             run("adb","shell","input","tap",str(sx),str(sy)); time.sleep(.2)
-            result=input_text("Money")
+            search_term = "Money" if any("money" in label.lower() for label in target_labels) else target_labels[0]\n            result=input_text(search_term)
             if result.returncode==0:
                 time.sleep(.8)
                 feature_xml=dump_ui("authenticated-features-money-search.xml")
