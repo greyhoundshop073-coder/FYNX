@@ -30,10 +30,12 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
         }
         FynxNotificationFoundation.createChannels(this)
         val stableHash = notificationId.hashCode()
+        val safeRoute = runCatching { Uri.parse(route) }.getOrNull() ?: Uri.parse("fynx://home")
         val intent = Intent(this, MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
-            this.data = Uri.parse(route)
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            data = safeRoute
+            setPackage(packageName)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         val pendingIntent = PendingIntent.getActivity(
             this,
