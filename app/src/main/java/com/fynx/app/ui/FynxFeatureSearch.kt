@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
 /**
@@ -22,7 +23,7 @@ fun FynxFeatureSearchField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth().heightIn(min = 64.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = 64.dp).semantics { contentDescription = "Search FYNX tools" },
         singleLine = true,
         placeholder = { Text("Search FYNX tools") },
         leadingIcon = { Text("⌕") }
