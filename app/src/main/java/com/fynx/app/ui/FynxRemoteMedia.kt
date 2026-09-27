@@ -179,7 +179,8 @@ fun FynxRemoteProfileAvatar(
     mediaId: String?,
     contentDescription: String?,
     modifier: Modifier = Modifier,
-    ownerUsername: String? = null
+    ownerUsername: String? = null,
+    onStatusClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     // Resolve a known person photo from the existing cache when the caller has no media id.
@@ -211,7 +212,7 @@ fun FynxRemoteProfileAvatar(
         modifier = modifier
             .then(if (hasActiveStatus) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(50)).padding(2.dp) else Modifier)
             .clip(RoundedCornerShape(50))
-            .then(if (hasActiveStatus && !ownerUsername.isNullOrBlank() && FynxStatusNavigation.opener != null) Modifier.clickable { FynxStatusNavigation.opener?.invoke(ownerUsername.removePrefix("@").trim()) } else Modifier),
+            .then(if (hasActiveStatus && onStatusClick != null) Modifier.clickable { onStatusClick() } else Modifier),
         contentAlignment = Alignment.Center
     ) { avatar() }
 }
