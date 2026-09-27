@@ -56,17 +56,17 @@ class FynxRealtimeClient(
     // even though the transport itself reports a normal failure.
     private fun emitState(state: State) {
         reconnectHandler.post {
-            if (!manuallyClosed) onStateChanged(state)
+            if (!manuallyClosed) runCatching { onStateChanged(state) }
         }
     }
     private fun emitMessage(message: FynxProductionMessaging.RemoteMessage) {
         reconnectHandler.post {
-            if (!manuallyClosed) onMessage(message)
+            if (!manuallyClosed) runCatching { onMessage(message) }
         }
     }
     private fun emitEvent(event: Event) {
         reconnectHandler.post {
-            if (!manuallyClosed) onEvent(event)
+            if (!manuallyClosed) runCatching { onEvent(event) }
         }
     }
 
