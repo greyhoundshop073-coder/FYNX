@@ -436,9 +436,13 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 onMarkAllRead = { notifications = FynxNotificationStore.load(context); remoteUnreadCount = 0 },
                 onUnreadCountChanged = { remoteUnreadCount = it },
                 onNotificationOpen = { notification ->
-                    val route = notification.route?.takeIf { it.isNotBlank() }
-                        ?: notification.sourceUsername?.takeIf { it.isNotBlank() }?.let { "fynx://profile/" + Uri.encode(it) }
-                        ?: "fynx://home"
+                    val route = notification.route?.takeIf { it.isNotBlank() } ?: when (notification.type) {
+                        FynxNotificationType.FOLLOW, FynxNotificationType.FRIEND_REQUEST -> notification.sourceUsername?.takeIf { it.isNotBlank() }?.let { "fynx://profile/" + Uri.encode(it) }
+                        FynxNotificationType.MESSAGE -> notification.sourceUsername?.takeIf { it.isNotBlank() }?.let { "fynx://chat/" + Uri.encode(it) }
+                        FynxNotificationType.GROUP -> notification.targetId?.takeIf { it.isNotBlank() }?.let { "fynx://group/" + Uri.encode(it) }
+                        FynxNotificationType.STORY -> notification.targetId?.takeIf { it.isNotBlank() }?.let { "fynx://status/" + Uri.encode(it) }
+                        else -> "fynx://home"
+                    } ?: "fynx://home"
                     when (val destination = FynxDeepLinkParser.parse(Uri.parse(route))) {
                         is FynxDeepLinkDestination.Profile -> { profileUser = destination.username; selected = "Home" }
                         is FynxDeepLinkDestination.Chat -> {
