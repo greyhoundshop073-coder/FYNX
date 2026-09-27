@@ -223,7 +223,7 @@ fun GroupChatPanel(
         saveGroupMessages(context, group.id, messages)
     }
 
-    FynxGroupWallpaperBackground(group.id, Modifier.fillMaxSize(), wallpaperOverride = groupAppearance.takeIf { it != "FYNX Default" }, settingsKey = group.id) {
+    FynxGroupWallpaperBackground(group.id, Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             Surface(color = glassPalette.backgroundMid.copy(alpha = 0.98f), contentColor = glassPalette.messageText, tonalElevation = 0.dp, modifier = Modifier.statusBarsPadding()) {
                 Row(
