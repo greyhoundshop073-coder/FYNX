@@ -201,7 +201,7 @@ class FynxRealtimeClient(
                     val current = socket === webSocket
                     if (current) { socket = null; socketAccountKey = null }
                     if (!current || manuallyClosed) return
-                    onStateChanged(State.DISCONNECTED)
+                    emitState(State.DISCONNECTED)
                     if (FynxCallTransportHardening.shouldRetrySocket(code)) scheduleReconnect(accountKey)
                 }
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -223,7 +223,7 @@ class FynxRealtimeClient(
                 socketBeingCreated = null
             }
             if (!manuallyClosed && isSocketStillAuthorized(accountKey)) {
-                onStateChanged(State.FAILED)
+                emitState(State.FAILED)
                 scheduleReconnect(accountKey)
             }
             return
