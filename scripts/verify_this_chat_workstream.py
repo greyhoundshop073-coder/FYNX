@@ -47,7 +47,7 @@ check('AI security gate remains present', 'AI provider key stays server-side' in
 check('Chat/Group glass theme catalog contains all eight approved themes', all(label in glass_theme for label in ['Pure Black Glass', 'Aurora Glass', 'Light Glass', 'Deep Emerald Glass', 'Sunset Glass', 'Rose Glass', 'Golden Glass', 'Turquoise Glass']))
 check('Chat wallpaper resolves every glass theme through the shared palette', 'FynxGlassThemeId.entries.firstOrNull' in glass_wallpaper and 'fynxGlassPalette(themeId)' in glass_wallpaper)
 check('Chat settings exposes the complete glass theme catalog', 'FynxGlassThemeId.entries.map { it.label }' in chat_settings)
-check('Group chat uses the shared themed wallpaper runtime', 'FynxChatWallpaperBackground' in group_panel and 'glassPalette' in group_panel)
+check('Group chat uses its shared wallpaper runtime and active glass palette surfaces', 'FynxGroupWallpaperBackground' in group_panel and 'glassPalette' in group_panel)
 check('Private conversation uses the shared themed wallpaper runtime', 'FynxChatWallpaperBackground' in conversation and 'glassPalette' in conversation)
 
 client_sources = '\n'.join(str(p.read_text(encoding='utf-8')) for p in (ROOT / 'app/src/main/java/com/fynx/app/ui').glob('*.kt'))
