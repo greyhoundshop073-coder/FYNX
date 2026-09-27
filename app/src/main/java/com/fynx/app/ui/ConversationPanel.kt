@@ -801,7 +801,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             }
         } else Surface(color = glassPalette.backgroundMid.copy(alpha = 0.98f), contentColor = glassPalette.messageText, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp).semantics(mergeDescendants = true) { contentDescription = "Chat message composer area" },
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Spacer(Modifier.width(2.dp))
