@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Certify the authenticated FYNX runtime journey with a real CI test account."""
 from __future__ import annotations
-import os, subprocess, time
+import os, subprocess, time, html, re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -238,6 +238,62 @@ def input_text(value:str):
     safe=value.replace("%","%25").replace(" ","%s")
     return run("adb","shell","input","text",safe)
 
+def find_username_near_control(xml_text:str, labels:list[str])->str:
+    if not xml_text: return ""
+    try: root=ET.fromstring(xml_text)
+    except ET.ParseError: return ""
+    wanted=[label.lower() for label in labels]
+    parents={}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)] = parent
+    for node in root.iter("node"):
+        hay=" | ".join(((node.attrib.get("text") or "").strip().lower(),
+                         (node.attrib.get("content-desc") or "").strip().lower(),
+                         (node.attrib.get("resource-id") or "").strip().lower()))
+        if not any(label in hay for label in wanted): continue
+        cur=node
+        while cur is not None:
+            if cur.attrib.get("clickable","false").lower()=="true":
+                for descendant in cur.iter("node"):
+                    value=(descendant.attrib.get("text") or "").strip()
+                    if re.fullmatch(r"@?[A-Za-z0-9_.-]{2,80}", value):
+                        return value
+                break
+            cur=parents.get(id(cur))
+    return ""
+
+def first_local_group_id()->str:
+    result=run("adb","shell","run-as",PACKAGE,"cat","shared_prefs/fynx_groups_store.xml")
+    if result.returncode != 0: return ""
+    raw=html.unescape(result.stdout or "")
+    match=re.search(r'"id":"([^"]+)"', raw)
+    return match.group(1) if match else ""
+
+def exercise_notification_route(route:str, name:str)->bool:
+    if not route: return False
+    run("adb","shell","am","force-stop",PACKAGE)
+    started=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d",route,PACKAGE,timeout=30)
+    time.sleep(2.5)
+    xml=dump_ui(f"{name}-notification-cold.xml")
+    alive, crashlog=capture_runtime_log(f"{name}-notification-cold-process.log")
+    screenshot(f"{name}-notification-cold.png")
+    if started.returncode != 0 or not xml or not alive:
+        FAILURES.append(f"{name} notification tap route cold-start caused the authenticated app to exit or lose its UI")
+        return False
+    warm=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d",route,PACKAGE,timeout=30)
+    time.sleep(1.5)
+    warm_xml=dump_ui(f"{name}-notification-warm.xml")
+    warm_alive,warm_crashlog=capture_runtime_log(f"{name}-notification-warm-process.log")
+    screenshot(f"{name}-notification-warm.png")
+    if warm.returncode != 0 or not warm_xml or not warm_alive:
+        FAILURES.append(f"{name} notification tap route warm-start caused the authenticated app to exit or lose its UI")
+        return False
+    if crashlog or warm_crashlog:
+        report.append(f"- {name} notification-route crash evidence captured")
+    report.append(f"- PASS {name} notification tap route: cold + warm Activity launch remain alive")
+    return True
+
 def login():
     run("adb","shell","am","force-stop",PACKAGE)
     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
@@ -332,6 +388,7 @@ if not FAILURES:
             if name=="friends":
                 # Exercise the same path used by real users: Friends -> a real person's Chat action.
                 friend_chat_control=find_control(after,["Open chat"])
+                friend_username=find_username_near_control(after,["Open chat"])
                 if friend_chat_control:
                     friend_chat=tap_control(after,["Open chat"],"friend-chat-entry")
                     alive, crashlog = capture_runtime_log("friend-chat-process.log")
@@ -342,6 +399,10 @@ if not FAILURES:
                         FAILURES.append("real Friends -> Chat entry caused the authenticated app to exit or lose its UI")
                     elif alive:
                         report.append("- PASS opening a real friend's private chat keeps the authenticated app alive")
+                    if friend_username:
+                        route_username=friend_username.removeprefix("@").strip()
+                        if route_username:
+                            exercise_notification_route("fynx://chat/" + route_username, "private-chat")
                 else:
                     report.append("- PASS Friends -> Chat test skipped because the authenticated account has no real person with a Chat action")
             if name=="chat":
@@ -369,12 +430,15 @@ if not FAILURES:
                     groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["Groups","New group"])
                     if groups_tab:
                         group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
+                        group_id=first_local_group_id()
                         alive, crashlog = capture_runtime_log("group-chat-process.log")
                         screenshot("group-chat-after-open.png")
                         report.append("- Group process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
                         if crashlog: report.append("- Group crash-log evidence captured in group-chat-process.log")
                         if group_after:
                             report.append("- PASS opening the first real group chat keeps the authenticated app alive")
+                            if group_id:
+                                exercise_notification_route("fynx://group/" + group_id, "group-chat")
                         else:
                             report.append("- PASS group-chat entry test skipped because the authenticated account has no real group; no test data was fabricated")
                     else:
