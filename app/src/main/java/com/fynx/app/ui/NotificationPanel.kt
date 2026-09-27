@@ -156,14 +156,17 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
                             onNotificationOpen(notification)
                         }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = containerColor), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
                             Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Surface(shape = FynxDesign.ControlShape, color = FynxDesign.SurfaceRaised) { Icon(notificationIcon(notification.type), null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(9.dp).size(22.dp)) }
+                                NotificationActorAvatar(notification = notification, modifier = Modifier.size(46.dp))
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                         Text(notification.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f), maxLines = 2)
                                         if (!notification.read) { Spacer(Modifier.width(8.dp)); Text("NEW", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
                                     }
-                                    Spacer(Modifier.height(4.dp)); Text(notification.message, style = MaterialTheme.typography.bodyMedium, color = if (notification.read) FynxDesign.TextSecondary else FynxDesign.TextPrimary)
+                                    Spacer(Modifier.height(3.dp))
+                                    Text(notification.message, style = MaterialTheme.typography.bodyMedium, color = if (notification.read) FynxDesign.TextSecondary else FynxDesign.TextPrimary, maxLines = 2)
+                                    Spacer(Modifier.height(3.dp))
+                                    Text(formatNotificationTimestamp(notification.timestamp), style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
                                 }
                             }
                         }
@@ -171,6 +174,46 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun NotificationActorAvatar(notification: FynxNotification, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val username = notification.sourceUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
+    val actorTypes = setOf(FynxNotificationType.MESSAGE, FynxNotificationType.FRIEND_REQUEST, FynxNotificationType.FOLLOW, FynxNotificationType.STORY, FynxNotificationType.GROUP, FynxNotificationType.REACTION, FynxNotificationType.COMMENT)
+    val canUseActorAvatar = username != null && notification.type in actorTypes
+    var remotePhotoId by remember(username) { mutableStateOf<String?>(FynxProfileRemoteClient.cachedProfilePhotoId(context, username ?: "")) }
+    LaunchedEffect(username) {
+        if (username != null) FynxProfileRemoteClient.get(context, username).onSuccess { remotePhotoId = it.profilePhotoMediaId }
+    }
+    Box(modifier = modifier) {
+        if (canUseActorAvatar) {
+            FynxRemoteProfileAvatar(mediaId = remotePhotoId, contentDescription = username, modifier = Modifier.fillMaxSize(), ownerUsername = username)
+        } else {
+            Surface(shape = FynxDesign.ControlShape, color = FynxDesign.SurfaceRaised, modifier = Modifier.fillMaxSize()) {
+                Icon(notificationIcon(notification.type), null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(11.dp).fillMaxSize())
+            }
+        }
+        if (canUseActorAvatar) {
+            Surface(shape = FynxDesign.ControlShape, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), modifier = Modifier.size(18.dp).align(Alignment.BottomEnd)) {
+                Icon(notificationIcon(notification.type), null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(3.dp).fillMaxSize())
+            }
+        }
+    }
+}
+
+private fun formatNotificationTimestamp(timestamp: Long): String {
+    val age = (System.currentTimeMillis() - timestamp).coerceAtLeast(0L)
+    val minute = 60_000L
+    val hour = 60L * minute
+    val day = 24L * hour
+    return when {
+        age < minute -> "Just now"
+        age < hour -> "${age / minute}m ago"
+        age < day -> "${age / hour}h ago"
+        age < 7L * day -> "${age / day}d ago"
+        else -> java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(timestamp))
     }
 }
 
