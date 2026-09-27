@@ -85,7 +85,7 @@ class FynxRealtimeClient(
                 socket = null
                 socketAccountKey = null
             }
-            onStateChanged(State.FAILED)
+            emitState(State.FAILED)
             if (isSocketStillAuthorized()) scheduleReconnect()
         }
     }
@@ -110,7 +110,7 @@ class FynxRealtimeClient(
                         socketBeingCreated = null
                         socketCreationInProgress = false
                     }
-                    onStateChanged(State.DISCONNECTED)
+                    emitState(State.DISCONNECTED)
                 }
             }
         }
