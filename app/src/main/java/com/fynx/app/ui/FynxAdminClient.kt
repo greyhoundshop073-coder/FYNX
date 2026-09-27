@@ -17,6 +17,19 @@ object FynxAdminClient {
         val category: String,
         val active: Boolean
     )
+    data class AppealReview(
+        val id: String,
+        val userId: String,
+        val username: String,
+        val displayName: String,
+        val reportId: String?,
+        val subject: String,
+        val details: String,
+        val status: String,
+        val decisionNote: String,
+        val accountStatus: String,
+        val createdAt: String
+    )
     data class ProtectionCase(
         val id: String,
         val orderId: String,
@@ -116,6 +129,20 @@ object FynxAdminClient {
             "/api/admin/social/music/catalogue/" + encode(trackId),
             JSONObject().put("active", active).toString()
         ).map { Unit }
+
+    suspend fun appeals(context: Context): Result<List<AppealReview>> =
+        FynxBackendClient.get(context, "/api/admin/appeals").mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("appeals") ?: return@mapCatching emptyList()
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    add(AppealReview(item.optString("id"), item.optString("userId"), item.optString("username"), item.optString("displayName"), item.optString("reportId").takeIf { it.isNotBlank() && it != "null" }, item.optString("subject"), item.optString("details"), item.optString("status"), item.optString("decisionNote"), item.optString("accountStatus"), item.optString("createdAt")))
+                }
+            }
+        }
+
+    suspend fun reviewAppeal(context: Context, appealId: String, status: String, decisionNote: String): Result<Unit> =
+        FynxBackendClient.patchJson(context, "/api/admin/appeals/${encode(appealId)}", JSONObject().put("status", status).put("decisionNote", decisionNote.take(500)).toString()).map { Unit }
 
     suspend fun marketplaceProtectionCases(context: Context, status: String? = null): Result<List<ProtectionCase>> {
         val path = if (status.isNullOrBlank()) "/api/admin/marketplace/protection/cases" else "/api/admin/marketplace/protection/cases?status=${encode(status.trim().uppercase())}"

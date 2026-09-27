@@ -129,7 +129,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.extraLarge, tonalElevation = 8.dp) {
                 // The comments sheet must resize as one unit when the IME opens.
                 // This keeps the list and composer inside the visible app window.
-                Column(Modifier.fillMaxSize().imePadding()) {
+                Column(Modifier.fillMaxSize()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Close comments") }
                         Column(Modifier.weight(1f)) { Text("Comments", style = MaterialTheme.typography.titleLarge); Text("$commentCount comments", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -177,7 +177,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
                     // IME insets are handled by the parent Column. Keep only the
                     // system navigation inset here so the composer never receives
                     // double keyboard padding.
-                    Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(10.dp), verticalAlignment = Alignment.Bottom) {
+                    Row(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
                         Column(Modifier.weight(1f)) {
                             OutlinedTextField(
                                 value = text,

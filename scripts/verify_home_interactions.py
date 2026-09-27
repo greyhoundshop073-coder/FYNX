@@ -93,8 +93,9 @@ require(realtime_bootstrap, "before === null ? [postId, req.user.sub, limit + 1]
 require(privacy_bootstrap, "fynxHomeCommentsPrivacyBatch", "Home comment privacy patch marker")
 for needle in ('remember(post.id)','rememberSaveable(post.id)','DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)','.imePadding()','KeyboardActions(onSend = { send() })','FynxRemoteProfileAvatar(photo, comment.authorDisplayName.ifBlank { comment.authorUsername }','commentCount += 1','onCommentCountChanged(commentCount)'):
     require(comments_panel, needle, f"Home 4D edge-case safeguard {needle}")
-require_normalized(comments_panel, 'Column(Modifier.fillMaxSize().imePadding())', "comment sheet moves above the IME as one layout")
-if 'Row(Modifier.fillMaxWidth().navigationBarsPadding().imePadding()' in comments_panel:
+require_normalized(comments_panel, 'Column(Modifier.fillMaxSize())', "comment sheet keeps a single stable layout owner")
+require_normalized(comments_panel, 'Row(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 10.dp, vertical = 6.dp)', "comment composer is positioned directly above IME")
+if 'Column(Modifier.fillMaxSize().imePadding())' in comments_panel:
     raise SystemExit("HOME INTERACTIONS RED: comment composer applies IME padding twice")
 for needle in ('visiblePost(postId, req.user.sub)','b.blocker_id=$2 AND b.blocked_id=c.author_id','b.blocker_id=c.author_id AND b.blocked_id=$2'):
     require(realtime_bootstrap, needle, f"Home 4D privacy boundary {needle}")
