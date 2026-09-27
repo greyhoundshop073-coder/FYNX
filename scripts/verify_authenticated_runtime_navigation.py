@@ -19,6 +19,17 @@ def run(*args:str, timeout:int=30):
         output=exc.stdout.decode("utf-8","replace") if isinstance(exc.stdout,bytes) else (exc.stdout or "")
         return subprocess.CompletedProcess(args,124,output+"\nCOMMAND TIMEOUT")
 
+def capture_runtime_log(name:str):
+    """Capture Android process/crash evidence immediately after a navigation action."""
+    log_path=ROOT/name
+    result=run("adb","logcat","-d","-v","time","-t","500")
+    log_text=result.stdout or ""
+    keywords=("FATAL EXCEPTION","AndroidRuntime","com.fynx.app","Process com.fynx.app")
+    relevant="\n".join(line for line in log_text.splitlines() if any(k in line for k in keywords))
+    log_path.write_text(relevant + ("\n" if relevant else ""),encoding="utf-8")
+    alive=run("adb","shell","pidof",PACKAGE)
+    return bool((alive.stdout or "").strip()), relevant
+
 def screenshot(name:str):
     with (ROOT/name).open("wb") as out:
         subprocess.run(["adb","exec-out","screencap","-p"],stdout=out,stderr=subprocess.STDOUT,check=False)
@@ -311,6 +322,10 @@ if not FAILURES:
                 source=ROOT/"authenticated-chat.png"; recent=ROOT/"authenticated-chat-recent.png"
                 if source.exists(): shutil.copyfile(source,recent); report.append("- PASS explicit Recent Chats screenshot artifact")
                 conversation_after=tap_first_real_chat_or_group_if_present(after,"private-chat-entry")
+                alive, crashlog = capture_runtime_log("private-chat-process.log")
+                screenshot("private-chat-after-open.png")
+                report.append("- Chat process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
+                if crashlog: report.append("- Chat crash-log evidence captured in private-chat-process.log")
                 if conversation_after:
                     report.append("- PASS opening the first real private chat keeps the authenticated app alive")
                     message_after=tap_first_message_if_present(conversation_after)
@@ -327,6 +342,10 @@ if not FAILURES:
                     groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["Groups","New group"])
                     if groups_tab:
                         group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
+                        alive, crashlog = capture_runtime_log("group-chat-process.log")
+                        screenshot("group-chat-after-open.png")
+                        report.append("- Group process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
+                        if crashlog: report.append("- Group crash-log evidence captured in group-chat-process.log")
                         if group_after:
                             report.append("- PASS opening the first real group chat keeps the authenticated app alive")
                         else:
