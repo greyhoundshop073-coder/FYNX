@@ -329,6 +329,21 @@ if not FAILURES:
         after=capture_surface(name,labels,xml,expected)
         if after:
             report.append(f"- PASS authenticated Home -> {name} screenshot/UI hierarchy")
+            if name=="friends":
+                # Exercise the same path used by real users: Friends -> a real person's Chat action.
+                friend_chat_control=find_control(after,["Open chat"])
+                if friend_chat_control:
+                    friend_chat=tap_control(after,["Open chat"],"friend-chat-entry")
+                    alive, crashlog = capture_runtime_log("friend-chat-process.log")
+                    screenshot("friend-chat-after-open.png")
+                    report.append("- Friend -> Chat process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
+                    if crashlog: report.append("- Friend -> Chat crash-log evidence captured in friend-chat-process.log")
+                    if not friend_chat:
+                        FAILURES.append("real Friends -> Chat entry caused the authenticated app to exit or lose its UI")
+                    elif alive:
+                        report.append("- PASS opening a real friend's private chat keeps the authenticated app alive")
+                else:
+                    report.append("- PASS Friends -> Chat test skipped because the authenticated account has no real person with a Chat action")
             if name=="chat":
                 import shutil
                 source=ROOT/"authenticated-chat.png"; recent=ROOT/"authenticated-chat-recent.png"
