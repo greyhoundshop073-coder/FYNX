@@ -202,9 +202,12 @@ fun FynxVisibleUpdatesPanel(
                     Text("FYNX Assistance", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                     Text("Ask, create, translate and get help", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
-                // Camera is intentionally kept in the Home header and the post composer.
-                // Do not add a second direct-camera shortcut here: it creates two competing
-                // camera entry points and bypasses the requested "What's on your mind?" flow.
+                IconButton(
+                    onClick = onOpenFastCamera,
+                    modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape)
+                ) {
+                    Icon(Icons.Default.CameraAlt, contentDescription = "Open FYNX camera", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(21.dp))
+                }
             }
             Row(
                 Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
