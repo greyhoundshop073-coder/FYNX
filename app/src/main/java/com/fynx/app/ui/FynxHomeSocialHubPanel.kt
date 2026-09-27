@@ -600,7 +600,7 @@ fun FynxHomeSocialHubPanel(
                                 .heightIn(min = 190.dp, max = 420.dp)
                                 .padding(top = 4.dp)
                                 .background(
-                                    color = textBackground?.let { Color(it.color) } ?: Color.Transparent,
+                                    color = textBackground?.let { Color(it.color) } ?: MaterialTheme.colorScheme.background,
                                     shape = RoundedCornerShape(0.dp)
                                 )
                                 .padding(horizontal = if (textBackground != null) 18.dp else 0.dp, vertical = 14.dp),
@@ -750,8 +750,8 @@ fun FynxHomeSocialHubPanel(
                                     }
                                 }
                                 Text(
-                                    capturedUris.size.toString() + " item" + if (capturedUris.size == 1) "" else "s" + " ready" +
-                                        if (audioCount > 0) " • " + audioCount + " audio" else "",
+                                    capturedUris.size.toString() + " item" + (if (capturedUris.size == 1) "" else "s") + " ready" +
+                                        (if (audioCount > 0) " • " + audioCount + " audio" else ""),
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             }
