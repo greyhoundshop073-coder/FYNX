@@ -799,16 +799,16 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     Button(onClick = { stopRecording() }, enabled = !sending) { Text("Send") }
                 }
             }
-        } else Surface(color = glassPalette.backgroundMid.copy(alpha = 0.98f), contentColor = glassPalette.messageText, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
+        } else Surface(color = glassPalette.backgroundMid.copy(alpha = 0.98f), contentColor = glassPalette.messageText, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding().semantics { contentDescription = "Chat message composer area" }) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp).semantics(mergeDescendants = true) { contentDescription = "Chat message composer area" },
+                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Spacer(Modifier.width(2.dp))
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
-                    modifier = Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = if (editingId == null) "Message composer" else "Edit message composer" },
+                    modifier = Modifier.weight(1f).semantics { contentDescription = if (editingId == null) "Message composer" else "Edit message composer" },
                     minLines = 1,
                     maxLines = 5,
                     shape = RoundedCornerShape(26.dp),
