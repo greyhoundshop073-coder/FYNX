@@ -13,6 +13,7 @@ import android.os.VibratorManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -64,6 +65,8 @@ fun GroupChatPanel(
     var editMessage by remember { mutableStateOf<ChatMessage?>(null) }
     var editText by remember { mutableStateOf("") }
     var replyTo by remember { mutableStateOf<ChatMessage?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+    var showGroupMenu by remember { mutableStateOf(false) }
 
     fun feedback() {
         if (Build.VERSION.SDK_INT >= 31) {
@@ -256,6 +259,13 @@ fun GroupChatPanel(
         saveGroupMessages(context, group.id, messages)
     }
 
+    val visibleMessages = remember(messages, searchQuery) {
+        val query = searchQuery.trim().lowercase()
+        if (query.isBlank()) messages else messages.filter { message ->
+            message.text.lowercase().contains(query) || message.senderUsername.orEmpty().lowercase().contains(query) || message.senderName.orEmpty().lowercase().contains(query)
+        }
+    }
+
     FynxGroupWallpaperBackground(group.id, Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             Surface(color = glassPalette.backgroundMid.copy(alpha = 0.98f), contentColor = glassPalette.messageText, tonalElevation = 0.dp, modifier = Modifier.statusBarsPadding()) {
@@ -266,14 +276,46 @@ fun GroupChatPanel(
                     IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.ArrowBack, "Back", tint = glassPalette.messageText) }
                     if (group.groupPhotoMediaId.isNullOrBlank()) FynxAvatar(group.name, Modifier.size(40.dp)) else FynxRemoteProfileAvatar(group.groupPhotoMediaId, group.name, Modifier.size(40.dp))
                     Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                        Text(group.name, style = MaterialTheme.typography.titleMedium, color = glassPalette.messageText)
-                        Text(
-                            "${group.memberUsernames.size} members${if (syncing) " • Syncing…" else ""}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = glassPalette.messageMuted
-                        )
+                        if (searchQuery.isBlank()) {
+                            Text(group.name, style = MaterialTheme.typography.titleMedium, color = glassPalette.messageText)
+                            Text(
+                                "${group.memberUsernames.size} members${if (syncing) " • Syncing…" else ""}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = glassPalette.messageMuted
+                            )
+                        } else {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                placeholder = { Text("Search messages…") },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedTextColor = glassPalette.messageText,
+                                    unfocusedTextColor = glassPalette.messageText,
+                                    focusedPlaceholderColor = glassPalette.messageMuted,
+                                    unfocusedPlaceholderColor = glassPalette.messageMuted,
+                                    focusedBorderColor = Color.Transparent,
+                                    unfocusedBorderColor = Color.Transparent
+                                )
+                            )
+                        }
                     }
-                    IconButton(onClick = { showWallpaper = true }) { Icon(Icons.Default.Wallpaper, "Group wallpaper", tint = glassPalette.messageText) }
+                    if (searchQuery.isBlank()) {
+                        IconButton(onClick = { searchQuery = " " }) { Icon(Icons.Default.Search, "Search messages", tint = glassPalette.messageText) }
+                    } else {
+                        IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Close, "Close message search", tint = glassPalette.messageText) }
+                    }
+                    Box {
+                        IconButton(onClick = { showGroupMenu = true }) { Icon(Icons.Default.MoreVert, "Group menu", tint = glassPalette.messageText) }
+                        DropdownMenu(expanded = showGroupMenu, onDismissRequest = { showGroupMenu = false }) {
+                            DropdownMenuItem(text = { Text("Search messages") }, onClick = { searchQuery = " "; showGroupMenu = false })
+                            DropdownMenuItem(text = { Text("Group wallpaper") }, onClick = { showWallpaper = true; showGroupMenu = false })
+                            DropdownMenuItem(text = { Text("Group info") }, onClick = { showGroupMenu = false; error = "${group.memberUsernames.size} members • ${if (group.description.isBlank()) "No description" else group.description}" })
+                        }
+                    }
                 }
             }
 
@@ -296,7 +338,7 @@ fun GroupChatPanel(
                         FynxFirstGroupContactIntro(group)
                     }
                 }
-                items(messages, key = { it.id }) { message ->
+                items(visibleMessages, key = { it.id }) { message ->
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start
@@ -306,7 +348,10 @@ fun GroupChatPanel(
                                 color = if (message.fromMe) glassPalette.outgoingStart.copy(alpha = 0.92f) else glassPalette.incomingGlass.copy(alpha = 0.96f),
                                 contentColor = glassPalette.messageText,
                                 shape = RoundedCornerShape(18.dp),
-                                modifier = Modifier.widthIn(max = 330.dp)
+                                modifier = Modifier.widthIn(max = 330.dp).combinedClickable(
+                                    onClick = { actionMessage = message },
+                                    onLongClick = { actionMessage = message }
+                                )
                             ) {
                                 Column(Modifier.padding(10.dp)) {
                                     if (message.replyToId != null) {
@@ -341,12 +386,6 @@ fun GroupChatPanel(
                                         if (message.fromMe) Text("✓✓", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
-                            }
-                            IconButton(
-                                onClick = { actionMessage = message },
-                                modifier = Modifier.size(48.dp).align(if (message.fromMe) Alignment.TopEnd else Alignment.TopStart)
-                            ) {
-                                Icon(Icons.Default.MoreVert, "Message actions", Modifier.size(22.dp), tint = glassPalette.messageText)
                             }
                         }
                     }
