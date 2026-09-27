@@ -159,7 +159,7 @@ class FynxRealtimeClient(
         val httpBase = FynxBackendClient.baseUrl(context)
         if (!httpBase.startsWith("https://")) {
             synchronized(socketCreationLock) { socketCreationInProgress = false; socketBeingCreated = null }
-            onStateChanged(State.FAILED); return
+            emitState(State.FAILED); return
         }
         val encodedToken = URLEncoder.encode(token, Charsets.UTF_8.name())
         val wsUrl = "wss://${httpBase.removePrefix("https://")}/realtime?token=$encodedToken"
@@ -181,8 +181,8 @@ class FynxRealtimeClient(
                     runCatching { val root = JSONObject(text); when (root.optString("type")) {
                         "message" -> root.optJSONObject("message")?.let { emitMessage(FynxProductionMessaging.fromJson(it)) }
                         "message_status" -> emitEvent(Event.MessageStatus(root.optString("messageId"), when (root.optString("status")) { "read" -> Status.READ; "delivered" -> Status.DELIVERED; else -> Status.SENT }))
-                        "typing" -> emitEvent(Event.Typing(root.optString("userId"), root.optBoolean("isTyping"))
-                        "presence" -> emitEvent(Event.Presence(root.optString("userId"), root.optBoolean("online"))
+                        "typing" -> emitEvent(Event.Typing(root.optString("userId"), root.optBoolean("isTyping")) )
+                        "presence" -> emitEvent(Event.Presence(root.optString("userId"), root.optBoolean("online")) )
                         "call" -> parseCallEvent(root)?.let { callEvent ->
                             if (callEvent.signalType == "invite") {
                                 val caller = callEvent.fromUsername?.removePrefix("@").orEmpty().ifBlank { callEvent.fromUserId }
