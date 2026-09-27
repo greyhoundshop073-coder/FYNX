@@ -808,7 +808,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
-                    modifier = Modifier.weight(1f).semantics { contentDescription = if (editingId == null) "Message composer" else "Edit message composer" },
+                    modifier = Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = if (editingId == null) "Message composer" else "Edit message composer" },
                     minLines = 1,
                     maxLines = 5,
                     shape = RoundedCornerShape(26.dp),
