@@ -29,7 +29,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.editableText
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
@@ -808,7 +810,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
-                    modifier = Modifier.weight(1f).semantics { contentDescription = if (editingId == null) "Message composer" else "Edit message composer" },
+                    modifier = Modifier.weight(1f).clearAndSetSemantics {\n                        contentDescription = if (editingId == null) "Message composer" else "Edit message composer"\n                        editableText = AnnotatedString(text)\n                    },
                     minLines = 1,
                     maxLines = 5,
                     shape = RoundedCornerShape(26.dp),
