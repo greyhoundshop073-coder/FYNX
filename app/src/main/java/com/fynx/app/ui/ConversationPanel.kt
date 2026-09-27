@@ -834,7 +834,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { videoNoteMode = false; cameraInitialMode = CameraMode.PHOTO; showCamera = true }) { Icon(Icons.Default.CameraAlt, "Camera", Modifier.size(22.dp)) }
                         val voiceMode = text.isBlank() && attachment == null
-                        Box(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).pointerInput(voiceMode, sending) {
+                        Box(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = if (voiceMode) "Hold to record voice message" else "Send message" }.pointerInput(voiceMode, sending) {
                             if (!voiceMode || sending) return@pointerInput
                             detectTapGestures(onPress = {
                                 startRecording()
