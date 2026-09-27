@@ -810,9 +810,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
-                    modifier = Modifier.weight(1f).clearAndSetSemantics {
+                    modifier = Modifier.weight(1f).semantics(mergeDescendants = true) {
                         contentDescription = if (editingId == null) "Message composer" else "Edit message composer"
-                        editableText = AnnotatedString(text)
                     },
                     minLines = 1,
                     maxLines = 5,
