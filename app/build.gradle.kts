@@ -43,11 +43,11 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("io.github.webrtc-sdk:android:144.7559.14")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("androidx.camera:camera-core:1.6.2")
-    implementation("androidx.camera:camera-camera2:1.6.2")
-    implementation("androidx.camera:camera-lifecycle:1.6.2")
-    implementation("androidx.camera:camera-view:1.6.2")
-    implementation("androidx.camera:camera-video:1.6.2")
+    implementation("androidx.camera:camera-core:1.5.3")
+    implementation("androidx.camera:camera-camera2:1.5.3")
+    implementation("androidx.camera:camera-lifecycle:1.5.3")
+    implementation("androidx.camera:camera-view:1.5.3")
+    implementation("androidx.camera:camera-video:1.5.3")
     implementation("androidx.exifinterface:exifinterface:1.4.2")
 
     implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
@@ -57,6 +57,6 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:runner:1.5.3")
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
 }
