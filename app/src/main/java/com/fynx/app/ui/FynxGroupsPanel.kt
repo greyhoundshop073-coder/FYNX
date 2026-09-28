@@ -315,14 +315,20 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             suspend fun refreshGroupMessages(showError: Boolean) {
                 FynxGroupRemoteClient.loadMessages(context, groupId)
                     .onSuccess { remote ->
-                        val remoteMessages = remote.mapNotNull { item ->
+                        val remoteMessages = remote.mapIndexedNotNull { index, item ->
                             runCatching {
                                 FynxGroupRemoteClient.toChatMessage(
                                     item,
                                     currentUsername,
                                     FynxBackendClient.baseUrl(context)
                                 )
-                            }.getOrNull()
+                            }.getOrNull()?.let { message ->
+                                if (message.id.isBlank()) {
+                                    message.copy(id = "group-remote-" + index + "-" + message.timestamp)
+                                } else {
+                                    message
+                                }
+                            }
                         }
                         val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
                         val pendingLocal = messages.filter { it.id !in remoteIds }
