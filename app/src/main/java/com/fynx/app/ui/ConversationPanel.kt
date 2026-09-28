@@ -63,7 +63,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     val bubbleLighting = FynxConversationPreferences.chatBubbleLighting(context, chat.username)
     val bubbleGradient = FynxConversationPreferences.chatBubbleGradient(context, chat.username)
     val clipboardManager = LocalClipboardManager.current
-    val conversationScope = remember(chat.username) { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
+    val conversationScope = rememberCoroutineScope()
     var recipientProfile by remember(chat.username) { mutableStateOf<FynxProfileRemoteClient.Profile?>(null) }
     var remoteProfileLoaded by remember(chat.username) { mutableStateOf(false) }
     val resolvedAvatarUri = if (remoteProfileLoaded) {
@@ -305,7 +305,6 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         onDispose {
             if (typingSent) realtimeClient.sendTyping(recipientUserId ?: "", false)
             realtimeClient.close()
-            conversationScope.cancel()
             runCatching { recorder?.stop() }
             recorder?.release(); player?.release()
         }
