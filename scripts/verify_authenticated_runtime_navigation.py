@@ -664,45 +664,45 @@ def find_feature_entry(xml_text:str, labels:list[str]):
     return None
 
 def open_features(target_labels:list[str]|None=None):
-        run("adb","shell","am","force-stop",PACKAGE)
-        run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-        time.sleep(2.5)
-        home_xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-features.xml") or xml
-        feature_xml=tap_control(home_xml,["More","Features"],"features",["FYNX Features"])
-        if not feature_xml: return ""
-        if target_labels is None: return feature_xml
+    run("adb","shell","am","force-stop",PACKAGE)
+    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
+    time.sleep(2.5)
+    home_xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-features.xml") or xml
+    feature_xml=tap_control(home_xml,["More","Features"],"features",["FYNX Features"])
+    if not feature_xml: return ""
+    if target_labels is None: return feature_xml
 
-        # Prefer the feature hub's own search field for deterministic CI navigation.
-        # Money is a real registered feature, but LazyColumn viewport scrolling can
-        # skip the middle of a long list on the emulator. Searching the existing
-        # feature index does not create data or bypass the real UI destination.
-        search=find_control(feature_xml,["Search FYNX tools"])
-        if search:
-            _,sx,sy=search
-            run("adb","shell","input","tap",str(sx),str(sy)); time.sleep(.3)
-            # Explicitly clear any stale Compose text before entering the query.
-            run("adb","shell","input","keyevent","KEYCODE_CTRL_A")
-            run("adb","shell","input","keyevent","KEYCODE_DEL")
-            search_term = "Money" if any("money" in label.lower() for label in target_labels) else target_labels[0]
-            result=input_text(search_term)
-            if result.returncode==0:
-                time.sleep(.8)
-                feature_xml=dump_ui("authenticated-features-money-search.xml")
-                if find_feature_entry(feature_xml,target_labels):
-                    return feature_xml
+    # Prefer the feature hub's own search field for deterministic CI navigation.
+    # Money is a real registered feature, but LazyColumn viewport scrolling can
+    # skip the middle of a long list on the emulator. Searching the existing
+    # feature index does not create data or bypass the real UI destination.
+    search=find_control(feature_xml,["Search FYNX tools"])
+    if search:
+        _,sx,sy=search
+        run("adb","shell","input","tap",str(sx),str(sy)); time.sleep(.3)
+        # Explicitly clear any stale Compose text before entering the query.
+        run("adb","shell","input","keyevent","KEYCODE_CTRL_A")
+        run("adb","shell","input","keyevent","KEYCODE_DEL")
+        search_term = "Money" if any("money" in label.lower() for label in target_labels) else target_labels[0]
+        result=input_text(search_term)
+        if result.returncode==0:
+            time.sleep(.8)
+            feature_xml=dump_ui("authenticated-features-money-search.xml")
+            if find_feature_entry(feature_xml,target_labels):
+                return feature_xml
 
-        # Fallback: short, bounded LazyColumn scrolls in both directions.
-        # Check after every gesture rather than flinging through the middle.
-        for direction in ("up","down"):
-            for _ in range(10):
-                if find_feature_entry(feature_xml,target_labels): return feature_xml
-                if direction=="up":
-                    run("adb","shell","input","swipe","540","1100","540","700","700")
-                else:
-                    run("adb","shell","input","swipe","540","700","540","1100","700")
-                time.sleep(.6)
-                feature_xml=dump_ui(f"authenticated-features-{direction}.xml")
-        return feature_xml if find_feature_entry(feature_xml,target_labels) else ""
+    # Fallback: short, bounded LazyColumn scrolls in both directions.
+    # Check after every gesture rather than flinging through the middle.
+    for direction in ("up","down"):
+        for _ in range(10):
+            if find_feature_entry(feature_xml,target_labels): return feature_xml
+            if direction=="up":
+                run("adb","shell","input","swipe","540","1100","540","700","700")
+            else:
+                run("adb","shell","input","swipe","540","700","540","1100","700")
+            time.sleep(.6)
+            feature_xml=dump_ui(f"authenticated-features-{direction}.xml")
+    return feature_xml if find_feature_entry(feature_xml,target_labels) else ""
 
     features=open_features()
     if features:
