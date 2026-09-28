@@ -164,11 +164,12 @@ object FynxChatStore {
         buildList {
             for (index in 0 until array.length()) {
                 val item = array.getJSONObject(index)
+                val storedId = item.optString("id").trim()
                 add(
                     ChatMessage(
                         text = item.optString("text"),
                         fromMe = item.optBoolean("fromMe"),
-                        id = item.optString("id"),
+                        id = storedId.ifBlank { "local-${index}-${item.optLong("timestamp")}" },
                         timestamp = item.optLong("timestamp"),
                         delivered = item.optBoolean("delivered"),
                         read = item.optBoolean("read"),
@@ -183,7 +184,7 @@ object FynxChatStore {
                     )
                 )
             }
-        }
+        }.distinctBy { it.id }
     }.getOrElse { fallback?.let { listOf(it) } ?: emptyList() }
 
     private fun accountKey(context: Context): String =
