@@ -50,7 +50,8 @@ fun FynxStatusTimelinePanel(
     onCameraClick: () -> Unit = {},
     onCreateClick: () -> Unit = {},
     openOwnerUsername: String? = null,
-    openStatusId: String? = null
+    openStatusId: String? = null,
+    onOpenCommandConsumed: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val auth = remember(context) { FynxAuthStore.load(context) }
@@ -91,7 +92,7 @@ fun FynxStatusTimelinePanel(
         } ?: openOwnerUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }?.let { target ->
             statuses.filterNot(FynxStatus::isExpired).filter { it.ownerUsername.equals(target, true) }.maxByOrNull { it.createdAtMillis }
         }
-        if (targetStatus != null) selected = targetStatus
+        if (targetStatus != null) { selected = targetStatus; onOpenCommandConsumed() }
     }
 
     val visibleStatuses = statuses.filterNot(FynxStatus::isExpired)
@@ -245,7 +246,7 @@ private fun StatusAvatar(
     }
     val avatarId = if (remoteProfileLoaded) profilePhotoMediaId else cachedPhotoId
     Box(modifier.size(58.dp)) {
-        Box(Modifier.fillMaxSize().border(2.dp, MaterialTheme.colorScheme.primary, CircleShape).padding(3.dp)) {
+        Box(Modifier.fillMaxSize().border(2.dp, Color(0xFF22C55E), CircleShape).padding(3.dp)) {
             if (!avatarId.isNullOrBlank()) {
                 FynxRemoteProfileAvatar(avatarId, ownerDisplayName, Modifier.fillMaxSize().clip(CircleShape), ownerUsername = ownerUsername)
             } else {

@@ -216,7 +216,7 @@ fun FynxRemoteProfileAvatar(
     }
     Box(
         modifier = modifier
-            .then(if (hasActiveStatus) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(50)).padding(2.dp) else Modifier)
+            .then(if (hasActiveStatus) Modifier.border(2.dp, Color(0xFF22C55E), RoundedCornerShape(50)).padding(2.dp) else Modifier)
             .clip(RoundedCornerShape(50))
             .then(if (hasActiveStatus && onStatusClick != null) Modifier.clickable { onStatusClick() } else Modifier),
         contentAlignment = Alignment.Center

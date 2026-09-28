@@ -70,7 +70,8 @@ fun FynxHomeSocialHubPanel(
     onOpenAuthorProfile: (String) -> Unit = {},
     onOpenFastCamera: () -> Unit = {},
     initialPostId: String? = null,
-    initialCommentId: String? = null
+    initialCommentId: String? = null,
+    onInitialPostConsumed: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -457,6 +458,7 @@ fun FynxHomeSocialHubPanel(
             currentUsername = currentUsername,
             initialPostId = initialPostId,
             initialCommentId = initialCommentId,
+            onInitialPostConsumed = onInitialPostConsumed,
             onOpenChats = onOpenChats,
             onOpenStories = onOpenStories,
             onOpenProfile = onOpenProfile,

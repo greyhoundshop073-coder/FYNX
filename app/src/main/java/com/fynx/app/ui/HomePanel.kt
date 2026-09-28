@@ -33,7 +33,8 @@ fun HomePanel(
     onCreatePost: () -> Unit = {},
     onOpenAuthorProfile: (String) -> Unit = {},
     initialPostId: String? = null,
-    initialCommentId: String? = null
+    initialCommentId: String? = null,
+    onInitialPostConsumed: () -> Unit = {}
 ) {
     val displayUsername = currentUsername.trim().removePrefix("@").trim()
     var showCreateMenu by remember { mutableStateOf(false) }
@@ -61,6 +62,7 @@ fun HomePanel(
                         onOpenAuthorProfile = onOpenAuthorProfile,
                         initialPostId = initialPostId,
                         initialCommentId = initialCommentId,
+                        onInitialPostConsumed = onInitialPostConsumed,
                         header = {
                             FynxVisibleUpdatesPanel(
                                 currentUsername = displayUsername,
