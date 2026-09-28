@@ -22,6 +22,21 @@ def run(*args:str, timeout:int=30):
         output=exc.stdout.decode("utf-8","replace") if isinstance(exc.stdout,bytes) else (exc.stdout or "")
         return subprocess.CompletedProcess(args,124,output+"\nCOMMAND TIMEOUT")
 
+def wait_for_group_conversation_ui(name:str, timeout:float=12.0)->str:
+    """Poll until the real FynxGroupConversationPanel exposes its message surface."""
+    deadline=time.monotonic()+timeout
+    latest=""
+    while time.monotonic()<deadline:
+        latest=dump_ui(name)
+        if latest and (
+            "Message..." in latest
+            or "Messaging is restricted" in latest
+            or "No messages here yet" in latest
+        ):
+            return latest
+        time.sleep(.5)
+    return latest
+
 def wait_for_conversation_ui(name:str, timeout:float=12.0)->str:
     """Poll the real accessibility tree until ConversationPanel is actually visible."""
     deadline=time.monotonic()+timeout
@@ -635,8 +650,8 @@ if not FAILURES:
                             # still certified rather than silently skipped.
                             run("adb","shell","am","force-stop",PACKAGE)
                             run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/ci-runtime-group",PACKAGE)
-                            time.sleep(2.5)
-                            group_destination=dump_ui("group-chat-inside.xml")
+                            time.sleep(.5)
+                            group_destination=wait_for_group_conversation_ui("group-chat-inside.xml")
                             screenshot("group-chat-inside.png")
                             alive,crashlog=capture_runtime_log("group-chat-inside-process.log")
                             if group_destination and alive and ("Message..." in group_destination or "Messaging is restricted" in group_destination or "No messages here yet" in group_destination):
