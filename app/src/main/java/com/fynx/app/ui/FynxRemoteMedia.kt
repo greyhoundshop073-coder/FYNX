@@ -88,7 +88,14 @@ fun FynxRemoteMedia(
                     val isVideo = isKnownVideo || (type.equals("auto", true) && contentType.startsWith("video/"))
                     if (isVideo) MediaLoadResult.Video(target)
                     else {
-                        val decoded = BitmapFactory.decodeFile(target.absolutePath) ?: throw IllegalStateException("Unable to decode media")
+                        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        BitmapFactory.decodeFile(target.absolutePath, bounds)
+                        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw IllegalStateException("Unable to decode media")
+                        val maxDimension = 2048
+                        var sample = 1
+                        while (bounds.outWidth / sample > maxDimension || bounds.outHeight / sample > maxDimension) sample *= 2
+                        val options = BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = android.graphics.Bitmap.Config.RGB_565 }
+                        val decoded = BitmapFactory.decodeFile(target.absolutePath, options) ?: throw IllegalStateException("Unable to decode media")
                         if (cacheTarget == null) target.delete()
                         MediaLoadResult.Image(decoded)
                     }
@@ -193,10 +200,9 @@ fun FynxRemoteProfileAvatar(
         if (owner.isBlank()) {
             hasActiveStatus = false
         } else {
-            while (true) {
-                hasActiveStatus = FynxStatusPresenceStore.activeOwners(context).contains(owner)
-                kotlinx.coroutines.delay(30_000L)
-            }
+            hasActiveStatus = runCatching {
+                FynxStatusPresenceStore.activeOwners(context).contains(owner)
+            }.getOrDefault(false)
         }
     }
     val avatar: @Composable () -> Unit = {
