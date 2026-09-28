@@ -22,6 +22,20 @@ def run(*args:str, timeout:int=30):
         output=exc.stdout.decode("utf-8","replace") if isinstance(exc.stdout,bytes) else (exc.stdout or "")
         return subprocess.CompletedProcess(args,124,output+"\nCOMMAND TIMEOUT")
 
+def wait_for_conversation_ui(name:str, timeout:float=12.0)->str:
+    """Poll the real accessibility tree until ConversationPanel is actually visible."""
+    deadline=time.monotonic()+timeout
+    latest=""
+    while time.monotonic()<deadline:
+        latest=dump_ui(name)
+        if latest and (
+            find_control(latest,["Message composer","Edit message composer","Chat message composer area"])
+            or find_control(latest,["No messages here yet"])
+        ):
+            return latest
+        time.sleep(.5)
+    return latest
+
 def capture_runtime_log(name:str):
     """Capture Android process/crash evidence immediately after a navigation action."""
     log_path=ROOT/name
@@ -497,8 +511,8 @@ if not FAILURES:
                 if real_chat_target:
                     run("adb","shell","am","force-stop",PACKAGE)
                     started=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+real_chat_target,PACKAGE,timeout=30)
-                    time.sleep(2.5)
-                    conversation_after=dump_ui("private-chat-inside.xml")
+                    time.sleep(.5)
+                    conversation_after=wait_for_conversation_ui("private-chat-inside.xml")
                     alive, crashlog = capture_runtime_log("private-chat-process.log")
                     if started.returncode!=0 or not conversation_after or not alive:
                         FAILURES.append("real private-chat deep link caused the authenticated app to exit or lose its UI")
@@ -530,8 +544,8 @@ if not FAILURES:
                     if chat_control:
                         _,fx,fy=chat_control
                         run("adb","shell","input","tap",str(fx),str(fy))
-                        time.sleep(2.5)
-                        fallback=dump_ui("private-chat-inside.xml")
+                        time.sleep(.5)
+                        fallback=wait_for_conversation_ui("private-chat-inside.xml")
                         alive,crashlog=capture_runtime_log("private-chat-inside-process.log")
                         if fallback and alive and find_control(fallback,["Message composer","Edit message composer","Chat message composer area"]):
                             screenshot("private-chat-inside.png")
