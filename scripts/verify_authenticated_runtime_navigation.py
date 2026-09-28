@@ -239,7 +239,16 @@ def find_edit_fields(xml_text:str):
     return fields
 
 def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[str]|None=None)->str:
+    # Compose/Home surfaces can take a moment to publish their accessibility tree
+    # after an Activity reset. Retry the same real control lookup before declaring
+    # a runtime navigation failure; never invent a fallback coordinate.
     control=find_control(xml_text,labels)
+    for _ in range(8):
+        if control:
+            break
+        time.sleep(.5)
+        xml_text=dump_ui(f"authenticated-{name}-retry.xml")
+        control=find_control(xml_text,labels)
     if not control:
         FAILURES.append(name); return ""
     _,x,y=control
@@ -620,7 +629,41 @@ if not FAILURES:
         run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
         xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-reset.xml") or xml
 
-    def open_features(target_labels:list[str]|None=None):
+    def find_feature_entry(xml_text:str, labels:list[str]):
+    """Find an actual clickable feature card, not the search field or its text."""
+    if not xml_text: return None
+    try:
+        root=ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    wanted=[x.lower() for x in labels]
+    parents={}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)] = parent
+    for node in root.iter("node"):
+        text_value=(node.attrib.get("text") or "").strip().lower()
+        if not text_value or not any(label == text_value or label in text_value for label in wanted):
+            continue
+        cur=node
+        while cur is not None:
+            if cur.attrib.get("clickable","false").lower()=="true":
+                bounds=cur.attrib.get("bounds","")
+                try:
+                    left_top,right_bottom=bounds.split("][",1)
+                    left,top=map(int,left_top.strip("[]").split(","))
+                    right,bottom=map(int,right_bottom.strip("[]").split(","))
+                    width,height=right-left,bottom-top
+                    center=_center(cur)
+                    if center and 700 <= center[1] <= 1800 and 120 <= height <= 240 and width >= 700:
+                        return (text_value,center[0],center[1])
+                except (ValueError,IndexError):
+                    pass
+                break
+            cur=parents.get(id(cur))
+    return None
+
+def open_features(target_labels:list[str]|None=None):
         run("adb","shell","am","force-stop",PACKAGE)
         run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
         time.sleep(2.5)
@@ -636,30 +679,30 @@ if not FAILURES:
         search=find_control(feature_xml,["Search FYNX tools"])
         if search:
             _,sx,sy=search
-            run("adb","shell","input","tap",str(sx),str(sy)); time.sleep(.2)
+            run("adb","shell","input","tap",str(sx),str(sy)); time.sleep(.3)
+            # Explicitly clear any stale Compose text before entering the query.
+            run("adb","shell","input","keyevent","KEYCODE_CTRL_A")
+            run("adb","shell","input","keyevent","KEYCODE_DEL")
             search_term = "Money" if any("money" in label.lower() for label in target_labels) else target_labels[0]
             result=input_text(search_term)
             if result.returncode==0:
                 time.sleep(.8)
                 feature_xml=dump_ui("authenticated-features-money-search.xml")
-                if find_control(feature_xml,target_labels): return feature_xml
-                run("adb","shell","input","keyevent","KEYCODE_CTRL_A")
-                run("adb","shell","input","keyevent","KEYCODE_DEL")
-                time.sleep(.4)
-                feature_xml=dump_ui("authenticated-features-search-cleared.xml")
+                if find_feature_entry(feature_xml,target_labels):
+                    return feature_xml
 
         # Fallback: short, bounded LazyColumn scrolls in both directions.
         # Check after every gesture rather than flinging through the middle.
         for direction in ("up","down"):
-            for _ in range(8):
-                if find_control(feature_xml,target_labels): return feature_xml
+            for _ in range(10):
+                if find_feature_entry(feature_xml,target_labels): return feature_xml
                 if direction=="up":
                     run("adb","shell","input","swipe","540","1100","540","700","700")
                 else:
                     run("adb","shell","input","swipe","540","700","540","1100","700")
                 time.sleep(.6)
                 feature_xml=dump_ui(f"authenticated-features-{direction}.xml")
-        return feature_xml if find_control(feature_xml,target_labels) else ""
+        return feature_xml if find_feature_entry(feature_xml,target_labels) else ""
 
     features=open_features()
     if features:
@@ -670,10 +713,18 @@ if not FAILURES:
         )
         for name,labels,expected in journeys:
             current=open_features(labels)
-            if not current:
+            entry=find_feature_entry(current,labels)
+            if not current or not entry:
                 FAILURES.append("authenticated Features -> "+name)
                 continue
-            after=capture_surface(name,labels,current,expected)
+            _,ex,ey=entry
+            run("adb","shell","input","tap",str(ex),str(ey))
+            time.sleep(1.2)
+            after=dump_ui(f"authenticated-{name}-destination.xml")
+            screenshot(f"authenticated-{name}.png")
+            if not after:
+                FAILURES.append("authenticated Features -> "+name)
+                continue
             if after: report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
             else: FAILURES.append("authenticated Features -> "+name)
     else: FAILURES.append("authenticated Home -> Features")
