@@ -3,7 +3,8 @@
 # Keep authenticated recovery coverage enabled after detector corrections.
 # Recovery runtime: rerun authenticated Chat/Groups coverage after navigation-detector fixes.
 from __future__ import annotations
-import os, subprocess, time, html, re
+import os, subprocess, time, html, re, json
+import urllib.parse, urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -255,6 +256,47 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
     screenshot(f"authenticated-{name}.png")
     return next_xml
 
+def backend_real_chat_target()->str:
+    """Find an existing FYNX user without creating test accounts or application data."""
+    base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-ai-backend.onrender.com").rstrip("/")
+    try:
+        login_body=json.dumps({"username":USERNAME,"password":PASSWORD}).encode("utf-8")
+        login_req=urllib.request.Request(
+            base+"/api/auth/login",
+            data=login_body,
+            headers={"Content-Type":"application/json","Accept":"application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(login_req,timeout=20) as response:
+            login_data=json.loads(response.read().decode("utf-8","replace"))
+        token=str(login_data.get("accessToken") or "").strip()
+        if not token:
+            return ""
+        self_name=USERNAME.removeprefix("@").strip().lower()
+        queries=[]
+        prefix=self_name[:2]
+        if len(prefix)>=2: queries.append(prefix)
+        queries.extend(["a","e","i","o","u","n","m"])
+        seen=set()
+        for query in queries:
+            if query in seen: continue
+            seen.add(query)
+            url=base+"/api/users/search?"+urllib.parse.urlencode({"q":query,"mode":"username"})
+            request=urllib.request.Request(
+                url,
+                headers={"Authorization":"Bearer "+token,"Accept":"application/json"},
+                method="GET",
+            )
+            with urllib.request.urlopen(request,timeout=20) as response:
+                data=json.loads(response.read().decode("utf-8","replace"))
+            for user in data.get("users",[]):
+                username=str(user.get("username") or "").removeprefix("@").strip()
+                if username and username.lower()!=self_name:
+                    return username
+    except Exception as error:
+        report.append("- Real chat target discovery unavailable: "+type(error).__name__)
+    return ""
+
 def input_text(value:str):
     safe=value.replace("%","%25").replace(" ","%s")
     return run("adb","shell","input","text",safe)
@@ -441,7 +483,26 @@ if not FAILURES:
                 source=ROOT/"authenticated-chat.png"; recent=ROOT/"authenticated-chat-recent.png"
                 if source.exists(): shutil.copyfile(source,recent); report.append("- PASS explicit Recent Chats screenshot artifact")
                 private_chat_username=first_username_in_xml(after)
-                conversation_after=tap_first_real_chat_or_group_if_present(after,"private-chat-entry")
+                real_chat_target=backend_real_chat_target()
+                conversation_after=""
+                if real_chat_target:
+                    run("adb","shell","am","force-stop",PACKAGE)
+                    started=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+real_chat_target,PACKAGE,timeout=30)
+                    time.sleep(2.5)
+                    conversation_after=dump_ui("private-chat-inside.xml")
+                    alive, crashlog = capture_runtime_log("private-chat-process.log")
+                    if started.returncode!=0 or not conversation_after or not alive:
+                        FAILURES.append("real private-chat deep link caused the authenticated app to exit or lose its UI")
+                        conversation_after=""
+                    elif not (find_control(conversation_after,["Message composer","Edit message composer","Chat message composer area"])
+                              or find_control(conversation_after,["No messages here yet"])):
+                        FAILURES.append("real private-chat deep link did not enter ConversationPanel")
+                        conversation_after=""
+                    else:
+                        screenshot("private-chat-inside.png")
+                        report.append("- PASS real private chat destination opened for an existing FYNX user")
+                else:
+                    report.append("- BLOCKED private-chat destination proof: no second real FYNX user was discoverable")
                 alive, crashlog = capture_runtime_log("private-chat-process.log")
                 screenshot("private-chat-after-open.png")
                 report.append("- Chat process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
@@ -489,6 +550,23 @@ if not FAILURES:
                     groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["Groups","New group"])
                     if groups_tab:
                         group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
+                        if not group_after:
+                            create_control=find_control(groups_tab,["New group","Create group"])
+                            if create_control:
+                                _,cx,cy=create_control
+                                run("adb","shell","input","tap",str(cx),str(cy)); time.sleep(.8)
+                                dialog=dump_ui("group-create-dialog.xml")
+                                fields=find_edit_fields(dialog)
+                                if len(fields)>=2:
+                                    run("adb","shell","input","tap",str(fields[0][0]),str(fields[0][1])); input_text("CI Chat Recovery Group")
+                                    run("adb","shell","input","tap",str(fields[1][0]),str(fields[1][1])); input_text("Persistent runtime recovery group")
+                                    dialog=dump_ui("group-create-filled.xml")
+                                    create_btn=find_control(dialog,["Create"])
+                                    if create_btn:
+                                        _,cx,cy=create_btn
+                                        run("adb","shell","input","tap",str(cx),str(cy)); time.sleep(2.0)
+                                        groups_tab=dump_ui("chat-groups-after-ci-create.xml")
+                                        group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
                         group_id=first_local_group_id()
                         alive, crashlog = capture_runtime_log("group-chat-process.log")
                         screenshot("group-chat-after-open.png")
