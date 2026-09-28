@@ -40,10 +40,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.window.Dialog
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -63,7 +60,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     val bubbleLighting = FynxConversationPreferences.chatBubbleLighting(context, chat.username)
     val bubbleGradient = FynxConversationPreferences.chatBubbleGradient(context, chat.username)
     val clipboardManager = LocalClipboardManager.current
-    val conversationScope = remember(chat.username) { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
+    val conversationScope = rememberCoroutineScope()
     var recipientProfile by remember(chat.username) { mutableStateOf<FynxProfileRemoteClient.Profile?>(null) }
     var remoteProfileLoaded by remember(chat.username) { mutableStateOf(false) }
     val resolvedAvatarUri = if (remoteProfileLoaded) {
@@ -231,7 +228,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             networkError = "This conversation has no valid username."
             return@LaunchedEffect
         }
-        runCatching {
+        try {
             currentUserId = FynxBackendClient.currentUserId(context).getOrNull()
             val searchedUser = FynxSocialClient.searchUsers(context, normalizedUsername)
                 .getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalizedUsername, true) }
@@ -266,6 +263,12 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             }
         }.onFailure {
             networkError = it.message ?: "Unable to initialize this conversation."
+            isNewConversation = false
+       
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (error: Exception) {
+            networkError = error.message ?: "Unable to initialize this conversation."
             isNewConversation = false
         }
     }
@@ -310,13 +313,6 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         }
     }
 
-    // The conversation coroutine scope belongs to the chat screen itself, not to
-    // the realtime-client instance. The realtime client is recreated as identity
-    // data resolves; cancelling this scope with that client would make active
-    // callbacks report Compose's "coroutine scope left the composition" error.
-    DisposableEffect(chat.username) {
-        onDispose { conversationScope.cancel() }
-    }
 
     fun startRecording() = microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
     fun cancelRecording() {
