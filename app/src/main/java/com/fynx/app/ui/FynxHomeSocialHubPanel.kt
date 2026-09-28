@@ -68,7 +68,9 @@ fun FynxHomeSocialHubPanel(
     onOpenFindPeople: () -> Unit = {},
     onOpenAi: () -> Unit = {},
     onOpenAuthorProfile: (String) -> Unit = {},
-    onOpenFastCamera: () -> Unit = {}
+    onOpenFastCamera: () -> Unit = {},
+    initialPostId: String? = null,
+    initialCommentId: String? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -453,6 +455,8 @@ fun FynxHomeSocialHubPanel(
     Box(Modifier.fillMaxSize()) {
         HomePanel(
             currentUsername = currentUsername,
+            initialPostId = initialPostId,
+            initialCommentId = initialCommentId,
             onOpenChats = onOpenChats,
             onOpenStories = onOpenStories,
             onOpenProfile = onOpenProfile,
