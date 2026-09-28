@@ -47,6 +47,10 @@ class FynxAppConnectionManager(
     private var generation = 0L
     private var started = false
 
+    private companion object {
+        const val CONNECTED_RECHECK_DELAY_MS = 30_000L
+    }
+
     override fun onStart(owner: LifecycleOwner) {
         if (lifecycleOwner !== owner) {
             lifecycleOwner?.lifecycle?.removeObserver(this)
@@ -123,16 +127,28 @@ class FynxAppConnectionManager(
             return
         }
 
+        // Android may deliver repeated capability callbacks while a network settles.
+        // Keep one probe alive instead of cancelling and restarting it on every callback.
+        if (probeJob?.isActive == true) return
+
         _state.value = State.CONNECTING
-        probeJob?.cancel()
         val currentGeneration = ++generation
         probeJob = scope.launch {
             var attempt = 0
-            while (started && currentGeneration == generation && hasUsableTransport()) {
+            while (started && currentGeneration == generation) {
+                if (!hasUsableTransport()) {
+                    _state.value = State.WAITING_FOR_NETWORK
+                    return@launch
+                }
+
                 val reachable = FynxBackendClient.health(appContext).isSuccess
                 if (reachable && currentGeneration == generation && started && hasUsableTransport()) {
                     _state.value = State.CONNECTED
-                    return@launch
+                    attempt = 0
+                    // Revalidate periodically so a backend outage is reflected without
+                    // requiring a network toggle or app restart.
+                    delay(CONNECTED_RECHECK_DELAY_MS)
+                    continue
                 }
 
                 _state.value = State.CONNECTING
