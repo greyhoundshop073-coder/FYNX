@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
 
 /**
  * Single app-level connection signal for the FYNX shell/header.
@@ -57,14 +58,16 @@ class FynxAppConnectionManager(
     }
 
     override fun onStop(owner: LifecycleOwner) {
-        if (lifecycleOwner === owner) {
-            started = false
-            unregisterCallback()
-            probeJob?.cancel()
-            probeJob = null
-            generation++
-            _state.value = State.WAITING_FOR_NETWORK
-        }
+        if (lifecycleOwner === owner) stop()
+    }
+
+    fun stop() {
+        started = false
+        unregisterCallback()
+        probeJob?.cancel()
+        probeJob = null
+        generation++
+        _state.value = State.WAITING_FOR_NETWORK
     }
 
     fun dispose() {
