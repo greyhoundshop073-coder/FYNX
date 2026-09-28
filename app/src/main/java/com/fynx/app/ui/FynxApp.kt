@@ -131,6 +131,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 profileUser = null
                 openGroup = destination.id
             }
+            is FynxDeepLinkDestination.Post -> { postOpenId = destination.postId; postOpenCommentId = destination.commentId; selected = "Home" }
+            is FynxDeepLinkDestination.Status -> { statusOpenId = destination.statusId; statusOpenOwner = null; selected = "Stories" }
             is FynxDeepLinkDestination.Marketplace -> {
                 openChat = null
                 openGroup = null
