@@ -103,7 +103,7 @@ require('mature text style weight matches viewer','editorWeight = if (font == Fy
 require('mature text preview sizing is responsive','BoxWithConstraints' in mature and 'maxWidth.value' in mature and '.coerceIn(24f, 42f)' in mature and 'text.length > 240' in mature)
 require('status viewer text sizing is responsive','BoxWithConstraints' in timeline and 'maxWidth.value' in timeline and '.coerceIn(24f, 42f)' in timeline and 'text.orEmpty().length > 240' in timeline)
 require('mature photo preview preserves aspect ratio','ImageView.ScaleType.FIT_CENTER' in mature and 'ImageView.ScaleType.CENTER_CROP' not in mature)
-require('status viewer renders media captions','status.type != FynxStatusType.TEXT && !status.text.isNullOrBlank()' in timeline and 'bottom = 154.dp' in timeline)
+require('status viewer renders media captions','status.type != FynxStatusType.TEXT && !status.text.isNullOrBlank()' in timeline and 'status.musicCatalogueId?.let' in timeline and 'status.text.orEmpty()' in timeline and 'maxLines = 3' in timeline and 'padding(horizontal = 12.dp, vertical = 9.dp)' in timeline and 'bottom = 154.dp' not in timeline)
 require('mature text emoji control','EmojiEmotions' in mature and 'showStatusEmoji' in mature)
 require('mature text editor uses responsive full view',('bottom = if (showMediaTools || showColors) 220.dp else 120.dp' in mature or 'bottom = 220.dp' in mature) and 'horizontal = 12.dp' in mature and '.imePadding()' in mature and 'BoxWithConstraints' in mature)
 require('mature composer Android back closes safely','BackHandler(enabled = !publishing && !recording) { onClose() }' in mature)
