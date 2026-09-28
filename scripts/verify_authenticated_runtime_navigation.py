@@ -601,7 +601,11 @@ if not FAILURES:
                         report.append("- Group process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
                         if crashlog: report.append("- Group crash-log evidence captured in group-chat-process.log")
                         if group_after:
-                            report.append("- PASS opening the first real group chat keeps the authenticated app alive")
+                            if find_control(group_after,["Message composer","Edit message composer","Chat message composer area","Messaging is restricted"]):
+                                screenshot("group-chat-inside.png")
+                                report.append("- PASS actual FynxGroupConversationPanel opened; captured group-chat-inside.png")
+                            else:
+                                FAILURES.append("group-chat row did not reach FynxGroupConversationPanel")
                             if group_id:
                                 exercise_notification_route("fynx://group/" + group_id, "group-chat")
                         if group_after and not group_id:
