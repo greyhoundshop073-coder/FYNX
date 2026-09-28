@@ -261,10 +261,6 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             if (!recipientUserId.isNullOrBlank() && !currentUserId.isNullOrBlank()) {
                 realtimeClient.connect()
             }
-        }.onFailure {
-            networkError = it.message ?: "Unable to initialize this conversation."
-            isNewConversation = false
-       
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (error: Exception) {
