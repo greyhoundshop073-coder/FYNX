@@ -30,6 +30,8 @@ def capture_runtime_log(name:str):
     relevant="\n".join(line for line in log_text.splitlines() if any(k in line for k in keywords))
     log_path.write_text(relevant + ("\n" if relevant else ""),encoding="utf-8")
     alive=run("adb","shell","pidof",PACKAGE)
+    if "FATAL EXCEPTION" in relevant or ("Process com.fynx.app" in relevant and "died" in relevant.lower()):
+        FAILURES.append(f"{name} captured a FYNX process crash in logcat")
     return bool((alive.stdout or "").strip()), relevant
 
 def screenshot(name:str):
@@ -164,6 +166,7 @@ def tap_first_message_if_present(xml_text:str, name:str="message-tap")->str:
         return ""
     _,_,node=min(candidates,key=lambda item:(item[0],item[1]))
     x,y=_center(node)
+    run("adb","logcat","-c")
     run("adb","shell","input","tap",str(x),str(y)); time.sleep(1.0)
     after=dump_ui(f"{name}-after-tap.xml")
     if not after:
@@ -205,6 +208,7 @@ def tap_first_real_chat_or_group_if_present(xml_text:str, name:str)->str:
     if not candidates: return ""
     _,_,node=min(candidates,key=lambda item:(item[0],item[1]))
     x,y=_center(node)
+    run("adb","logcat","-c")
     run("adb","shell","input","tap",str(x),str(y)); time.sleep(1.5)
     after=dump_ui(f"{name}-after-open.xml")
     if not after:
@@ -238,6 +242,7 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
     if not control:
         FAILURES.append(name); return ""
     _,x,y=control
+    run("adb","logcat","-c")
     run("adb","shell","input","tap",str(x),str(y))
     next_xml=""
     for _ in range(16):
