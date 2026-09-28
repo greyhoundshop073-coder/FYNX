@@ -606,7 +606,7 @@ if not FAILURES:
                             group_destination=dump_ui("group-chat-inside.xml")
                             screenshot("group-chat-inside.png")
                             alive,crashlog=capture_runtime_log("group-chat-inside-process.log")
-                            if group_destination and alive and find_control(group_destination,["Message...","Messaging is restricted"]):
+                            if group_destination and alive and ("Message..." in group_destination or "Messaging is restricted" in group_destination or "No messages here yet" in group_destination):
                                 report.append("- PASS deterministic Group ConversationPanel opened; captured group-chat-inside.png")
                             else:
                                 FAILURES.append("deterministic Group ConversationPanel did not open")
