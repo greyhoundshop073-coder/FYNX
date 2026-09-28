@@ -80,6 +80,31 @@ object FynxStatusClient {
         }
     }
 
+    suspend fun archive(context: Context): Result<List<FynxStatus>> = runCatching {
+        val raw = FynxBackendClient.get(context, "/api/statuses/archive").getOrThrow()
+        val items = JSONObject(raw).getJSONArray("statuses")
+        buildList {
+            for (i in 0 until items.length()) {
+                val o = items.getJSONObject(i)
+                val type = runCatching { FynxStatusType.valueOf(o.getString("type")) }.getOrNull() ?: continue
+                val font = runCatching { FynxStatusTextFont.valueOf(o.optString("font", "CLASSIC")) }.getOrDefault(FynxStatusTextFont.CLASSIC)
+                val audience = runCatching { FynxStatusAudience.valueOf(o.optString("audience", if (o.optBoolean("privateStatus")) "FRIENDS" else "EVERYONE")) }.getOrDefault(FynxStatusAudience.EVERYONE)
+                val mediaId = o.optString("mediaId").ifBlank { o.optString("media_id") }.ifBlank { null }
+                val mediaUrl = o.optString("mediaUrl").ifBlank { o.optString("media_url") }.ifBlank { mediaId?.let { "/api/media/$it" } }
+                add(FynxStatus(
+                    id=o.getString("id"), ownerUsername=o.getString("ownerUsername"), ownerDisplayName=o.optString("ownerDisplayName"),
+                    type=type, contentUri=mediaUrl, text=o.optString("text").ifBlank { null },
+                    createdAtMillis=o.optLong("createdAtMillis"), expiresAtMillis=o.optLong("expiresAtMillis"),
+                    textStyle=FynxStatusTextStyle(o.optLong("backgroundColor",0xFF111111),o.optLong("foregroundColor",0xFFFFFFFF),font,o.optInt("alignment",1)),
+                    privateStatus=o.optBoolean("privateStatus"), voiceDurationMs=o.optLong("voiceDurationMs",0L), audience=audience,
+                    musicCatalogueId=o.optLong("musicCatalogueId",0L).takeIf { it > 0L },
+                    musicTitle=o.optString("musicTitle").ifBlank { null }, musicArtist=o.optString("musicArtist").ifBlank { null },
+                    musicDurationMs=o.optLong("musicDurationMs",0L).coerceAtLeast(0L)
+                ))
+            }
+        }
+    }
+
     suspend fun interactions(context: Context, statusId: String): Result<FynxStatusInteractions> = runCatching {
         val raw = FynxBackendClient.get(context, "/api/statuses/${statusId.trim()}/interactions").getOrThrow()
         val o = JSONObject(raw)
