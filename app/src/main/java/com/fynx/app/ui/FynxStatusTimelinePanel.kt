@@ -49,7 +49,8 @@ import kotlinx.coroutines.launch
 fun FynxStatusTimelinePanel(
     onCameraClick: () -> Unit = {},
     onCreateClick: () -> Unit = {},
-    openOwnerUsername: String? = null
+    openOwnerUsername: String? = null,
+    openStatusId: String? = null
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val auth = remember(context) { FynxAuthStore.load(context) }
@@ -84,12 +85,12 @@ fun FynxStatusTimelinePanel(
 
     LaunchedEffect(refreshKey) { refresh() }
 
-    LaunchedEffect(statuses, openOwnerUsername) {
-        val target = openOwnerUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
-        val targetStatus = statuses
-            .filterNot(FynxStatus::isExpired)
-            .filter { it.ownerUsername.equals(target, true) }
-            .maxByOrNull { it.createdAtMillis }
+    LaunchedEffect(statuses, openOwnerUsername, openStatusId) {
+        val targetStatus = openStatusId?.trim()?.takeIf { it.isNotBlank() }?.let { id ->
+            statuses.firstOrNull { it.id == id && !it.isExpired() }
+        } ?: openOwnerUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }?.let { target ->
+            statuses.filterNot(FynxStatus::isExpired).filter { it.ownerUsername.equals(target, true) }.maxByOrNull { it.createdAtMillis }
+        }
         if (targetStatus != null) selected = targetStatus
     }
 
