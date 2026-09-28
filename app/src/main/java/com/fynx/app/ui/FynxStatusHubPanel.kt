@@ -60,7 +60,7 @@ private data class FynxRecentMedia(
 
 /** Single Status/Stories surface. */
 @Composable
-fun FynxStatusHubPanel(openOwnerUsername: String? = null) {
+fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var addStatusOpen by remember { mutableStateOf(false) }
@@ -130,6 +130,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null) {
                     // FynxStatusTimelinePanel() remains the single backend Status hub surface.
                     FynxStatusTimelinePanel(
                         openOwnerUsername = openOwnerUsername,
+                        openStatusId = openStatusId,
                         onCameraClick = {
                             if (!cameraOpen) {
                                 cameraError = null
