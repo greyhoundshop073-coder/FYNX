@@ -136,11 +136,15 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         FynxProductionMessaging.history(context, chat.username.removePrefix("@"))
                             .onSuccess { remoteMessages ->
                                 val myId = currentUserId ?: return@onSuccess
-                                val authoritative = remoteMessages.map { remote ->
-                                    FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
-                                        if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
+                                val authoritative = remoteMessages.mapIndexedNotNull { index, remote ->
+                                    runCatching {
+                                        FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
+                                            if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
+                                        }
+                                    }.getOrNull()?.let { message ->
+                                        if (message.id.isBlank()) message.copy(id = "remote-" + index + "-" + message.timestamp) else message
                                     }
-                                }
+                                }.distinctBy { it.id }
                                 val byId = (messages + authoritative).associateBy { it.id }
                                 messages = byId.values.sortedBy { it.timestamp }
                                 networkError = null
