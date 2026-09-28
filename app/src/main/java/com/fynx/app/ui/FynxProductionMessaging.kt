@@ -34,7 +34,16 @@ object FynxProductionMessaging {
     suspend fun history(context: Context, username: String): Result<List<RemoteMessage>> =
         FynxBackendClient.get(context, "/api/messages/${encodePathSegment(username)}").mapCatching { raw ->
             val messages = JSONObject(raw).optJSONArray("messages") ?: JSONArray()
-            buildList { for (index in 0 until messages.length()) add(fromJson(messages.getJSONObject(index))) }
+            buildList {
+                for (index in 0 until messages.length()) {
+                    runCatching { fromJson(messages.getJSONObject(index)) }
+                        .getOrNull()
+                        ?.let { message ->
+                            val safeId = message.id.trim().ifBlank { "remote-$index-${message.timestamp}" }
+                            add(if (message.id == safeId) message else message.copy(id = safeId))
+                        }
+                }
+            }.distinctBy { it.id }
         }
 
     suspend fun uploadMedia(context: Context, uri: Uri, mimeTypeOverride: String? = null): Result<RemoteMedia> = withContext(Dispatchers.IO) {
