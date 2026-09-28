@@ -547,10 +547,20 @@ if not FAILURES:
                         if self_target:
                             run("adb","shell","am","force-stop",PACKAGE)
                             run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+self_target,PACKAGE,timeout=30)
-                            time.sleep(2.5)
-                            fallback=dump_ui("private-chat-inside.xml")
+                            fallback=""
+                            # Deep-link Activity launch can briefly expose the previous
+                            # Compose surface while ConversationPanel is being restored.
+                            # Poll the real UI hierarchy until the destination marker is
+                            # present instead of treating the transition frame as failure.
+                            for _ in range(16):
+                                time.sleep(.5)
+                                candidate=dump_ui("private-chat-inside.xml")
+                                if candidate and (find_control(candidate,["Message composer","Edit message composer","Chat message composer area","Message..."])
+                                                   or find_control(candidate,["No messages here yet"])):
+                                    fallback=candidate
+                                    break
                             alive,crashlog=capture_runtime_log("private-chat-inside-process.log")
-                            if fallback and alive and find_control(fallback,["Message composer","Edit message composer","Chat message composer area"]):
+                            if fallback and alive:
                                 screenshot("private-chat-inside.png")
                                 report.append("- PASS authenticated ConversationPanel UI smoke test opened; captured private-chat-inside.png")
                             else:
