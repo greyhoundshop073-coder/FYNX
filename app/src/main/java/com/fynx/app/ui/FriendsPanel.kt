@@ -155,7 +155,7 @@ private fun RemoteFriendRow(person: FynxSocialClient.User, actionText: String, b
                         OutlinedButton(onClick = onAction, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = actionText }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) { Text(actionText) }
                     } else {
                         Button(onClick = onAction, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = actionText }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 9.dp, vertical = 5.dp)) { Text(actionText) }
-                        OutlinedButton(onClick = onSecondaryAction, modifier = Modifier.heightIn(min = 40.dp), shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 9.dp, vertical = 5.dp)) { Text(secondaryAction) }
+                        OutlinedButton(onClick = onSecondaryAction, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = secondaryAction ?: "Secondary action" }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 9.dp, vertical = 5.dp)) { Text(secondaryAction) }
                     }
                 }
             }
