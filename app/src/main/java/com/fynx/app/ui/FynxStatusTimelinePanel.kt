@@ -100,6 +100,22 @@ fun FynxStatusTimelinePanel(
     val myStatus = latestByOwner.firstOrNull { it.ownerUsername.equals(username, true) }
     val recentUpdates = latestByOwner.filterNot { it.ownerUsername.equals(username, true) }
     var menuOpen by remember { mutableStateOf(false) }
+    var archiveOpen by remember { mutableStateOf(false) }
+    var archivedStatuses by remember { mutableStateOf<List<FynxStatus>>(emptyList()) }
+    var archiveLoading by remember { mutableStateOf(false) }
+    var archiveError by remember { mutableStateOf<String?>(null) }
+
+    fun openArchive() {
+        menuOpen = false
+        archiveOpen = true
+        archiveLoading = true
+        archiveError = null
+        scope.launch {
+            FynxStatusClient.archive(context)
+                .onSuccess { archivedStatuses = it; archiveLoading = false }
+                .onFailure { archiveError = it.message ?: "Unable to load Status archive."; archiveLoading = false }
+        }
+    }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -109,6 +125,7 @@ fun FynxStatusTimelinePanel(
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, "Status menu") }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(text = { Text("Refresh") }, onClick = { menuOpen = false; refreshKey++ })
+                    DropdownMenuItem(text = { Text("Status archive") }, onClick = { openArchive() })
                 }
             }
         }
@@ -227,6 +244,65 @@ private fun StatusAvatar(
         }
     }
 }
+
+    if (archiveOpen) {
+        StatusArchiveDialog(
+            statuses = archivedStatuses,
+            loading = archiveLoading,
+            error = archiveError,
+            onDelete = { status ->
+                scope.launch {
+                    FynxStatusClient.delete(context, status.id)
+                        .onSuccess { archivedStatuses = archivedStatuses.filterNot { it.id == status.id } }
+                        .onFailure { archiveError = it.message ?: "Status deletion failed." }
+                }
+            },
+            onDismiss = { archiveOpen = false }
+        )
+    }
+}
+
+@Composable
+private fun StatusArchiveDialog(
+    statuses: List<FynxStatus>,
+    loading: Boolean,
+    error: String?,
+    onDelete: (FynxStatus) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Status archive") },
+        text = {
+            Box(Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 460.dp)) {
+                when {
+                    loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    error != null -> Text(error, color = MaterialTheme.colorScheme.error)
+                    statuses.isEmpty() -> Text("Your expired Status updates will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(statuses, key = { it.id }) { status ->
+                            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+                                Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(status.text?.ifBlank { null } ?: statusTypeLabel(status.type), maxLines = 2)
+                                        Text(
+                                            formatStatusTimestamp(status.createdAtMillis) + " • Expired",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    TextButton(onClick = { onDelete(status) }) { Text("Delete") }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
+    )
+}
+
 
 @Composable
 private fun StatusHomeRow(
