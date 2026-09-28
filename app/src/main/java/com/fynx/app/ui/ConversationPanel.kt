@@ -628,11 +628,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                     if (message.attachmentUri != null) {
                                         if (message.attachmentType == "video_note") {
                                             Box(Modifier.size(170.dp).clip(androidx.compose.foundation.shape.CircleShape)) {
-                                                FynxRemoteMedia(message.attachmentUri, "video", Modifier.fillMaxSize(), rounded = false, loopVideo = true)
+                                                FynxRemoteMedia(message.attachmentUri, "video", Modifier.fillMaxSize(), rounded = false, loopVideo = true, autoPlay = false)
                                                 Surface(color = glassPalette.background.copy(alpha = 0.62f), contentColor = glassPalette.messageText, shape = androidx.compose.foundation.shape.CircleShape, modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)) { Text("Video note", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageText, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
                                             }
                                         } else {
-                                            FynxRemoteMedia(mediaUrl = message.attachmentUri, type = message.attachmentType ?: "image", modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp))
+                                            FynxRemoteMedia(mediaUrl = message.attachmentUri, type = message.attachmentType ?: "image", modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp), autoPlay = false)
                                         }
                                     }
                                     if (message.text.isNotBlank()) SelectionContainer { Text(message.text, color = glassPalette.messageText, fontSize = messageTextSizeSp.sp) }
