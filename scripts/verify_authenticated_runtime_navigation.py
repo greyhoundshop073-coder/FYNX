@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Certify the authenticated FYNX runtime journey with a real CI test account."""
+# Keep authenticated recovery coverage enabled after detector corrections.
 # Recovery runtime: rerun authenticated Chat/Groups coverage after navigation-detector fixes.
 from __future__ import annotations
 import os, subprocess, time, html, re
