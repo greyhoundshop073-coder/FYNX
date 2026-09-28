@@ -31,7 +31,9 @@ fun HomePanel(
     onOpenFastCamera: () -> Unit = onOpenCamera,
     onOpenStatusOwner: (String) -> Unit = {},
     onCreatePost: () -> Unit = {},
-    onOpenAuthorProfile: (String) -> Unit = {}
+    onOpenAuthorProfile: (String) -> Unit = {},
+    initialPostId: String? = null,
+    initialCommentId: String? = null
 ) {
     val displayUsername = currentUsername.trim().removePrefix("@").trim()
     var showCreateMenu by remember { mutableStateOf(false) }
@@ -57,6 +59,8 @@ fun HomePanel(
                         onOpenMarketplace = onOpenMarketplace,
                         onCreatePost = { showCreateMenu = true },
                         onOpenAuthorProfile = onOpenAuthorProfile,
+                        initialPostId = initialPostId,
+                        initialCommentId = initialCommentId,
                         header = {
                             FynxVisibleUpdatesPanel(
                                 currentUsername = displayUsername,
