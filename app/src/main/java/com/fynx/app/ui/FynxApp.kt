@@ -52,6 +52,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var openGroup by remember { mutableStateOf<String?>(null) }
     var profileUser by remember { mutableStateOf<String?>(null) }
     var statusOpenOwner by remember { mutableStateOf<String?>(null) }
+    var statusOpenId by remember { mutableStateOf<String?>(null) }
+    var postOpenId by remember { mutableStateOf<String?>(null) }
+    var postOpenCommentId by remember { mutableStateOf<String?>(null) }
     var callTarget by remember { mutableStateOf<String?>(null) }
     var callVideo by remember { mutableStateOf(false) }
     var marketplaceListingId by remember { mutableStateOf<String?>(null) }
@@ -69,7 +72,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var homeCameraRequest by remember { mutableIntStateOf(0) }
     var navigationDirection by remember { mutableIntStateOf(1) }
     DisposableEffect(Unit) {
-        FynxStatusNavigation.opener = { username -> statusOpenOwner = username; selected = "Stories" }
+        FynxStatusNavigation.opener = { username -> statusOpenOwner = username; statusOpenId = null; selected = "Stories" }
         onDispose { if (FynxStatusNavigation.opener != null) FynxStatusNavigation.opener = null }
     }
 
@@ -396,7 +399,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     label = "FYNX page swipe"
                 ) { page ->
                     when (page) {
-            "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { statusOpenOwner = null; selected = "Stories" }, onOpenStatusOwner = { statusOpenOwner = it; selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it })
+            "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { statusOpenOwner = null; selected = "Stories" }, onOpenStatusOwner = { statusOpenOwner = it; selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it }, initialPostId = postOpenId, initialCommentId = postOpenCommentId)
             "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" }, onOpenContacts = { selected = "Contacts" })
             "Friends" -> FriendsPanel(
                 onOpenProfile = { profileUser = it },
@@ -428,7 +431,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Features" -> FynxFeaturesPanel(isAdmin = adminRole != null, onSelect = { if (it != "Admin" || adminRole != null) selected = it })
             "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
             "Calendar" -> CalendarPanel()
-            "Stories" -> FynxStatusHubPanel(openOwnerUsername = statusOpenOwner)
+            "Stories" -> FynxStatusHubPanel(openOwnerUsername = statusOpenOwner, openStatusId = statusOpenId)
             "Gifts" -> GiftsPanel()
             "Groups" -> FynxGroupsPanel(currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", onOpenGroup = { openGroup = it })
             "Notifications" -> NotificationPanel(
@@ -442,7 +445,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         FynxNotificationType.FOLLOW, FynxNotificationType.FRIEND_REQUEST -> notification.sourceUsername?.takeIf { it.isNotBlank() }?.let { "fynx://profile/" + Uri.encode(it) }
                         FynxNotificationType.MESSAGE -> notification.sourceUsername?.takeIf { it.isNotBlank() }?.let { "fynx://chat/" + Uri.encode(it) }
                         FynxNotificationType.GROUP -> notification.targetId?.takeIf { it.isNotBlank() }?.let { "fynx://group/" + Uri.encode(it) }
-                        FynxNotificationType.STORY -> notification.targetId?.takeIf { it.isNotBlank() }?.let { "fynx://status/" + Uri.encode(it) }
+                        FynxNotificationType.STORY -> notification.route?.takeIf { it.isNotBlank() } ?: notification.targetId?.takeIf { it.isNotBlank() }?.let { "fynx://status/" + Uri.encode(it) }
+                        FynxNotificationType.COMMENT, FynxNotificationType.REACTION -> notification.route?.takeIf { it.isNotBlank() } ?: notification.targetId?.takeIf { it.isNotBlank() }?.let { "fynx://post/" + Uri.encode(it) }
                         else -> "fynx://home"
                     } ?: "fynx://home"
                     when (val destination = FynxDeepLinkParser.parse(Uri.parse(route))) {
@@ -460,6 +464,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         }
                         is FynxDeepLinkDestination.Call -> { callTarget = destination.username; callVideo = destination.video; selected = "Calls" }
                         is FynxDeepLinkDestination.Group -> openGroup = destination.id
+                        is FynxDeepLinkDestination.Post -> { postOpenId = destination.postId; postOpenCommentId = destination.commentId; selected = "Home" }
+                        is FynxDeepLinkDestination.Status -> { statusOpenId = destination.statusId; statusOpenOwner = null; selected = "Stories" }
                         is FynxDeepLinkDestination.Marketplace -> { marketplaceListingId = destination.listingId; selected = "Marketplace" }
                         FynxDeepLinkDestination.Stories -> selected = "Stories"
                         FynxDeepLinkDestination.Money -> selected = "Money Tools"
