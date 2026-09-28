@@ -139,7 +139,7 @@ def tap_first_message_if_present(xml_text:str, name:str="message-tap")->str:
     def walk(node):
         path.append(node)
         text=(node.attrib.get("text") or "").strip()
-        normalized=text.lower().replace("＋","").replace("+","").strip()\n        if text and normalized not in excluded and not any(item in normalized for item in ("create group","phone contacts","search chats","archived","no groups found","your private conversations","start one with")) and node.attrib.get("visible-to-user","true").lower()!="false":
+        if text and text.lower() not in excluded and node.attrib.get("visible-to-user","true").lower()!="false":
             for ancestor in reversed(path):
                 if ancestor.attrib.get("clickable","false").lower()=="true" and _center(ancestor):
                     left_top,right_bottom=ancestor.attrib.get("bounds","").split("][",1)
@@ -182,7 +182,7 @@ def tap_first_real_chat_or_group_if_present(xml_text:str, name:str)->str:
     def walk(node):
         path.append(node)
         text=(node.attrib.get("text") or "").strip()
-        if text and text.lower() not in excluded and node.attrib.get("visible-to-user","true").lower()!="false":
+        normalized=text.lower().replace("＋","").replace("+","").strip()\n        if text and normalized not in excluded and not any(item in normalized for item in ("create group","phone contacts","search chats","archived","no groups found","your private conversations","start one with")) and node.attrib.get("visible-to-user","true").lower()!="false":
             for ancestor in reversed(path):
                 if ancestor.attrib.get("clickable","false").lower()=="true" and _center(ancestor):
                     bounds=ancestor.attrib.get("bounds","")
