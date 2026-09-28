@@ -420,31 +420,6 @@ private fun FynxStatusStoryViewer(
                     }
                 }
 
-                if (status.type != FynxStatusType.TEXT && !status.text.isNullOrBlank()) {
-                    Surface(
-                        color = Color.Black.copy(alpha = 0.62f),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .imePadding()
-                            .padding(start = 18.dp, end = 18.dp, bottom = 154.dp)
-                    ) {
-                        Text(
-                            status.text.orEmpty(),
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 4,
-                            modifier = Modifier
-                                .heightIn(max = 132.dp)
-                                .verticalScroll(rememberScrollState())
-                                .padding(horizontal = 14.dp, vertical = 10.dp)
-                        )
-                    }
-                }
-
                 // Top overlay stays readable over every status type.
                 Column(
                     Modifier
@@ -549,9 +524,29 @@ private fun FynxStatusStoryViewer(
                     Column(
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 9.dp),
-                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                            .padding(horizontal = 12.dp, vertical = 9.dp)
+                            .imePadding(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        if (status.type != FynxStatusType.TEXT && !status.text.isNullOrBlank()) {
+                            Surface(
+                                color = Color.White.copy(alpha = 0.10f),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    status.text.orEmpty(),
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 3,
+                                    modifier = Modifier
+                                        .heightIn(max = 96.dp)
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(horizontal = 12.dp, vertical = 9.dp)
+                                )
+                            }
+                        }
                         status.musicCatalogueId?.let { musicId ->
                             Surface(
                                 color = Color.White.copy(alpha = 0.10f),
@@ -721,7 +716,13 @@ private fun StatusViewerText(status: FynxStatus) {
     }
     val weight = if (status.textStyle.font == FynxStatusTextFont.BOLD) FontWeight.Bold else FontWeight.Normal
     val textAlign = when (status.textStyle.alignment) { 0 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
-    BoxWithConstraints(Modifier.fillMaxSize().background(Color(status.textStyle.backgroundColor)), contentAlignment = Alignment.Center) {
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .background(Color(status.textStyle.backgroundColor))
+            .padding(top = 96.dp, bottom = 190.dp),
+        contentAlignment = Alignment.Center
+    ) {
         val baseSize = (maxWidth.value * 0.085f).coerceIn(24f, 42f)
         val scale = when {
             status.text.orEmpty().length > 420 -> 0.72f
