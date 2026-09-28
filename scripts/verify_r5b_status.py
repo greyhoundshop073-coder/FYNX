@@ -78,7 +78,7 @@ require('Status composer does not publish local file path','FynxStatusClient.cre
 require('remote media requires authenticated account','FynxAuthStore.accountStorageKey(context) ?: return null' in remote_media and 'FynxBackendClient.hasAccessToken(context)' in remote_media)
 require('remote media uses authenticated download','FynxBackendClient.downloadToFile(context, resolvedUrl, destination, MAX_REMOTE_MEDIA_BYTES)' in remote_media)
 require('remote media has size cap','MAX_REMOTE_MEDIA_BYTES = 12L * 1024L * 1024L' in remote_media)
-require('remote image renderer','BitmapFactory.decodeFile(target.absolutePath)' in remote_media and 'ContentScale.Crop' in remote_media)
+require('remote image renderer',('BitmapFactory.decodeFile(target.absolutePath, bounds)' in remote_media or 'BitmapFactory.decodeFile(target.absolutePath)' in remote_media) and 'inSampleSize' in remote_media and 'ContentScale.Crop' in remote_media)
 require('remote video renderer','VideoView(ctx)' in remote_media and 'setVideoPath(file.absolutePath)' in remote_media)
 require('remote audio renderer',contains_remote_audio_renderer(remote_media))
 require('media privacy guard installed','app.use("/api/media", mediaGuard)' in media_privacy)
