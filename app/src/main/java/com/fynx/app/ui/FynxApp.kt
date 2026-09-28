@@ -78,11 +78,15 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         FynxStatusNavigation.opener = { username -> statusOpenOwner = username; statusOpenId = null; selected = "Stories" }
         onDispose { if (FynxStatusNavigation.opener != null) FynxStatusNavigation.opener = null }
     }
+    DisposableEffect(Unit) {
+        onDispose { appConnectionManager.dispose() }
+    }
     DisposableEffect(lifecycleOwner, authSession.state) {
         if (authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) {
             lifecycleOwner.lifecycle.addObserver(appConnectionManager)
         }
         onDispose {
+            appConnectionManager.stop()
             lifecycleOwner.lifecycle.removeObserver(appConnectionManager)
         }
     }
