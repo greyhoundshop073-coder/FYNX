@@ -114,7 +114,7 @@ export async function installSocialPostReactions() {
           message: reactionMessage,
           targetId: postId,
           sourceUsername: reactionContext.actor_username || null,
-          route: 'fynx://home',
+          route: 'fynx://post/' + postId,
           notificationId: 'post-reaction-' + postId + '-' + req.user.sub + '-' + Date.now() + '-' + Math.random().toString(36).slice(2,8)
         });
       }
