@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Certify the authenticated FYNX runtime journey with a real CI test account."""
+# Recovery runtime: rerun authenticated Chat/Groups coverage after navigation-detector fixes.
 from __future__ import annotations
 import os, subprocess, time, html, re
 import xml.etree.ElementTree as ET
