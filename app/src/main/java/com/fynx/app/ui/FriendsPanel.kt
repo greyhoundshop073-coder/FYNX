@@ -142,7 +142,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
 private fun RemoteFriendRow(person: FynxSocialClient.User, actionText: String, busy: Boolean, onOpenProfile: (String) -> Unit, onOpenChat: (String) -> Unit = {}, secondaryAction: String? = null, onAction: () -> Unit, onSecondaryAction: () -> Unit = {}) {
     Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { onOpenProfile(person.username) }, modifier = Modifier.size(48.dp).semantics(mergeDescendants = true) { contentDescription = "Open ${person.username} profile" }) { FynxRemoteProfileAvatar(mediaId = person.profilePhotoMediaId, contentDescription = person.displayName.ifBlank { person.username }, modifier = Modifier.size(42.dp), ownerUsername = person.username) }
+            IconButton(onClick = { onOpenProfile(person.username) }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = "Open ${person.username} profile" }) { FynxRemoteProfileAvatar(mediaId = person.profilePhotoMediaId, contentDescription = person.displayName.ifBlank { person.username }, modifier = Modifier.size(42.dp), ownerUsername = person.username) }
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) { Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.titleSmall, maxLines = 1); Text(if (person.username.startsWith("@")) person.username else "@${person.username}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1) }
             if (busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
@@ -152,9 +152,9 @@ private fun RemoteFriendRow(person: FynxSocialClient.User, actionText: String, b
                         Icon(Icons.Default.ChatBubbleOutline, contentDescription = "Open chat")
                     }
                     if (secondaryAction == null) {
-                        OutlinedButton(onClick = onAction, modifier = Modifier.heightIn(min = 40.dp), shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) { Text(actionText) }
+                        OutlinedButton(onClick = onAction, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = actionText }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) { Text(actionText) }
                     } else {
-                        Button(onClick = onAction, modifier = Modifier.heightIn(min = 40.dp), shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 9.dp, vertical = 5.dp)) { Text(actionText) }
+                        Button(onClick = onAction, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = actionText }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 9.dp, vertical = 5.dp)) { Text(actionText) }
                         OutlinedButton(onClick = onSecondaryAction, modifier = Modifier.heightIn(min = 40.dp), shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 9.dp, vertical = 5.dp)) { Text(secondaryAction) }
                     }
                 }
