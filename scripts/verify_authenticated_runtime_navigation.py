@@ -206,6 +206,19 @@ def tap_first_real_chat_or_group_if_present(xml_text:str, name:str)->str:
     after=dump_ui(f"{name}-after-open.xml")
     if not after:
         FAILURES.append(name+" caused the authenticated app to exit or lose its UI")
+        return ""
+    # The old certification accepted the parent list as a successful navigation.
+    # Require destination-specific UI markers so a false GREEN cannot hide a crash.
+    if name == "private-chat-entry":
+        if not (find_control(after, ["Message composer", "Edit message composer", "Chat message composer area"])
+                or find_control(after, ["No messages here yet"])):
+            FAILURES.append(name+" did not enter ConversationPanel; destination UI markers were absent")
+            return ""
+    if name == "group-chat-entry":
+        if not (find_control(after, ["Message composer", "Chat message composer area"])
+                or find_control(after, ["Messaging is restricted", "No messages here yet"])):
+            FAILURES.append(name+" did not enter FynxGroupConversationPanel; destination UI markers were absent")
+            return ""
     return after
 
 def find_edit_fields(xml_text:str):
