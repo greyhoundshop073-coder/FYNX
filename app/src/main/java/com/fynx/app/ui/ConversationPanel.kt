@@ -40,6 +40,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -59,7 +63,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     val bubbleLighting = FynxConversationPreferences.chatBubbleLighting(context, chat.username)
     val bubbleGradient = FynxConversationPreferences.chatBubbleGradient(context, chat.username)
     val clipboardManager = LocalClipboardManager.current
-    val conversationScope = rememberCoroutineScope()
+    val conversationScope = remember(chat.username) { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
     var recipientProfile by remember(chat.username) { mutableStateOf<FynxProfileRemoteClient.Profile?>(null) }
     var remoteProfileLoaded by remember(chat.username) { mutableStateOf(false) }
     val resolvedAvatarUri = if (remoteProfileLoaded) {
@@ -304,6 +308,14 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             runCatching { recorder?.stop() }
             recorder?.release(); player?.release()
         }
+    }
+
+    // The conversation coroutine scope belongs to the chat screen itself, not to
+    // the realtime-client instance. The realtime client is recreated as identity
+    // data resolves; cancelling this scope with that client would make active
+    // callbacks report Compose's "coroutine scope left the composition" error.
+    DisposableEffect(chat.username) {
+        onDispose { conversationScope.cancel() }
     }
 
     fun startRecording() = microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
