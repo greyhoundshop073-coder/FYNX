@@ -136,7 +136,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             onStateChanged = { state ->
                 realtimeState = state
                 if (state == FynxRealtimeClient.State.CONNECTED && !currentUserId.isNullOrBlank()) {
-                    scope.launch {
+                    conversationScope.launch {
                         FynxProductionMessaging.history(context, chat.username.removePrefix("@"))
                             .onSuccess { remoteMessages ->
                                 val myId = currentUserId ?: return@onSuccess
@@ -254,7 +254,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     val unread = remoteMessages.filter { it.recipientId == myId && !it.read }.map { it.id }
                     if (unread.isNotEmpty()) {
                         realtimeClient.sendRead(unread)
-                        scope.launch { FynxProductionMessaging.markRead(context, unread) }
+                        conversationScope.launch { FynxProductionMessaging.markRead(context, unread) }
                     }
                 }
                 .onFailure {
@@ -322,7 +322,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         runCatching { r.stop() }; r.release(); recorder = null; isRecordingPaused = false; isRecording = false; recordingFile = null; recordingElapsed = 0L
         if (file != null && file.exists() && file.length() > 0L && duration >= 300L) {
             val pendingFile = file
-            scope.launch {
+            conversationScope.launch {
                 sending = true
                 networkError = null
                 FynxProductionMessaging.uploadMedia(context, Uri.fromFile(pendingFile), "audio/mp4")
@@ -356,7 +356,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         player?.release()
         player = null
         playingVoiceId = null
-        scope.launch {
+        conversationScope.launch {
             val localUri = if (voiceUrl.startsWith("http://") || voiceUrl.startsWith("https://") || voiceUrl.startsWith("/api/")) {
                 val mediaId = message.mediaId ?: voiceUrl.substringAfterLast('/').takeIf { it.isNotBlank() }
                 if (mediaId == null) {
@@ -400,7 +400,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         val value = text.trim()
         if (value.isBlank() && attachment == null || sending) return
         sending = true
-        scope.launch {
+        conversationScope.launch {
             if (editingId != null) {
                 FynxProductionMessaging.editMessage(context, editingId!!, value)
                     .onSuccess { remote ->
@@ -529,7 +529,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     TextButton(
                         enabled = !sending,
                         onClick = {
-                            scope.launch {
+                            conversationScope.launch {
                                 sending = true
                                 FynxSocialClient.sendRequest(context, chat.username.removePrefix("@"))
                                     .onSuccess { networkError = "Contact request sent." }
@@ -542,7 +542,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     TextButton(
                         enabled = !sending,
                         onClick = {
-                            scope.launch {
+                            conversationScope.launch {
                                 sending = true
                                 FynxSocialClient.block(context, chat.username.removePrefix("@"))
                                     .onSuccess { networkError = "User blocked."; onBack() }
@@ -560,7 +560,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
         if (searchOpen) OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search messages…") })
         pinnedMessage?.let { pinned ->
-            Surface(onClick = { searchQuery = ""; val index = messages.indexOfFirst { it.id == pinned.id }; if (index >= 0) scope.launch { messageListState.animateScrollToItem(index) } }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), color = glassPalette.backgroundMid.copy(alpha = 0.96f), contentColor = glassPalette.messageText, shape = RoundedCornerShape(12.dp)) {
+            Surface(onClick = { searchQuery = ""; val index = messages.indexOfFirst { it.id == pinned.id }; if (index >= 0) conversationScope.launch { messageListState.animateScrollToItem(index) } }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), color = glassPalette.backgroundMid.copy(alpha = 0.96f), contentColor = glassPalette.messageText, shape = RoundedCornerShape(12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.PushPin, "Pinned message", tint = glassPalette.doodleSecondary, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) { Text("Pinned message", style = MaterialTheme.typography.labelMedium, color = glassPalette.doodleSecondary); Text(pinned.text.ifBlank { "Media message" }, maxLines = 1, style = MaterialTheme.typography.bodySmall, color = glassPalette.messageText) }
@@ -669,7 +669,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                             TextButton(
                                 onClick = {
                                     menuMessageId = null
-                                    scope.launch {
+                                    conversationScope.launch {
                                         FynxProductionMessaging.reactToMessage(
                                             context,
                                             message.id,
@@ -713,7 +713,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     TextButton(
                         onClick = {
                             menuMessageId = null
-                            scope.launch {
+                            conversationScope.launch {
                                 FynxProductionMessaging.setPinned(context, message.id, !message.pinned)
                                     .onSuccess { remote ->
                                         currentUserId?.let { myId ->
@@ -738,7 +738,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     ) { Text("Forward") }
                     TextButton(
                         onClick = {
-                            scope.launch {
+                            conversationScope.launch {
                                 FynxProductionMessaging.deleteMessage(context, message.id)
                                     .onSuccess {
                                         messages = messages.map { existing ->
@@ -940,7 +940,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         val messageId = forwardMessageId
                         if (messageId == null || forwardUsername.isBlank() || sending) return@TextButton
                         sending = true
-                        scope.launch {
+                        conversationScope.launch {
                             FynxProductionMessaging.forwardMessage(context, messageId, forwardUsername)
                                 .onSuccess {
                                     networkError = null
