@@ -32,7 +32,7 @@ private const val MAX_COMMENT_LENGTH = 1000
 private const val COMMENT_PAGE_SIZE = 50
 
 @Composable
-fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -> Unit, onCommentCountChanged: (Int) -> Unit = {}) {
+fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommentId: String? = null, onClose: () -> Unit, onCommentCountChanged: (Int) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -49,6 +49,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
     var replyErrorId by remember(post.id) { mutableStateOf<String?>(null) }
     var expandedReplies by remember(post.id) { mutableStateOf<Map<String, List<FynxRemoteSocialClient.RemoteComment>>>(emptyMap()) }
     var authorPhotos by remember(post.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
+    var highlightedCommentId by remember(post.id, initialCommentId) { mutableStateOf(initialCommentId) }
     val consumedCursors = remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
     val replyingTo = replyingToId?.let { id -> comments.firstOrNull { it.id == id } }
 
@@ -74,6 +75,20 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, onClose: () -
                 .onSuccess { page -> comments = page.comments.distinctBy { it.id }; resolveCommenterPhotos(comments); nextCursor = page.nextCursor }
                 .onFailure { failure -> comments = emptyList(); error = if (failure.message?.contains("404") == true) "This post is no longer available." else failure.message ?: "Unable to load comments." }
             loading = false
+        }
+    }
+    LaunchedEffect(comments, highlightedCommentId) {
+        val targetId = highlightedCommentId ?: return@LaunchedEffect
+        val target = comments.firstOrNull { it.id == targetId } ?: return@LaunchedEffect
+        val parentId = target.parentCommentId
+        if (parentId != null && expandedReplies[parentId].orEmpty().none { it.id == targetId }) {
+            expandedReplies = expandedReplies + (parentId to ((expandedReplies[parentId].orEmpty() + target).distinctBy { it.id }))
+        }
+        val topLevel = comments.filter { it.parentCommentId == null }
+        val index = topLevel.indexOfFirst { it.id == (parentId ?: targetId) }
+        if (index >= 0) {
+            listState.animateScrollToItem(index + if (nextCursor != null) 1 else 0)
+            highlightedCommentId = null
         }
     }
     fun loadMore() {
