@@ -522,7 +522,7 @@ if not FAILURES:
                     time.sleep(2.5)
                     home_for_chat=dismiss_runtime_permission_prompt() or dump_ui("private-chat-fallback-home.xml")
                     friends_surface=tap_control(home_for_chat,["Friends"],"private-chat-fallback-friends",["Friends"])
-                    candidate=first_username_in_xml(friends_surface)
+                    candidate=first_username_in_xml(friends_surface) or USERNAME
                     if candidate:
                         route_username=candidate.removeprefix("@").strip()
                         run("adb","shell","am","force-stop",PACKAGE)
@@ -583,8 +583,10 @@ if not FAILURES:
                             if create:
                                 _,gx,gy=create
                                 run("adb","shell","logcat","-c")
-                                run("adb","shell","input","tap",str(gx),str(gy)); time.sleep(.8)
+                                run("adb","shell","input","tap",str(gx),str(gy)); time.sleep(1.2)
                                 dialog=dump_ui("group-create-dialog.xml")
+                                if len(find_edit_fields(dialog)) < 2:
+                                    dialog=tap_control(groups_tab,["Create group","New group"],"group-create-retry",["Group name","Description"])
                                 name=find_control(dialog,["Group name"]); desc=find_control(dialog,["Description"])
                                 if name and desc:
                                     _,nx,ny=name; run("adb","shell","input","tap",str(nx),str(ny)); input_text("CI Runtime Group")
