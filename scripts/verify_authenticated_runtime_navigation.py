@@ -454,7 +454,28 @@ if not FAILURES:
                     elif MESSAGE_TAP_SKIPPED:
                         report.append("- PASS message-action test not run because the opened real conversation has no real message; no test data was fabricated")
                 else:
-                    report.append("- PASS private-chat entry test skipped because the authenticated account has no real private conversation; no test data was fabricated")
+                    # If the Chats list is empty, use a real person exposed by the
+                    # authenticated Friends surface and open the production Chat route.
+                    run("adb","shell","am","force-stop",PACKAGE)
+                    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
+                    time.sleep(2.5)
+                    home_for_chat=dismiss_runtime_permission_prompt() or dump_ui("private-chat-fallback-home.xml")
+                    friends_surface=tap_control(home_for_chat,["Friends"],"private-chat-fallback-friends",["Friends"])
+                    candidate=first_username_in_xml(friends_surface)
+                    if candidate:
+                        route_username=candidate.removeprefix("@").strip()
+                        run("adb","shell","am","force-stop",PACKAGE)
+                        run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+route_username,PACKAGE)
+                        time.sleep(2.5)
+                        fallback=dump_ui("private-chat-inside.xml")
+                        screenshot("private-chat-inside.png")
+                        alive,crashlog=capture_runtime_log("private-chat-inside-process.log")
+                        if fallback and alive and find_control(fallback,["Message...","Messaging is restricted"]):
+                            report.append("- PASS actual private ConversationPanel opened; captured private-chat-inside.png")
+                        else:
+                            FAILURES.append("private-chat fallback did not reach ConversationPanel")
+                    else:
+                        FAILURES.append("no real FYNX user was available for private-chat certification")
                 if private_chat_username:
                     route_username=private_chat_username.removeprefix("@").strip()
                     if route_username:
@@ -478,7 +499,43 @@ if not FAILURES:
                             if group_id:
                                 exercise_notification_route("fynx://group/" + group_id, "group-chat")
                         else:
-                            report.append("- PASS group-chat entry test skipped because the authenticated account has no real group; no test data was fabricated")
+                            # No existing group: create one through the production Groups
+                            # dialog, sync it to the backend, then open that real group.
+                            create=find_control(groups_tab,["Create group","New group"])
+                            if create:
+                                _,gx,gy=create
+                                run("adb","shell","logcat","-c")
+                                run("adb","shell","input","tap",str(gx),str(gy)); time.sleep(.8)
+                                dialog=dump_ui("group-create-dialog.xml")
+                                name=find_control(dialog,["Group name"]); desc=find_control(dialog,["Description"])
+                                if name and desc:
+                                    _,nx,ny=name; run("adb","shell","input","tap",str(nx),str(ny)); input_text("CI Runtime Group")
+                                    _,dx,dy=desc; run("adb","shell","input","tap",str(dx),str(dy)); input_text("Authenticated group conversation runtime test")
+                                    dialog=dump_ui("group-create-filled.xml")
+                                    create_button=find_control(dialog,["Create"])
+                                    if create_button:
+                                        _,cx,cy=create_button
+                                        run("adb","shell","input","tap",str(cx),str(cy)); time.sleep(3)
+                                        group_id=first_local_group_id()
+                                        if group_id:
+                                            run("adb","shell","am","force-stop",PACKAGE)
+                                            run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/"+group_id,PACKAGE)
+                                            time.sleep(2.5)
+                                            fallback=dump_ui("group-chat-inside.xml")
+                                            screenshot("group-chat-inside.png")
+                                            alive,crashlog=capture_runtime_log("group-chat-inside-process.log")
+                                            if fallback and alive and find_control(fallback,["Message...","Messaging is restricted"]):
+                                                report.append("- PASS actual FynxGroupConversationPanel opened; captured group-chat-inside.png")
+                                            else:
+                                                FAILURES.append("group creation succeeded but Group ConversationPanel did not open")
+                                        else:
+                                            FAILURES.append("group creation did not produce a local group id")
+                                    else:
+                                        FAILURES.append("group creation dialog did not expose Create")
+                                else:
+                                    FAILURES.append("group creation dialog did not expose Group name and Description")
+                            else:
+                                FAILURES.append("Groups surface did not expose Create group")
                         if group_after and not group_id:
                             report.append("- PASS group notification-route test skipped because the real group ID could not be read from the authenticated app store; no test data was fabricated")
                     else:
