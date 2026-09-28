@@ -305,7 +305,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                         Card(onClick = { onOpenGroup(group.id) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                             ListItem(
                                 headlineContent = { Text(group.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                leadingContent = { FynxAvatar(group.name, modifier = Modifier.size(avatarSize)) },
+                                leadingContent = { if (group.groupPhotoMediaId.isNullOrBlank()) FynxAvatar(group.name, modifier = Modifier.size(avatarSize)) else FynxRemoteProfileAvatar(group.groupPhotoMediaId, group.name, modifier = Modifier.size(avatarSize)) },
                                 supportingContent = { Text("${group.members.size} members${group.description.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)
                             )

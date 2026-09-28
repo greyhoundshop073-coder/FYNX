@@ -709,6 +709,15 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
     val isAdmin = myRole == FynxGroupRole.ADMIN
     val prefs = remember(current.id) { FynxConversationPreferences.group(context, current.id) }
     val canAddMembers = isAdmin || prefs.getBoolean("add_members", true)
+    val memberPhotoIds = remember(current.members) { mutableStateMapOf<String, String?>() }
+    LaunchedEffect(current.members.map { it.username }) {
+        current.members.forEach { member ->
+            val normalized = member.username.removePrefix("@").trim()
+            if (normalized.isNotBlank() && !memberPhotoIds.containsKey(normalized)) {
+                memberPhotoIds[normalized] = FynxProfileRemoteClient.get(context, normalized).getOrNull()?.profilePhotoMediaId
+            }
+        }
+    }
     FynxPlainDialog(onDismissRequest = onDismiss, title = { Text("Members • ${current.members.size}", style = MaterialTheme.typography.headlineSmall) }, text = {
         Column {
             if (canManage && canAddMembers) Row(verticalAlignment = Alignment.CenterVertically) {
@@ -727,6 +736,13 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
                 items(current.members, key = { it.username }) { member ->
                     val blocked = management.value.state.blockedUsernames.contains(member.username)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        FynxRemoteProfileAvatar(
+                            mediaId = memberPhotoIds[member.username.removePrefix("@").trim()],
+                            contentDescription = member.username,
+                            modifier = Modifier.size(38.dp),
+                            ownerUsername = member.username
+                        )
+                        Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) { Text(member.username, style = MaterialTheme.typography.titleSmall); Text(if (blocked) "Blocked" else member.role.name.lowercase().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         if (canManage && member.username != current.ownerUsername) {
                             TextButton(onClick = {
