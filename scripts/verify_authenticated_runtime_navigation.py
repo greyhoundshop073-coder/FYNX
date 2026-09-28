@@ -608,6 +608,21 @@ if not FAILURES:
                                 FAILURES.append("group-chat row did not reach FynxGroupConversationPanel")
                             if group_id:
                                 exercise_notification_route("fynx://group/" + group_id, "group-chat")
+                        if not group_after:
+                            # The authenticated CI account may have no persisted group.
+                            # Exercise the actual production Group ConversationPanel route
+                            # with a deterministic destination ID so the screen itself is
+                            # still certified rather than silently skipped.
+                            run("adb","shell","am","force-stop",PACKAGE)
+                            run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/ci-runtime-group",PACKAGE)
+                            time.sleep(2.5)
+                            group_destination=dump_ui("group-chat-inside.xml")
+                            screenshot("group-chat-inside.png")
+                            alive,crashlog=capture_runtime_log("group-chat-inside-process.log")
+                            if group_destination and alive and find_control(group_destination,["Message...","Messaging is restricted"]):
+                                report.append("- PASS deterministic Group ConversationPanel opened; captured group-chat-inside.png")
+                            else:
+                                FAILURES.append("deterministic Group ConversationPanel did not open")
                         if group_after and not group_id:
                             report.append("- PASS group notification-route test skipped because the real group ID could not be read from the authenticated app store; no test data was fabricated")
                     else:
