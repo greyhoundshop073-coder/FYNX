@@ -46,6 +46,9 @@ private data class FynxNavItem(val key: String, val label: String, val icon: Ima
 @Composable
 fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     val context = LocalContext.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val appConnectionManager = remember(context) { FynxAppConnectionManager(context.applicationContext) }
+    val appConnectionState by appConnectionManager.state.collectAsState()
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf("Home") }
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
@@ -74,6 +77,14 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     DisposableEffect(Unit) {
         FynxStatusNavigation.opener = { username -> statusOpenOwner = username; statusOpenId = null; selected = "Stories" }
         onDispose { if (FynxStatusNavigation.opener != null) FynxStatusNavigation.opener = null }
+    }
+    DisposableEffect(lifecycleOwner, authSession.state) {
+        if (authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) {
+            lifecycleOwner.lifecycle.addObserver(appConnectionManager)
+        }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(appConnectionManager)
+        }
     }
 
     DisposableEffect(context) {
@@ -251,9 +262,33 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                            Spacer(Modifier.width(4.dp))
-                            Icon(Icons.Default.Verified, "Verified FYNX", tint = Color(0xFF1877F2), modifier = Modifier.size(18.dp))
+                            if (appConnectionState == FynxAppConnectionManager.State.CONNECTED) {
+                                Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                                Spacer(Modifier.width(4.dp))
+                                Icon(Icons.Default.Verified, "Verified FYNX", tint = Color(0xFF1877F2), modifier = Modifier.size(18.dp))
+                            } else {
+                                var connectingDotCount by remember { mutableIntStateOf(1) }
+                                LaunchedEffect(appConnectionState) {
+                                    if (appConnectionState != FynxAppConnectionManager.State.CONNECTING) {
+                                        connectingDotCount = 1
+                                        return@LaunchedEffect
+                                    }
+                                    while (true) {
+                                        delay(450L)
+                                        connectingDotCount = connectingDotCount % 3 + 1
+                                    }
+                                }
+                                Text(
+                                    if (appConnectionState == FynxAppConnectionManager.State.WAITING_FOR_NETWORK) {
+                                        "Waiting for network…"
+                                    } else {
+                                        "Connecting" + ".".repeat(connectingDotCount)
+                                    },
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleLarge
+                                )
+                            }
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
