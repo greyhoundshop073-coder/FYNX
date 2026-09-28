@@ -554,7 +554,7 @@ if not FAILURES:
                             # present instead of treating the transition frame as failure.
                             for _ in range(16):
                                 time.sleep(.5)
-                                candidate=dump_ui("private-chat-inside.xml")
+                                candidate=dismiss_runtime_permission_prompt() or dump_ui("private-chat-inside.xml")
                                 if candidate and (find_control(candidate,["Message composer","Edit message composer","Chat message composer area","Message..."])
                                                    or find_control(candidate,["No messages here yet"])):
                                     fallback=candidate
