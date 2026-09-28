@@ -472,7 +472,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                         ownerUsername = message.senderUsername
                                     )
                                     Spacer(Modifier.width(6.dp))
-                                    Text(message.senderUsername!!, style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = glassPalette.messageMuted)
+                                    Text(message.senderUsername.orEmpty(), style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = glassPalette.messageMuted)
                                 }
                             }
                             Box {
