@@ -28,7 +28,9 @@ object FynxGroupsStore {
                     }
                     add(FynxGroup(item.optString("id"), item.optString("name"), item.optString("description"), runCatching { FynxGroupVisibility.valueOf(item.optString("visibility")) }.getOrDefault(FynxGroupVisibility.PRIVATE), item.optString("ownerUsername"), parsedMembers, item.optString("groupPhotoMediaId").ifBlank { null }))
                 }
-            }.filter { FynxGroupsBatch1.validate(it).isEmpty() }
+            }
+                .filter { it.id.isNotBlank() && FynxGroupsBatch1.validate(it).isEmpty() }
+                .distinctBy { it.id }
         }.getOrElse { emptyList() }
     }
 
