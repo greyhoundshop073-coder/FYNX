@@ -411,3 +411,4 @@ jobs:
           if-no-files-found: ignore
 
 # FYNX runtime certification trigger [full-runtime]
+# Chat/Groups recovery: force authenticated emulator certification on this diagnostic push.
