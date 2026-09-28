@@ -184,6 +184,22 @@ fun FynxStatusTimelinePanel(
             { selected = null; refreshKey++ }
         )
     }
+
+    if (archiveOpen) {
+        StatusArchiveDialog(
+            statuses = archivedStatuses,
+            loading = archiveLoading,
+            error = archiveError,
+            onDelete = { status ->
+                scope.launch {
+                    FynxStatusClient.delete(context, status.id)
+                        .onSuccess { archivedStatuses = archivedStatuses.filterNot { it.id == status.id } }
+                        .onFailure { archiveError = it.message ?: "Status deletion failed." }
+                }
+            },
+            onDismiss = { archiveOpen = false }
+        )
+    }
 }
 
 @Composable
@@ -242,23 +258,6 @@ private fun StatusAvatar(
                 Icon(Icons.Default.Add, "Add Status", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(15.dp))
             }
         }
-    }
-}
-
-    if (archiveOpen) {
-        StatusArchiveDialog(
-            statuses = archivedStatuses,
-            loading = archiveLoading,
-            error = archiveError,
-            onDelete = { status ->
-                scope.launch {
-                    FynxStatusClient.delete(context, status.id)
-                        .onSuccess { archivedStatuses = archivedStatuses.filterNot { it.id == status.id } }
-                        .onFailure { archiveError = it.message ?: "Status deletion failed." }
-                }
-            },
-            onDismiss = { archiveOpen = false }
-        )
     }
 }
 
