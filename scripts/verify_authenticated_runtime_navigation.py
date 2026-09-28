@@ -502,7 +502,35 @@ if not FAILURES:
                         screenshot("private-chat-inside.png")
                         report.append("- PASS real private chat destination opened for an existing FYNX user")
                 else:
-                    report.append("- BLOCKED private-chat destination proof: no second real FYNX user was discoverable")
+                    # Use the production Friends discovery UI as the fallback. This
+                    # exercises the same real-user search and Chat action a user uses.
+                    run("adb","shell","am","force-stop",PACKAGE)
+                    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
+                    time.sleep(2.5)
+                    home_for_chat=dismiss_runtime_permission_prompt() or dump_ui("private-chat-fallback-home.xml")
+                    friends_surface=tap_control(home_for_chat,["Friends"],"private-chat-fallback-friends",["Friends"])
+                    fallback_fields=find_edit_fields(friends_surface)
+                    fallback=""
+                    if fallback_fields:
+                        fx,fy=fallback_fields[0]
+                        run("adb","shell","input","tap",str(fx),str(fy))
+                        input_text("a")
+                        time.sleep(2.0)
+                        fallback=dump_ui("private-chat-search-results.xml")
+                    chat_control=find_control(fallback,["Open chat"])
+                    if chat_control:
+                        _,fx,fy=chat_control
+                        run("adb","shell","input","tap",str(fx),str(fy))
+                        time.sleep(2.5)
+                        fallback=dump_ui("private-chat-inside.xml")
+                        alive,crashlog=capture_runtime_log("private-chat-inside-process.log")
+                        if fallback and alive and find_control(fallback,["Message composer","Edit message composer","Chat message composer area"]):
+                            screenshot("private-chat-inside.png")
+                            report.append("- PASS actual private ConversationPanel opened from real Friends discovery; captured private-chat-inside.png")
+                        else:
+                            FAILURES.append("Friends discovery Chat action did not reach ConversationPanel")
+                    else:
+                        report.append("- BLOCKED private-chat destination proof: Friends discovery returned no real Chat action")
                 alive, crashlog = capture_runtime_log("private-chat-process.log")
                 screenshot("private-chat-after-open.png")
                 report.append("- Chat process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
