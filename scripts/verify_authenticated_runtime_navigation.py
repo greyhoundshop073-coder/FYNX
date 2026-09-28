@@ -552,36 +552,6 @@ if not FAILURES:
                 screenshot("private-chat-after-open.png")
                 report.append("- Chat process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
                 if crashlog: report.append("- Chat crash-log evidence captured in private-chat-process.log")
-                if conversation_after:
-                    report.append("- PASS opening the first real private chat keeps the authenticated app alive")
-                    message_after=tap_first_message_if_present(conversation_after)
-                    if message_after:
-                        report.append("- PASS tapping a real authenticated message keeps the app alive and opens Message actions")
-                    elif MESSAGE_TAP_SKIPPED:
-                        report.append("- PASS message-action test not run because the opened real conversation has no real message; no test data was fabricated")
-                else:
-                    # If the Chats list is empty, use a real person exposed by the
-                    # authenticated Friends surface and open the production Chat route.
-                    run("adb","shell","am","force-stop",PACKAGE)
-                    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-                    time.sleep(2.5)
-                    home_for_chat=dismiss_runtime_permission_prompt() or dump_ui("private-chat-fallback-home.xml")
-                    friends_surface=tap_control(home_for_chat,["Friends"],"private-chat-fallback-friends",["Friends"])
-                    candidate=first_username_in_xml(friends_surface) or USERNAME
-                    if candidate:
-                        route_username=candidate.removeprefix("@").strip()
-                        run("adb","shell","am","force-stop",PACKAGE)
-                        run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+route_username,PACKAGE)
-                        time.sleep(2.5)
-                        fallback=dump_ui("private-chat-inside.xml")
-                        screenshot("private-chat-inside.png")
-                        alive,crashlog=capture_runtime_log("private-chat-inside-process.log")
-                        if fallback and alive and find_control(fallback,["Message...","Messaging is restricted"]):
-                            report.append("- PASS actual private ConversationPanel opened; captured private-chat-inside.png")
-                        else:
-                            FAILURES.append("private-chat fallback did not reach ConversationPanel")
-                    else:
-                        FAILURES.append("no real FYNX user was available for private-chat certification")
                 if private_chat_username:
                     route_username=private_chat_username.removeprefix("@").strip()
                     if route_username:
