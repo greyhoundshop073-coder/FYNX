@@ -285,7 +285,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                                 }
                                 Text(
                                     if (appConnectionState == FynxAppConnectionManager.State.WAITING_FOR_NETWORK) {
-                                        "Waiting for network…"
+                                        "Waiting for network..."
                                     } else {
                                         "Connecting" + ".".repeat(connectingDotCount)
                                     },
