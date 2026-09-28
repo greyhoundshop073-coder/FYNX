@@ -112,6 +112,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                     openGroup = null
                     profileUser = null
                     openChat = local ?: remote?.let { user -> ChatPreview(name = user.displayName.ifBlank { normalized }, username = user.username.removePrefix("@").let { "@$it" }, lastMessage = "Start a conversation", time = "Now", avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }) }
+                        ?: authSession.username?.takeIf { it.removePrefix("@").equals(normalized, true) }?.let {
+                            ChatPreview(name = it.removePrefix("@"), username = "@${it.removePrefix("@")}", lastMessage = "Start a conversation", time = "Now")
+                        }
                     if (openChat != null) FynxChatStore.savePreview(context, openChat!!)
                 }
             }
