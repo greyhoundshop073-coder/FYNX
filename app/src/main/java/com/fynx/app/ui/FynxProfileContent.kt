@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @Composable
 fun FynxProfileContentSection(
@@ -42,6 +43,7 @@ fun FynxProfileContentSection(
     var selectedTab by rememberSaveable(username) { mutableStateOf("All") }
     var selectedPost by remember { mutableStateOf<FynxProfileRemoteClient.ProfilePost?>(null) }
     var selectedListing by remember { mutableStateOf<FynxMarketplaceClient.Listing?>(null) }
+    val isOwnProfile = FynxAuthStore.load(context).username?.removePrefix("@")?.equals(username.removePrefix("@"), true) == true
 
     LaunchedEffect(username) {
         loading = true
@@ -156,7 +158,7 @@ fun FynxProfileContentSection(
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     gridItems.filterIsInstance<FynxProfileGridItem.PostItem>().forEach { item ->
-                        FynxProfilePostFeedCard(item.post, username) { selectedPost = item.post }
+                        FynxProfilePostFeedCard(post = item.post, username = username, canManage = isOwnProfile, onOpen = { selectedPost = item.post }, onDeleted = { posts = posts.filterNot { it.id == item.post.id } }, onAudienceChanged = { next -> posts = posts.map { if (it.id == item.post.id) it.copy(visibility = next.name) else it } })
                     }
                 }
             }        }
@@ -302,11 +304,16 @@ private fun SoulPill(
     }
 }
 @Composable
-private fun FynxProfilePostFeedCard(post: FynxProfileRemoteClient.ProfilePost, username: String, onOpen: () -> Unit) {
+private fun FynxProfilePostFeedCard(post: FynxProfileRemoteClient.ProfilePost, username: String, canManage: Boolean, onOpen: () -> Unit, onDeleted: () -> Unit, onAudienceChanged: (FynxPostVisibility) -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val mediaUrl = post.mediaUrl ?: post.mediaId?.let { "/api/social/media/" + it }
     val type = post.mediaType?.lowercase().orEmpty()
     var profilePhotoId by remember(username) { mutableStateOf<String?>(null) }
+    var menuOpen by remember(post.id) { mutableStateOf(false) }
+    var audienceOpen by remember(post.id) { mutableStateOf(false) }
+    var deleteConfirm by remember(post.id) { mutableStateOf(false) }
+    var deleting by remember(post.id) { mutableStateOf(false) }
     LaunchedEffect(username) { FynxProfileRemoteClient.get(context, username).onSuccess { profilePhotoId = it.profilePhotoMediaId } }
     Card(Modifier.fillMaxWidth().clickable(onClick = onOpen), shape = RoundedCornerShape(0.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(0.dp, MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxWidth()) {
@@ -317,8 +324,17 @@ private fun FynxProfilePostFeedCard(post: FynxProfileRemoteClient.ProfilePost, u
                     Text("@"+username.removePrefix("@"), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text("FYNX post", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                 }
+                if (canManage) {
+                    Box {
+                        IconButton(onClick = { menuOpen = true }, enabled = !deleting) { Icon(Icons.Default.MoreHoriz, "Post options") }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(text = { Text("Change audience") }, onClick = { menuOpen = false; audienceOpen = true })
+                            DropdownMenuItem(text = { Text("Delete post") }, onClick = { menuOpen = false; deleteConfirm = true })
+                        }
+                    }
+                }
             }
-            if (post.text.isNotBlank()) Text(post.text, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodyLarge)
+            if (post.text.isNotBlank()) FynxExpandableCaption(post.text, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
             if (!mediaUrl.isNullOrBlank()) {
                 if (type.contains("audio")) {
                     Column(
@@ -366,6 +382,8 @@ private fun FynxProfilePostFeedCard(post: FynxProfileRemoteClient.ProfilePost, u
             }
         }
     }
+    if (canManage && audienceOpen) FynxPostAudienceEditor(postId = post.id, currentVisibility = runCatching { FynxPostVisibility.valueOf(post.visibility.uppercase()) }.getOrDefault(FynxPostVisibility.PUBLIC), onDismiss = { audienceOpen = false }, onSaved = { next -> audienceOpen = false; onAudienceChanged(next) })
+    if (canManage && deleteConfirm) AlertDialog(onDismissRequest = { if (!deleting) deleteConfirm = false }, title = { Text("Delete post?") }, text = { Text("This will permanently remove your post from FYNX.") }, confirmButton = { TextButton(enabled = !deleting, onClick = { deleting = true; scope.launch { FynxRemoteSocialClient.deletePost(context, post.id).onSuccess { deleteConfirm = false; onDeleted() }.onFailure { deleting = false } } }) { Text(if (deleting) "Deleting…" else "Delete") } }, dismissButton = { TextButton(enabled = !deleting, onClick = { deleteConfirm = false }) { Text("Cancel") } })
 }
 @Composable
 private fun FynxProfileMediaGridTile(post: FynxProfileRemoteClient.ProfilePost, onOpen: () -> Unit) {
