@@ -40,6 +40,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -59,7 +63,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     val bubbleLighting = FynxConversationPreferences.chatBubbleLighting(context, chat.username)
     val bubbleGradient = FynxConversationPreferences.chatBubbleGradient(context, chat.username)
     val clipboardManager = LocalClipboardManager.current
-    val scope = rememberCoroutineScope()
+    val conversationScope = remember(chat.username) { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
     var recipientProfile by remember(chat.username) { mutableStateOf<FynxProfileRemoteClient.Profile?>(null) }
     var remoteProfileLoaded by remember(chat.username) { mutableStateOf(false) }
     val resolvedAvatarUri = if (remoteProfileLoaded) {
@@ -126,7 +130,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 if (remote.recipientId == myId) {
                     FynxInChatSound.play(context)
                     realtimeClient.acknowledgeMessage(remote.id)
-                    scope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
+                    conversationScope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
                 }
             },
             onStateChanged = { state ->
@@ -301,6 +305,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         onDispose {
             if (typingSent) realtimeClient.sendTyping(recipientUserId ?: "", false)
             realtimeClient.close()
+            conversationScope.cancel()
             runCatching { recorder?.stop() }
             recorder?.release(); player?.release()
         }
