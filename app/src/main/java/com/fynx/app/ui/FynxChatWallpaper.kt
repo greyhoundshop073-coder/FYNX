@@ -320,7 +320,8 @@ fun FynxChatDoodlePattern(palette: FynxGlassThemePalette? = null, density: Float
                 FynxGlassThemeId.GOLDEN -> intArrayOf(27, 28, 29, 30, 31, 32, 33, 7, 10, 26, 27, 28, 29, 30, 31, 32, 33, 7, 10, 26)
                 FynxGlassThemeId.TURQUOISE -> intArrayOf(35, 36, 37, 38, 39, 21, 15, 19, 24, 35, 36, 37, 38, 39, 21, 15, 19, 24)
             }
-            when (stories[index % stories.size]) {
+            val safeIndex = Math.floorMod(index, stories.size)
+            when (stories[safeIndex]) {
                 0 -> bubble(x, y, scale)
                 1 -> camera(x, y, scale)
                 2 -> phone(x, y, scale)
