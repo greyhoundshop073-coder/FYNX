@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Runtime certification trigger: keep Chat/Groups emulator coverage active for recovery pushes.
 from pathlib import Path
 import re
 import sys
