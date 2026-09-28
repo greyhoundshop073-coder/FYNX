@@ -61,7 +61,7 @@ private const val FEED_REFRESH_DEBOUNCE_MS = 1000L
 private data class HomePeopleRecommendation(val username: String, val displayName: String, val verified: Boolean, val mutualFriends: Int, val reason: String, val photoId: String?)
 
 @Composable
-fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}, header: (@Composable () -> Unit)? = null) {
+fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, initialPostId: String? = null, initialCommentId: String? = null, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}, header: (@Composable () -> Unit)? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val publishRefreshKey = FynxHomeLifecycleRefreshBus.currentVersion()
@@ -208,6 +208,11 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     LaunchedEffect(publishRefreshKey) {
         if (publishRefreshKey > 0) reload(true)
     }
+    LaunchedEffect(posts, initialPostId, initialCommentId) {
+        val target = initialPostId?.trim()?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        val post = posts.firstOrNull { it.id == target } ?: return@LaunchedEffect
+        commentsPost = post
+    }
 
     fun loadMore() {
         if (loading || loadingMore || !hasMore || feedRequestInFlight) return
@@ -282,7 +287,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         if (loadingMore) item(key = "feed_loading_more") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
     }
     reportPost?.let { post -> AlertDialog(onDismissRequest = { if (!reportBusy) { reportPost = null; reportNotice = null } }, title = { Text("Report post") }, text = { Text(reportNotice ?: "Report this post to FYNX for review.") }, confirmButton = { TextButton(enabled = !reportBusy, onClick = { reportBusy = true; reportNotice = "Sending report…"; scope.launch { FynxDiscoveryClient.recordEvent(context, "REPORT", postId = post.id, metadata = JSONObject().put("reason", "user_report")).onSuccess { reportNotice = "Report submitted."; reportBusy = false; delay(700L); reportPost = null; reportNotice = null }.onFailure { reportNotice = it.message ?: "Report could not be submitted."; reportBusy = false } } }) { Text("Report post") } }, dismissButton = { TextButton(enabled = !reportBusy, onClick = { reportPost = null; reportNotice = null }) { Text("Cancel") } }) }
-    commentsPost?.let { post -> FynxHomeCommentsPanel(post = post, onClose = { commentsPost = null }, onCommentCountChanged = { newCount -> posts = posts.map { if (it.id == post.id) it.copy(commentCount = newCount) else it } }) }
+    commentsPost?.let { post -> FynxHomeCommentsPanel(post = post, initialCommentId = initialCommentId, onClose = { commentsPost = null }, onCommentCountChanged = { newCount -> posts = posts.map { if (it.id == post.id) it.copy(commentCount = newCount) else it } }) }
     reactionUsersPostId?.let { postId -> ReactionUsersDialog(context = context, postId = postId, onDismiss = { reactionUsersPostId = null }) }
     authorStatusViewer?.let { HomeAuthorStatusDialog(it, onDismiss = { authorStatusViewer = null }) }
     deletePost?.let { post -> AlertDialog(onDismissRequest = { if (post.id !in interactionBusy) deletePost = null }, title = { Text("Delete post?") }, text = { Text("This will permanently remove your post from FYNX. This action cannot be undone.") }, confirmButton = { TextButton(onClick = { runDelete(post.id) }, enabled = post.id !in interactionBusy) { Text("Delete") } }, dismissButton = { TextButton(onClick = { deletePost = null }, enabled = post.id !in interactionBusy) { Text("Cancel") } }) }
