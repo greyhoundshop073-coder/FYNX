@@ -9,6 +9,8 @@ sealed interface FynxDeepLinkDestination {
     data class Chat(val username: String) : FynxDeepLinkDestination
     data class Call(val username: String, val video: Boolean) : FynxDeepLinkDestination
     data class Group(val id: String) : FynxDeepLinkDestination
+    data class Post(val postId: String, val commentId: String? = null) : FynxDeepLinkDestination
+    data class Status(val statusId: String) : FynxDeepLinkDestination
     data class Marketplace(val listingId: String?) : FynxDeepLinkDestination
     data object Stories : FynxDeepLinkDestination
     data object Money : FynxDeepLinkDestination
@@ -22,6 +24,8 @@ object FynxDeepLinkParser {
     private const val CHAT_PATH = "/chat"
     private const val CALL_PATH = "/call"
     private const val GROUP_PATH = "/group"
+    private const val POST_PATH = "/post"
+    private const val STATUS_PATH = "/status"
     private const val MARKETPLACE_PATH = "/marketplace"
     private const val STORIES_PATH = "/stories"
     private const val MONEY_PATH = "/money"
@@ -39,6 +43,8 @@ object FynxDeepLinkParser {
     fun callAppLink(username:String, video:Boolean=false):String=Uri.Builder().scheme("fynx").authority("call").appendPath(username.trim().removePrefix("@")).appendQueryParameter("video",video.toString()).build().toString()
     fun groupWebLink(id:String):String=routeWebLink(GROUP_PATH,id)
     fun groupAppLink(id:String):String=routeAppLink("group",id)
+    fun postAppLink(postId:String, commentId:String?=null):String = Uri.Builder().scheme("fynx").authority("post").appendPath(postId.trim()).apply { commentId?.trim()?.takeIf { it.isNotBlank() }?.let { appendQueryParameter("comment", it) } }.build().toString()
+    fun statusAppLink(statusId:String):String = routeAppLink("status", statusId)
     fun marketplaceWebLink(listingId:String?=null):String=routeWebLink(MARKETPLACE_PATH,listingId)
     fun marketplaceAppLink(listingId:String?=null):String=routeAppLink("marketplace",listingId)
     fun storiesWebLink():String="https://$FYNX_HOST$STORIES_PATH"
@@ -74,6 +80,8 @@ object FynxDeepLinkParser {
                 normalizedPath.size==3&&normalizedPath[1].equals("invite",true)->cleanIdentifier(normalizedPath[2])?.let{FynxDeepLinkDestination.Invite("${value.orEmpty()}:$it",value)}
                 else->null
             }
+            "post"->if(normalizedPath.size==1)value?.let{FynxDeepLinkDestination.Post(it, uri.getQueryParameter("comment")?.trim()?.takeIf{v->v.isNotBlank()})}else null
+            "status"->if(normalizedPath.size==1)value?.let{FynxDeepLinkDestination.Status(it)}else null
             "marketplace"->if(normalizedPath.size<=1)FynxDeepLinkDestination.Marketplace(value)else null
             "invite"->if(normalizedPath.size<=1)FynxDeepLinkDestination.Invite(queryCode?:value,queryGroupId)else null
             else->null
@@ -86,6 +94,8 @@ object FynxDeepLinkParser {
             "chat"->if(normalizedPath.size==2)value?.let{FynxDeepLinkDestination.Chat(it)}else null
             "call"->if(normalizedPath.size==2)value?.let{FynxDeepLinkDestination.Call(it,queryVideo)}else null
             "group"->if(normalizedPath.size==2)value?.let{FynxDeepLinkDestination.Group(it)}else null
+            "post"->if(normalizedPath.size==2)value?.let{FynxDeepLinkDestination.Post(it, uri.getQueryParameter("comment")?.trim()?.takeIf{v->v.isNotBlank()})}else null
+            "status"->if(normalizedPath.size==2)value?.let{FynxDeepLinkDestination.Status(it)}else null
             "marketplace"->if(normalizedPath.size<=2)FynxDeepLinkDestination.Marketplace(value)else null
             "stories"->if(normalizedPath.size==1)FynxDeepLinkDestination.Stories else null
             "money"->if(normalizedPath.size==1)FynxDeepLinkDestination.Money else null
