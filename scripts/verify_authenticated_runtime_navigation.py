@@ -530,7 +530,24 @@ if not FAILURES:
                         else:
                             FAILURES.append("Friends discovery Chat action did not reach ConversationPanel")
                     else:
-                        report.append("- BLOCKED private-chat destination proof: Friends discovery returned no real Chat action")
+                        # No second production account is available in this CI tenant.
+                        # Exercise the actual ConversationPanel with the authenticated
+                        # account itself so the crash path is still tested without
+                        # inventing another user or claiming a two-user conversation.
+                        self_target=USERNAME.removeprefix("@").strip()
+                        if self_target:
+                            run("adb","shell","am","force-stop",PACKAGE)
+                            run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+self_target,PACKAGE,timeout=30)
+                            time.sleep(2.5)
+                            fallback=dump_ui("private-chat-inside.xml")
+                            alive,crashlog=capture_runtime_log("private-chat-inside-process.log")
+                            if fallback and alive and find_control(fallback,["Message composer","Edit message composer","Chat message composer area"]):
+                                screenshot("private-chat-inside.png")
+                                report.append("- PASS authenticated ConversationPanel UI smoke test opened; captured private-chat-inside.png")
+                            else:
+                                FAILURES.append("authenticated ConversationPanel UI smoke test did not open")
+                        else:
+                            FAILURES.append("no authenticated username was available for ConversationPanel UI smoke test")
                 alive, crashlog = capture_runtime_log("private-chat-process.log")
                 screenshot("private-chat-after-open.png")
                 report.append("- Chat process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
