@@ -56,10 +56,18 @@ missing_panel = [token for token in required_panel if token not in panel]
 if missing_panel:
     raise SystemExit("HOME 4F MEDIA RED: lifecycle boundary missing " + ", ".join(missing_panel))
 
-required_lifecycle = ["LocalLifecycleOwner", "ON_RESUME", "removeObserver"]
+# Home must refresh only through the explicit publish bus. Normal lifecycle resume
+# must not recreate the feed, because that causes unnecessary media/feed reloads.
+if "LocalLifecycleOwner" in lifecycle or "ON_RESUME" in lifecycle or "removeObserver" in lifecycle:
+    raise SystemExit("HOME 4F MEDIA RED: legacy ON_RESUME lifecycle observer must not recreate Home")
+required_lifecycle = [
+    "FynxHomeLifecycleRefreshBus",
+    "currentVersion()",
+    "refreshSignal",
+]
 missing_lifecycle = [token for token in required_lifecycle if token not in lifecycle]
 if missing_lifecycle:
-    raise SystemExit("HOME 4F MEDIA RED: lifecycle observer incomplete " + ", ".join(missing_lifecycle))
+    raise SystemExit("HOME 4F MEDIA RED: Home refresh bus incomplete " + ", ".join(missing_lifecycle))
 
 required_saved = [
     'app.get("/api/social/saved", auth',
