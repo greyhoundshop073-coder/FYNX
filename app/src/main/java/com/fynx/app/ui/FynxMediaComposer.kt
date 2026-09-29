@@ -45,12 +45,13 @@ fun FynxMediaComposer(
                     modifier = Modifier.fillMaxWidth().fillMaxHeight(),
                     factory = { ctx ->
                         VideoView(ctx).apply {
+                            tag = uri.toString()
                             setVideoURI(uri)
                             setMediaController(MediaController(ctx))
                             setOnPreparedListener { player -> player.isLooping = true; player.start() }
                         }
                     },
-                    update = { it.setVideoURI(uri) }
+                    update = { view -> if (view.tag != uri.toString()) { view.tag = uri.toString(); view.setVideoURI(uri) } }
                 )
             } else {
                 AndroidView(
