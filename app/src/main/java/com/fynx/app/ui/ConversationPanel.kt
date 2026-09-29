@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,6 +37,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -72,6 +75,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var text by remember(chat.username) { mutableStateOf("") }
     var messages by remember(chat.username) { mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage)) }
     var replyToId by remember { mutableStateOf<String?>(null) }
+    val replySwipeOffsets = remember { mutableStateMapOf<String, Float>() }
     var editingId by remember { mutableStateOf<String?>(null) }
     var attachment by remember { mutableStateOf<Uri?>(null) }
     var attachmentType by remember { mutableStateOf<String?>(null) }
@@ -608,7 +612,26 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                 tonalElevation = 0.dp,
                                 modifier = Modifier
                                     .widthIn(max = 300.dp)
+                                    .offset { IntOffset((replySwipeOffsets[message.id] ?: 0f).roundToInt(), 0) }
                                     .then(if (mediaOnly) Modifier else Modifier.background(bubbleBrush, bubbleShape))
+                                    .pointerInput(message.id) {
+                                        detectHorizontalDragGestures(
+                                            onHorizontalDrag = { change, dragAmount ->
+                                                if (dragAmount > 0f) {
+                                                    val next = ((replySwipeOffsets[message.id] ?: 0f) + dragAmount).coerceAtMost(88f)
+                                                    replySwipeOffsets[message.id] = next
+                                                    change.consume()
+                                                }
+                                            },
+                                            onDragEnd = {
+                                                if ((replySwipeOffsets[message.id] ?: 0f) >= 64f) {
+                                                    replyToId = message.id
+                                                }
+                                                replySwipeOffsets[message.id] = 0f
+                                            },
+                                            onDragCancel = { replySwipeOffsets[message.id] = 0f }
+                                        )
+                                    }
                                     .combinedClickable(onClick = { menuMessageId = message.id }, onLongClick = { menuMessageId = message.id })
                             ) {
                             Column(Modifier.padding(horizontal = if (mediaOnly) 0.dp else 9.dp, vertical = if (mediaOnly) 0.dp else 5.dp)) {
@@ -621,7 +644,35 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                 }
                                 if (message.replyToId != null) {
                                     val replied = messages.firstOrNull { it.id == message.replyToId }
-                                    Text("Reply: " + (replied?.text?.take(80) ?: "Original message"), style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(bottom = 5.dp))
+                                    Column(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 5.dp)
+                                            .background(glassPalette.backgroundMid.copy(alpha = 0.32f), RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                                    ) {
+                                        Text(
+                                            replied?.senderName?.takeIf { it.isNotBlank() }
+                                                ?: replied?.senderUsername?.takeIf { it.isNotBlank() }?.let { "@$it" }
+                                                ?: "Original message",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            maxLines = 1
+                                        )
+                                        Text(
+                                            replied?.text?.takeIf { it.isNotBlank() }
+                                                ?: when (replied?.attachmentType) {
+                                                    "image" -> "Photo"
+                                                    "video", "video_note" -> "Video"
+                                                    "audio" -> "Voice message"
+                                                    "document" -> "Document"
+                                                    else -> "Original message"
+                                                },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = glassPalette.messageMuted,
+                                            maxLines = 2
+                                        )
+                                    }
                                 }
                                 if (message.voiceUri != null) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
