@@ -90,6 +90,9 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var reportPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
     var reportBusy by remember { mutableStateOf(false) }
     var reportNotice by remember { mutableStateOf<String?>(null) }
+    var discoveryLoadingMore by remember { mutableStateOf(false) }
+    var discoveryHasMore by remember { mutableStateOf(false) }
+    var discoveryOffset by remember { mutableIntStateOf(0) }
     var videoDiscoveryOpen by remember { mutableStateOf(false) }
     var videoDiscoverySourcePostId by remember { mutableStateOf<String?>(null) }
     var postMedia by remember { mutableStateOf<Map<String, List<FynxHomePostMediaClient.PostMediaItem>>>(emptyMap()) }
@@ -188,24 +191,32 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         while (next < clean.size && result.size < base.size + 3) result += clean[next++]
         return result
     }
-    fun hydrateDiscovery() {
+    fun hydrateDiscovery(offset: Int = 0, replace: Boolean = false) {
+        if (discoveryLoadingMore) return
+        discoveryLoadingMore = true
         scope.launch {
-            FynxRemoteSocialClient.discoveryFeed(context, 12).onSuccess { suggested ->
-                if (suggested.posts.isNotEmpty()) {
-                    posts = mergeDiscoveryPosts(posts.filterNot { it.isDiscovery }, suggested.posts)
-                    resolveAuthorPhotos(suggested.posts)
-                    hydrateInteractionStates(suggested.posts)
-                    hydrateReactionStates(suggested.posts)
-                    hydratePostMedia(suggested.posts)
-                }
+            FynxRemoteSocialClient.discoveryFeed(context, 12, offset).onSuccess { suggested ->
+                val base = posts.filterNot { it.isDiscovery }
+                val previousDiscovery = if (replace) emptyList() else posts.filter { it.isDiscovery }
+                val existing = (base + previousDiscovery).map { it.id }.toSet()
+                val additions = suggested.posts.filterNot { it.id in existing }.distinctBy { it.id }
+                val mergedDiscovery = previousDiscovery + additions
+                posts = mergeDiscoveryPosts(base, mergedDiscovery)
+                discoveryOffset = offset + suggested.posts.size
+                discoveryHasMore = suggested.hasMore && suggested.posts.isNotEmpty()
+                resolveAuthorPhotos(additions)
+                hydrateInteractionStates(additions)
+                hydrateReactionStates(additions)
+                hydratePostMedia(additions)
             }
+            discoveryLoadingMore = false
         }
     }
 
     fun reload(forceRefresh: Boolean = false) {
         val now = System.currentTimeMillis(); if (feedRequestInFlight) return; if (forceRefresh && now - lastFeedRequestAt < FEED_REFRESH_DEBOUNCE_MS) return
         feedRequestInFlight = true; lastFeedRequestAt = now
-        scope.launch { loading = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh).onSuccess { page -> posts = page.posts; hasMore = page.hasMore; error = null; interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null; resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); hydratePostMedia(page.posts); hydrateDiscovery() }.onFailure { error = if (it.message?.contains("HTTP 404", true) == true) "Your FYNX feed service is temporarily unavailable." else it.message ?: "Unable to load your feed." }; loading = false; feedRequestInFlight = false }
+        scope.launch { loading = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh).onSuccess { page -> posts = page.posts; hasMore = page.hasMore; error = null; interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null; resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); hydratePostMedia(page.posts); discoveryOffset = 0; discoveryHasMore = false; hydrateDiscovery(0, true) }.onFailure { error = if (it.message?.contains("HTTP 404", true) == true) "Your FYNX feed service is temporarily unavailable." else it.message ?: "Unable to load your feed." }; loading = false; feedRequestInFlight = false }
     }
 
     LaunchedEffect(publishRefreshKey) {
@@ -219,9 +230,9 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     }
 
     fun loadMore() {
-        if (loading || loadingMore || !hasMore || feedRequestInFlight) return
+        if (loading || loadingMore || (!hasMore && !discoveryHasMore) || feedRequestInFlight) return
         feedRequestInFlight = true
-        scope.launch { loadingMore = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = posts.count { !it.isDiscovery }, useCache = false).onSuccess { page -> val existing = posts.map { it.id }.toSet(); val additions = page.posts.filterNot { it.id in existing }; posts = posts + additions; hasMore = page.hasMore; error = null; resolveAuthorPhotos(additions); hydrateInteractionStates(additions); hydrateReactionStates(additions); hydratePostMedia(additions) }.onFailure { error = it.message ?: "Unable to load more posts." }; loadingMore = false; feedRequestInFlight = false }
+        scope.launch { loadingMore = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = posts.count { !it.isDiscovery }, useCache = false).onSuccess { page -> val existing = posts.map { it.id }.toSet(); val additions = page.posts.filterNot { it.id in existing }; posts = posts + additions; hasMore = page.hasMore; error = null; resolveAuthorPhotos(additions); hydrateInteractionStates(additions); hydrateReactionStates(additions); hydratePostMedia(additions); if (!page.hasMore && discoveryHasMore) hydrateDiscovery(discoveryOffset) }.onFailure { error = it.message ?: "Unable to load more posts." }; loadingMore = false; feedRequestInFlight = false }
     }
     fun runInteraction(id: String, desired: Boolean, isActive: (FynxRemoteSocialClient.SocialInteractionState) -> Boolean, count: (FynxRemoteSocialClient.SocialInteractionState) -> Int, action: suspend () -> Result<Pair<Boolean, Int>>, update: (FynxRemoteSocialClient.SocialInteractionState, Boolean, Int) -> FynxRemoteSocialClient.SocialInteractionState) {
         if (id in interactionBusy) return
@@ -260,7 +271,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     }
     LaunchedEffect(Unit) { reload(); hydrateActiveStatuses(); hydratePeopleRecommendations() }
 
-    LaunchedEffect(feedListState, posts.size, hasMore, loading, loadingMore, feedRequestInFlight) {
+    LaunchedEffect(feedListState, posts.size, hasMore, discoveryHasMore, loading, loadingMore, discoveryLoadingMore, feedRequestInFlight) {
         snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }
             .collect { (lastVisibleIndex, totalItems) -> if (hasMore && !loading && !loadingMore && !feedRequestInFlight && lastVisibleIndex != null && lastVisibleIndex >= totalItems - 6) loadMore() }
     }
