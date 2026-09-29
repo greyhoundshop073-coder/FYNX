@@ -40,22 +40,20 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
     var busyUsername by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
 
-    fun refresh() {
-        scope.launch {
-            loading = true
-            message = null
-            val fr = FynxSocialClient.friends(context)
-            val rr = FynxSocialClient.requests(context)
-            val br = FynxSocialClient.blocked(context)
-            friends = fr.getOrElse { emptyList() }
-            val requests = rr.getOrElse { emptyList() }
-            incoming = requests.filter { it.status.equals("incoming", true) }
-            outgoing = requests.filter { it.status.equals("outgoing", true) }
-            blocked = br.getOrElse { emptyList() }
-            val error = fr.exceptionOrNull() ?: rr.exceptionOrNull() ?: br.exceptionOrNull()
-            if (error != null) message = error.message ?: "Could not load your connections."
-            loading = false
-        }
+    suspend fun refresh() {
+        loading = true
+        message = null
+        val fr = FynxSocialClient.friends(context)
+        val rr = FynxSocialClient.requests(context)
+        val br = FynxSocialClient.blocked(context)
+        friends = fr.getOrElse { emptyList() }
+        val requests = rr.getOrElse { emptyList() }
+        incoming = requests.filter { it.status.equals("incoming", true) }
+        outgoing = requests.filter { it.status.equals("outgoing", true) }
+        blocked = br.getOrElse { emptyList() }
+        val error = fr.exceptionOrNull() ?: rr.exceptionOrNull() ?: br.exceptionOrNull()
+        if (error != null) message = error.message ?: "Could not load your connections."
+        loading = false
     }
 
     LaunchedEffect(Unit) { refresh() }
@@ -80,7 +78,12 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
         scope.launch {
             busyUsername = username
             message = null
-            action().onSuccess { refresh() }.onFailure { message = it.message ?: "That action could not be completed." }
+            val result = action()
+            if (result.isSuccess) {
+                refresh()
+            } else {
+                message = result.exceptionOrNull()?.message ?: "That action could not be completed."
+            }
             busyUsername = null
         }
     }
@@ -121,7 +124,14 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
             if (validation != null) Text(validation, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
             else Text("Exact phone matching only. Phone numbers are not returned in people results.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
         }
-        message?.let { Text(it, color = if (it.contains("could not", true) || it.contains("failed", true) || it.contains("error", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp)) }
+        message?.let {
+            Text(it, color = if (it.contains("could not", true) || it.contains("failed", true) || it.contains("error", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
+            if (!loading) {
+                OutlinedButton(onClick = { scope.launch { refresh() } }, modifier = Modifier.padding(top = 5.dp).heightIn(min = 44.dp), shape = FynxDesign.ControlShape) {
+                    Text("Retry")
+                }
+            }
+        }
         Spacer(Modifier.height(12.dp)); Text("Connections", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold); Spacer(Modifier.height(7.dp))
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) { listOf("Friends", "Requests", "Sent", "Discover", "Blocked").forEach { tab -> FilterChip(section == tab, { section = tab }, label = { Text(tab) }) } }
         Spacer(Modifier.height(6.dp))
