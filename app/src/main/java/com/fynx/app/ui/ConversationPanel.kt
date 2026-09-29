@@ -1036,10 +1036,12 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                             composerVideoMode = !composerVideoMode
                                         },
                                         onPress = {
-                                            val started = kotlinx.coroutines.CompletableDeferred<Boolean>()
-                                            val starter = kotlinx.coroutines.launch {
-                                                delay(250L)
-                                                started.complete(true)
+                                            val releasedBeforeLongPress = kotlinx.coroutines.withTimeoutOrNull(250L) {
+                                                tryAwaitRelease()
+                                            } != null
+                                            if (releasedBeforeLongPress) {
+                                                composerVideoMode = !composerVideoMode
+                                            } else {
                                                 if (recordingMode) {
                                                     videoNoteMode = true
                                                     cameraInitialMode = CameraMode.VIDEO
@@ -1047,15 +1049,9 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                 } else {
                                                     startRecording()
                                                 }
+                                                tryAwaitRelease()
+                                                if (!recordingMode && isRecording) stopRecording()
                                             }
-                                            val released = tryAwaitRelease()
-                                            if (!started.isCompleted) {
-                                                starter.cancel()
-                                                started.complete(false)
-                                            } else if (started.await() && !recordingMode && isRecording) {
-                                                stopRecording()
-                                            }
-                                            released
                                         }
                                     )
                                 },
