@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -58,6 +59,9 @@ fun GroupChatPanel(
     var attachmentType by remember { mutableStateOf("image") }
     var attachmentName by remember { mutableStateOf<String?>(null) }
     var showCamera by remember { mutableStateOf(false) }
+    var cameraInitialMode by remember { mutableStateOf(CameraMode.PHOTO) }
+    var videoNoteMode by remember { mutableStateOf(false) }
+    var composerVideoMode by remember { mutableStateOf(false) }
     var showWallpaper by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf<MediaRecorder?>(null) }
     var recordingFile by remember { mutableStateOf<File?>(null) }
@@ -255,6 +259,7 @@ fun GroupChatPanel(
         text = ""
         attachment = null
         replyTo = null
+        composerVideoMode = false
         sendMessage(message)
     }
 
@@ -367,7 +372,14 @@ fun GroupChatPanel(
                                             color = MaterialTheme.colorScheme.primary
                                         )
                                     }
-                                    if (message.attachmentUri != null && message.attachmentType == "document") {
+                                    if (message.attachmentUri != null && message.attachmentType == "video_note") {
+                                        Box(Modifier.size(170.dp).clip(CircleShape)) {
+                                            FynxRemoteMedia(message.attachmentUri, "video", Modifier.fillMaxSize(), rounded = false, loopVideo = true, autoPlay = false)
+                                            Surface(color = Color.Black.copy(alpha = 0.46f), shape = CircleShape, modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)) {
+                                                Text("Video note", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                                            }
+                                        }
+                                    } else if (message.attachmentUri != null && message.attachmentType == "document") {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Icon(Icons.Default.Description, null, Modifier.size(28.dp))
                                             Spacer(Modifier.width(8.dp))
@@ -410,8 +422,23 @@ fun GroupChatPanel(
                     }
                     if (attachment != null) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 5.dp)) {
-                            Icon(if (attachmentType == "video") Icons.Default.Videocam else Icons.Default.Image, null)
-                            Text(if (attachmentType == "video") "Video ready" else if (attachmentType == "document") (attachmentName ?: "Document ready") else "Photo ready", Modifier.weight(1f))
+                            Icon(
+                                when (attachmentType) {
+                                    "video_note", "video" -> Icons.Default.Videocam
+                                    "document" -> Icons.Default.Description
+                                    else -> Icons.Default.Image
+                                },
+                                null
+                            )
+                            Text(
+                                when (attachmentType) {
+                                    "video_note" -> "Video note ready"
+                                    "video" -> "Video ready"
+                                    "document" -> (attachmentName ?: "Document ready")
+                                    else -> "Photo ready"
+                                },
+                                Modifier.weight(1f)
+                            )
                             IconButton(onClick = { attachment = null }) { Icon(Icons.Default.Close, "Remove") }
                         }
                     }
@@ -465,25 +492,48 @@ fun GroupChatPanel(
                                     unfocusedBorderColor = Color.Transparent
                                 ),
                                 trailingIcon = {
-                                    val canSend = text.isNotBlank() || attachment != null
-                                    IconButton(
-                                        onClick = {
-                                            if (canSend) send() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
-                                        },
-                                        modifier = Modifier
+                                    val voiceMode = text.isBlank() && attachment == null
+                                    val recordingMode = voiceMode && composerVideoMode
+                                    Box(
+                                        Modifier
                                             .size(46.dp)
-                                            .clip(androidx.compose.foundation.shape.CircleShape)
-                                            .background(
-                                                if (canSend) glassPalette.outgoingStart
-                                                else glassPalette.doodleSecondary
-                                            )
+                                            .clip(CircleShape)
+                                            .background(if (!voiceMode || recordingMode) glassPalette.outgoingStart else glassPalette.doodleSecondary)
                                             .semantics {
-                                                contentDescription = if (canSend) "Send message" else "Hold to record voice message"
+                                                contentDescription = when {
+                                                    !voiceMode -> "Send message"
+                                                    recordingMode -> "Hold to record video note"
+                                                    else -> "Hold to record voice message"
+                                                }
                                             }
+                                            .pointerInput(voiceMode, recordingMode) {
+                                                if (!voiceMode) return@pointerInput
+                                                detectTapGestures(
+                                                    onTap = { composerVideoMode = !composerVideoMode },
+                                                    onLongPress = {
+                                                        if (recordingMode) {
+                                                            videoNoteMode = true
+                                                            cameraInitialMode = CameraMode.VIDEO
+                                                            showCamera = true
+                                                        } else {
+                                                            micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                                                        }
+                                                    }
+                                                )
+                                            },
+                                        contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            if (canSend) Icons.Default.Send else Icons.Default.Mic,
-                                            if (canSend) "Send message" else "Record voice",
+                                            when {
+                                                !voiceMode -> Icons.Default.Send
+                                                recordingMode -> Icons.Default.Videocam
+                                                else -> Icons.Default.Mic
+                                            },
+                                            when {
+                                                !voiceMode -> "Send message"
+                                                recordingMode -> "Hold to record video note"
+                                                else -> "Hold to record voice message"
+                                            },
                                             tint = Color.White
                                         )
                                     }
@@ -606,8 +656,18 @@ fun GroupChatPanel(
             Surface(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxSize().safeDrawingPadding()) {
                 FynxCameraCapturePanel(
-                    onCaptured = { uri, type -> attachment = uri; attachmentType = type; showCamera = false },
-                    onDismiss = { showCamera = false }
+                    initialMode = cameraInitialMode,
+                    videoNoteMode = videoNoteMode,
+                    onCaptured = { uri, type ->
+                        attachment = uri
+                        attachmentType = if (videoNoteMode && type == "video") "video_note" else type
+                        videoNoteMode = false
+                        showCamera = false
+                    },
+                    onDismiss = {
+                        videoNoteMode = false
+                        showCamera = false
+                    }
                 )
                 }
             }
