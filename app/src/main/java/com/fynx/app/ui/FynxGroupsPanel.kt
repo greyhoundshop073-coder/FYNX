@@ -19,6 +19,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Contacts
+import androidx.compose.material.icons.filled.Poll
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Call
@@ -286,6 +289,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var showConversationMoments by remember { mutableStateOf(false) }
     var groupNotificationsEnabled by remember(groupId) { mutableStateOf(FynxConversationPreferences.groupNotifications(context, groupId)) }
     var showEmojiPanel by remember { mutableStateOf(false) }
+    var showAttachmentMenu by remember { mutableStateOf(false) }
     var reactionMessageId by remember { mutableStateOf<String?>(null) }
     var replyToId by remember { mutableStateOf<String?>(null) }
     val replySwipeOffsets = remember { mutableStateMapOf<String, Float>() }
@@ -643,88 +647,132 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             }
         }
         Surface(color = glassPalette.backgroundMid.copy(alpha = 0.98f), contentColor = glassPalette.messageText, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(enabled = canSendMessages, onClick = { showEmojiPanel = !showEmojiPanel }, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Default.EmojiEmotions, "Emoji", Modifier.size(24.dp))
+            Column(Modifier.fillMaxWidth()) {
+                if (showAttachmentMenu && canSendMessages) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
+                        color = glassPalette.backgroundMid.copy(alpha = 0.99f),
+                        shape = RoundedCornerShape(18.dp)
+                    ) {
+                        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Share in group", style = MaterialTheme.typography.labelLarge, color = glassPalette.messageMuted)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = { showAttachmentMenu = false; showTools = true }, modifier = Modifier.weight(1f)) {
+                                    Icon(Icons.Default.PhotoCamera, null); Spacer(Modifier.width(5.dp)); Text("Camera")
+                                }
+                                OutlinedButton(onClick = { showAttachmentMenu = false; showTools = true }, modifier = Modifier.weight(1f)) {
+                                    Icon(Icons.Default.PhotoLibrary, null); Spacer(Modifier.width(5.dp)); Text("Gallery")
+                                }
+                                OutlinedButton(onClick = { showAttachmentMenu = false; showTools = true }, modifier = Modifier.weight(1f)) {
+                                    Icon(Icons.Default.AttachFile, null); Spacer(Modifier.width(5.dp)); Text("Files")
+                                }
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = { showAttachmentMenu = false; showTools = true }, modifier = Modifier.weight(1f)) {
+                                    Icon(Icons.Default.LocationOn, null); Spacer(Modifier.width(5.dp)); Text("Location")
+                                }
+                                OutlinedButton(onClick = { showAttachmentMenu = false; showTools = true }, modifier = Modifier.weight(1f)) {
+                                    Icon(Icons.Default.Contacts, null); Spacer(Modifier.width(5.dp)); Text("Contact")
+                                }
+                                OutlinedButton(onClick = { showAttachmentMenu = false; showTools = true }, modifier = Modifier.weight(1f)) {
+                                    Icon(Icons.Default.Poll, null); Spacer(Modifier.width(5.dp)); Text("Poll")
+                                }
+                            }
+                            Text("Group-specific sharing stays organized here so the message box remains simple.", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
+                        }
+                    }
                 }
-                Spacer(Modifier.width(8.dp))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    enabled = canSendMessages,
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text(if (canSendMessages) "Message..." else "Messaging is restricted") },
-                    maxLines = 1,
-                    singleLine = true,
-                    shape = RoundedCornerShape(24.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = glassPalette.incomingGlass,
-                        unfocusedContainerColor = glassPalette.incomingGlass,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        cursorColor = glassPalette.bubbleRim,
-                        focusedTextColor = glassPalette.messageText,
-                        unfocusedTextColor = glassPalette.messageText,
-                        focusedPlaceholderColor = glassPalette.messageMuted,
-                        unfocusedPlaceholderColor = glassPalette.messageMuted
-                    ),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = {
-                        if (text.isNotBlank() && !sending && selectedGroup != null) {
-                            val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
-                            messages = messages + optimistic
-                            FynxChatStore.save(context, "group_$groupId", messages)
-                            text = ""; replyToId = null; sending = true
-                            scope.launch {
-                                FynxGroupRemoteClient.sendMessage(context, groupId, optimistic)
-                                    .onSuccess { remote ->
-                                        val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
-                                        messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
-                                        FynxChatStore.save(context, "group_$groupId", messages)
-                                        syncMessage = null
-                                    }
-                                    .onFailure { error ->
-                                        messages = messages.filterNot { it.id == optimistic.id }
-                                        FynxChatStore.save(context, "group_$groupId", messages)
-                                        syncMessage = error.message ?: "Message could not be sent."
-                                    }
-                                sending = false
-                            }
-                        }
-                    })
-                )
-                Spacer(Modifier.width(8.dp))
-                IconButton(
-                    enabled = canSendMessages,
-                    onClick = {
-                        if (text.isNotBlank() && !sending && selectedGroup != null) {
-                            val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
-                            messages = messages + optimistic
-                            FynxChatStore.save(context, "group_$groupId", messages)
-                            text = ""; replyToId = null; sending = true
-                            scope.launch {
-                                FynxGroupRemoteClient.sendMessage(context, groupId, optimistic)
-                                    .onSuccess { remote ->
-                                        val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
-                                        messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
-                                        FynxChatStore.save(context, "group_$groupId", messages)
-                                        syncMessage = null
-                                    }
-                                    .onFailure { error ->
-                                        messages = messages.filterNot { it.id == optimistic.id }
-                                        FynxChatStore.save(context, "group_$groupId", messages)
-                                        syncMessage = error.message ?: "Message could not be sent."
-                                    }
-                                sending = false
-                            }
-                        }
-                    },
-                    modifier = Modifier.size(48.dp)
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Mic, "Microphone", Modifier.size(24.dp))
+                    IconButton(enabled = canSendMessages, onClick = { showAttachmentMenu = !showAttachmentMenu; showEmojiPanel = false }, modifier = Modifier.size(48.dp)) {
+                        Icon(if (showAttachmentMenu) Icons.Default.Close else Icons.Default.Add, if (showAttachmentMenu) "Close attachments" else "Add attachment", Modifier.size(25.dp))
+                    }
+                    IconButton(enabled = canSendMessages, onClick = { showEmojiPanel = !showEmojiPanel; showAttachmentMenu = false }, modifier = Modifier.size(44.dp)) {
+                        Icon(Icons.Default.EmojiEmotions, "Emoji", Modifier.size(23.dp))
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        enabled = canSendMessages,
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text(if (canSendMessages) "Message..." else "Messaging is restricted") },
+                        maxLines = 1,
+                        singleLine = true,
+                        shape = RoundedCornerShape(24.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = glassPalette.incomingGlass,
+                            unfocusedContainerColor = glassPalette.incomingGlass,
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            cursorColor = glassPalette.bubbleRim,
+                            focusedTextColor = glassPalette.messageText,
+                            unfocusedTextColor = glassPalette.messageText,
+                            focusedPlaceholderColor = glassPalette.messageMuted,
+                            unfocusedPlaceholderColor = glassPalette.messageMuted
+                        ),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = {
+                            if (text.isNotBlank() && !sending && selectedGroup != null) {
+                                val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
+                                messages = messages + optimistic
+                                FynxChatStore.save(context, "group_$groupId", messages)
+                                text = ""; replyToId = null; sending = true
+                                scope.launch {
+                                    FynxGroupRemoteClient.sendMessage(context, groupId, optimistic)
+                                        .onSuccess { remote ->
+                                            val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
+                                            messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
+                                            FynxChatStore.save(context, "group_$groupId", messages)
+                                            syncMessage = null
+                                        }
+                                        .onFailure { error ->
+                                            messages = messages.filterNot { it.id == optimistic.id }
+                                            FynxChatStore.save(context, "group_$groupId", messages)
+                                            syncMessage = error.message ?: "Message could not be sent."
+                                        }
+                                    sending = false
+                                }
+                            }
+                        })
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        Modifier.size(46.dp).clip(CircleShape).background(Color(0xFF7C3AED)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        IconButton(
+                            enabled = canSendMessages,
+                            onClick = {
+                                if (text.isNotBlank() && !sending && selectedGroup != null) {
+                                    val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
+                                    messages = messages + optimistic
+                                    FynxChatStore.save(context, "group_$groupId", messages)
+                                    text = ""; replyToId = null; sending = true
+                                    scope.launch {
+                                        FynxGroupRemoteClient.sendMessage(context, groupId, optimistic)
+                                            .onSuccess { remote ->
+                                                val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
+                                                messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
+                                                FynxChatStore.save(context, "group_$groupId", messages)
+                                                syncMessage = null
+                                            }
+                                            .onFailure { error ->
+                                                messages = messages.filterNot { it.id == optimistic.id }
+                                                FynxChatStore.save(context, "group_$groupId", messages)
+                                                syncMessage = error.message ?: "Message could not be sent."
+                                            }
+                                        sending = false
+                                    }
+                                }
+                            },
+                            modifier = Modifier.size(46.dp)
+                        ) {
+                            Icon(Icons.Default.Mic, "Microphone", tint = Color.White, Modifier.size(23.dp))
+                        }
+                    }
                 }
             }
         }
