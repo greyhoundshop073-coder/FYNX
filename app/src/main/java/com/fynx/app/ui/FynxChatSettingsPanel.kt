@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -49,7 +50,9 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
     val context = LocalContext.current
-    var muted by rememberSaveable(chatUsername) { mutableStateOf(FynxPreferencesStore.isChatMuted(context, chatUsername)) }
+    var notifications by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatNotifications(context, chatUsername)) }
+    var sounds by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatSounds(context, chatUsername)) }
+    var vibration by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatVibration(context, chatUsername)) }
     var showClearDialog by rememberSaveable(chatUsername) { mutableStateOf(false) }
     var showResetDialog by rememberSaveable(chatUsername) { mutableStateOf(false) }
     var wallpaper by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatWallpaper(context, chatUsername)) }
@@ -87,8 +90,9 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
             text = { Text("The chat notification preference will return to its FYNX default.") },
             confirmButton = {
                 TextButton(onClick = {
-                    FynxPreferencesStore.setChatMuted(context, chatUsername, false)
-                    muted = false
+                    FynxConversationPreferences.setChatNotifications(context, chatUsername, true)
+                    sounds = true
+                    vibration = true
                     showResetDialog = false
                 }) { Text("Reset") }
             },
@@ -112,22 +116,21 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
             }
 
             ChatSettingsSection("Notifications", Icons.Default.Notifications) {
-            ChatSwitchRow(
-                "Mute notifications",
-                "Keep this chat quiet without hiding the conversation",
-                muted
-            ) {
-                muted = it
-                FynxPreferencesStore.setChatMuted(context, chatUsername, it)
+            ChatSwitchRow("Chat notifications", "Show notification activity for this conversation", notifications) {
+                notifications = it
+                FynxConversationPreferences.setChatNotifications(context, chatUsername, it)
             }
-            Text(
-                "Other notification controls are managed by FYNX notification settings until their runtime behavior is connected.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            ChatSwitchRow("Message sound", "Play the FYNX chat tone for incoming messages", sounds) {
+                sounds = it
+                FynxConversationPreferences.chat(context, chatUsername).edit().putBoolean("sounds_" + chatUsername.removePrefix("@").lowercase(), it).apply()
+            }
+            ChatSwitchRow("Vibration", "Vibrate briefly for incoming chat messages", vibration) {
+                vibration = it
+                FynxConversationPreferences.chat(context, chatUsername).edit().putBoolean("vibration_" + chatUsername.removePrefix("@").lowercase(), it).apply()
+            }
         }
 
-        ChatSettingsSection("Appearance", Icons.Default.RestartAlt) {
+        ChatSettingsSection("Appearance", Icons.Default.Palette) {
             Text("Message text size", style = MaterialTheme.typography.titleMedium)
             val selectedTextSize = textSizeOptions.firstOrNull { it.first == textSize } ?: textSizeOptions[1]
             Text(selectedTextSize.first, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
