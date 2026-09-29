@@ -220,7 +220,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     }
 
     LaunchedEffect(publishRefreshKey) {
-        if (publishRefreshKey > 0) reload(true)
+        reload(forceRefresh = publishRefreshKey > 0)
     }
     LaunchedEffect(posts, initialPostId, initialCommentId) {
         val target = initialPostId?.trim()?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
@@ -269,7 +269,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         videoDiscoveryOpen = true
         scope.launch { runCatching { FynxDiscoveryClient.recordView(context, postId) } }
     }
-    LaunchedEffect(Unit) { reload(); hydrateActiveStatuses(); hydratePeopleRecommendations() }
+    LaunchedEffect(Unit) { hydrateActiveStatuses(); hydratePeopleRecommendations() }
 
     LaunchedEffect(feedListState, posts.size, hasMore, discoveryHasMore, loading, loadingMore, discoveryLoadingMore, feedRequestInFlight) {
         snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }
