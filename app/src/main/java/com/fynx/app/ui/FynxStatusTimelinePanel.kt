@@ -86,13 +86,22 @@ fun FynxStatusTimelinePanel(
 
     LaunchedEffect(refreshKey) { refresh() }
 
-    LaunchedEffect(statuses, openOwnerUsername, openStatusId) {
+    LaunchedEffect(statuses, openOwnerUsername, openStatusId, loading) {
+        // Do not consume a command while the first status fetch is still in flight:
+        // an empty list at that point does not mean the requested owner/status is
+        // missing. Once loading has settled, every command is consumed exactly once,
+        // including a stale/expired target that cannot be opened.
+        if (loading) return@LaunchedEffect
+        val hasCommand = !openStatusId.isNullOrBlank() || !openOwnerUsername.isNullOrBlank()
+        if (!hasCommand) return@LaunchedEffect
+
         val targetStatus = openStatusId?.trim()?.takeIf { it.isNotBlank() }?.let { id ->
             statuses.firstOrNull { it.id == id && !it.isExpired() }
         } ?: openOwnerUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }?.let { target ->
             statuses.filterNot(FynxStatus::isExpired).filter { it.ownerUsername.equals(target, true) }.maxByOrNull { it.createdAtMillis }
         }
-        if (targetStatus != null) { selected = targetStatus; onOpenCommandConsumed() }
+        if (targetStatus != null) selected = targetStatus
+        onOpenCommandConsumed()
     }
 
     val visibleStatuses = statuses.filterNot(FynxStatus::isExpired)
