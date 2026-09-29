@@ -84,6 +84,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var editingId by remember { mutableStateOf<String?>(null) }
     var attachment by remember { mutableStateOf<Uri?>(null) }
     var attachmentType by remember { mutableStateOf<String?>(null) }
+    var mediaPickerPurpose by remember { mutableStateOf<String?>(null) }
     var showCamera by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
     var isRecordingPaused by remember { mutableStateOf(false) }
@@ -205,9 +206,24 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         }
         val mimeType = context.contentResolver.getType(uri)?.lowercase()
         when {
+            mediaPickerPurpose == "gif" && mimeType == "image/gif" -> {
+                attachment = uri
+                attachmentType = "image"
+                mediaPickerPurpose = null
+                showEmojiPanel = false
+                networkError = null
+            }
+            mediaPickerPurpose == "sticker" && mimeType?.startsWith("image/") == true -> {
+                attachment = uri
+                attachmentType = "image"
+                mediaPickerPurpose = null
+                showEmojiPanel = false
+                networkError = null
+            }
             mimeType?.startsWith("image/") == true -> {
                 attachment = uri
                 attachmentType = "image"
+                mediaPickerPurpose = null
                 networkError = null
             }
             mimeType?.startsWith("video/") == true -> {
@@ -218,7 +234,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             else -> {
                 attachment = null
                 attachmentType = null
-                networkError = "Please choose an image or video."
+                mediaPickerPurpose = null
+                networkError = if (mediaPickerPurpose == "gif") "Please choose a GIF image." else "Please choose an image or video."
             }
         }
     }
@@ -859,10 +876,21 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             }
         }
         if (showEmojiPanel) {
-            FynxChatEmojiPanel(onEmojiSelected = { emoji ->
-                text += emoji
-                showEmojiPanel = false
-            })
+            FynxChatEmojiPanel(
+                onEmojiSelected = { emoji ->
+                    text += emoji
+                    showEmojiPanel = false
+                },
+                onAddSticker = {
+                    mediaPickerPurpose = "sticker"
+                    mediaPicker.launch(arrayOf("image/*"))
+                },
+                onAddGif = {
+                    mediaPickerPurpose = "gif"
+                    mediaPicker.launch(arrayOf("image/gif"))
+                },
+                onClose = { showEmojiPanel = false }
+            )
         }
 
         if (replyToId != null || editingId != null || attachment != null) {
