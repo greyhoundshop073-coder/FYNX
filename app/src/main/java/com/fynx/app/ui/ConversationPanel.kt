@@ -114,6 +114,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var cameraInitialMode by remember { mutableStateOf(CameraMode.PHOTO) }
     var videoNoteMode by remember { mutableStateOf(false) }
     var reactionMessageId by remember { mutableStateOf<String?>(null) }
+    var pollVoteNotice by remember { mutableStateOf<String?>(null) }
     var currentUserId by remember { mutableStateOf<String?>(null) }
     var recipientUserId by remember { mutableStateOf<String?>(null) }
     var recipientCreatedAt by remember(chat.username) { mutableStateOf<String?>(null) }
@@ -688,7 +689,43 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                         maxDurationMs = message.voiceDurationMs.takeIf { it > 0L }
                                     )
                                 } else {
-                                    if (message.attachmentUri != null) {
+                                    if (message.messageType == "location") {
+                                        val lat = message.messagePayload["latitude"] ?: ""
+                                        val lon = message.messagePayload["longitude"] ?: ""
+                                        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                                            Column(Modifier.padding(12.dp)) {
+                                                Icon(Icons.Default.LocationOn, "Location", tint = MaterialTheme.colorScheme.primary)
+                                                Text("Location", style = MaterialTheme.typography.titleSmall)
+                                                Text("Latitude: " + lat, style = MaterialTheme.typography.bodySmall)
+                                                Text("Longitude: " + lon, style = MaterialTheme.typography.bodySmall)
+                                            }
+                                        }
+                                    } else if (message.messageType == "contact") {
+                                        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                                            Column(Modifier.padding(12.dp)) {
+                                                Icon(Icons.Default.ContactPage, "Contact", tint = MaterialTheme.colorScheme.primary)
+                                                Text(message.messagePayload["displayName"].orEmpty().ifBlank { "FYNX contact" }, style = MaterialTheme.typography.titleSmall)
+                                                Text("@" + message.messagePayload["username"].orEmpty(), style = MaterialTheme.typography.bodySmall)
+                                            }
+                                        }
+                                    } else if (message.messageType == "poll") {
+                                        val options = message.messagePayload["options"].orEmpty().split("\u001F").filter { it.isNotBlank() }
+                                        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Icon(Icons.Default.Poll, "Poll", tint = MaterialTheme.colorScheme.primary)
+                                                Text(message.messagePayload["question"].orEmpty(), style = MaterialTheme.typography.titleSmall)
+                                                options.forEachIndexed { optionIndex, option ->
+                                                    OutlinedButton(onClick = {
+                                                        conversationScope.launch {
+                                                            FynxProductionMessaging.votePoll(context, message.id, optionIndex)
+                                                                .onSuccess { pollVoteNotice = "Vote recorded" }
+                                                                .onFailure { pollVoteNotice = it.message ?: "Vote failed" }
+                                                        }
+                                                    }, modifier = Modifier.fillMaxWidth()) { Text(option) }
+                                                }
+                                            }
+                                        }
+                                    } else if (message.attachmentUri != null) {
                                         if (message.attachmentType == "video_note") {
                                             Box(Modifier.size(170.dp).clip(androidx.compose.foundation.shape.CircleShape)) {
                                                 FynxRemoteMedia(message.attachmentUri, "video", Modifier.fillMaxSize(), rounded = false, loopVideo = true, autoPlay = false)
@@ -991,6 +1028,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 }
             }) { Text("Send poll") } },
             dismissButton = { TextButton(onClick = { showPollDialog = false }) { Text("Cancel") } })
+    }
+
+    pollVoteNotice?.let { notice ->
+        LaunchedEffect(notice) { delay(1800L); pollVoteNotice = null }
+        Text(notice, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
     }
 
     if (showAttachmentSheet) {
