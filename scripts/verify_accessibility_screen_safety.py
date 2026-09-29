@@ -64,7 +64,12 @@ def clipped_by_scrollable_ancestor(n, parents):
                 # A partially visible child of a scrollable surface can have a
                 # clipped accessibility bounds in UIAutomator. Its real control
                 # remains larger; do not mistake the viewport crop for its target.
-                if iw > 0 and ih > 0 and (l < cl or t < ct or r > cr or bot > cbot):
+                if l < cl or t < ct or r > cr or bot > cbot:
+                    # Fully off-viewport children have zero visible intersection; they are
+                    # not actionable in the captured frame and must not be certified by
+                    # their clipped accessibility bounds.
+                    if iw == 0 or ih == 0:
+                        return True
                     return True
         cur = parents.get(id(cur))
     return False
