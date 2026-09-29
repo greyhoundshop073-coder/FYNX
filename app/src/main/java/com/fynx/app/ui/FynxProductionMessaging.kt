@@ -199,6 +199,19 @@ object FynxProductionMessaging {
         return FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { fromJson(JSONObject(it).getJSONObject("message")) }
     }
 
+    suspend fun votePoll(context: Context, messageId: String, optionIndex: Int): Result<List<Pair<Int, Int>>> {
+        val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid poll id"))
+        return FynxBackendClient.postJson(context, "/api/messages/$id/poll-vote", JSONObject().put("optionIndex", optionIndex).toString()).mapCatching { raw ->
+            val counts = JSONObject(raw).optJSONArray("counts") ?: JSONArray()
+            buildList {
+                for (i in 0 until counts.length()) {
+                    val item = counts.getJSONObject(i)
+                    add(item.optInt("optionIndex") to item.optInt("votes"))
+                }
+            }
+        }
+    }
+
     suspend fun reactToMessage(context: Context, messageId: String, reaction: String?): Result<RemoteMessage> {
         val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id"))
         val clean = reaction?.trim()?.takeIf { it.isNotBlank() }
