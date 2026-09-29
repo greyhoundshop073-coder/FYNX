@@ -171,7 +171,7 @@ fun OtherUserProfilePanel(
                                                 busy = false
                                             }
                                         },
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                                         shape = RoundedCornerShape(22.dp)
                                     ) {
                                         Text(
@@ -184,7 +184,7 @@ fun OtherUserProfilePanel(
                                         )
                                     }
                                     if (person.canMessage) {
-                                        OutlinedButton(enabled = !busy, onClick = { onMessage(person.username) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp)) {
+                                        OutlinedButton(enabled = !busy, onClick = { onMessage(person.username) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), shape = RoundedCornerShape(22.dp)) {
                                             Icon(Icons.Default.Message, contentDescription = null, modifier = Modifier.size(18.dp))
                                             Spacer(Modifier.width(6.dp))
                                             Text("Message")
