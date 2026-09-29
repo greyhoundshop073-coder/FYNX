@@ -405,7 +405,14 @@ fun SettingsPanel(
                 item { SettingsSectionTitle("General") }
                 item { SettingsActionCard("Language", "English • current language") { showLanguage = true } }
             }
-            if (query.isNotBlank() && !listOf("Account","Privacy & Safety","Notifications","Chat & personalization","Appearance","Language").any { visible(it, "") }) {
+            if (query.isNotBlank() && !listOf(
+    "Account" to "Username bio profile account",
+    "Privacy & Safety" to "Profile online posts Status photo visibility",
+    "Notifications" to "Sounds calls badges message alerts",
+    "Chat & personalization" to "Wallpapers night mode animations stickers emoji read receipts",
+    "Appearance" to "Light, Charcoal Black, Dark, Black AMOLED, System theme",
+    "Language" to "App language English"
+).any { (title, description) -> visible(title, description) }) {
                 item {
                     Text(
                         "No matching settings",
