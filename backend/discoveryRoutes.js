@@ -56,6 +56,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
     try {
       await ensureSchema();
       const limit = Math.min(Math.max(Number(req.query?.limit) || 20, 1), 50);
+      const offset = Math.min(Math.max(Number(req.query?.offset) || 0, 0), 1000000);
       const result = await pool.query(`
         SELECT p.id,
                p.author_id,
@@ -87,11 +88,14 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
           AND p.author_id<>$1
           AND NOT EXISTS (SELECT 1 FROM social_follows f WHERE f.follower_id=$1 AND f.followed_id=p.author_id)
           AND NOT EXISTS (SELECT 1 FROM fynx_discovery_events n WHERE n.user_id=$1 AND n.post_id=p.id AND n.event_type='NOT_INTERESTED' AND n.created_at > NOW()-INTERVAL '30 days')
-        ORDER BY discovery_score DESC, p.created_at DESC
-        LIMIT $2
-      `, [req.user.sub, limit]);
+        ORDER BY discovery_score DESC, p.created_at DESC, p.id DESC
+        LIMIT $2 OFFSET $3
+      `, [req.user.sub, limit + 1, offset]);
+      const hasMore = result.rows.length > limit;
+      const rows = hasMore ? result.rows.slice(0, limit) : result.rows;
+      res.set('Cache-Control', 'private, max-age=15, stale-while-revalidate=30');
       return res.json({
-        posts: result.rows.map((row) => ({
+        posts: rows.map((row) => ({
           id: String(row.id), authorId: String(row.author_id), authorUsername: row.author_username,
           authorDisplayName: row.author_display_name, text: row.text, visibility: row.visibility,
           mediaId: row.media_id == null ? null : String(row.media_id), mediaType: row.media_type || null,
@@ -100,7 +104,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
           likedByCurrentUser: false, followedByCurrentUser: false, isDiscovery: true,
           discoveryScore: Number(row.discovery_score || 0)
         })),
-        hasMore: result.rows.length >= limit
+        hasMore
       });
     } catch (error) {
       console.error("trending feed", error);
