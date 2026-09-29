@@ -115,7 +115,13 @@ fun FynxRemoteMedia(
         if (playbackActive && autoPlay) { if (!view.isPlaying) runCatching { view.start(); videoPlaying = true } }
         else if (!playbackActive) { if (view.isPlaying) runCatching { view.pause() }; videoPlaying = false }
     }
-    DisposableEffect(resolvedUrl, type) { onDispose { videoView?.stopPlayback(); preparedPlayer = null; videoView = null } }
+    DisposableEffect(resolvedUrl, type) {
+        onDispose {
+            videoView?.stopPlayback()
+            preparedPlayer = null
+            videoView = null
+        }
+    }
     when (kind) {
         "image" -> bitmap?.let {
             val imageModifier = if (rounded) modifier.clip(RoundedCornerShape(14.dp)) else modifier
@@ -139,8 +145,18 @@ fun FynxRemoteMedia(
                         if (view.tag != file.absolutePath) {
                             view.tag = file.absolutePath
                             view.setVideoPath(file.absolutePath)
-                            view.setOnPreparedListener { player -> player.isLooping = loopVideo; player.start(); videoPlaying = true }
+                            view.setOnPreparedListener { player ->
+                                preparedPlayer = player
+                                player.isLooping = loopVideo
+                                if (autoPlay && playbackActive) {
+                                    player.start()
+                                    videoPlaying = true
+                                } else {
+                                    videoPlaying = false
+                                }
+                            }
                             view.setOnCompletionListener { videoPlaying = false; onVideoCompleted?.invoke() }
+                            view.setOnErrorListener { _, _, _ -> videoPlaying = false; true }
                         }
                     },
                     modifier = Modifier.fillMaxSize()
