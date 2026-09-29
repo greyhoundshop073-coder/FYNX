@@ -273,7 +273,11 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
 
     LaunchedEffect(feedListState, posts.size, hasMore, discoveryHasMore, loading, loadingMore, discoveryLoadingMore, feedRequestInFlight) {
         snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }
-            .collect { (lastVisibleIndex, totalItems) -> if (hasMore && !loading && !loadingMore && !feedRequestInFlight && lastVisibleIndex != null && lastVisibleIndex >= totalItems - 6) loadMore() }
+            .collect { (lastVisibleIndex, totalItems) ->
+                if (lastVisibleIndex != null && lastVisibleIndex >= totalItems - 6 && !loading && !loadingMore && !discoveryLoadingMore && !feedRequestInFlight) {
+                    if (hasMore) loadMore() else if (discoveryHasMore) hydrateDiscovery(discoveryOffset)
+                }
+            }
     }
 
     LazyColumn(state = feedListState, modifier = modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp)) {
