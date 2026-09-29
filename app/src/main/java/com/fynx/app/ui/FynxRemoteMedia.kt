@@ -129,7 +129,6 @@ fun FynxRemoteMedia(
     }
     DisposableEffect(resolvedUrl, type) {
         onDispose {
-            (animatedDrawable as? AnimatedImageDrawable)?.stop()
             videoView?.stopPlayback()
             preparedPlayer = null
             videoView = null
@@ -139,8 +138,8 @@ fun FynxRemoteMedia(
         "gif" -> animatedDrawable?.let { drawable ->
             val imageModifier = if (rounded) modifier.clip(RoundedCornerShape(14.dp)) else modifier
             AndroidView(
-                factory = { ctx -> android.widget.ImageView(ctx).apply { scaleType = android.widget.ImageView.ScaleType.FIT_CENTER; setImageDrawable(drawable); (drawable as? AnimatedImageDrawable)?.start() } },
-                update = { view -> if (view.drawable !== drawable) view.setImageDrawable(drawable); (drawable as? AnimatedImageDrawable)?.takeIf { !it.isRunning }?.start() },
+                factory = { ctx -> android.widget.ImageView(ctx).apply { scaleType = android.widget.ImageView.ScaleType.FIT_CENTER; setImageDrawable(drawable); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) (drawable as? AnimatedImageDrawable)?.start() } },
+                update = { view -> if (view.drawable !== drawable) view.setImageDrawable(drawable); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) (drawable as? AnimatedImageDrawable)?.takeIf { !it.isRunning }?.start() },
                 modifier = imageModifier
             )
         }
