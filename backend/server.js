@@ -141,6 +141,8 @@ async function initDatabase() {
     CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages (sender_id, recipient_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS messages_recipient_idx ON messages (recipient_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS messages_delivery_idx ON messages (recipient_id, delivered_at, created_at DESC);
+    CREATE TABLE IF NOT EXISTS message_poll_votes (message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, option_index INTEGER NOT NULL CHECK (option_index >= 0 AND option_index < 20), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (message_id, user_id));
+    CREATE INDEX IF NOT EXISTS message_poll_votes_message_idx ON message_poll_votes (message_id);
     CREATE TABLE IF NOT EXISTS friendships (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -592,6 +594,22 @@ app.post("/api/messages/:id/delivered", auth, async (req, res) => {
     broadcastToUser(result.rows[0].sender_id, { type: "message_status", messageId: String(id), status: "delivered" });
     return res.json({ ok: true });
   } catch (error) { console.error("message delivered", error); return res.status(500).json({ error: "delivery receipt failed" }); }
+});
+
+app.post("/api/messages/:id/poll-vote", auth, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const optionIndex = Number(req.body?.optionIndex);
+    if (!Number.isInteger(id) || id < 1 || !Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= 20) return res.status(400).json({ error: "invalid poll vote" });
+    const target = await pool.query("SELECT id, sender_id, recipient_id, message_type, message_payload FROM messages WHERE id=$1 AND deleted=FALSE LIMIT 1", [id]);
+    const row = target.rows[0];
+    if (!row || row.message_type !== "poll" || ![String(row.sender_id), String(row.recipient_id)].includes(String(req.user.sub))) return res.status(404).json({ error: "poll not found" });
+    const options = Array.isArray(row.message_payload?.options) ? row.message_payload.options : [];
+    if (optionIndex >= options.length) return res.status(400).json({ error: "invalid poll option" });
+    await pool.query("INSERT INTO message_poll_votes (message_id,user_id,option_index) VALUES ($1,$2,$3) ON CONFLICT (message_id,user_id) DO UPDATE SET option_index=EXCLUDED.option_index, created_at=NOW()", [id, req.user.sub, optionIndex]);
+    const counts = await pool.query("SELECT option_index, COUNT(*)::int AS votes FROM message_poll_votes WHERE message_id=$1 GROUP BY option_index ORDER BY option_index", [id]);
+    return res.json({ ok: true, selectedOption: optionIndex, counts: counts.rows.map(v => ({ optionIndex: v.option_index, votes: v.votes })) });
+  } catch (error) { console.error("poll vote", error); return res.status(500).json({ error: "poll vote failed" }); }
 });
 
 app.patch("/api/messages/:id", auth, async (req, res) => {
