@@ -156,9 +156,7 @@ fun FynxVisibleUpdatesPanel(
                                 own?.second ?: 0,
                                 ownerPhotoIds[current]
                             )
-                            IconButton(
-    onClick = onCreateStatus,
-    modifier = Modifier.align(Alignment.TopEnd).sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                            IconButton(onClick = onCreateStatus, modifier = Modifier.align(Alignment.TopEnd).sizeIn(minWidth = 48.dp, minHeight = 48.dp)
         .background(MaterialTheme.colorScheme.primary, CircleShape)
         .semantics { contentDescription = "Create your status" }
 ) {
