@@ -19,8 +19,8 @@ def require(path: Path, *needles: str) -> None:
 
 require(
     MARKETPLACE,
-    "fun contactSeller(username: String)",
-    "FynxDeepLinkParser.chatAppLink(normalized)",
+    "fun contactSeller(username: String, listingId: String)",
+    "FynxDeepLinkParser.chatAppLink(normalized, listingId)",
     "TextButton(onClick = onContact)",
     "Contact seller",
 )
