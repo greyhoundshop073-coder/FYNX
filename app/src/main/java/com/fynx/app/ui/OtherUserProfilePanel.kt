@@ -101,7 +101,7 @@ fun OtherUserProfilePanel(
             profile == null -> Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 Text(error ?: "User not found", color = FynxDesign.TextSecondary, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(12.dp))
-                OutlinedButton(onClick = { loadProfile() }) { Text("Retry") }
+                OutlinedButton(onClick = { scope.launch { loadProfile() } }) { Text("Retry") }
             }
             else -> {
                 val person = profile!!
