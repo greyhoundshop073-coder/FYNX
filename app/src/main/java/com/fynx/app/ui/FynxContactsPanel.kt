@@ -12,7 +12,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Search
@@ -60,7 +59,7 @@ fun FynxContactsPanel(
                 val local = readDeviceContacts(context)
                 val sim = readSimContacts(context)
                 contacts = mergeContacts(local, sim)
-                val candidates = contacts.take(150)
+                val candidates = contacts
                 val found = mutableMapOf<String, FynxSocialClient.User>()
                 var failedLookups = 0
                 candidates.chunked(4).forEach { batch ->
@@ -173,16 +172,6 @@ fun FynxContactsPanel(
                                     Spacer(Modifier.width(3.dp))
                                     Text("Profile")
                                 }
-                                TextButton(onClick = {
-                                    val username = user.username.removePrefix("@").lowercase()
-                                    val preview = ChatPreview(name = user.displayName.ifBlank { username }, username = "@$username", lastMessage = "", time = "Now", online = false, avatarUri = user.profilePhotoMediaId?.let { "/api/media/$it" })
-                                    FynxChatStore.savePreview(context, preview)
-                                    openChat = preview
-                                }) {
-                                    Icon(Icons.Default.ChatBubbleOutline, null)
-                                    Spacer(Modifier.width(3.dp))
-                                    Text("Chat")
-                                }
                             } else {
                                 TextButton(onClick = {
                                     val payload = FynxShareActions.invitePayload(contact.name.ifBlank { "A friend" })
@@ -195,7 +184,12 @@ fun FynxContactsPanel(
                 }
             }
         }
-        notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        notice?.let {
+            Text(it, color = MaterialTheme.colorScheme.error)
+            if (!loading && permission) {
+                OutlinedButton(onClick = { loadContacts() }, modifier = Modifier.heightIn(min = 44.dp)) { Text("Retry") }
+            }
+        }
     }
 }
 
