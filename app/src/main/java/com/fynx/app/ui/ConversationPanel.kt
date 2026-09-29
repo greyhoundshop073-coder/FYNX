@@ -538,7 +538,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                 sending = false
                             }
                         }
-                    ) { Text("Block User", color = Color(0xFF7C4DFF), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
+                    ) { Text("Block User", color = MaterialTheme.colorScheme.error, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) }
                     IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                         Icon(Icons.Default.Close, "Close", tint = glassPalette.messageMuted, modifier = Modifier.size(22.dp))
                     }
