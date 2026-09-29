@@ -117,6 +117,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var pollOptions by remember { mutableStateOf(listOf("", "")) }
     var cameraInitialMode by remember { mutableStateOf(CameraMode.PHOTO) }
     var videoNoteMode by remember { mutableStateOf(false) }
+    var composerVideoMode by remember { mutableStateOf(false) }
     var reactionMessageId by remember { mutableStateOf<String?>(null) }
     var pollVoteNotice by remember { mutableStateOf<String?>(null) }
     var currentUserId by remember { mutableStateOf<String?>(null) }
@@ -496,6 +497,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         attachment = null
                         attachmentType = null
                         attachmentMessageType = null
+                        composerVideoMode = false
                     }
                     .onFailure { networkError = it.message ?: "Message could not be sent" }
             }
@@ -775,9 +777,19 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                         }
                                     } else if (message.attachmentUri != null) {
                                         if (message.attachmentType == "video_note") {
-                                            Box(Modifier.size(170.dp).clip(androidx.compose.foundation.shape.CircleShape)) {
-                                                FynxRemoteMedia(message.attachmentUri, "video", Modifier.fillMaxSize(), rounded = false, loopVideo = true, autoPlay = false)
-                                                Surface(color = glassPalette.background.copy(alpha = 0.62f), contentColor = glassPalette.messageText, shape = androidx.compose.foundation.shape.CircleShape, modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)) { Text("Video note", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageText, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
+                                            Box(
+                                                Modifier
+                                                    .size(170.dp)
+                                                    .clip(androidx.compose.foundation.shape.CircleShape)
+                                            ) {
+                                                FynxRemoteMedia(
+                                                    message.attachmentUri,
+                                                    "video",
+                                                    Modifier.fillMaxSize(),
+                                                    rounded = false,
+                                                    loopVideo = true,
+                                                    autoPlay = false
+                                                )
                                             }
                                         } else {
                                             FynxRemoteMedia(mediaUrl = message.attachmentUri, type = if (message.messageType == "gif") "gif" else (message.attachmentType ?: "image"), modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp), autoPlay = false)
@@ -1004,15 +1016,57 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         Row(verticalAlignment = Alignment.CenterVertically) {
                         
                         val voiceMode = text.isBlank() && attachment == null
-                        Box(Modifier.size(46.dp).clip(androidx.compose.foundation.shape.CircleShape).background(if (voiceMode) Color(0xFF7C3AED) else glassPalette.outgoingStart).semantics { contentDescription = if (voiceMode) "Hold to record voice message" else "Send message" }.pointerInput(voiceMode, sending) {
-                            if (!voiceMode || sending) return@pointerInput
-                            detectTapGestures(onPress = {
-                                startRecording()
-                                tryAwaitRelease()
-                                if (isRecording) stopRecording()
-                            })
-                        }, contentAlignment = Alignment.Center) {
-                            Icon(if (voiceMode) Icons.Default.Mic else Icons.Default.Send, if (voiceMode) "Hold to record voice message" else "Send message", Modifier.size(22.dp), tint = Color.White)
+                        val recordingMode = voiceMode && composerVideoMode
+                        Box(
+                            Modifier
+                                .size(46.dp)
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .background(if (voiceMode) Color(0xFF7C3AED) else glassPalette.outgoingStart)
+                                .semantics {
+                                    contentDescription = when {
+                                        !voiceMode -> "Send message"
+                                        recordingMode -> "Hold to record video note"
+                                        else -> "Hold to record voice message"
+                                    }
+                                }
+                                .pointerInput(voiceMode, recordingMode, sending) {
+                                    if (!voiceMode || sending) return@pointerInput
+                                    detectTapGestures(
+                                        onTap = {
+                                            composerVideoMode = !composerVideoMode
+                                        },
+                                        onPress = {
+                                            val started = kotlinx.coroutines.CompletableDeferred<Boolean>()
+                                            val starter = kotlinx.coroutines.launch {
+                                                delay(250L)
+                                                started.complete(true)
+                                                if (recordingMode) {
+                                                    videoNoteMode = true
+                                                    cameraInitialMode = CameraMode.VIDEO
+                                                    showCamera = true
+                                                } else {
+                                                    startRecording()
+                                                }
+                                            }
+                                            val released = tryAwaitRelease()
+                                            if (!started.isCompleted) {
+                                                starter.cancel()
+                                                started.complete(false)
+                                            } else if (started.await() && !recordingMode && isRecording) {
+                                                stopRecording()
+                                            }
+                                            released
+                                        }
+                                    )
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                if (!voiceMode) Icons.Default.Send else if (recordingMode) Icons.Default.Videocam else Icons.Default.Mic,
+                                if (!voiceMode) "Send message" else if (recordingMode) "Hold to record video note" else "Hold to record voice message",
+                                Modifier.size(22.dp),
+                                tint = Color.White
+                            )
                         }
                         }
                     },
