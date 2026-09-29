@@ -62,7 +62,7 @@ fun OtherUserProfilePanel(
     var profileMenuOpen by remember(username) { mutableStateOf(false) }
     var blockConfirmOpen by remember(username) { mutableStateOf(false) }
 
-    fun loadProfile() {
+    suspend fun loadProfile() {
         scope.launch {
             loading = true
             error = null
@@ -174,7 +174,8 @@ fun OtherUserProfilePanel(
                                         modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                                         shape = RoundedCornerShape(22.dp)
                                     ) {
-                                        Text(
+                                        if (busy) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                        else Text(
                                             when {
                                                 person.relationship == "friends" -> if (following) "Following" else "Follow"
                                                 person.viewerReceivedRequest -> "Accept request"
