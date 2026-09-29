@@ -96,7 +96,7 @@ check("main push runs full Android build and runtime verification",
       './gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest' in workflow and
       'connectedDebugAndroidTest' in workflow)
 check("APK filename is tied to the exact Git commit",
-      'FYNX-debug-\${GITHUB_SHA}.apk' in workflow and
+      'FYNX-debug-${GITHUB_SHA}.apk' in workflow and
       'FYNX Android APK build commit: %s\\n' in workflow)
 
 failed = [name for name, ok in checks if not ok]
