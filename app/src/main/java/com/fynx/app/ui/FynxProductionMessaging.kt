@@ -28,7 +28,7 @@ object FynxProductionMessaging {
         val id: String, val senderId: String, val senderUsername: String? = null, val senderDisplayName: String? = null,
         val recipientId: String, val recipientUsername: String? = null, val recipientDisplayName: String? = null,
         val text: String, val timestamp: Long, val delivered: Boolean, val read: Boolean, val edited: Boolean, val deleted: Boolean,
-        val replyToId: String?, val reaction: String? = null, val mediaId: String? = null, val mediaType: String? = null, val mediaUrl: String? = null, val voiceDurationMs: Long = 0L, val pinned: Boolean = false
+        val replyToId: String?, val reaction: String? = null, val messageType: String = "text", val messagePayload: Map<String, String> = emptyMap(), val mediaId: String? = null, val mediaType: String? = null, val mediaUrl: String? = null, val voiceDurationMs: Long = 0L, val pinned: Boolean = false
     )
 
     suspend fun history(context: Context, username: String): Result<List<RemoteMessage>> =
@@ -185,6 +185,20 @@ object FynxProductionMessaging {
             .maxByOrNull { it.timestamp }
     }
 
+    suspend fun sendStructuredMessage(context: Context, recipientUsername: String, messageType: String, payload: Map<String, String>, replyToId: String? = null): Result<RemoteMessage> {
+        val allowed = setOf("location", "contact", "poll", "sticker", "gif")
+        if (messageType !in allowed) return Result.failure(IllegalArgumentException("Unsupported message type."))
+        if (payload.isEmpty()) return Result.failure(IllegalArgumentException("Message details are required."))
+        val body = JSONObject().apply {
+            put("recipientUsername", recipientUsername.trim().removePrefix("@").lowercase())
+            put("text", "")
+            put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL)
+            put("messageType", messageType)
+            put("messagePayload", JSONObject(payload))
+        }
+        return FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { fromJson(JSONObject(it).getJSONObject("message")) }
+    }
+
     suspend fun reactToMessage(context: Context, messageId: String, reaction: String?): Result<RemoteMessage> {
         val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id"))
         val clean = reaction?.trim()?.takeIf { it.isNotBlank() }
@@ -230,7 +244,7 @@ object FynxProductionMessaging {
         text = if (message.deleted) "Message deleted" else message.text, fromMe = message.senderId == currentUserId, id = message.id,
         timestamp = message.timestamp, delivered = message.delivered, read = message.read, replyToId = message.replyToId, edited = message.edited,
         attachmentUri = message.mediaUrl, attachmentType = message.mediaType, voiceUri = if (message.mediaType == "audio") message.mediaUrl else null,
-        voiceDurationMs = message.voiceDurationMs, reaction = message.reaction, mediaId = message.mediaId, pinned = message.pinned, senderName = message.senderDisplayName, senderUsername = message.senderUsername
+        voiceDurationMs = message.voiceDurationMs, messageType = message.messageType, messagePayload = message.messagePayload, reaction = message.reaction, mediaId = message.mediaId, pinned = message.pinned, senderName = message.senderDisplayName, senderUsername = message.senderUsername
     )
 
     fun fromJson(item: JSONObject): RemoteMessage = RemoteMessage(
@@ -240,6 +254,8 @@ object FynxProductionMessaging {
         text = item.optString("text"), timestamp = item.optDouble("timestamp", 0.0).toLong(), delivered = item.optBoolean("delivered", false), read = item.optBoolean("read", false), edited = item.optBoolean("edited", false), deleted = item.optBoolean("deleted", false),
         reaction = item.optString("reaction").takeIf { it.isNotBlank() },
         replyToId = if (item.isNull("reply_to_id") && item.isNull("replyToId")) null else item.optString("reply_to_id", item.optString("replyToId")).takeIf { it.isNotBlank() },
+        messageType = item.optString("message_type", item.optString("messageType", "text")),
+        messagePayload = item.optJSONObject("message_payload")?.let { obj -> buildMap { val keys = obj.keys(); while (keys.hasNext()) { val key = keys.next(); val value = obj.opt(key); if (value != null && value != JSONObject.NULL) put(key, value.toString()) } } } ?: emptyMap(),
         mediaId = if (item.isNull("media_id") && item.isNull("mediaId")) null else item.optString("media_id", item.optString("mediaId")).takeIf { it.isNotBlank() }, mediaType = item.optString("media_type", item.optString("mediaType")).takeIf { it.isNotBlank() },
         mediaUrl = item.optString("mediaUrl").takeIf { it.isNotBlank() }, voiceDurationMs = item.optLong("voiceDurationMs", 0L), pinned = item.optBoolean("pinned", false)
     )
