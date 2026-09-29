@@ -1032,14 +1032,8 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                 .pointerInput(voiceMode, recordingMode, sending) {
                                     if (!voiceMode || sending) return@pointerInput
                                     detectTapGestures(
-                                        onTap = {
-                                            composerVideoMode = !composerVideoMode
-                                        },
                                         onPress = {
-                                            val releasedBeforeLongPress = kotlinx.coroutines.withTimeoutOrNull(250L) {
-                                                tryAwaitRelease()
-                                            } != null
-                                            if (releasedBeforeLongPress) {
+                                            if (tryAwaitRelease()) {
                                                 composerVideoMode = !composerVideoMode
                                             } else {
                                                 if (recordingMode) {
@@ -1048,9 +1042,9 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                     showCamera = true
                                                 } else {
                                                     startRecording()
+                                                    tryAwaitRelease()
+                                                    if (isRecording) stopRecording()
                                                 }
-                                                tryAwaitRelease()
-                                                if (!recordingMode && isRecording) stopRecording()
                                             }
                                         }
                                     )
