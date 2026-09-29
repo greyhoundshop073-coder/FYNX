@@ -8,7 +8,9 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.location.LocationManager
 import android.content.Context
+import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.core.content.ContextCompat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
@@ -975,6 +977,12 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             text = { Text("Share your current location with this chat?") },
             confirmButton = { TextButton(onClick = {
                 showLocationDialog = false
+                val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                val coarseGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                if (!fineGranted && !coarseGranted) {
+                    networkError = "Location permission is required to share your location."
+                    return@TextButton
+                }
                 val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
                 val location = runCatching { manager.getLastKnownLocation(LocationManager.GPS_PROVIDER) ?: manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) }.getOrNull()
                 if (location == null) { networkError = "Current location is not available yet."; return@TextButton }
