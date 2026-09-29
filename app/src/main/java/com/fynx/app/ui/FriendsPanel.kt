@@ -148,7 +148,7 @@ private fun RemoteFriendRow(person: FynxSocialClient.User, actionText: String, b
             if (busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
             else {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { onOpenChat(person.username) }, modifier = Modifier.size(42.dp)) {
+                    IconButton(onClick = { onOpenChat(person.username) }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = "Open chat" }) {
                         Icon(Icons.Default.ChatBubbleOutline, contentDescription = "Open chat")
                     }
                     if (secondaryAction == null) {
