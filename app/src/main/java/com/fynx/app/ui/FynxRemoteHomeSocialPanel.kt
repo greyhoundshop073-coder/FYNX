@@ -195,7 +195,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         if (discoveryLoadingMore) return
         discoveryLoadingMore = true
         scope.launch {
-            FynxRemoteSocialClient.discoveryFeed(context, 12, offset).onSuccess { suggested ->
+            FynxRemoteSocialClient.discoveryFeed(context, 3, offset).onSuccess { suggested ->
                 val base = posts.filterNot { it.isDiscovery }
                 val previousDiscovery = if (replace) emptyList() else posts.filter { it.isDiscovery }
                 val existing = (base + previousDiscovery).map { it.id }.toSet()
