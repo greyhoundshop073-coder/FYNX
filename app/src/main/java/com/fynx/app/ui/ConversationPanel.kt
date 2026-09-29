@@ -1,7 +1,6 @@
 package com.fynx.app.ui
 
 import android.Manifest
-import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
@@ -86,8 +85,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var recordingFile by remember { mutableStateOf<File?>(null) }
     var recordingStartedAt by remember { mutableStateOf(0L) }
-    var playingVoiceId by remember { mutableStateOf<String?>(null) }
-    var player by remember { mutableStateOf<MediaPlayer?>(null) }
+    var recordingPausedAt by remember { mutableStateOf(0L) }
+    var recordingPausedTotalMs by remember { mutableStateOf(0L) }
     var searchQuery by remember { mutableStateOf("") }
     var searchOpen by remember { mutableStateOf(false) }
     var menuMessageId by remember { mutableStateOf<String?>(null) }
@@ -218,6 +217,8 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     recorder = this
                     recordingFile = file
                     recordingStartedAt = System.currentTimeMillis()
+                    recordingPausedAt = 0L
+                    recordingPausedTotalMs = 0L
                     recordingElapsed = 0L
                     isRecordingPaused = false
                     isRecording = true
@@ -286,7 +287,9 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     LaunchedEffect(isRecording, recordingStartedAt) {
         while (isRecording) {
-            if (!isRecordingPaused) recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L)
+            val now = System.currentTimeMillis()
+            val pausedNow = if (isRecordingPaused && recordingPausedAt > 0L) now - recordingPausedAt else 0L
+            recordingElapsed = (now - recordingStartedAt - recordingPausedTotalMs - pausedNow).coerceAtLeast(0L).coerceAtMost(120_000L)
             delay(200L)
         }
     }
@@ -309,20 +312,60 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             if (typingSent) realtimeClient.sendTyping(recipientUserId ?: "", false)
             realtimeClient.close()
             runCatching { recorder?.stop() }
-            recorder?.release(); player?.release()
+            recorder?.release()
         }
     }
 
 
     fun startRecording() = microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
     fun cancelRecording() {
-        recorder?.release(); recorder = null; recordingFile?.delete(); recordingFile = null; recordingElapsed = 0L; isRecording = false
+        recorder?.release()
+        recorder = null
+        recordingFile?.delete()
+        recordingFile = null
+        recordingElapsed = 0L
+        recordingStartedAt = 0L
+        recordingPausedAt = 0L
+        recordingPausedTotalMs = 0L
+        isRecordingPaused = false
+        isRecording = false
+    }
+    fun pauseRecording() {
+        val r = recorder ?: return
+        if (!isRecordingPaused) {
+            runCatching { r.pause() }.onSuccess {
+                recordingPausedAt = System.currentTimeMillis()
+                isRecordingPaused = true
+            }.onFailure { networkError = it.message ?: "Recording could not be paused" }
+        }
+    }
+    fun resumeRecording() {
+        val r = recorder ?: return
+        if (isRecordingPaused) {
+            runCatching { r.resume() }.onSuccess {
+                recordingPausedTotalMs += (System.currentTimeMillis() - recordingPausedAt).coerceAtLeast(0L)
+                recordingPausedAt = 0L
+                isRecordingPaused = false
+            }.onFailure { networkError = it.message ?: "Recording could not be resumed" }
+        }
     }
     fun stopRecording() {
         val r = recorder ?: return
         val file = recordingFile
-        val duration = (System.currentTimeMillis() - recordingStartedAt).coerceAtMost(120_000L)
-        runCatching { r.stop() }; r.release(); recorder = null; isRecordingPaused = false; isRecording = false; recordingFile = null; recordingElapsed = 0L
+        val now = System.currentTimeMillis()
+        val pausedNow = if (isRecordingPaused && recordingPausedAt > 0L) now - recordingPausedAt else 0L
+        val duration = (now - recordingStartedAt - recordingPausedTotalMs - pausedNow).coerceAtMost(120_000L)
+        runCatching { if (isRecordingPaused) r.resume() }
+        runCatching { r.stop() }
+        r.release()
+        recorder = null
+        isRecordingPaused = false
+        isRecording = false
+        recordingFile = null
+        recordingStartedAt = 0L
+        recordingPausedAt = 0L
+        recordingPausedTotalMs = 0L
+        recordingElapsed = 0L
         if (file != null && file.exists() && file.length() > 0L && duration >= 300L) {
             val pendingFile = file
             conversationScope.launch {
@@ -342,62 +385,6 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         } else file?.delete()
     }
     stopRecordingAction = ::stopRecording
-
-    fun playVoice(message: ChatMessage) {
-        val voiceUrl = message.voiceUri ?: return
-        val currentPlayer = player
-        if (playingVoiceId == message.id && currentPlayer != null) {
-            runCatching {
-                if (currentPlayer.isPlaying) currentPlayer.pause() else currentPlayer.start()
-            }.onFailure {
-                playingVoiceId = null
-                currentPlayer.release()
-                player = null
-            }
-            return
-        }
-        player?.release()
-        player = null
-        playingVoiceId = null
-        conversationScope.launch {
-            val localUri = if (voiceUrl.startsWith("http://") || voiceUrl.startsWith("https://") || voiceUrl.startsWith("/api/")) {
-                val mediaId = message.mediaId ?: voiceUrl.substringAfterLast('/').takeIf { it.isNotBlank() }
-                if (mediaId == null) {
-                    networkError = "Voice message media is unavailable"
-                    return@launch
-                }
-                FynxProductionMessaging.cacheRemoteMedia(context, mediaId, voiceUrl).getOrElse {
-                    networkError = it.message ?: "Voice message could not be loaded"
-                    return@launch
-                }
-            } else Uri.parse(voiceUrl)
-            val preparedPlayer = runCatching {
-                MediaPlayer().apply {
-                    setDataSource(context, localUri)
-                    setOnCompletionListener {
-                        playingVoiceId = null
-                        release()
-                        player = null
-                    }
-                    setOnErrorListener { _, _, _ ->
-                        playingVoiceId = null
-                        release()
-                        player = null
-                        true
-                    }
-                    prepare()
-                    start()
-                }
-            }.getOrElse {
-                networkError = it.message ?: "Voice message could not be played"
-                null
-            }
-            if (preparedPlayer != null) {
-                player = preparedPlayer
-                playingVoiceId = message.id
-            }
-        }
-    }
 
     fun submitComposer() {
         val value = text.trim()
@@ -510,8 +497,6 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         DropdownMenuItem(text = { Text("Chat settings") }, onClick = { showChatMenu = false; showChatSettings = true }, leadingIcon = { Icon(Icons.Default.Settings, null) })
                         DropdownMenuItem(text = { Text(if (chatNotificationsEnabled) "Mute notifications" else "Turn on notifications") }, onClick = { chatNotificationsEnabled = !chatNotificationsEnabled; FynxConversationPreferences.setChatNotifications(context, chat.username, chatNotificationsEnabled); showChatMenu = false }, leadingIcon = { Icon(Icons.Default.Notifications, null) })
                         DropdownMenuItem(text = { Text(if (searchOpen) "Close search" else "Search messages") }, onClick = { showChatMenu = false; searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, leadingIcon = { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, null) })
-                        DropdownMenuItem(text = { Text("Take photo or video") }, onClick = { showChatMenu = false; showCamera = true }, leadingIcon = { Icon(Icons.Default.CameraAlt, null) })
-                        DropdownMenuItem(text = { Text("Choose photo or video") }, onClick = { showChatMenu = false; mediaPicker.launch(arrayOf("image/*", "video/*")) }, leadingIcon = { Icon(Icons.Default.AttachFile, null) })
                         DropdownMenuItem(text = { Text("Send gift") }, onClick = { showChatMenu = false; showGifts = true }, leadingIcon = { Icon(Icons.Default.CardGiftcard, null) })
                     }
                 }
@@ -675,10 +660,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                     }
                                 }
                                 if (message.voiceUri != null) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(onClick = { playVoice(message) }, modifier = Modifier.size(48.dp)) { Icon(if (playingVoiceId == message.id) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (playingVoiceId == message.id) "Pause voice message" else "Play voice message", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-                                        Text("Voice message", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
+                                    FynxRemoteAudio(
+                                        mediaUrl = message.voiceUri,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        maxDurationMs = message.voiceDurationMs.takeIf { it > 0L }
+                                    )
                                 } else {
                                     if (message.attachmentUri != null) {
                                         if (message.attachmentType == "video_note") {
@@ -856,6 +842,9 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     Icon(Icons.Default.Mic, "Recording", tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(8.dp))
                     Text("Recording ${recordingElapsed / 1000L}s", Modifier.weight(1f))
+                    TextButton(onClick = { if (isRecordingPaused) resumeRecording() else pauseRecording() }) {
+                        Text(if (isRecordingPaused) "Resume" else "Pause")
+                    }
                     TextButton(onClick = { cancelRecording() }) { Text("Cancel") }
                     Button(onClick = { stopRecording() }, enabled = !sending) { Text("Send") }
                 }
@@ -935,7 +924,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 val items = listOf(
                     Triple("Camera", Icons.Default.CameraAlt) { showAttachmentSheet = false; cameraInitialMode = CameraMode.PHOTO; showCamera = true },
                     Triple("Gallery", Icons.Default.PhotoLibrary) { showAttachmentSheet = false; mediaPicker.launch(arrayOf("image/*", "video/*")) },
-                    Triple("Document", Icons.Default.Description) { showAttachmentSheet = false; mediaPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) },
+                    Triple("Files", Icons.Default.Description) { showAttachmentSheet = false; mediaPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) },
                     Triple("Video note", Icons.Default.Videocam) { showAttachmentSheet = false; videoNoteMode = true; cameraInitialMode = CameraMode.VIDEO; showCamera = true }
                 )
                 items.forEach { (label, icon, action) ->
