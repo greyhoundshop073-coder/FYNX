@@ -772,7 +772,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             },
                             modifier = Modifier.size(46.dp)
                         ) {
-                            Icon(Icons.Default.Mic, "Microphone", tint = Color.White, Modifier.size(23.dp))
+                            Icon(Icons.Default.Mic, "Microphone", modifier = Modifier.size(23.dp), tint = Color.White)
                         }
                     }
                 }
