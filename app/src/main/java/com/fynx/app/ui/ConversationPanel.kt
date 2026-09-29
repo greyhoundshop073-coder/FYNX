@@ -470,7 +470,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                     payload = mapOf("mediaId" to media.id),
                                     replyToId = replyToId,
                                     mediaId = media.id,
-                                    mediaType = if (selectedMessageType == "gif") "image/gif" else selectedType
+                                    mediaType = selectedType
                                 ).getOrThrow()
                             } else {
                                 FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId, media.id, selectedType, 0L).getOrThrow()
