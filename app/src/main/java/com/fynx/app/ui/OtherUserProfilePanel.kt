@@ -266,18 +266,48 @@ fun OtherUserProfilePanel(
 private fun ProfilePhotoViewerDialog(mediaId: String, name: String, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var bitmap by remember(mediaId) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    LaunchedEffect(mediaId) {
+    var loading by remember(mediaId) { mutableStateOf(true) }
+    var failed by remember(mediaId) { mutableStateOf(false) }
+    var retryNonce by remember(mediaId) { mutableIntStateOf(0) }
+
+    LaunchedEffect(mediaId, retryNonce) {
+        loading = true
+        failed = false
+        bitmap = null
         val uri = FynxProductionMessaging.cacheRemoteMedia(context, mediaId, "/api/social/media/$mediaId").getOrNull()
-        bitmap = if (uri != null) withContext(Dispatchers.IO) { runCatching { context.contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it) } }.getOrNull() } else null
+        bitmap = if (uri != null) {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it) }
+                }.getOrNull()
+            }
+        } else null
+        failed = bitmap == null
+        loading = false
     }
+
     Dialog(onDismissRequest = onDismiss) {
         Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) {
-            if (bitmap != null) Image(bitmap!!.asImageBitmap(), contentDescription = "Profile photo", modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)), contentScale = ContentScale.Fit)
-            else FynxAvatar(name, Modifier.size(120.dp))
+            when {
+                loading -> CircularProgressIndicator()
+                bitmap != null -> Image(
+                    bitmap!!.asImageBitmap(),
+                    contentDescription = "Profile photo",
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)),
+                    contentScale = ContentScale.Fit
+                )
+                failed -> Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FynxAvatar(name, Modifier.size(120.dp))
+                    Text("Profile photo unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = { retryNonce++ }) { Text("Retry") }
+                }
+            }
         }
     }
 }
-
 @Composable
 private fun ProfileCount(label: String, value: Int) {
     Column(Modifier.widthIn(min = 72.dp, max = 120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
