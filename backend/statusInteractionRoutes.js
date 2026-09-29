@@ -212,8 +212,36 @@ export function registerStatusInteractionRoutes({ app }) {
         // A Status reply is also a real private-chat message. Keep the existing
         // status_replies record for Status history while making the reply visible
         // in the owner's normal conversation surface.
-        await pool.query(`INSERT INTO messages(sender_id,recipient_id,text,created_at)
-          VALUES($1,$2,$3,NOW())`, [req.user.sub, status.owner_id, body]);
+        const messageResult = await pool.query(`INSERT INTO messages(sender_id,recipient_id,text,created_at)
+          VALUES($1,$2,$3,NOW()) RETURNING id, EXTRACT(EPOCH FROM created_at) * 1000 AS timestamp`, [req.user.sub, status.owner_id, body]);
+        const broadcast = req.app.locals?.fynxBroadcastMessage;
+        if (typeof broadcast === 'function') {
+          const row = messageResult.rows[0];
+          await broadcast({
+            id: String(row.id),
+            senderId: String(req.user.sub),
+            senderUsername: req.user.username || null,
+            senderDisplayName: null,
+            recipientId: String(status.owner_id),
+            recipientUsername: null,
+            recipientDisplayName: null,
+            text: body,
+            timestamp: Number(row.timestamp),
+            delivered: false,
+            read: false,
+            edited: false,
+            deleted: false,
+            replyToId: null,
+            mediaId: null,
+            mediaType: null,
+            mediaUrl: null,
+            voiceDurationMs: 0,
+            messageType: "text",
+            messagePayload: null,
+            reaction: null,
+            pinned: false
+          });
+        }
         await queueFynxNotification(pool, {
           userId: status.owner_id,
           type: 'COMMENT',
