@@ -66,9 +66,10 @@ object FynxRemoteSocialClient {
     private fun writeCachedFeed(context: Context, raw: String) { runCatching { val k = feedCacheKey(context) ?: return; val t = feedCacheTimeKey(context) ?: return; context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE).edit().putString(k, raw).putLong(t, System.currentTimeMillis()).apply() } }
 
 
-    suspend fun discoveryFeed(context: Context, limit: Int = 12): Result<FeedPage> {
+    suspend fun discoveryFeed(context: Context, limit: Int = 12, offset: Int = 0): Result<FeedPage> {
         val safeLimit = limit.coerceIn(1, 20)
-        return FynxBackendClient.get(context, "/api/discovery/trending?limit=$safeLimit").mapCatching { raw -> parseFeedPage(raw) }
+        val safeOffset = offset.coerceAtLeast(0)
+        return FynxBackendClient.get(context, "/api/discovery/trending?limit=$safeLimit&offset=$safeOffset").mapCatching { raw -> parseFeedPage(raw) }
     }
     suspend fun createPost(context: Context, text: String, visibility: FynxPostVisibility, uri: Uri?): Result<Unit> = runCatching {
         val media = uri?.let { u ->
