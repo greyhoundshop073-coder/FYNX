@@ -8,6 +8,9 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Gif
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -25,7 +28,8 @@ private val FynxEmojiCategories = linkedMapOf(
 )
 
 @Composable
-fun FynxChatEmojiPanel(modifier: Modifier = Modifier, onEmojiSelected: (String) -> Unit, onClose: (() -> Unit)? = null) {
+fun FynxChatEmojiPanel(modifier: Modifier = Modifier, onEmojiSelected: (String) -> Unit, onAddSticker: (() -> Unit)? = null, onAddGif: (() -> Unit)? = null, onClose: (() -> Unit)? = null) {
+    var mode by remember { mutableStateOf("Emoji") }
     var category by remember { mutableStateOf("Recent") }
     var query by remember { mutableStateOf("") }
     var recent by remember { mutableStateOf(FynxEmojiCategories["Recent"].orEmpty()) }
@@ -38,15 +42,34 @@ fun FynxChatEmojiPanel(modifier: Modifier = Modifier, onEmojiSelected: (String) 
                 if (onClose != null) IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Close emoji panel") }
             }
             Spacer(Modifier.height(6.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                FynxEmojiCategories.keys.forEach { name -> FilterChip(selected = category == name, onClick = { category = name; query = "" }, label = { Text(name.take(3)) }) }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(selected = mode == "Emoji", onClick = { mode = "Emoji" }, label = { Text("Emoji") })
+                FilterChip(selected = mode == "Stickers", onClick = { mode = "Stickers" }, label = { Text("Stickers") })
+                FilterChip(selected = mode == "GIF", onClick = { mode = "GIF" }, label = { Text("GIF") })
             }
-            LazyVerticalGrid(columns = GridCells.Fixed(8), modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 300.dp), contentPadding = PaddingValues(4.dp)) {
-                items(emojis) { emoji ->
-                    Box(Modifier.padding(2.dp).sizeIn(minWidth = 48.dp, minHeight = 48.dp).aspectRatio(1f).clickable {
-                        recent = listOf(emoji) + recent.filterNot { it == emoji }.take(31)
-                        onEmojiSelected(emoji)
-                    }) { Text(emoji, style = MaterialTheme.typography.headlineSmall) }
+            if (mode == "Emoji") {
+                Spacer(Modifier.height(6.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    FynxEmojiCategories.keys.forEach { name -> FilterChip(selected = category == name, onClick = { category = name; query = "" }, label = { Text(name.take(3)) }) }
+                }
+                LazyVerticalGrid(columns = GridCells.Fixed(8), modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 300.dp), contentPadding = PaddingValues(4.dp)) {
+                    items(emojis) { emoji ->
+                        Box(Modifier.padding(2.dp).sizeIn(minWidth = 48.dp, minHeight = 48.dp).aspectRatio(1f).clickable {
+                            recent = listOf(emoji) + recent.filterNot { it == emoji }.take(31)
+                            onEmojiSelected(emoji)
+                        }) { Text(emoji, style = MaterialTheme.typography.headlineSmall) }
+                    }
+                }
+            } else {
+                Column(Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 260.dp), horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Icon(if (mode == "GIF") Icons.Default.Gif else Icons.Default.Image, null, modifier = Modifier.size(44.dp))
+                    Text(if (mode == "GIF") "GIFs" else "Stickers", style = MaterialTheme.typography.titleMedium)
+                    Text(if (mode == "GIF") "Choose a GIF from your device." else "Add your own sticker image from your device.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(10.dp))
+                    Button(onClick = { if (mode == "GIF") onAddGif?.invoke() else onAddSticker?.invoke() }) {
+                        Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp))
+                        Text(if (mode == "GIF") "Add GIF" else "Add sticker")
+                    }
                 }
             }
         }
