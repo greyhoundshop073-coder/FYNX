@@ -4,6 +4,7 @@ import android.graphics.BitmapFactory
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -248,55 +249,151 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier, maxDuration
     val resolvedUrl = remember(mediaUrl) { resolveFynxMediaUrl(context, mediaUrl) }
     val scope = rememberCoroutineScope()
     var player by remember(resolvedUrl) { mutableStateOf<MediaPlayer?>(null) }
-    var localFile by remember(resolvedUrl) { mutableStateOf<File?>(null) }
     var playing by remember(resolvedUrl) { mutableStateOf(false) }
     var loading by remember(resolvedUrl) { mutableStateOf(false) }
     var error by remember(resolvedUrl) { mutableStateOf<String?>(null) }
+    var positionMs by remember(resolvedUrl) { mutableLongStateOf(0L) }
+    var durationMs by remember(resolvedUrl) { mutableLongStateOf(maxDurationMs ?: 0L) }
 
-    DisposableEffect(resolvedUrl) { onDispose { player?.release(); player = null; localFile = null } }
+    DisposableEffect(resolvedUrl) {
+        onDispose { player?.release(); player = null }
+    }
 
-    LaunchedEffect(playing, maxDurationMs, resolvedUrl) {
-        val limit = maxDurationMs?.coerceAtLeast(0L) ?: 0L
-        if (playing && limit > 0L) {
-            kotlinx.coroutines.delay(limit)
-            player?.let { runCatching { it.pause(); it.seekTo(0) } }
-            playing = false
+    LaunchedEffect(playing, player) {
+        while (playing) {
+            positionMs = player?.currentPosition?.toLong() ?: positionMs
+            delay(120L)
         }
     }
 
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(enabled = !loading, onClick = {
-            if (playing) { player?.pause(); playing = false; return@IconButton }
-            if (player != null) { player?.start(); playing = true; error = null; return@IconButton }
-            loading = true; error = null
-            scope.launch {
-                try {
-                    val cached = remoteMediaCacheFile(context, resolvedUrl, ".audio")
-                    val target = cached ?: File.createTempFile("fynx_audio_", ".audio", context.cacheDir)
-                    val result = if (cached?.exists() == true && cached.length() > 0L) Result.success(FynxBackendClient.DownloadedMedia(null, cached.length())) else downloadRemoteMedia(context, resolvedUrl, target)
-                    result.getOrThrow()
-                    if (!target.exists() || target.length() == 0L) error("Downloaded voice media is empty")
-                    val finalFile = target
-                    val p = MediaPlayer().apply {
-                        setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-                        setDataSource(finalFile.absolutePath)
-                        setOnPreparedListener { loading = false; playing = true; it.start() }
-                        setOnCompletionListener { playing = false; release(); player = null }
-                        setOnErrorListener { mp, _, _ -> loading = false; playing = false; error = "Voice media could not be decoded or played."; runCatching { mp.reset() }; runCatching { mp.release() }; player = null; true }
+    Row(
+        modifier = modifier.padding(horizontal = 2.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            modifier = Modifier.size(42.dp),
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.primaryContainer
+        ) {
+            IconButton(
+                enabled = !loading,
+                onClick = {
+                    if (playing) {
+                        player?.pause()
+                        playing = false
+                        return@IconButton
                     }
-                    player = p; localFile = finalFile; p.prepareAsync()
-                } catch (cancelled: CancellationException) { throw cancelled }
-                catch (failure: Throwable) { loading = false; playing = false; error = failure.message ?: "Voice Status could not be loaded."; player?.release(); player = null }
+                    if (player != null) {
+                        player?.start()
+                        playing = true
+                        return@IconButton
+                    }
+                    loading = true
+                    error = null
+                    scope.launch {
+                        try {
+                            val cached = remoteMediaCacheFile(context, resolvedUrl, ".audio")
+                            val target = cached ?: File.createTempFile("fynx_audio_", ".audio", context.cacheDir)
+                            val result = if (cached?.exists() == true && cached.length() > 0L) {
+                                Result.success(FynxBackendClient.DownloadedMedia(null, cached.length()))
+                            } else {
+                                downloadRemoteMedia(context, resolvedUrl, target)
+                            }
+                            result.getOrThrow()
+                            if (!target.exists() || target.length() == 0L) throw IllegalStateException("Downloaded voice media is empty")
+                            val finalFile = target
+                            val p = MediaPlayer().apply {
+                                setAudioAttributes(
+                                    AudioAttributes.Builder()
+                                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                                        .build()
+                                )
+                                setDataSource(finalFile.absolutePath)
+                                setOnPreparedListener {
+                                    durationMs = maxDurationMs?.takeIf { it > 0L } ?: it.duration.toLong()
+                                    positionMs = 0L
+                                    loading = false
+                                    playing = true
+                                    it.start()
+                                }
+                                setOnCompletionListener {
+                                    positionMs = 0L
+                                    playing = false
+                                    release()
+                                    player = null
+                                }
+                                setOnErrorListener { mp, _, _ ->
+                                    loading = false
+                                    playing = false
+                                    error = "Voice message could not be played."
+                                    runCatching { mp.reset() }
+                                    runCatching { mp.release() }
+                                    player = null
+                                    true
+                                }
+                            }
+                            player = p
+                            p.prepareAsync()
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (failure: Throwable) {
+                            loading = false
+                            playing = false
+                            error = failure.message ?: "Voice message could not be loaded."
+                            player?.release()
+                            player = null
+                        }
+                    }
+                }
+            ) {
+                if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                else Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause voice message" else "Play voice message")
             }
-        }) {
-            if (loading) CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-            else Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause voice" else "Play voice")
         }
-        Icon(Icons.Default.GraphicEq, "Voice Status")
-        error?.let { Text(it, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 8.dp)) }
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Canvas(Modifier.fillMaxWidth().height(34.dp)) {
+                val bars = 32
+                val gap = 3.dp.toPx()
+                val barWidth = ((size.width - gap * (bars - 1)) / bars).coerceAtLeast(1f)
+                val progress = if (durationMs > 0L) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
+                for (i in 0 until bars) {
+                    val phase = ((i * 37) % 17) / 17f
+                    val normalized = (0.25f + 0.75f * kotlin.math.abs(kotlin.math.sin(i * 0.73f + phase))).coerceIn(0.22f, 1f)
+                    val height = size.height * normalized
+                    val x = i * (barWidth + gap)
+                    val y = (size.height - height) / 2f
+                    val played = i.toFloat() / bars <= progress
+                    drawRoundRect(
+                        color = if (played) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.42f),
+                        topLeft = androidx.compose.ui.geometry.Offset(x, y),
+                        size = androidx.compose.ui.geometry.Size(barWidth, height),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2f, barWidth / 2f)
+                    )
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    formatVoiceDuration(positionMs),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    formatVoiceDuration(durationMs),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            error?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, maxLines = 1) }
+        }
     }
 }
 
+private fun formatVoiceDuration(durationMs: Long): String {
+    val totalSeconds = (durationMs.coerceAtLeast(0L) / 1000L)
+    return "%d:%02d".format(totalSeconds / 60L, totalSeconds % 60L)
+}
 
 /** Video surface stays passive so parent LazyColumn/LazyRow containers keep ownership of drag gestures. */
 internal class FynxPassiveVideoView(context: android.content.Context) : android.widget.VideoView(context) {
