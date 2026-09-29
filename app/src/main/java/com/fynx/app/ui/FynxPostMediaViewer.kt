@@ -112,10 +112,12 @@ fun FynxPostMediaViewer(context: Context, post: FynxRemoteSocialClient.RemotePos
                 Text("Media unavailable", color = Color.White)
                 TextButton(onClick = { reloadNonce++ }) { Text("Retry", color = Color.White) }
             }
-            item.mediaType.equals("video", true) && file != null ->
+            item.mediaType.equals("video", true) && file != null -> {
+                var videoView by remember(file) { mutableStateOf<VideoView?>(null) }
                 AndroidView(
                     factory = { ctx ->
                         VideoView(ctx).apply {
+                            videoView = this
                             layoutParams = ViewGroup.LayoutParams(-1, -1)
                             setMediaController(MediaController(ctx))
                             setVideoURI(Uri.fromFile(file))
@@ -124,6 +126,13 @@ fun FynxPostMediaViewer(context: Context, post: FynxRemoteSocialClient.RemotePos
                     },
                     modifier = Modifier.fillMaxSize()
                 )
+                DisposableEffect(videoView) {
+                    onDispose {
+                        videoView?.stopPlayback()
+                        videoView = null
+                    }
+                }
+            }
             file != null -> {
                 var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
                 LaunchedEffect(file) {
