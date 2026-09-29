@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -247,7 +248,7 @@ fun GroupChatPanel(
         if (text.isBlank() && attachment == null) return
         val selected = attachment
         val message = ChatMessage(
-            text.trim().ifBlank { if (attachmentType == "video") "Video" else "Photo" },
+            text.trim().ifBlank { when (attachmentType) { "video_note" -> "Video note"; "video" -> "Video"; "document" -> "Document"; else -> "Photo" } },
             true,
             UUID.randomUUID().toString(),
             delivered = true,
@@ -650,7 +651,7 @@ fun GroupChatPanel(
 
     if (showCamera) {
         Dialog(
-            onDismissRequest = { showCamera = false },
+            onDismissRequest = { videoNoteMode = false; showCamera = false },
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
         ) {
             Surface(Modifier.fillMaxSize()) {
