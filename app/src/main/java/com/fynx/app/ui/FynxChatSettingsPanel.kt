@@ -110,9 +110,8 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
                 }
             }
             }
-        }
 
-        ChatSettingsSection("Notifications", Icons.Default.Notifications) {
+            ChatSettingsSection("Notifications", Icons.Default.Notifications) {
             ChatSwitchRow(
                 "Mute notifications",
                 "Keep this chat quiet without hiding the conversation",
@@ -264,7 +263,8 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
             ) { showResetDialog = true }
         }
 
-        HorizontalDivider(Modifier.padding(top = 8.dp))
+            HorizontalDivider(Modifier.padding(top = 8.dp))
+        }
     }
 }
 
