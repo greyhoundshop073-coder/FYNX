@@ -166,6 +166,18 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     }
     LaunchedEffect(selected) {
         if (selected != "Marketplace") marketplaceListingId = null
+
+        // Deep-link commands are one-shot navigation intents. Once the user leaves
+        // the destination surface, discard any command that was not consumed so a
+        // later recomposition/navigation cannot reopen an old post or status.
+        if (selected != "Home") {
+            postOpenId = null
+            postOpenCommentId = null
+        }
+        if (selected != "Stories") {
+            statusOpenOwner = null
+            statusOpenId = null
+        }
     }
     LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context); notifications = FynxNotificationStore.load(context) }
     LaunchedEffect(authSession.state, authSession.username) {
