@@ -84,6 +84,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var editingId by remember { mutableStateOf<String?>(null) }
     var attachment by remember { mutableStateOf<Uri?>(null) }
     var attachmentType by remember { mutableStateOf<String?>(null) }
+    var attachmentMessageType by remember { mutableStateOf<String?>(null) }
     var mediaPickerPurpose by remember { mutableStateOf<String?>(null) }
     var showCamera by remember { mutableStateOf(false) }
     var isRecording by remember { mutableStateOf(false) }
@@ -202,6 +203,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
         if (uri == null) {
             attachment = null
             attachmentType = null
+            attachmentMessageType = null
             return@rememberLauncherForActivityResult
         }
         val mimeType = context.contentResolver.getType(uri)?.lowercase()
@@ -209,6 +211,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             mediaPickerPurpose == "gif" && mimeType == "image/gif" -> {
                 attachment = uri
                 attachmentType = "image"
+                attachmentMessageType = "gif"
                 mediaPickerPurpose = null
                 showEmojiPanel = false
                 networkError = null
@@ -216,6 +219,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             mediaPickerPurpose == "sticker" && mimeType?.startsWith("image/") == true -> {
                 attachment = uri
                 attachmentType = "image"
+                attachmentMessageType = "sticker"
                 mediaPickerPurpose = null
                 showEmojiPanel = false
                 networkError = null
@@ -223,18 +227,22 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
             mimeType?.startsWith("image/") == true -> {
                 attachment = uri
                 attachmentType = "image"
+                attachmentMessageType = null
                 mediaPickerPurpose = null
                 networkError = null
             }
             mimeType?.startsWith("video/") == true -> {
                 attachment = uri
                 attachmentType = "video"
+                attachmentMessageType = null
+                mediaPickerPurpose = null
                 networkError = null
             }
             else -> {
                 val purpose = mediaPickerPurpose
                 attachment = null
                 attachmentType = null
+                attachmentMessageType = null
                 mediaPickerPurpose = null
                 networkError = if (purpose == "gif") "Please choose a GIF image." else "Please choose an image or video."
             }
@@ -449,11 +457,24 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     .onFailure { networkError = it.message ?: "Message could not be edited" }
             } else {
                 val selectedAttachment = attachment
+                val selectedMessageType = attachmentMessageType
                 val sendResult = if (selectedAttachment != null) {
                     val selectedType = attachmentType ?: "image"
                     FynxProductionMessaging.uploadMedia(context, selectedAttachment)
                         .mapCatching { media ->
-                            FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId, media.id, selectedType, 0L).getOrThrow()
+                            if (selectedMessageType != null) {
+                                FynxProductionMessaging.sendStructuredMessage(
+                                    context = context,
+                                    recipientUsername = chat.username,
+                                    messageType = selectedMessageType,
+                                    payload = mapOf("mediaId" to media.id),
+                                    replyToId = replyToId,
+                                    mediaId = media.id,
+                                    mediaType = if (selectedMessageType == "gif") "image/gif" else selectedType
+                                ).getOrThrow()
+                            } else {
+                                FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId, media.id, selectedType, 0L).getOrThrow()
+                            }
                         }
                 } else {
                     FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
@@ -468,6 +489,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         replyToId = null
                         attachment = null
                         attachmentType = null
+                        attachmentMessageType = null
                     }
                     .onFailure { networkError = it.message ?: "Message could not be sent" }
             }
@@ -752,7 +774,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                                 Surface(color = glassPalette.background.copy(alpha = 0.62f), contentColor = glassPalette.messageText, shape = androidx.compose.foundation.shape.CircleShape, modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)) { Text("Video note", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageText, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
                                             }
                                         } else {
-                                            FynxRemoteMedia(mediaUrl = message.attachmentUri, type = message.attachmentType ?: "image", modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp), autoPlay = false)
+                                            FynxRemoteMedia(mediaUrl = message.attachmentUri, type = if (message.messageType == "gif") "gif" else (message.attachmentType ?: "image"), modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp), autoPlay = false)
                                         }
                                     }
                                     if (message.text.isNotBlank()) SelectionContainer { Text(message.text, color = glassPalette.messageText, fontSize = messageTextSizeSp.sp) }

@@ -57,7 +57,7 @@ object FynxProductionMessaging {
                     else -> "application/octet-stream"
                 }
             require(detectedMimeType.startsWith("image/") || detectedMimeType.startsWith("video/") || detectedMimeType.startsWith("audio/") || detectedMimeType == "application/pdf" || detectedMimeType == "text/plain" || detectedMimeType == "application/zip" || detectedMimeType == "application/msword" || detectedMimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || detectedMimeType == "application/vnd.ms-excel" || detectedMimeType == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || detectedMimeType == "application/vnd.ms-powerpoint" || detectedMimeType == "application/vnd.openxmlformats-officedocument.presentationml.presentation") { "Unsupported document or media type." }
-            val prepared: Pair<ByteArray, String> = if (detectedMimeType.startsWith("image/")) prepareImageUpload(context, uri, detectedMimeType) else readMediaBytes(context, uri) to detectedMimeType
+            val prepared: Pair<ByteArray, String> = if (detectedMimeType == "image/gif") readMediaBytes(context, uri) to detectedMimeType else if (detectedMimeType.startsWith("image/")) prepareImageUpload(context, uri, detectedMimeType) else readMediaBytes(context, uri) to detectedMimeType
             val bytes = prepared.first
             val effectiveMimeType = prepared.second
             require(bytes.isNotEmpty()) { "The selected media is empty." }
@@ -185,7 +185,7 @@ object FynxProductionMessaging {
             .maxByOrNull { it.timestamp }
     }
 
-    suspend fun sendStructuredMessage(context: Context, recipientUsername: String, messageType: String, payload: Map<String, String>, replyToId: String? = null): Result<RemoteMessage> {
+    suspend fun sendStructuredMessage(context: Context, recipientUsername: String, messageType: String, payload: Map<String, String>, replyToId: String? = null, mediaId: String? = null, mediaType: String? = null): Result<RemoteMessage> {
         val allowed = setOf("location", "contact", "poll", "sticker", "gif")
         if (messageType !in allowed) return Result.failure(IllegalArgumentException("Unsupported message type."))
         if (payload.isEmpty()) return Result.failure(IllegalArgumentException("Message details are required."))
@@ -193,6 +193,8 @@ object FynxProductionMessaging {
             put("recipientUsername", recipientUsername.trim().removePrefix("@").lowercase())
             put("text", "")
             put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL)
+            put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL)
+            put("mediaType", mediaType ?: JSONObject.NULL)
             put("messageType", messageType)
             put("messagePayload", JSONObject(payload))
         }

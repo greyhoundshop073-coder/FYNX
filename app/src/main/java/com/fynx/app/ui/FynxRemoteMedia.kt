@@ -1,6 +1,9 @@
 package com.fynx.app.ui
 
 import android.graphics.BitmapFactory
+import android.graphics.drawable.AnimatedImageDrawable
+import android.graphics.drawable.Drawable
+import android.os.Build
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import androidx.compose.foundation.Image
@@ -26,6 +29,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import android.graphics.ImageDecoder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -72,13 +76,14 @@ fun FynxRemoteMedia(
     val resolvedUrl = remember(mediaUrl) { resolveFynxMediaUrl(context, mediaUrl) }
     var kind by remember(resolvedUrl, type) { mutableStateOf("loading") }
     var bitmap by remember(resolvedUrl, type) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var animatedDrawable by remember(resolvedUrl, type) { mutableStateOf<Drawable?>(null) }
     var localFile by remember(resolvedUrl, type) { mutableStateOf<File?>(null) }
     var reloadNonce by remember(resolvedUrl, type) { mutableIntStateOf(0) }
     var videoView by remember(resolvedUrl, type) { mutableStateOf<android.widget.VideoView?>(null) }
     var preparedPlayer by remember(resolvedUrl, type) { mutableStateOf<android.media.MediaPlayer?>(null) }
     var videoPlaying by remember(resolvedUrl, type) { mutableStateOf(false) }
     LaunchedEffect(resolvedUrl, type, reloadNonce) {
-        kind = "loading"; bitmap = null; localFile = null; videoView = null; videoPlaying = false
+        kind = "loading"; bitmap = null; animatedDrawable = null; localFile = null; videoView = null; videoPlaying = false
         try {
             val loaded = withContext(Dispatchers.IO) {
                 val isKnownVideo = type.equals("video", true)
@@ -89,8 +94,12 @@ fun FynxRemoteMedia(
                 result.getOrThrow().let { downloaded ->
                     val contentType = downloaded.contentType.orEmpty()
                     val isVideo = isKnownVideo || (type.equals("auto", true) && contentType.startsWith("video/"))
+                    val isGif = type.equals("gif", true) || contentType.equals("image/gif", true)
                     if (isVideo) MediaLoadResult.Video(target)
-                    else {
+                    else if (isGif && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        val source = ImageDecoder.createSource(android.os.ParcelFileDescriptor.open(target, android.os.ParcelFileDescriptor.MODE_READ_ONLY).fileDescriptor)
+                        MediaLoadResult.Gif(ImageDecoder.decodeDrawable(source))
+                    } else {
                         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                         BitmapFactory.decodeFile(target.absolutePath, bounds)
                         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw IllegalStateException("Unable to decode media")
@@ -105,8 +114,9 @@ fun FynxRemoteMedia(
                 }
             }
             when (loaded) {
-                is MediaLoadResult.Image -> { bitmap = loaded.bitmap; localFile = null; kind = "image" }
-                is MediaLoadResult.Video -> { localFile = loaded.file; bitmap = null; kind = "video" }
+                is MediaLoadResult.Image -> { bitmap = loaded.bitmap; animatedDrawable = null; localFile = null; kind = "image" }
+                is MediaLoadResult.Gif -> { animatedDrawable = loaded.drawable; bitmap = null; localFile = loaded.file; kind = "gif" }
+                is MediaLoadResult.Video -> { localFile = loaded.file; bitmap = null; animatedDrawable = null; kind = "video" }
             }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Throwable) { kind = "error" }
@@ -119,12 +129,21 @@ fun FynxRemoteMedia(
     }
     DisposableEffect(resolvedUrl, type) {
         onDispose {
+            (animatedDrawable as? AnimatedImageDrawable)?.stop()
             videoView?.stopPlayback()
             preparedPlayer = null
             videoView = null
         }
     }
     when (kind) {
+        "gif" -> animatedDrawable?.let { drawable ->
+            val imageModifier = if (rounded) modifier.clip(RoundedCornerShape(14.dp)) else modifier
+            AndroidView(
+                factory = { ctx -> android.widget.ImageView(ctx).apply { scaleType = android.widget.ImageView.ScaleType.FIT_CENTER; setImageDrawable(drawable); (drawable as? AnimatedImageDrawable)?.start() } },
+                update = { view -> if (view.drawable !== drawable) view.setImageDrawable(drawable); (drawable as? AnimatedImageDrawable)?.takeIf { !it.isRunning }?.start() },
+                modifier = imageModifier
+            )
+        }
         "image" -> bitmap?.let {
             val imageModifier = if (rounded) modifier.clip(RoundedCornerShape(14.dp)) else modifier
             Image(it.asImageBitmap(), "Media", imageModifier, contentScale = contentScale)
@@ -242,7 +261,7 @@ fun FynxRemoteProfileAvatar(
     ) { avatar() }
 }
 
-private sealed interface MediaLoadResult { data class Image(val bitmap: android.graphics.Bitmap) : MediaLoadResult; data class Video(val file: File) : MediaLoadResult }
+private sealed interface MediaLoadResult { data class Image(val bitmap: android.graphics.Bitmap) : MediaLoadResult; data class Gif(val drawable: Drawable, val file: File) : MediaLoadResult; data class Video(val file: File) : MediaLoadResult }
 
 @Composable
 fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier, maxDurationMs: Long? = null) {
