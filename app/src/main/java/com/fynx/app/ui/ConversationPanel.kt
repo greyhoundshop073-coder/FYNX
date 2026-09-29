@@ -897,7 +897,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                         Row(verticalAlignment = Alignment.CenterVertically) {
                         
                         val voiceMode = text.isBlank() && attachment == null
-                        Box(Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = if (voiceMode) "Hold to record voice message" else "Send message" }.pointerInput(voiceMode, sending) {
+                        Box(Modifier.size(46.dp).clip(androidx.compose.foundation.shape.CircleShape).background(if (voiceMode) Color(0xFF7C3AED) else glassPalette.outgoingStart).semantics { contentDescription = if (voiceMode) "Hold to record voice message" else "Send message" }.pointerInput(voiceMode, sending) {
                             if (!voiceMode || sending) return@pointerInput
                             detectTapGestures(onPress = {
                                 startRecording()
@@ -905,7 +905,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                                 if (isRecording) stopRecording()
                             })
                         }, contentAlignment = Alignment.Center) {
-                            Icon(if (voiceMode) Icons.Default.Mic else Icons.Default.Send, if (voiceMode) "Hold to record voice message" else "Send message", Modifier.size(22.dp))
+                            Icon(if (voiceMode) Icons.Default.Mic else Icons.Default.Send, if (voiceMode) "Hold to record voice message" else "Send message", Modifier.size(22.dp), tint = Color.White)
                         }
                         }
                     },
