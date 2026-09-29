@@ -7,6 +7,8 @@ import android.media.MediaPlayer
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.view.ViewGroup
+import android.view.Surface
+import android.view.TextureView
 import android.widget.VideoView
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -509,6 +511,7 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
                                 onClick = { menuOpen = false; onSave(post.id, !interactionState.saved) },
                                 leadingIcon = { Icon(if (interactionState.saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, null) }
                             )
+                            DropdownMenuItem(text = { Text(if (interactionState.reposted) "Undo repost" else "Repost") }, onClick = { menuOpen = false; onRepost(post.id, !interactionState.reposted) }, leadingIcon = { Icon(Icons.Default.Repeat, null) })
                             DropdownMenuItem(text = { Text("I'm interested") }, onClick = { menuOpen = false; onInterested(post.id) })
                             DropdownMenuItem(text = { Text("Share post") }, onClick = { menuOpen = false; onShare() }, leadingIcon = { Icon(Icons.Default.Share, null) })
                             DropdownMenuItem(text = { Text("I'm not interested") }, onClick = { menuOpen = false; onNotInterested(post.id) })
@@ -547,7 +550,7 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
             FeedActionButton(onClick = { onLike(post.id) }, onLongClick = onOpenReactionPicker, enabled = !interactionBusy, icon = if (post.likedByCurrentUser) Icons.Default.Favorite else Icons.Default.FavoriteBorder, label = "Like", longClickLabel = "Open post reactions", count = reactionState.total.coerceAtLeast(post.likeCount), active = post.likedByCurrentUser)
             FeedActionButton(onClick = onComment, enabled = !interactionBusy, icon = Icons.Default.ChatBubbleOutline, label = "Comment", count = post.commentCount)
             FeedActionButton(onClick = onShare, enabled = !interactionBusy, icon = Icons.Default.Share, label = "Share")
-            FeedActionButton(onClick = { onRepost(post.id, !interactionState.reposted) }, enabled = !interactionBusy, icon = Icons.Default.Repeat, label = if (interactionState.reposted) "Reposted" else "Repost", count = interactionState.repostCount, active = interactionState.reposted)
+            FeedActionButton(onClick = { onSave(post.id, !interactionState.saved) }, enabled = !interactionBusy, icon = if (interactionState.saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, label = if (interactionState.saved) "Saved" else "Save", count = interactionState.savedCount, active = interactionState.saved)
         }
         if (reactionState.total > 0) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) { Text(reactionSummary(reactionState), style = MaterialTheme.typography.labelMedium, color = FynxDesign.TextSecondary, modifier = Modifier.combinedClickable(role = Role.Button, onClickLabel = "Open people who reacted", onClick = onOpenReactionUsers)) }
     }
@@ -588,12 +591,96 @@ private fun RowScope.FeedActionButton(onClick: () -> Unit, onLongClick: (() -> U
 private fun sharePost(context: Context, post: FynxRemoteSocialClient.RemotePost): Result<Unit> = runCatching { val text = if (post.text.startsWith(MARKETPLACE_AD_MARKER)) "${post.text.removePrefix(MARKETPLACE_AD_MARKER).trim()}\n\nSee this product on FYNX Marketplace." else "${post.authorDisplayName.ifBlank { post.authorUsername }} on FYNX:\n${post.text}".trim(); val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, text); putExtra(Intent.EXTRA_TITLE, "Share from FYNX") }; context.startActivity(Intent.createChooser(intent, "Share with…")) }
 
 @Composable
+private fun FynxFeedTextureVideo(
+    file: File,
+    playbackActive: Boolean,
+    muted: Boolean,
+    onPlayingChanged: (Boolean) -> Unit,
+    onMutedChanged: (Boolean) -> Unit,
+    onOpenMedia: (() -> Unit)?,
+    onOpenFullscreen: () -> Unit
+) {
+    val textureState = remember(file) { mutableStateOf<android.graphics.SurfaceTexture?>(null) }
+    val surface = remember(textureState.value) { textureState.value?.let(::Surface) }
+    val player = remember(file) { MediaPlayer() }
+    var prepared by remember(file) { mutableStateOf(false) }
+    var playing by remember(file) { mutableStateOf(false) }
+
+    Box(Modifier.fillMaxSize()) {
+        AndroidView(
+            factory = { ctx ->
+                TextureView(ctx).apply {
+                    isClickable = false
+                    isFocusable = false
+                    setSurfaceTextureListener(object : TextureView.SurfaceTextureListener {
+                        override fun onSurfaceTextureAvailable(texture: android.graphics.SurfaceTexture, width: Int, height: Int) { textureState.value = texture }
+                        override fun onSurfaceTextureSizeChanged(texture: android.graphics.SurfaceTexture, width: Int, height: Int) = Unit
+                        override fun onSurfaceTextureDestroyed(texture: android.graphics.SurfaceTexture): Boolean { textureState.value = null; return true }
+                        override fun onSurfaceTextureUpdated(texture: android.graphics.SurfaceTexture) = Unit
+                    })
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+        Box(Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.BottomEnd) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (onOpenMedia != null) IconButton(onClick = onOpenMedia) { Icon(Icons.Default.OpenInNew, "Open video", tint = Color.White) }
+                IconButton(onClick = onOpenFullscreen) { Icon(Icons.Default.Fullscreen, "Open video full screen", tint = Color.White) }
+                IconButton(onClick = { onMutedChanged(!muted) }) { Icon(if (muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp, if (muted) "Unmute video" else "Mute video", tint = Color.White) }
+            }
+        }
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            FilledIconButton(
+                onClick = {
+                    if (!prepared) return@FilledIconButton
+                    runCatching {
+                        if (playing) { player.pause(); playing = false } else { player.start(); playing = true }
+                        onPlayingChanged(playing)
+                    }
+                },
+                modifier = Modifier.size(56.dp)
+            ) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause video" else "Play video") }
+        }
+    }
+
+    LaunchedEffect(file, surface) {
+        if (surface == null) return@LaunchedEffect
+        prepared = false; playing = false; onPlayingChanged(false)
+        runCatching {
+            player.reset()
+            player.setDataSource(file.absolutePath)
+            player.setSurface(surface)
+            player.isLooping = true
+            player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f)
+            player.setOnPreparedListener {
+                prepared = true
+                if (playbackActive) runCatching { it.start(); playing = true; onPlayingChanged(true) }
+            }
+            player.setOnCompletionListener { playing = false; onPlayingChanged(false) }
+            player.setOnErrorListener { _, _, _ -> prepared = false; playing = false; onPlayingChanged(false); true }
+            player.prepareAsync()
+        }.onFailure { prepared = false; playing = false; onPlayingChanged(false) }
+    }
+    LaunchedEffect(playbackActive, prepared) {
+        if (!prepared) return@LaunchedEffect
+        runCatching {
+            if (playbackActive && !playing) { player.start(); playing = true; onPlayingChanged(true) }
+            else if (!playbackActive && playing) { player.pause(); playing = false; onPlayingChanged(false) }
+        }
+    }
+    LaunchedEffect(muted, prepared) {
+        if (prepared) runCatching { player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f) }
+    }
+    DisposableEffect(file) {
+        onDispose { runCatching { player.stop() }; runCatching { player.release() }; textureState.value = null }
+    }
+}
+
+@Composable
 private fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (() -> Unit)? = null, onOpenMedia: (() -> Unit)? = null, playbackActive: Boolean = true) {
     val context = LocalContext.current
     var file by remember(path) { mutableStateOf<File?>(null) }
     var videoAspectRatio by remember(path) { mutableFloatStateOf(16f / 9f) }
-    var videoView by remember(path) { mutableStateOf<VideoView?>(null) }
-    var preparedPlayer by remember(path) { mutableStateOf<MediaPlayer?>(null) }
     var playing by remember(path) { mutableStateOf(false) }
     var muted by remember(path) { mutableStateOf(true) }
     var fullscreen by remember(path) { mutableStateOf(false) }
@@ -612,65 +699,19 @@ private fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: ((
             }.getOrDefault(16f / 9f)
         }
     }
-    LaunchedEffect(playbackActive, videoView) {
-        val view = videoView ?: return@LaunchedEffect
-        if (playbackActive) { if (!view.isPlaying) runCatching { view.start(); playing = true } }
-        else { if (view.isPlaying) runCatching { view.pause() }; playing = false }
-    }
-    DisposableEffect(videoView) { onDispose { videoView?.stopPlayback(); preparedPlayer = null } }
     if (file == null) Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     else if (type == "audio") AudioPostPlayer(file!!)
     else if (type == "video") {
         Box(Modifier.fillMaxWidth().aspectRatio(videoAspectRatio)) {
-            AndroidView(factory = { ctx ->
-                FynxPassiveVideoView(ctx).apply {
-                    videoView = this
-                    layoutParams = ViewGroup.LayoutParams(-1, -1)
-                    setVideoPath(file!!.absolutePath)
-                    setOnPreparedListener { player ->
-                        preparedPlayer = player
-                        player.isLooping = true
-                        player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f)
-                        if (playbackActive) { start(); playing = true }
-                    }
-                    setOnCompletionListener { playing = false }
-                }
-            }, modifier = Modifier.fillMaxSize())
-            Box(
-                Modifier.fillMaxSize().padding(8.dp),
-                contentAlignment = Alignment.BottomEnd
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (onOpenMedia != null) IconButton(onClick = onOpenMedia) {
-                        Icon(Icons.Default.OpenInNew, "Open video", tint = Color.White)
-                    }
-                    IconButton(onClick = { fullscreen = true }) {
-                        Icon(Icons.Default.Fullscreen, "Open video full screen", tint = Color.White)
-                    }
-                    IconButton(onClick = {
-                        muted = !muted
-                        preparedPlayer?.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f)
-                    }) {
-                        Icon(if (muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp, if (muted) "Unmute video" else "Mute video", tint = Color.White)
-                    }
-                }
-            }
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                FilledIconButton(
-                    onClick = {
-                        if (videoView?.isPlaying == true) {
-                            videoView?.pause()
-                            playing = false
-                        } else {
-                            videoView?.start()
-                            playing = true
-                        }
-                    },
-                    modifier = Modifier.size(56.dp)
-                ) {
-                    Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause video" else "Play video")
-                }
-            }
+            FynxFeedTextureVideo(
+                file = file!!,
+                playbackActive = playbackActive,
+                muted = muted,
+                onPlayingChanged = { playing = it },
+                onMutedChanged = { muted = it },
+                onOpenMedia = onOpenMedia,
+                onOpenFullscreen = { fullscreen = true }
+            )
         }
     } else {
         var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }

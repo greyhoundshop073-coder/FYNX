@@ -21,13 +21,18 @@ required_home = {
     "FilledIconButton": "FYNX video play/pause control",
     "Fullscreen": "FYNX video fullscreen control",
     '"Open video full screen"': "FYNX video fullscreen accessibility action",
-    "DisposableEffect(videoView)": "video lifecycle cleanup",
-    "stopPlayback()": "video playback cleanup",
+    "FynxFeedTextureVideo": "scroll-safe Home feed video surface",
+    "TextureView": "regular View-backed feed video surface",
+    "prepareAsync()": "asynchronous feed video preparation",
+    "DisposableEffect(file)": "video lifecycle cleanup",
     "DisposableEffect(player)": "audio lifecycle cleanup",
     "player.release()": "audio resource release",
     "FynxRemoteProfileAvatar": "real author identity media",
     "MaterialTheme.colorScheme": "theme-aware Home presentation",
     'label = "Share"': "share accessibility action",
+    'label = "Comment"': "comment accessibility action",
+    'label = "Like"': "like accessibility action",
+    'label = if (interactionState.saved) "Saved" else "Save"': "primary Save accessibility/action label",
 }
 
 missing = [label for token, label in required_home.items() if token not in home]

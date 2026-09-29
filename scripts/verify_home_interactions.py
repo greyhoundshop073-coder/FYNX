@@ -68,7 +68,7 @@ if 'feed_load_more' in home or 'Load more posts' in home:
 if '"Refresh feed"' in home:
     raise SystemExit("HOME INTERACTIONS RED: Home feed must not expose a manual refresh button")
 require(home, 'text = { Text(if (interactionState.saved) "Remove from saved" else "Save post") }', "Home 4F save state label")
-require(home, 'label = if (interactionState.reposted) "Reposted" else "Repost"', "Home 4F repost state label")
+require(home, 'Text(if (interactionState.reposted) "Undo repost" else "Repost")', "Home 4F repost state label")
 if 'contentDescription = null' not in home and 'Icon(Icons.Default.ShoppingBag, null)' not in home:
     raise SystemExit("HOME INTERACTIONS RED: missing Home 4F decorative-icon accessibility handling")
 for needle in ('FynxRemoteProfileAvatar(','profilePhotoMediaId','post.authorDisplayName.ifBlank { post.authorUsername }','post.mediaUrl?.let'):
