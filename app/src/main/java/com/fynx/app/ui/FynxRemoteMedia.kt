@@ -61,7 +61,7 @@ fun FynxRemoteMedia(
     modifier: Modifier = Modifier,
     loopVideo: Boolean = true,
     onVideoCompleted: (() -> Unit)? = null,
-    contentScale: ContentScale = ContentScale.Crop,
+    contentScale: ContentScale = ContentScale.Fit,
     rounded: Boolean = true,
     autoPlay: Boolean = true,
     playbackActive: Boolean = true
