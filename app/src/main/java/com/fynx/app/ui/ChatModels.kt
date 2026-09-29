@@ -28,5 +28,7 @@ data class ChatMessage(
     val senderName: String? = null,
     val senderUsername: String? = null,
     val senderAvatarUri: String? = null,
-    val pinned: Boolean = false
+    val pinned: Boolean = false,
+    val messageType: String = "text",
+    val messagePayload: Map<String, String> = emptyMap()
 )
