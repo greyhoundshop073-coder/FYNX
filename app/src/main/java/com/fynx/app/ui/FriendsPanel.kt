@@ -96,12 +96,12 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = {
                     context.startActivity(Intent(context, FynxContactsActivity::class.java))
-                }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
+                }, shape = FynxDesign.ControlShape, modifier = Modifier.heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
                     Icon(Icons.Default.PersonAdd, "Open contacts", Modifier.size(17.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("Contacts")
                 }
-                OutlinedButton(onClick = { showUniversalSearch = true }, shape = FynxDesign.ControlShape) {
+                OutlinedButton(onClick = { showUniversalSearch = true }, modifier = Modifier.heightIn(min = 48.dp), shape = FynxDesign.ControlShape) {
                     Icon(Icons.Default.Search, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text("Search all FYNX")
                 }
             }
@@ -110,7 +110,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             FilterChip(searchMethod == FynxPeopleSearchMethod.USERNAME, { searchMethod = FynxPeopleSearchMethod.USERNAME; query = "" }, label = { Text("Username") })
             FilterChip(searchMethod == FynxPeopleSearchMethod.PHONE, { searchMethod = FynxPeopleSearchMethod.PHONE; query = "" }, label = { Text("Phone") })
-            OutlinedButton(onClick = { shareFynx(context) }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)) {
+            OutlinedButton(onClick = { shareFynx(context) }, modifier = Modifier.heightIn(min = 48.dp), shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)) {
                 Icon(Icons.Default.PersonAdd, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text("Invite")
             }
         }
