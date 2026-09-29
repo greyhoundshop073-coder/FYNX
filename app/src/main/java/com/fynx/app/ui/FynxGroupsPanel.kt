@@ -6,6 +6,7 @@ package com.fynx.app.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -48,6 +49,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import java.util.UUID
@@ -284,6 +287,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var showEmojiPanel by remember { mutableStateOf(false) }
     var reactionMessageId by remember { mutableStateOf<String?>(null) }
     var replyToId by remember { mutableStateOf<String?>(null) }
+    val replySwipeOffsets = remember { mutableStateMapOf<String, Float>() }
     var syncMessage by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
@@ -490,11 +494,59 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 border = if (mediaOnly) null else BorderStroke(0.7.dp, glassPalette.bubbleRim.copy(alpha = (bubbleLighting * bubbleTransparency).coerceIn(0f, 1f))),
                                 tonalElevation = 0.dp,
                                 modifier = Modifier.widthIn(max = 300.dp)
+                                    .offset { IntOffset((replySwipeOffsets[message.id] ?: 0f).roundToInt(), 0) }
                                     .then(if (mediaOnly) Modifier else Modifier.background(bubbleBrush, bubbleShape))
+                                    .pointerInput(message.id) {
+                                        detectHorizontalDragGestures(
+                                            onHorizontalDrag = { change, dragAmount ->
+                                                if (dragAmount > 0f) {
+                                                    val next = ((replySwipeOffsets[message.id] ?: 0f) + dragAmount).coerceAtMost(88f)
+                                                    replySwipeOffsets[message.id] = next
+                                                    change.consume()
+                                                }
+                                            },
+                                            onDragEnd = {
+                                                if ((replySwipeOffsets[message.id] ?: 0f) >= 64f) {
+                                                    replyToId = message.id
+                                                }
+                                                replySwipeOffsets[message.id] = 0f
+                                            },
+                                            onDragCancel = { replySwipeOffsets[message.id] = 0f }
+                                        )
+                                    }
                                     .combinedClickable(onClick = { reactionMessageId = message.id }, onLongClick = { reactionMessageId = message.id })
                             ) {
                                 Column(Modifier.padding(horizontal = if (mediaOnly) 0.dp else 9.dp, vertical = if (mediaOnly) 0.dp else 5.dp)) {
-                                    if (message.replyToId != null) Text("Reply", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(bottom = 5.dp))
+                                    if (message.replyToId != null) {
+                                        val replied = messages.firstOrNull { it.id == message.replyToId }
+                                        Column(
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(bottom = 5.dp)
+                                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.28f), RoundedCornerShape(8.dp))
+                                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                                        ) {
+                                            Text(
+                                                replied?.senderUsername?.takeIf { it.isNotBlank() }?.let { "@$it" } ?: "Original message",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                maxLines = 1
+                                            )
+                                            Text(
+                                                replied?.text?.takeIf { it.isNotBlank() }
+                                                    ?: when (replied?.attachmentType) {
+                                                        "image" -> "Photo"
+                                                        "video", "video_note" -> "Video"
+                                                        "audio" -> "Voice message"
+                                                        "document" -> "Document"
+                                                        else -> "Original message"
+                                                    },
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = glassPalette.messageMuted,
+                                                maxLines = 2
+                                            )
+                                        }
+                                    }
                                 if (message.attachmentUri != null) {
                                     if (message.attachmentType == "audio") FynxRemoteAudio(message.attachmentUri, Modifier.fillMaxWidth())
                                     else if (message.attachmentType == "video_note") {
