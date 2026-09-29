@@ -91,8 +91,35 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
             confirmButton = {
                 TextButton(onClick = {
                     FynxConversationPreferences.setChatNotifications(context, chatUsername, true)
+                    FynxConversationPreferences.chat(context, chatUsername).edit()
+                        .putBoolean("sounds_" + chatUsername.removePrefix("@").lowercase(), true)
+                        .putBoolean("vibration_" + chatUsername.removePrefix("@").lowercase(), true)
+                        .apply()
+                    notifications = true
                     sounds = true
                     vibration = true
+                    textSize = "Medium"
+                    FynxConversationPreferences.setChatTextSize(context, chatUsername, "Medium")
+                    bubbleTransparency = 0.90f
+                    bubbleLighting = 0.58f
+                    bubbleGradient = 0.70f
+                    doodleDensity = 1f
+                    doodleScale = 1f
+                    doodleIntensity = 1f
+                    doodleLight = 1f
+                    gradientRotation = 45f
+                    backgroundGlow = 1f
+                    wallpaper = "FYNX Default"
+                    FynxConversationPreferences.setChatBubbleTransparency(context, chatUsername, 0.90f)
+                    FynxConversationPreferences.setChatBubbleLighting(context, chatUsername, 0.58f)
+                    FynxConversationPreferences.setChatBubbleGradient(context, chatUsername, 0.70f)
+                    FynxConversationPreferences.setChatDoodleDensity(context, chatUsername, 1f)
+                    FynxConversationPreferences.setChatDoodleScale(context, chatUsername, 1f)
+                    FynxConversationPreferences.setChatDoodleIntensity(context, chatUsername, 1f)
+                    FynxConversationPreferences.setChatDoodleLight(context, chatUsername, 1f)
+                    FynxConversationPreferences.setChatGradientRotation(context, chatUsername, 45f)
+                    FynxConversationPreferences.setChatBackgroundGlow(context, chatUsername, 1f)
+                    FynxConversationPreferences.setChatWallpaper(context, chatUsername, "FYNX Default")
                     showResetDialog = false
                 }) { Text("Reset") }
             },
