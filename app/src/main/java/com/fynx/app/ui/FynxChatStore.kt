@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableSharedFlow
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -15,6 +16,9 @@ import org.json.JSONObject
  * UI contract so edit/delete actions remain authoritative on the production backend.
  */
 object FynxChatStore {
+    /** Emits a chat username whenever its local preview may have changed. */
+    val previewUpdates = MutableSharedFlow<String>(extraBufferCapacity = 64)
+
     private const val PREFS = "fynx_chat_store"
     private const val SYNC_INITIALIZED_SUFFIX = "_sync_initialized"
 
@@ -73,6 +77,8 @@ object FynxChatStore {
                     put("voiceUri", message.voiceUri ?: "")
                     put("voiceDurationMs", message.voiceDurationMs)
                     put("mediaId", message.mediaId ?: "")
+                    put("messageType", message.messageType)
+                    put("messagePayload", JSONObject(message.messagePayload))
                 }
             )
         }
@@ -132,6 +138,7 @@ object FynxChatStore {
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(previewKey(context), array.toString()).apply()
+        previewUpdates.tryEmit(normalizedPreview.username)
     }
 
     fun clear(context: Context, chatKey: String) {
@@ -180,7 +187,11 @@ object FynxChatStore {
                         attachmentType = item.optString("attachmentType").takeIf { it.isNotEmpty() },
                         voiceUri = item.optString("voiceUri").takeIf { it.isNotEmpty() },
                         voiceDurationMs = item.optLong("voiceDurationMs"),
-                        mediaId = item.optString("mediaId").takeIf { it.isNotEmpty() }
+                        mediaId = item.optString("mediaId").takeIf { it.isNotEmpty() },
+                        messageType = item.optString("messageType").ifBlank { "text" },
+                        messagePayload = item.optJSONObject("messagePayload")?.let { payload ->
+                            payload.keys().asSequence().associateWith { key -> payload.optString(key) }
+                        }.orEmpty()
                     )
                 )
             }
