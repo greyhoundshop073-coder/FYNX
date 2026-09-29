@@ -2,13 +2,14 @@ package com.fynx.app.ui
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 
 /** Coordinates authoritative Home refreshes after returning from another FYNX surface. */
 object FynxHomeLifecycleRefreshBus {
     private const val FEED_CACHE_PREFS = "fynx_feed_cache"
     private const val FEED_CACHE_KEY_PREFIX = "fynx_feed_cache_v1_"
     private const val FEED_CACHE_TIME_KEY_PREFIX = "fynx_feed_cache_time_v1_"
-    private val refreshSignal = mutableIntStateOf(0)
+    private val refreshSignal = mutableStateOf(0)
 
     fun request(context: Context) {
         runCatching {
@@ -20,11 +21,11 @@ object FynxHomeLifecycleRefreshBus {
                     .apply()
             }
         }
-        refreshSignal.intValue++
+        refreshSignal.value++
     }
 
     @Composable
-    fun currentVersion(): Int = refreshSignal.intValue
+    fun currentVersion(): Int = refreshSignal.value
 }
 
 @Composable
