@@ -125,7 +125,9 @@ async function initDatabase() {
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_id BIGINT;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_type TEXT;
-    ALTER TABLE messages ADD COLUMN IF NOT EXISTS voice_duration_ms BIGINT NOT NULL DEFAULT 0;\n    ALTER TABLE messages ADD COLUMN IF NOT EXISTS reaction TEXT;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS voice_duration_ms BIGINT NOT NULL DEFAULT 0;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT NOT NULL DEFAULT 'text';
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_payload JSONB;\n    ALTER TABLE messages ADD COLUMN IF NOT EXISTS reaction TEXT;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE;
     CREATE TABLE IF NOT EXISTS message_media (
       id BIGSERIAL PRIMARY KEY,
@@ -459,10 +461,10 @@ app.get("/api/media/:id", auth, async (req, res) => {
 });
 
 function messageProjection() {
-  return `SELECT m.id, m.sender_id, sender.username AS sender_username, sender.display_name AS sender_display_name, m.recipient_id, recipient.username AS recipient_username, recipient.display_name AS recipient_display_name, m.text, EXTRACT(EPOCH FROM m.created_at) * 1000 AS timestamp, m.delivered_at IS NOT NULL AS delivered, m.read_at IS NOT NULL AS read, m.edited, m.deleted, m.reply_to_id, m.media_id, m.media_type, m.voice_duration_ms, m.reaction, m.pinned FROM messages m JOIN users sender ON sender.id = m.sender_id JOIN users recipient ON recipient.id = m.recipient_id`;
+  return `SELECT m.id, m.sender_id, sender.username AS sender_username, sender.display_name AS sender_display_name, m.recipient_id, recipient.username AS recipient_username, recipient.display_name AS recipient_display_name, m.text, EXTRACT(EPOCH FROM m.created_at) * 1000 AS timestamp, m.delivered_at IS NOT NULL AS delivered, m.read_at IS NOT NULL AS read, m.edited, m.deleted, m.reply_to_id, m.media_id, m.media_type, m.voice_duration_ms, m.message_type, m.message_payload, m.reaction, m.pinned FROM messages m JOIN users sender ON sender.id = m.sender_id JOIN users recipient ON recipient.id = m.recipient_id`;
 }
 function rowToMessage(row) {
-  return { id: String(row.id), senderId: String(row.sender_id), senderUsername: row.sender_username || null, senderDisplayName: row.sender_display_name || null, recipientId: String(row.recipient_id), recipientUsername: row.recipient_username || null, recipientDisplayName: row.recipient_display_name || null, text: row.text, timestamp: Number(row.timestamp), delivered: row.delivered, read: row.read, edited: row.edited, deleted: row.deleted, replyToId: row.reply_to_id == null ? null : String(row.reply_to_id), mediaId: row.media_id == null ? null : String(row.media_id), mediaType: row.media_type || null, mediaUrl: row.media_id == null ? null : `/api/media/${row.media_id}`, voiceDurationMs: Number(row.voice_duration_ms || 0), reaction: row.reaction || null, pinned: Boolean(row.pinned) };
+  return { id: String(row.id), senderId: String(row.sender_id), senderUsername: row.sender_username || null, senderDisplayName: row.sender_display_name || null, recipientId: String(row.recipient_id), recipientUsername: row.recipient_username || null, recipientDisplayName: row.recipient_display_name || null, text: row.text, timestamp: Number(row.timestamp), delivered: row.delivered, read: row.read, edited: row.edited, deleted: row.deleted, replyToId: row.reply_to_id == null ? null : String(row.reply_to_id), mediaId: row.media_id == null ? null : String(row.media_id), mediaType: row.media_type || null, mediaUrl: row.media_id == null ? null : `/api/media/${row.media_id}`, voiceDurationMs: Number(row.voice_duration_ms || 0), messageType: row.message_type || 'text', messagePayload: row.message_payload || null, reaction: row.reaction || null, pinned: Boolean(row.pinned) };
 }
 
 app.get("/api/messages/:username", auth, async (req, res) => {
@@ -541,6 +543,10 @@ app.post("/api/messages", auth, async (req, res) => {
     const mediaId = req.body?.mediaId == null ? null : Number(req.body.mediaId);
     const mediaType = typeof req.body?.mediaType === "string" ? req.body.mediaType.trim().toLowerCase() : null;
     const voiceDurationMs = req.body?.voiceDurationMs == null ? 0 : Number(req.body.voiceDurationMs);
+    const messageType = typeof req.body?.messageType === 'string' ? req.body.messageType.trim().toLowerCase() : 'text';
+    const messagePayload = req.body?.messagePayload && typeof req.body.messagePayload === 'object' && !Array.isArray(req.body.messagePayload) ? req.body.messagePayload : null;
+    if (!/^(text|location|contact|poll|sticker|gif)$/.test(messageType)) return res.status(400).json({ error: 'invalid message type' });
+    if (messageType !== 'text' && !messagePayload) return res.status(400).json({ error: 'message payload is required' });
     if (!recipientUsername || text.length > 4000 || (!text && !Number.isInteger(mediaId))) return res.status(400).json({ error: "valid recipientUsername and message content are required" });
     if (mediaId != null && (!Number.isInteger(mediaId) || mediaId < 1)) return res.status(400).json({ error: "invalid media id" });
     if (mediaId != null && (!mediaType || !/^(image|video|video_note|audio|document)$/.test(mediaType))) return res.status(400).json({ error: "invalid media type" });
@@ -558,9 +564,9 @@ app.post("/api/messages", auth, async (req, res) => {
       const reply = await pool.query("SELECT id FROM messages WHERE id = $1 AND ((sender_id = $2 AND recipient_id = $3) OR (sender_id = $3 AND recipient_id = $2))", [replyToId, req.user.sub, recipient.id]);
       if (!reply.rows[0]) return res.status(400).json({ error: "invalid reply target" });
     }
-    const result = await pool.query("INSERT INTO messages (sender_id, recipient_id, text, reply_to_id, media_id, media_type, voice_duration_ms) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, created_at", [req.user.sub, recipient.id, text, replyToId, mediaId, mediaType, voiceDurationMs]);
+    const result = await pool.query("INSERT INTO messages (sender_id, recipient_id, text, reply_to_id, media_id, media_type, voice_duration_ms, message_type, message_payload) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, created_at", [req.user.sub, recipient.id, text, replyToId, mediaId, mediaType, voiceDurationMs, messageType, messagePayload]);
     const sender = await pool.query("SELECT username, display_name FROM users WHERE id = $1", [req.user.sub]);
-    const message = { id: String(result.rows[0].id), senderId: String(req.user.sub), senderUsername: sender.rows[0]?.username || req.user.username || null, senderDisplayName: sender.rows[0]?.display_name || null, recipientId: String(recipient.id), recipientUsername: recipient.username, recipientDisplayName: recipient.display_name, text, timestamp: new Date(result.rows[0].created_at).getTime(), delivered: false, read: false, edited: false, deleted: false, replyToId: replyToId == null ? null : String(replyToId), mediaId: mediaId == null ? null : String(mediaId), mediaType, mediaUrl: mediaId == null ? null : `/api/media/${mediaId}`, voiceDurationMs };
+    const message = { id: String(result.rows[0].id), senderId: String(req.user.sub), senderUsername: sender.rows[0]?.username || req.user.username || null, senderDisplayName: sender.rows[0]?.display_name || null, recipientId: String(recipient.id), recipientUsername: recipient.username, recipientDisplayName: recipient.display_name, text, timestamp: new Date(result.rows[0].created_at).getTime(), delivered: false, read: false, edited: false, deleted: false, replyToId: replyToId == null ? null : String(replyToId), mediaId: mediaId == null ? null : String(mediaId), mediaType, mediaUrl: mediaId == null ? null : `/api/media/${mediaId}`, voiceDurationMs, messageType, messagePayload };
     await broadcastMessage(message);
     return res.status(201).json({ message });
   } catch (error) { console.error("send message", error); return res.status(500).json({ error: "message send failed" }); }
