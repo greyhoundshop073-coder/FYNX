@@ -446,7 +446,7 @@ fun GroupChatPanel(
                                 onValueChange = { text = it.take(4000) },
                                 modifier = Modifier.weight(1f),
                                 minLines = 1,
-                                maxLines = 5,
+                                maxLines = 6,
                                 shape = RoundedCornerShape(24.dp),
                                 placeholder = { Text("Message group…") },
                                 colors = OutlinedTextFieldDefaults.colors(
@@ -460,13 +460,28 @@ fun GroupChatPanel(
                                     unfocusedBorderColor = Color.Transparent
                                 ),
                                 trailingIcon = {
-                                    Row {
-                                        IconButton(onClick = { micPermission.launch(Manifest.permission.RECORD_AUDIO) }, modifier = Modifier.size(48.dp)) {
-                                            Icon(Icons.Default.Mic, "Record voice", tint = glassPalette.messageText)
-                                        }
-                                        IconButton(onClick = { send() }, enabled = text.isNotBlank() || attachment != null, modifier = Modifier.size(48.dp)) {
-                                            Icon(Icons.Default.Send, "Send", tint = glassPalette.messageText)
-                                        }
+                                    val canSend = text.isNotBlank() || attachment != null
+                                    IconButton(
+                                        onClick = {
+                                            if (canSend) send() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                                        },
+                                        enabled = !sending,
+                                        modifier = Modifier
+                                            .size(46.dp)
+                                            .clip(androidx.compose.foundation.shape.CircleShape)
+                                            .background(
+                                                if (canSend) glassPalette.outgoingStart
+                                                else glassPalette.doodleSecondary
+                                            )
+                                            .semantics {
+                                                contentDescription = if (canSend) "Send message" else "Hold to record voice message"
+                                            }
+                                    ) {
+                                        Icon(
+                                            if (canSend) Icons.Default.Send else Icons.Default.Mic,
+                                            if (canSend) "Send message" else "Record voice",
+                                            tint = Color.White
+                                        )
                                     }
                                 },
                                 singleLine = false
