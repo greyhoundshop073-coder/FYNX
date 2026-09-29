@@ -87,14 +87,55 @@ fun FynxPostMediaViewer(context: Context, post: FynxRemoteSocialClient.RemotePos
 
 @Composable private fun FynxViewerMediaPage(context: Context, item: FynxPostViewerItem) {
     var file by remember(item.mediaUrl) { mutableStateOf<File?>(null) }
-    LaunchedEffect(item.mediaUrl) { file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, item.mediaUrl, item.mediaType) } }
+    var loading by remember(item.mediaUrl) { mutableStateOf(true) }
+    var failed by remember(item.mediaUrl) { mutableStateOf(false) }
+    var reloadNonce by remember(item.mediaUrl) { mutableIntStateOf(0) }
+
+    LaunchedEffect(item.mediaUrl, reloadNonce) {
+        loading = true
+        failed = false
+        file = withContext(Dispatchers.IO) {
+            FynxMediaCache.getOrDownload(context, item.mediaUrl, item.mediaType)
+        }
+        if (file == null) failed = true
+        loading = false
+    }
+
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        if (file == null) CircularProgressIndicator(color = Color.White)
-        else if (item.mediaType.equals("video", true)) AndroidView(factory = { ctx -> VideoView(ctx).apply { layoutParams = ViewGroup.LayoutParams(-1, -1); setMediaController(MediaController(ctx)); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxSize())
-        else {
-            var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
-            LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }
-            bitmap?.let { Image(it.asImageBitmap(), "Post photo", Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
+        when {
+            loading -> CircularProgressIndicator(color = Color.White)
+            failed -> Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.BrokenImage, contentDescription = null, tint = Color.White)
+                Text("Media unavailable", color = Color.White)
+                TextButton(onClick = { reloadNonce++ }) { Text("Retry", color = Color.White) }
+            }
+            item.mediaType.equals("video", true) && file != null ->
+                AndroidView(
+                    factory = { ctx ->
+                        VideoView(ctx).apply {
+                            layoutParams = ViewGroup.LayoutParams(-1, -1)
+                            setMediaController(MediaController(ctx))
+                            setVideoURI(Uri.fromFile(file))
+                            setOnPreparedListener { it.isLooping = true; start() }
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            file != null -> {
+                var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
+                LaunchedEffect(file) {
+                    bitmap = withContext(Dispatchers.IO) {
+                        runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull()
+                    }
+                    if (bitmap == null) failed = true
+                }
+                if (bitmap != null) {
+                    Image(bitmap!!.asImageBitmap(), "Post photo", Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                }
+            }
         }
     }
 }
