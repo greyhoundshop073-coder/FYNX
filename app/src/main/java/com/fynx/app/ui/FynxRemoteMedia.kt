@@ -97,8 +97,8 @@ fun FynxRemoteMedia(
                     val isGif = type.equals("gif", true) || contentType.equals("image/gif", true)
                     if (isVideo) MediaLoadResult.Video(target)
                     else if (isGif && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                        val source = ImageDecoder.createSource(android.os.ParcelFileDescriptor.open(target, android.os.ParcelFileDescriptor.MODE_READ_ONLY).fileDescriptor)
-                        MediaLoadResult.Gif(ImageDecoder.decodeDrawable(source))
+                        val source = ImageDecoder.createSource(target)
+                        MediaLoadResult.Gif(ImageDecoder.decodeDrawable(source), target)
                     } else {
                         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                         BitmapFactory.decodeFile(target.absolutePath, bounds)
