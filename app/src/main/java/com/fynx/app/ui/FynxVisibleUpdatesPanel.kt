@@ -147,7 +147,10 @@ fun FynxVisibleUpdatesPanel(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     item {
-                        Box(Modifier.width(82.dp)) {
+                        Row(
+                            Modifier.width(138.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             FynxStatusPreviewCircle(
                                 own?.first,
                                 currentUsername.ifBlank { "You" },
@@ -157,16 +160,17 @@ fun FynxVisibleUpdatesPanel(
                                 own?.second ?: 0,
                                 ownerPhotoIds[current]
                             )
-                            IconButton(onClick = onCreateStatus, modifier = Modifier.align(Alignment.TopEnd).sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-        .background(MaterialTheme.colorScheme.primary, CircleShape)
-        .semantics { contentDescription = "Create your status" }
-) {
+                            IconButton(onClick = onCreateStatus, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                .semantics { contentDescription = "Create your status" }
+                            ) {
                                 Icon(
                                     Icons.Default.Add,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onPrimary,
                                     modifier = Modifier.size(17.dp)
-                                )                            }
+                                )
+                            }
                         }
                     }
                     items(
