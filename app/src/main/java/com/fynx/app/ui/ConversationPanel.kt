@@ -232,10 +232,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 networkError = null
             }
             else -> {
+                val purpose = mediaPickerPurpose
                 attachment = null
                 attachmentType = null
                 mediaPickerPurpose = null
-                networkError = if (mediaPickerPurpose == "gif") "Please choose a GIF image." else "Please choose an image or video."
+                networkError = if (purpose == "gif") "Please choose a GIF image." else "Please choose an image or video."
             }
         }
     }
