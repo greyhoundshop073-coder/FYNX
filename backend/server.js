@@ -190,6 +190,7 @@ async function broadcastMessage(message) {
   broadcastToUser(message.senderId, payload);
   broadcastToUser(message.recipientId, payload);
 }
+app.locals.fynxBroadcastMessage = broadcastMessage;
 function broadcastPresence(userId, online) {
   const payload = { type: "presence", userId: String(userId), online };
   for (const sockets of clientsByUserId.values()) for (const socket of sockets) sendSocket(socket, payload);
