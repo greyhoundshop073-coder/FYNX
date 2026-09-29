@@ -139,7 +139,7 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
                         OutlinedTextField(value = reportTarget, onValueChange = { reportTarget = it.take(64) }, label = { Text("Username") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = true)
                         OutlinedTextField(value = reportReason, onValueChange = { reportReason = it.take(80) }, label = { Text("Reason") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = true)
                         OutlinedTextField(value = reportDetails, onValueChange = { reportDetails = it.take(4000) }, label = { Text("Details (optional)") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), minLines = 3)
-                        Button(enabled = !submittingReport && reportTarget.trim().length >= 2 && reportReason.trim().length >= 3, onClick = { submittingReport = true; scope.launch { FynxSafetyRemoteClient.submitReport(context, reportTarget, reportReason, reportDetails).onSuccess { reports = listOf(it) + reports; reportTarget=""; reportReason=""; reportDetails=""; notice="Report submitted. FYNX Safety will review it." }.onFailure { error -> notice=error.message ?: "Report submission failed." }; submittingReport=false } }, modifier = Modifier.padding(top = 8.dp)) { Text(if (submittingReport) "Submitting…" else "Submit report") }
+                        Button(enabled = !submittingReport && reportTarget.trim().length >= 2 && reportReason.trim().length >= 3, onClick = { submittingReport = true; scope.launch { FynxSafetyRemoteClient.submitReport(context, reportTarget, reportReason, reportDetails).onSuccess { reports = listOf(it) + reports; reportTarget=""; reportReason=""; reportDetails=""; notice="Report submitted. FYNX Safety will review it." }.onFailure { error -> notice=error.message ?: "Report submission failed." }; submittingReport=false } }, modifier = Modifier.padding(top = 8.dp).heightIn(min = 48.dp)) { Text(if (submittingReport) "Submitting…" else "Submit report") }
                     }
                 }
             }
@@ -173,7 +173,7 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
                                 }.onFailure { error -> notice = error.message ?: "Appeal submission failed." }
                                 submittingAppeal = false
                             }
-                        }, modifier = Modifier.padding(top = 8.dp)) { Text(if (submittingAppeal) "Submitting…" else "Submit appeal") }
+                        }, modifier = Modifier.padding(top = 8.dp).heightIn(min = 48.dp)) { Text(if (submittingAppeal) "Submitting…" else "Submit appeal") }
                         if (appeals.isNotEmpty()) {
                             Text("Recent appeals", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
                             appeals.take(5).forEach { appeal ->
