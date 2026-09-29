@@ -59,7 +59,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (String) -> Unit = {}, onVoiceCall: () -> Unit = {}, onVideoCall: () -> Unit = {}) {
+fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, onBack: () -> Unit, onOpenProfile: (String) -> Unit = {}, onVoiceCall: () -> Unit = {}, onVideoCall: () -> Unit = {}) {
     val context = LocalContext.current
     val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == FynxConversationPreferences.chatWallpaper(context, chat.username) } ?: FynxGlassThemeId.PURE_BLACK
     val glassPalette = fynxGlassPalette(glassThemeId)
@@ -128,6 +128,7 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var realtimeState by remember(chat.username) { mutableStateOf(FynxRealtimeClient.State.DISCONNECTED) }
     var networkError by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
+    var marketplaceContextAttached by remember(chat.username, marketplaceListingId) { mutableStateOf(false) }
     var typingSent by remember { mutableStateOf(false) }
     var stopRecordingAction: (() -> Unit)? = null
 
@@ -483,6 +484,11 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     .onSuccess { remote ->
                         currentUserId?.let { myId ->
                             messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp }
+                        }
+                        if (!marketplaceContextAttached && !marketplaceListingId.isNullOrBlank()) {
+                            FynxR6GIntegrationClient.attachListingToMessage(context, remote.id, marketplaceListingId)
+                                .onSuccess { marketplaceContextAttached = true }
+                                .onFailure { networkError = it.message ?: "Marketplace listing could not be attached to this message" }
                         }
                         text = ""
                         editingId = null
