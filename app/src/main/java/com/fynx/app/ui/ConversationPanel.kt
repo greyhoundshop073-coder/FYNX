@@ -4,6 +4,8 @@ import android.Manifest
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
+import android.location.LocationManager
+import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -101,6 +103,12 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
     var chatNotificationsEnabled by remember(chat.username) { mutableStateOf(FynxConversationPreferences.chatNotifications(context, chat.username)) }
     var showEmojiPanel by remember { mutableStateOf(false) }
     var showAttachmentSheet by remember { mutableStateOf(false) }
+    var showLocationDialog by remember { mutableStateOf(false) }
+    var showContactDialog by remember { mutableStateOf(false) }
+    var showPollDialog by remember { mutableStateOf(false) }
+    var contactUsername by remember { mutableStateOf("") }
+    var pollQuestion by remember { mutableStateOf("") }
+    var pollOptions by remember { mutableStateOf(listOf("", "")) }
     var cameraInitialMode by remember { mutableStateOf(CameraMode.PHOTO) }
     var videoNoteMode by remember { mutableStateOf(false) }
     var reactionMessageId by remember { mutableStateOf<String?>(null) }
@@ -199,6 +207,9 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                 networkError = "Please choose an image or video."
             }
         }
+    }
+    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) networkError = "Location permission is required to share your location." else showLocationDialog = true
     }
     val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted && !isRecording) {
@@ -911,6 +922,66 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
 
     }
 
+    if (showLocationDialog) {
+        AlertDialog(onDismissRequest = { showLocationDialog = false }, title = { Text("Share location") },
+            text = { Text("Share your current location with this chat?") },
+            confirmButton = { TextButton(onClick = {
+                showLocationDialog = false
+                val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+                val location = runCatching { manager.getLastKnownLocation(LocationManager.GPS_PROVIDER) ?: manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) }.getOrNull()
+                if (location == null) { networkError = "Current location is not available yet."; return@TextButton }
+                conversationScope.launch {
+                    sending = true
+                    FynxProductionMessaging.sendStructuredMessage(context, chat.username, "location", mapOf("latitude" to location.latitude.toString(), "longitude" to location.longitude.toString()))
+                        .onSuccess { remote -> messages = (messages + FynxProductionMessaging.toChatMessage(remote, currentUserId ?: "")).distinctBy { it.id }.sortedBy { it.timestamp } }
+                        .onFailure { networkError = it.message ?: "Location could not be sent" }
+                    sending = false
+                }
+            }) { Text("Share") } },
+            dismissButton = { TextButton(onClick = { showLocationDialog = false }) { Text("Cancel") } })
+    }
+    if (showContactDialog) {
+        AlertDialog(onDismissRequest = { showContactDialog = false }, title = { Text("Share contact") },
+            text = { OutlinedTextField(value = contactUsername, onValueChange = { contactUsername = it }, label = { Text("FYNX username") }, singleLine = true) },
+            confirmButton = { TextButton(enabled = contactUsername.isNotBlank() && !sending, onClick = {
+                val value = contactUsername.trim().removePrefix("@")
+                showContactDialog = false
+                contactUsername = ""
+                conversationScope.launch {
+                    sending = true
+                    FynxProfileRemoteClient.get(context, value).onSuccess { profile ->
+                        FynxProductionMessaging.sendStructuredMessage(context, chat.username, "contact", mapOf("username" to profile.username, "displayName" to profile.displayName, "country" to profile.country))
+                            .onSuccess { remote -> messages = (messages + FynxProductionMessaging.toChatMessage(remote, currentUserId ?: "")).distinctBy { it.id }.sortedBy { it.timestamp } }
+                            .onFailure { networkError = it.message ?: "Contact could not be sent" }
+                    }.onFailure { networkError = it.message ?: "Contact not found" }
+                    sending = false
+                }
+            }) { Text("Share") } },
+            dismissButton = { TextButton(onClick = { showContactDialog = false }) { Text("Cancel") } })
+    }
+    if (showPollDialog) {
+        AlertDialog(onDismissRequest = { showPollDialog = false }, title = { Text("Create poll") },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = pollQuestion, onValueChange = { pollQuestion = it }, label = { Text("Question") }, singleLine = true)
+                pollOptions.forEachIndexed { optionIndex, option -> OutlinedTextField(value = option, onValueChange = { value -> pollOptions = pollOptions.mapIndexed { i, old -> if (i == optionIndex) value else old } }, label = { Text("Option " + (optionIndex + 1)) }, singleLine = true) }
+                TextButton(onClick = { if (pollOptions.size < 5) pollOptions = pollOptions + "" }) { Text("Add option") }
+            } },
+            confirmButton = { TextButton(enabled = pollQuestion.isNotBlank() && pollOptions.count { it.isNotBlank() } >= 2 && !sending, onClick = {
+                val cleanOptions = pollOptions.map { it.trim() }.filter { it.isNotBlank() }.distinct().take(5)
+                showPollDialog = false
+                val question = pollQuestion.trim()
+                pollQuestion = ""; pollOptions = listOf("", "")
+                conversationScope.launch {
+                    sending = true
+                    FynxProductionMessaging.sendStructuredMessage(context, chat.username, "poll", mapOf("question" to question, "options" to cleanOptions.joinToString("\\u001F")))
+                        .onSuccess { remote -> messages = (messages + FynxProductionMessaging.toChatMessage(remote, currentUserId ?: "")).distinctBy { it.id }.sortedBy { it.timestamp } }
+                        .onFailure { networkError = it.message ?: "Poll could not be sent" }
+                    sending = false
+                }
+            }) { Text("Send poll") } },
+            dismissButton = { TextButton(onClick = { showPollDialog = false }) { Text("Cancel") } })
+    }
+
     if (showAttachmentSheet) {
         ModalBottomSheet(
             onDismissRequest = { showAttachmentSheet = false },
@@ -925,6 +996,9 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     Triple("Camera", Icons.Default.CameraAlt) { showAttachmentSheet = false; cameraInitialMode = CameraMode.PHOTO; showCamera = true },
                     Triple("Gallery", Icons.Default.PhotoLibrary) { showAttachmentSheet = false; mediaPicker.launch(arrayOf("image/*", "video/*")) },
                     Triple("Files", Icons.Default.Description) { showAttachmentSheet = false; mediaPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) },
+                    Triple("Location", Icons.Default.LocationOn) { showAttachmentSheet = false; locationPermission.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
+                    Triple("Contact", Icons.Default.ContactPage) { showAttachmentSheet = false; showContactDialog = true },
+                    Triple("Poll", Icons.Default.Poll) { showAttachmentSheet = false; showPollDialog = true },
                     Triple("Video note", Icons.Default.Videocam) { showAttachmentSheet = false; videoNoteMode = true; cameraInitialMode = CameraMode.VIDEO; showCamera = true }
                 )
                 items.forEach { (label, icon, action) ->
