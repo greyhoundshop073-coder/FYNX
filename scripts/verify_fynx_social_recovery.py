@@ -87,7 +87,7 @@ check("connected state requires successful FYNX backend health",
       '_state.value = State.CONNECTED' in connection)
 check("header text matches the required three states",
       '"Waiting for network..."' in app and
-      '"Connecting" + ".repeat(connectingDotCount)' in app and
+      '"Connecting" + ".".repeat(connectingDotCount)' in app and
       'Text("FYNX"' in app and
       'Icons.Default.Verified' in app)
 
