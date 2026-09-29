@@ -685,7 +685,24 @@ private fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: ((
         Dialog(onDismissRequest = { fullscreen = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
             Box(Modifier.fillMaxSize().background(Color.Black)) {
                 if (type == "video") {
-                    AndroidView(factory = { ctx -> VideoView(ctx).apply { layoutParams = ViewGroup.LayoutParams(-1, -1); setVideoURI(Uri.fromFile(file)); setOnPreparedListener { it.isLooping = true; start() } } }, modifier = Modifier.fillMaxSize())
+                    var fullscreenVideoView by remember(file) { mutableStateOf<VideoView?>(null) }
+                    AndroidView(
+                        factory = { ctx ->
+                            FynxPassiveVideoView(ctx).apply {
+                                fullscreenVideoView = this
+                                layoutParams = ViewGroup.LayoutParams(-1, -1)
+                                setVideoPath(file!!.absolutePath)
+                                setOnPreparedListener { player -> player.isLooping = true; player.start() }
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    DisposableEffect(file) {
+                        onDispose {
+                            fullscreenVideoView?.stopPlayback()
+                            fullscreenVideoView = null
+                        }
+                    }
                 } else {
                     var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
                     LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull() } }
