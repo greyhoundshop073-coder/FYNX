@@ -63,14 +63,16 @@ fun OtherUserProfilePanel(
     var blockConfirmOpen by remember(username) { mutableStateOf(false) }
 
     suspend fun loadProfile() {
-        scope.launch {
-            loading = true
-            error = null
-            FynxProfileRemoteClient.get(context, username)
-                .onSuccess { loaded -> profile = loaded; following = loaded.followedByCurrentUser }
-            if (profile == null) error = "Unable to load this profile."
-            loading = false
-        }
+        loading = true
+        error = null
+        FynxProfileRemoteClient.get(context, username)
+            .onSuccess { loaded ->
+                profile = loaded
+                following = loaded.followedByCurrentUser
+            }
+            .onFailure { error = it.message ?: "Unable to load this profile." }
+        if (profile == null && error == null) error = "Unable to load this profile."
+        loading = false
     }
 
     LaunchedEffect(username) { loadProfile() }
