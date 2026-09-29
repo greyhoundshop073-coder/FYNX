@@ -598,6 +598,28 @@ if not FAILURES:
                             FAILURES.append("no authenticated username was available for ConversationPanel UI smoke test")
                 alive, crashlog = capture_runtime_log("private-chat-process.log")
                 screenshot("private-chat-after-open.png")
+                # Capture the real Chat Settings screen from the same opened conversation.
+                # This is read-only: do not toggle or reset the account preferences.
+                settings_menu = tap_control(dump_ui("private-chat-before-settings.xml"), ["More"], "private-chat-menu", ["Chat settings"])
+                if settings_menu:
+                    settings_screen = tap_control(settings_menu, ["Chat settings"], "private-chat-settings", ["Chat Settings", "Notifications", "Appearance"])
+                    if settings_screen:
+                        required_settings = ["Chat Settings", "Notifications", "Appearance", "Chat notifications", "Message sound", "Vibration", "Message text size"]
+                        missing_settings = [label for label in required_settings if not find_control(settings_screen, [label])]
+                        if missing_settings:
+                            FAILURES.append("Chat Settings screen is missing visible controls: " + ", ".join(missing_settings))
+                        else:
+                            report.append("- PASS private Chat Settings opened; notification and appearance controls verified")
+                            run("adb", "shell", "input", "swipe", "540", "1600", "540", "650", "550")
+                            settings_lower = dump_ui("authenticated-private-chat-settings-lower.xml")
+                            screenshot("authenticated-private-chat-settings-lower.png")
+                            if settings_lower and find_control(settings_lower, ["Chat Management"]):
+                                report.append("- PASS Chat Settings lower section captured, including Chat Management")
+                            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                    else:
+                        FAILURES.append("private Chat Settings did not open from the conversation menu")
+                else:
+                    FAILURES.append("private chat More menu did not expose Chat settings")
                 report.append("- Chat process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
                 if crashlog: report.append("- Chat crash-log evidence captured in private-chat-process.log")
                 if private_chat_username:
