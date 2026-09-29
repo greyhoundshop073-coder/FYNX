@@ -992,7 +992,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         contentDescription = if (editingId == null) "Message composer" else "Edit message composer"
                     },
                     minLines = 1,
-                    maxLines = 5,
+                    maxLines = 6,
                     shape = RoundedCornerShape(26.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = glassPalette.incomingGlass,
@@ -1032,20 +1032,21 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                 .pointerInput(voiceMode, recordingMode, sending) {
                                     if (!voiceMode || sending) return@pointerInput
                                     detectTapGestures(
-                                        onPress = {
-                                            if (tryAwaitRelease()) {
-                                                composerVideoMode = !composerVideoMode
+                                        onTap = {
+                                            composerVideoMode = !composerVideoMode
+                                        },
+                                        onLongPress = {
+                                            if (recordingMode) {
+                                                videoNoteMode = true
+                                                cameraInitialMode = CameraMode.VIDEO
+                                                showCamera = true
                                             } else {
-                                                if (recordingMode) {
-                                                    videoNoteMode = true
-                                                    cameraInitialMode = CameraMode.VIDEO
-                                                    showCamera = true
-                                                } else {
-                                                    startRecording()
-                                                    tryAwaitRelease()
-                                                    if (isRecording) stopRecording()
-                                                }
+                                                startRecording()
                                             }
+                                        },
+                                        onPress = {
+                                            tryAwaitRelease()
+                                            if (isRecording) stopRecording()
                                         }
                                     )
                                 },
