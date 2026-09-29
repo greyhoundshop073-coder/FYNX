@@ -354,6 +354,8 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier, maxDuration
         }
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
+            val waveformPlayedColor = MaterialTheme.colorScheme.primary
+            val waveformIdleColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.42f)
             Canvas(Modifier.fillMaxWidth().height(34.dp)) {
                 val bars = 32
                 val gap = 3.dp.toPx()
@@ -367,7 +369,7 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier, maxDuration
                     val y = (size.height - height) / 2f
                     val played = i.toFloat() / bars <= progress
                     drawRoundRect(
-                        color = if (played) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.42f),
+                        color = if (played) waveformPlayedColor else waveformIdleColor,
                         topLeft = androidx.compose.ui.geometry.Offset(x, y),
                         size = androidx.compose.ui.geometry.Size(barWidth, height),
                         cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2f, barWidth / 2f)
