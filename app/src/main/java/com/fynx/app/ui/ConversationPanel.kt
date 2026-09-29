@@ -1065,7 +1065,6 @@ fun ConversationPanel(chat: ChatPreview, onBack: () -> Unit, onOpenProfile: (Str
                     }
                 }
             }
-            }
         }
     }
 
