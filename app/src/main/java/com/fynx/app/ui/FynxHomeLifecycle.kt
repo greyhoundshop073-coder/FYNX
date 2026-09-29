@@ -37,15 +37,6 @@ object FynxHomeLifecycleRefreshBus {
 
 @Composable
 fun FynxHomeLifecycleRefresh(content: @Composable (refreshKey: Int) -> Unit) {
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var lifecycleRefreshKey by remember { mutableIntStateOf(0) }
     val publishRefreshKey = FynxHomeLifecycleRefreshBus.currentVersion()
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) lifecycleRefreshKey++
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-    content(lifecycleRefreshKey + publishRefreshKey)
+    content(publishRefreshKey)
 }
