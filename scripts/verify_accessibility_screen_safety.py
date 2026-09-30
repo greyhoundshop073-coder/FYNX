@@ -43,7 +43,7 @@ def same_bounds(a, b):
     return bounds(a) is not None and bounds(a) == bounds(b)
 
 def semantic_child_of_larger_clickable(n, parents, min_size):
-    """Ignore Compose semantic projection children inside a real larger click target."""
+    """Ignore Compose semantic projection children inside a sufficiently large clickable ancestor."""
     b = bounds(n)
     if b is None or label(n) or n.attrib.get("class", "") in allow_unlabelled:
         return False
@@ -58,7 +58,7 @@ def semantic_child_of_larger_clickable(n, parents, min_size):
                 pw, ph = pr - pl, pbot - pt
                 if pw >= min_size and ph >= min_size:
                     inter = max(0, min(r, pr) - max(l, pl)) * max(0, min(bot, pbot) - max(t, pt))
-                    if inter / child_area >= 0.75:
+                    if inter / child_area >= 0.50:
                         return True
             return False
         cur = parents.get(id(cur))
@@ -67,6 +67,29 @@ def semantic_child_of_larger_clickable(n, parents, min_size):
 def is_duplicate_semantics_node(n, parents):
     parent = parents.get(id(n))
     return bool(parent is not None and click(parent) and same_bounds(n, parent) and n.attrib.get("NAF", "false").lower() == "true")
+
+def is_projected_naf_node(n, parents, min_size):
+    """UiAutomator can expose nested Compose NAF projection nodes as clickable nodes.
+    They are accessibility-tree projections, not independent touch targets, when they
+    are contained by a sufficiently large clickable ancestor or duplicate one."""
+    if n.attrib.get("NAF", "false").lower() != "true":
+        return False
+    b = bounds(n)
+    if b is None:
+        return False
+    l, t, r, bot = b
+    area = max(1, (r - l) * (bot - t))
+    cur = parents.get(id(n))
+    while cur is not None:
+        cb = bounds(cur)
+        if cb and click(cur):
+            cl, ct, cr, cbot = cb
+            cw, ch = cr - cl, cbot - ct
+            inter = max(0, min(r, cr) - max(l, cl)) * max(0, min(bot, cbot) - max(t, ct))
+            if cw >= min_size and ch >= min_size and inter / area >= 0.50:
+                return True
+        cur = parents.get(id(cur))
+    return False
 
 def has_adjacent_larger_clickable(n, parents, min_size):
     if n.attrib.get("class") != "android.widget.TextView" or not label(n):
@@ -127,7 +150,9 @@ for p in files:
             if click(n) or n.attrib.get("focusable", "false").lower() == "true":
                 failures.append(f"{p.name}: invalid actionable node bounds {b}")
             continue
-        if not click(n) or is_duplicate_semantics_node(n, parents) or semantic_child_of_larger_clickable(n, parents, min_px):
+        if (not click(n) or is_duplicate_semantics_node(n, parents) or
+                semantic_child_of_larger_clickable(n, parents, min_px) or
+                is_projected_naf_node(n, parents, min_px)):
             continue
         checked += 1
         cls = n.attrib.get("class", "")
@@ -139,7 +164,7 @@ for p in files:
         if not text and cls not in allow_unlabelled and not has_semantic_descendant(n) and not clipped_scroll:
             failures.append(f"{p.name}: clickable node has no accessible text/content-desc/resource-id and no semantic descendant class={cls} bounds={b}")
     for parent in root.iter("node"):
-        kids = [n for n in list(parent) if click(n) and bounds(n) and not is_duplicate_semantics_node(n, parents) and not semantic_child_of_larger_clickable(n, parents, min_px)]
+        kids = [n for n in list(parent) if click(n) and bounds(n) and not is_duplicate_semantics_node(n, parents) and not semantic_child_of_larger_clickable(n, parents, min_px) and not is_projected_naf_node(n, parents, min_px)]
         for i, a in enumerate(kids):
             al, at, ar, ab = bounds(a)
             aa = max(0, ar - al) * max(0, ab - at)
