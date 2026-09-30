@@ -89,7 +89,13 @@ fun FynxRemoteMedia(
                 val extension = if (isKnownVideo) ".media" else ".image"
                 val cacheTarget = remoteMediaCacheFile(context, resolvedUrl, extension)
                 val target = cacheTarget ?: File.createTempFile("fynx_media_", ".media", context.cacheDir)
-                val result = if (cacheTarget?.exists() == true && cacheTarget.length() > 0L) Result.success(FynxBackendClient.DownloadedMedia(null, cacheTarget.length())) else downloadRemoteMedia(context, resolvedUrl, target)
+                val result = if (cacheTarget?.exists() == true && cacheTarget.length() > 0L) {
+                    Result.success(FynxBackendClient.DownloadedMedia(null, cacheTarget.length()))
+                } else if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE || !FynxBackendClient.hasAccessToken(context)) {
+                    Result.failure(IllegalStateException("Media is offline and not cached"))
+                } else {
+                    downloadRemoteMedia(context, resolvedUrl, target)
+                }
                 result.getOrThrow().let { downloaded ->
                     val contentType = downloaded.contentType.orEmpty()
                     val isVideo = isKnownVideo || (type.equals("auto", true) && contentType.startsWith("video/"))
