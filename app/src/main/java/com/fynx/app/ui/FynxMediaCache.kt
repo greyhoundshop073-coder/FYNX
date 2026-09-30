@@ -22,9 +22,8 @@ internal object FynxMediaCache {
         val normalizedPath = path.trim()
         if (!isSupportedMediaPath(normalizedPath)) return null
         val accountKey = FynxAuthStore.accountStorageKey(context) ?: return null
-        if (!FynxBackendClient.hasAccessToken(context)) return null
 
-        val directory = File(context.cacheDir, "$FYNX_MEDIA_CACHE_DIR/${accountCacheKey(accountKey)}").apply { mkdirs() }
+        val directory = File(context.filesDir, "$FYNX_MEDIA_CACHE_DIR/${accountCacheKey(accountKey)}").apply { mkdirs() }
         val extension = when (type) { "video" -> ".mp4"; "audio" -> ".m4a"; else -> ".jpg" }
         val file = File(directory, "${key(normalizedPath, type)}$extension")
         if (file.isFile && file.length() in 1..MAX_FYNX_MEDIA_FILE_BYTES) {
@@ -32,6 +31,8 @@ internal object FynxMediaCache {
             return file
         }
         if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) return null
+
+        if (!FynxBackendClient.hasAccessToken(context)) return null
 
         val lock = synchronized(downloadLocks) { downloadLocks.getOrPut(file.absolutePath) { Mutex() } }
         return try {
