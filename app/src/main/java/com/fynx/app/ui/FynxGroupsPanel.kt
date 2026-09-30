@@ -742,7 +742,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     )
                     Spacer(Modifier.width(6.dp))
                     Box(
-                        Modifier.size(46.dp).clip(CircleShape).background(Color(0xFF7C3AED)),
+                        Modifier.size(48.dp).clip(CircleShape).background(Color(0xFF7C3AED)),
                         contentAlignment = Alignment.Center
                     ) {
                         IconButton(
@@ -770,7 +770,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     }
                                 }
                             },
-                            modifier = Modifier.size(46.dp)
+                            modifier = Modifier.size(48.dp)
                         ) {
                             Icon(Icons.Default.Mic, "Microphone", modifier = Modifier.size(23.dp), tint = Color.White)
                         }
