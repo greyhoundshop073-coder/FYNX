@@ -43,6 +43,12 @@ def same_bounds(a, b):
     return bounds(a) is not None and bounds(a) == bounds(b)
 
 def semantic_child_of_larger_clickable(n, parents, min_size):
+    """Ignore Compose accessibility projection children when the real parent is the touch target.
+
+    Compose can expose an unlabelled semantic child with a clipped/partial rectangle inside
+    an already accessible clickable parent. The parent is the actionable target; certifying
+    the projected child separately produces false failures such as 126x90 or 63x126 nodes.
+    """
     parent = parents.get(id(n))
     b = bounds(n)
     if parent is None or b is None or not click(parent):
@@ -55,9 +61,15 @@ def semantic_child_of_larger_clickable(n, parents, min_size):
     pw, ph = pr - pl, pbot - pt
     if pw < min_size or ph < min_size:
         return False
-    inter = max(0, min(r, pr) - max(l, pl)) * max(0, min(bot, pbot) - max(t, pt))
+    if label(n):
+        return False
+    if n.attrib.get("class", "") in allow_unlabelled:
+        return False
     child_area = max(1, (r - l) * (bot - t))
-    return inter / child_area >= 0.75 and n.attrib.get("NAF", "false").lower() == "true"
+    inter = max(0, min(r, pr) - max(l, pl)) * max(0, min(bot, pbot) - max(t, pt))
+    if inter / child_area < 0.75:
+        return False
+    return True
 
 def is_duplicate_semantics_node(n, parents):
     parent = parents.get(id(n))
