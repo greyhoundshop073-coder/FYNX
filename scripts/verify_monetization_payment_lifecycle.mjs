@@ -6,6 +6,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const monetization = read('backend/monetizationRoutes.js');
 const marketplace = read('backend/marketplaceReputation.js');
 const verification = read('scripts/verify_monetization_production.mjs');
+const client = read('app/src/main/java/com/fynx/app/ui/FynxMonetizationClient.kt');
 
 const checks = [
   ['paid-plan payment table is server-owned', monetization.includes('CREATE TABLE IF NOT EXISTS fynx_plan_payments') && monetization.includes("status TEXT NOT NULL DEFAULT 'PENDING'")],
@@ -21,6 +22,8 @@ const checks = [
   ['stale pending payments do not block a fresh checkout', monetization.includes("status='PENDING' AND expires_at>NOW()") && monetization.includes("NOW()+INTERVAL '30 minutes'")],
   ['failed Paystack charges are recorded without activating entitlement', monetization.includes("eventName === 'charge.failed'") && monetization.includes("status='FAILED'") && monetization.includes("status='PENDING'")],
   ['Paystack webhook is signature-protected and handles success/failure separately', monetization.includes('x-paystack-signature') && monetization.includes('safeEqualHex') && monetization.includes("eventName === 'charge.failed'") && monetization.includes("eventName !== 'charge.success'")],
+  ['Android client exposes server-authoritative plan catalog and entitlement state', client.includes('FynxMonetizationClient') && client.includes('"/api/monetization/plans"') && client.includes('"/api/monetization/entitlements"')],
+  ['Android client starts and verifies payments through the backend', client.includes('"/api/monetization/plans/$normalized/payment"') && client.includes('"/api/monetization/plans/payment/verify"') && client.includes('FynxBackendClient.postJson')],
   ['marketplace payment implementation remains unchanged in this batch', marketplace.includes("app.post('/api/marketplace/orders/:id/payment'") && marketplace.includes("FYNX_MARKETPLACE_ORDER") && !marketplace.includes('FYNX_PAID_PLAN')],
   ['existing production monetization gate remains in CI', verification.includes('chargingEnabled') && verification.includes('AI monetization remains entitlement-only')]
 ];
