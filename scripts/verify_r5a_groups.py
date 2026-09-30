@@ -12,6 +12,9 @@ def check(name, ok):
 group = read('backend/groupRoutes.js')
 membership = read('backend/groupMembershipRoutes.js')
 bootstrap = read('backend/scalability.js')
+server = read('backend/server.js')
+realtime = read('app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt')
+group_panel = read('app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt')
 client = read('app/src/main/java/com/fynx/app/ui/FynxGroupsBatch3.kt')
 
 check('group routes authenticate requests', "const auth = (req,res,next)" in group and "jwt.verify(token,JWT_SECRET)" in group)
@@ -30,6 +33,10 @@ check('server exposes authenticated member removal', "app.delete('/api/groups/:g
 check('owner cannot be removed', "group owner cannot be removed" in membership)
 check('moderator cannot remove moderators/admins', "moderators can only remove members" in membership)
 check('membership controls are wired into production bootstrap', "registerGroupMembershipRoutes({ app });" in bootstrap)
+check('backend exposes an authenticated group realtime broadcast hub', 'app.locals.fynxBroadcastGroupMessage' in server and 'SELECT user_id FROM fynx_group_members' in server)
+check('group message send/action routes publish realtime updates', 'broadcastGroupMessage(groupId, message)' in group)
+check('realtime client accepts group message events', '"group_message" in realtime and 'GroupMessage' in realtime)
+check('group chat subscribes to authenticated realtime updates', 'FynxRealtimeClient(' in group_panel and 'Event.GroupMessage' in group_panel)
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
