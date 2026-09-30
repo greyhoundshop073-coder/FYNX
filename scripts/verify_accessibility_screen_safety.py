@@ -42,6 +42,20 @@ def parent_map(root):
 def same_bounds(a, b):
     return bounds(a) is not None and bounds(a) == bounds(b)
 
+def has_duplicate_semantics_child(n):
+    """Compose may expose one logical clickable as two identical NAF nodes.
+    Both nodes carry the same bounds and have no independent semantics."""
+    if n.attrib.get("NAF", "false").lower() != "true":
+        return False
+    return any(
+        child is not n
+        and child.attrib.get("NAF", "false").lower() == "true"
+        and click(child)
+        and same_bounds(n, child)
+        and not label(child)
+        for child in list(n)
+    )
+
 def semantic_child_of_larger_clickable(n, parents, min_size):
     """Ignore Compose semantic projection children inside a sufficiently large clickable ancestor."""
     b = bounds(n)
@@ -66,7 +80,12 @@ def semantic_child_of_larger_clickable(n, parents, min_size):
 
 def is_duplicate_semantics_node(n, parents):
     parent = parents.get(id(n))
-    return bool(parent is not None and click(parent) and same_bounds(n, parent) and n.attrib.get("NAF", "false").lower() == "true")
+    return bool(
+        parent is not None
+        and click(parent)
+        and same_bounds(n, parent)
+        and n.attrib.get("NAF", "false").lower() == "true"
+    ) or has_duplicate_semantics_child(n)
 
 def is_projected_naf_node(n, parents, min_size):
     """UiAutomator can expose nested Compose NAF projection nodes as clickable nodes.
@@ -171,7 +190,7 @@ for p in files:
             for bnode in kids[i + 1:]:
                 bl, bt, br, bb = bounds(bnode)
                 inter = max(0, min(ar, br) - max(al, bl)) * max(0, min(ab, bb) - max(at, bt))
-                ba = max(0, br - bl) * max(0, bb - bt)
+                ba = max(0, br - bl) * max(0, bb - bt) * 1
                 if inter and min(aa, ba) and inter / min(aa, ba) >= .75:
                     failures.append(f"{p.name}: overlapping sibling clickable targets {label(a) or '<a>'} vs {label(bnode) or '<b>'}")
 
