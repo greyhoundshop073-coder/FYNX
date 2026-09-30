@@ -1,5 +1,6 @@
 import pg from "pg";
 import jwt from "jsonwebtoken";
+import crypto from "node:crypto";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -51,6 +52,11 @@ async function ensureSchema() {
     END $$;
   `).catch(error => { schemaPromise = undefined; throw error; });
   return schemaPromise;
+}
+
+function safeEqualHex(actual, expected) {
+  if (!actual || !expected || !/^[0-9a-f]{128}$/i.test(actual) || !/^[0-9a-f]{128}$/i.test(expected)) return false;
+  return crypto.timingSafeEqual(Buffer.from(actual, 'hex'), Buffer.from(expected, 'hex'));
 }
 
 function authenticate(req, res) {
@@ -353,7 +359,7 @@ export function registerMonetizationRoutes({ app }) {
     const secret = process.env.PAYSTACK_SECRET_KEY || '';
     const signature = req.get('x-paystack-signature') || '';
     const rawBody = Buffer.isBuffer(req.rawBody) ? req.rawBody : null;
-    if (!secret || !rawBody || !crypto.timingSafeEqual(Buffer.from(crypto.createHmac('sha512', secret).update(rawBody).digest('hex'), 'hex'), Buffer.from(signature || '', 'hex'))) return res.status(401).json({ error: 'invalid webhook signature' });
+    if (!secret || !rawBody || !safeEqualHex(crypto.createHmac('sha512', secret).update(rawBody).digest('hex'), signature)) return res.status(401).json({ error: 'invalid webhook signature' });
     let event;
     try { event = JSON.parse(rawBody.toString('utf8')); } catch { return res.status(400).json({ error: 'invalid webhook payload' }); }
     if (String(event?.event || '').toLowerCase() !== 'charge.success') return res.status(200).json({ received: true, ignored: true });
