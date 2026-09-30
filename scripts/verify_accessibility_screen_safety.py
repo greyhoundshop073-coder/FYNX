@@ -43,33 +43,26 @@ def same_bounds(a, b):
     return bounds(a) is not None and bounds(a) == bounds(b)
 
 def semantic_child_of_larger_clickable(n, parents, min_size):
-    """Ignore Compose accessibility projection children when the real parent is the touch target.
-
-    Compose can expose an unlabelled semantic child with a clipped/partial rectangle inside
-    an already accessible clickable parent. The parent is the actionable target; certifying
-    the projected child separately produces false failures such as 126x90 or 63x126 nodes.
-    """
-    parent = parents.get(id(n))
+    """Ignore Compose semantic projection children inside a real larger click target."""
     b = bounds(n)
-    if parent is None or b is None or not click(parent):
+    if b is None or label(n) or n.attrib.get("class", "") in allow_unlabelled:
         return False
-    pb = bounds(parent)
-    if pb is None:
-        return False
-    pl, pt, pr, pbot = pb
     l, t, r, bot = b
-    pw, ph = pr - pl, pbot - pt
-    if pw < min_size or ph < min_size:
-        return False
-    if label(n):
-        return False
-    if n.attrib.get("class", "") in allow_unlabelled:
-        return False
     child_area = max(1, (r - l) * (bot - t))
-    inter = max(0, min(r, pr) - max(l, pl)) * max(0, min(bot, pbot) - max(t, pt))
-    if inter / child_area < 0.75:
-        return False
-    return True
+    cur = parents.get(id(n))
+    while cur is not None:
+        if click(cur):
+            pb = bounds(cur)
+            if pb:
+                pl, pt, pr, pbot = pb
+                pw, ph = pr - pl, pbot - pt
+                if pw >= min_size and ph >= min_size:
+                    inter = max(0, min(r, pr) - max(l, pl)) * max(0, min(bot, pbot) - max(t, pt))
+                    if inter / child_area >= 0.75:
+                        return True
+            return False
+        cur = parents.get(id(cur))
+    return False
 
 def is_duplicate_semantics_node(n, parents):
     parent = parents.get(id(n))
@@ -166,7 +159,7 @@ if warnings:
 if failures:
     lines += ["", "## Failures"] + [f"- {x}" for x in failures]
 else:
-    lines += ["", "## Certified checks", "- clickable controls have usable 48dp-class targets or a clearly adjacent larger equivalent target", "- accessibility projection nodes inside a sufficiently large clickable parent are not counted as separate touch targets", "- duplicate merged Compose accessibility nodes are not counted as separate touch targets", "- UI bounds remain inside the captured screen when screen dimensions are supplied", "- invalid actionable bounds are rejected", "- substantially overlapping sibling click targets are rejected", "- checks run against real emulator UI hierarchies captured during authenticated runtime"]
+    lines += ["", "## Certified checks", "- clickable controls have usable 48dp-class targets or a clearly adjacent larger equivalent target", "- accessibility projection nodes inside a sufficiently large clickable ancestor are not counted as separate touch targets", "- duplicate merged Compose accessibility nodes are not counted as separate touch targets", "- UI bounds remain inside the captured screen when screen dimensions are supplied", "- invalid actionable bounds are rejected", "- substantially overlapping sibling click targets are rejected", "- checks run against real emulator UI hierarchies captured during authenticated runtime"]
 (REPORT / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 print("\n".join(lines))
 raise SystemExit(1 if failures else 0)
