@@ -320,6 +320,8 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier, maxDuration
                             val target = cached ?: File.createTempFile("fynx_audio_", ".audio", context.cacheDir)
                             val result = if (cached?.exists() == true && cached.length() > 0L) {
                                 Result.success(FynxBackendClient.DownloadedMedia(null, cached.length()))
+                            } else if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE || !FynxBackendClient.hasAccessToken(context)) {
+                                Result.failure(IllegalStateException("Audio is offline and not cached"))
                             } else {
                                 downloadRemoteMedia(context, resolvedUrl, target)
                             }
