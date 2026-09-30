@@ -79,6 +79,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var activeStatusOwners by remember { mutableStateOf<Set<String>>(emptySet()) }
     var peopleRecommendations by remember { mutableStateOf<List<HomePeopleRecommendation>>(emptyList()) }
     var dismissedPeople by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var peopleRecommendationsLoading by remember { mutableStateOf(false) }
     var authorStatusViewer by remember { mutableStateOf<List<FynxStatus>?>(null) }
     var interactionStates by remember { mutableStateOf<Map<String, FynxRemoteSocialClient.SocialInteractionState>>(emptyMap()) }
     var reactionStates by remember { mutableStateOf<Map<String, FynxHomePostReactionsClient.ReactionState>>(emptyMap()) }
@@ -126,6 +127,8 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
     }
     fun hydratePeopleRecommendations() {
+        if (peopleRecommendationsLoading) return
+        peopleRecommendationsLoading = true
         scope.launch {
             val body = JSONObject().apply { put("name", "get_people_recommendations"); put("arguments", JSONObject()) }.toString()
             FynxBackendClient.postJson(context, "/api/assistant/tools", body).onSuccess { raw ->
@@ -145,6 +148,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                 }
             }
         }
+        peopleRecommendationsLoading = false
     }
     fun hydrateActiveStatuses() {
         scope.launch {
