@@ -688,7 +688,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(enabled = canSendMessages, onClick = { showAttachmentMenu = !showAttachmentMenu; showEmojiPanel = false }, modifier = Modifier.size(48.dp)) {
+                    IconButton(enabled = canSendMessages, onClick = { showAttachmentMenu = !showAttachmentMenu; showEmojiPanel = false }, modifier = Modifier.size(50.dp)) {
                         Icon(if (showAttachmentMenu) Icons.Default.Close else Icons.Default.Add, if (showAttachmentMenu) "Close attachments" else "Add attachment", Modifier.size(25.dp))
                     }
                     IconButton(enabled = canSendMessages, onClick = { showEmojiPanel = !showEmojiPanel; showAttachmentMenu = false }, modifier = Modifier.size(44.dp)) {
