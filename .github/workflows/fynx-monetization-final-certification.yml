@@ -1,0 +1,31 @@
+name: FYNX Monetization Final Certification
+
+on:
+  push:
+    branches:
+      - main
+      - monetization-**
+  pull_request:
+    paths:
+      - 'backend/monetizationRoutes.js'
+      - 'app/src/main/java/com/fynx/app/ui/FynxMonetizationClient.kt'
+      - 'app/src/main/java/com/fynx/app/ui/FynxBusinessAccount.kt'
+      - 'scripts/verify_monetization_*.mjs'
+      - '.github/workflows/fynx-monetization-final-certification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  certification:
+    name: Monetization certification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run final monetization certification
+        run: node scripts/verify_monetization_final_certification.mjs
