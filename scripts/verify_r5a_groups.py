@@ -9,6 +9,9 @@ checks = []
 def check(name, ok):
     checks.append((name, bool(ok)))
 
+def compact(value):
+    return ' '.join(value.split())
+
 group = read('backend/groupRoutes.js')
 membership = read('backend/groupMembershipRoutes.js')
 bootstrap = read('backend/scalability.js')
@@ -24,7 +27,7 @@ check('group messages respect account safety state', "account_status" in group a
 check('group messages run trust safety inspection', "inspectTrustSafetyText" in group and "SAFETY_BLOCK" in group)
 check('group membership has unique database key', "PRIMARY KEY(group_id,user_id)" in group)
 check('existing group sync never deletes members from a stale client snapshot', "DELETE FROM fynx_group_members WHERE group_id=$1 AND user_id<>$2 AND user_id<>ALL($3::bigint[])" not in group)
-check('existing group sync does not implicitly rewrite membership', "if(existing){\n        await client.query(`UPDATE fynx_groups" in group and "if(existing){\n        for(const user of requested.values())" not in group)
+check('existing group sync does not implicitly rewrite membership', compact(group).find('if(existing){ await client.query(`UPDATE fynx_groups') != -1 and compact(group).find('if(existing){ for(const user of requested.values())') == -1)
 check('group sync returns persisted database membership', "const persistedMembers=(await client.query(`SELECT u.username,m.role FROM fynx_group_members" in group and "members:persistedMembers.map" in group)
 check('client defines remove and leave semantics', "FynxGroupMemberAction.REMOVE" in client and "fun leaveGroup" in client)
 check('server exposes authenticated leave route', "app.post('/api/groups/:groupId/leave', auth" in membership)
@@ -39,8 +42,8 @@ check('realtime client accepts group message events', '"group_message" in realti
 check('group chat subscribes to authenticated realtime updates', 'FynxRealtimeClient(' in group_panel and 'Event.GroupMessage' in group_panel)
 
 failed = [name for name, ok in checks if not ok]
-for name, ok in checks:
-    print(('PASS: ' if ok else 'FAIL: ') + name)
+for index, (name, ok) in enumerate(checks, 1):
+    print(f"R5A_CHECK_{index}: {'PASS' if ok else 'FAIL'}: {name}")
 if failed:
     raise SystemExit('R5A groups gate failed: ' + '; '.join(failed))
 print(f'R5A groups gate passed ({len(checks)} checks)')
