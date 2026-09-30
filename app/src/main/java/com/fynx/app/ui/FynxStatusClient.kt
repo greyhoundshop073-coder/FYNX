@@ -77,7 +77,7 @@ object FynxStatusClient {
                     musicCatalogueId=musicCatalogueId, musicTitle=o.optString("musicTitle").ifBlank { null }, musicArtist=o.optString("musicArtist").ifBlank { null }, musicDurationMs=o.optLong("musicDurationMs",0L).coerceAtLeast(0L)
                 ))
             }
-        }
+        }.filterNot(FynxStatus::isExpired).sortedByDescending { it.createdAtMillis }
     }
 
     suspend fun archive(context: Context): Result<List<FynxStatus>> = runCatching {
