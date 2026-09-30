@@ -26,7 +26,7 @@ const checks = [
   ['AI monetization remains entitlement-only', has(admin,/fynx_ai_entitlements/) && has(monetization,/chargingEnabled:\s*false/)],
   ['admin reconciliation is protected', has(monetization,/\/api\/admin\/monetization\/reconciliation/) && has(monetization,/administrator access required/)],
   ['client cannot establish payment authority', has(monetization,/no client-side payment authority/)],
-  ['no provider secret is embedded in the new monetization module', !has(monetization,/PAYSTACK_SECRET_KEY|SECRET_KEY/)],
+  ['paid-plan Paystack secret is server-side only', has(monetization,/process\.env\.PAYSTACK_SECRET_KEY/) && !has(monetization,/sk_(test|live)_[A-Za-z0-9_\-]+/)],
   ['workflow runs monetization verification before production certification', has(workflow,/Verify FYNX monetization production/) && workflow.indexOf('Verify FYNX monetization production') < workflow.indexOf('Verify final FYNX production certification gate')]
 ];
 
