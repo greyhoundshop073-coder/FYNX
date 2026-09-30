@@ -23,7 +23,7 @@ market_api = read("backend/marketplaceTransactions.js")
 profile_api = read("backend/profileRoutes.js")
 social_api = read("backend/socialRoutes.js")
 server = read("backend/server.js")
-status = read("backend/statusInteractionRoutes.js")
+status = read("backend/statusInteractionRoutes.py") if (ROOT / "backend/statusInteractionRoutes.py").is_file() else read("backend/statusInteractionRoutes.js")
 workflow = read(".github/workflows/android-build.yml")
 
 # Push 5
