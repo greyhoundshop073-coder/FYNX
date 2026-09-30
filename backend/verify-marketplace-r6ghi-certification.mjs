@@ -3,13 +3,22 @@ import path from 'node:path';
 
 const root = process.cwd();
 const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
+const resolveAppFile = (name) => {
+  const candidates = [
+    path.join(root, 'app/src/main/java/com/fynx/app/ui', name),
+    path.join(root, 'app/src/main/java/com/fynx/app', name),
+  ];
+  const found = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!found) throw new Error(`Marketplace UI file not found: ${name}`);
+  return fs.readFileSync(found, 'utf8');
+};
 const checks = [];
 const check = (name, ok) => checks.push([name, Boolean(ok)]);
 
-const panel = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt');
-const client = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceClient.kt');
-const checkout = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceCheckout.kt');
-const seller = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt');
+const panel = resolveAppFile('FynxMarketplacePanel.kt');
+const client = resolveAppFile('FynxMarketplaceClient.kt');
+const checkout = resolveAppFile('FynxMarketplaceCheckout.kt');
+const seller = resolveAppFile('FynxMarketplaceSellerCenterPanel.kt');
 const adIdentity = read('./verify-marketplace-ad-creative-identity.mjs');
 const chatGuard = read('../scripts/verify_marketplace_chat_connection.py');
 const protection = read('./verify-marketplace-protection-lifecycle.mjs');
