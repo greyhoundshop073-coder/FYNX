@@ -12,13 +12,21 @@ object FynxHomeLifecycleRefreshBus {
     private val refreshSignal = mutableStateOf(0)
 
     fun request(context: Context) {
+        // Keep the last known Home snapshot available while the authoritative refresh runs.
+        // The Home surface can therefore continue showing valid content during refresh or
+        // temporary network failure instead of first destroying its offline fallback.
         runCatching {
             FynxAuthStore.accountStorageKey(context)?.takeIf { it.isNotBlank() }?.let { accountKey ->
                 context.getSharedPreferences(FEED_CACHE_PREFS, Context.MODE_PRIVATE)
-                    .edit()
-                    .remove(FEED_CACHE_KEY_PREFIX + accountKey)
-                    .remove(FEED_CACHE_TIME_KEY_PREFIX + accountKey)
-                    .apply()
+                    .getString(FEED_CACHE_KEY_PREFIX + accountKey, null)
+                    ?.let { cached ->
+                        context.getSharedPreferences(FEED_CACHE_PREFS, Context.MODE_PRIVATE)
+                            .edit()
+                            .putString(FEED_CACHE_KEY_PREFIX + accountKey, cached)
+                            .apply()
+                    }
+                context.getSharedPreferences(FEED_CACHE_PREFS, Context.MODE_PRIVATE)
+                    .getLong(FEED_CACHE_TIME_KEY_PREFIX + accountKey, 0L)
             }
         }
         refreshSignal.value++
