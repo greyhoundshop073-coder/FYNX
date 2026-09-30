@@ -9,6 +9,7 @@ import android.os.Vibrator
 import android.location.LocationManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.annotation.SuppressLint
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.core.content.ContextCompat
 import androidx.activity.result.contract.ActivityResultContracts
@@ -1086,7 +1087,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     return@TextButton
                 }
                 val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-                val location = runCatching { manager.getLastKnownLocation(LocationManager.GPS_PROVIDER) ?: manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) }.getOrNull()
+                val location = lastKnownLocationAfterPermissionCheck(manager, fineGranted, coarseGranted)
                 if (location == null) { networkError = "Current location is not available yet."; return@TextButton }
                 conversationScope.launch {
                     sending = true
@@ -1349,4 +1350,14 @@ private fun FynxCatchUpStat(label: String, value: String, modifier: Modifier = M
             Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+@SuppressLint("MissingPermission")
+private fun lastKnownLocationAfterPermissionCheck(manager: LocationManager, fineGranted: Boolean, coarseGranted: Boolean): android.location.Location? {
+    if (!fineGranted && !coarseGranted) return null
+    return runCatching {
+        if (fineGranted) manager.getLastKnownLocation(LocationManager.GPS_PROVIDER) else null
+    }.getOrNull() ?: runCatching {
+        if (fineGranted || coarseGranted) manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) else null
+    }.getOrNull()
 }
