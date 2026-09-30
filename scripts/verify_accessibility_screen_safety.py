@@ -45,6 +45,31 @@ def parent_map(root):
 def same_bounds(a, b):
     return bounds(a) is not None and bounds(a) == bounds(b)
 
+def screen_edge_clipped_scrollable(n, parents):
+    """UIAutomator reports screen-clipped child bounds after a LazyRow/LazyColumn clips them.
+    Treat an undersized edge-touching child as clipped only when it is inside a
+    scrollable ancestor, rather than weakening the target-size rule globally.
+    """
+    if not (sw and sh):
+        return False
+    b = bounds(n)
+    if not b:
+        return False
+    l, t, r, bot = b
+    w, h = r - l, bot - t
+    if w >= min_px and h >= min_px:
+        return False
+    touches_horizontal_edge = (l == 0 or r == sw)
+    touches_vertical_edge = (t == 0 or bot == sh)
+    if not (touches_horizontal_edge or touches_vertical_edge):
+        return False
+    cur = parents.get(id(n))
+    while cur is not None:
+        if cur.attrib.get("scrollable", "false").lower() == "true":
+            return True
+        cur = parents.get(id(cur))
+    return False
+
 def is_duplicate_semantics_node(n, parents):
     parent = parents.get(id(n))
     return bool(parent is not None and click(parent) and same_bounds(n, parent) and n.attrib.get("NAF", "false").lower() == "true")
@@ -118,7 +143,7 @@ for p in files:
         checked += 1
         cls = n.attrib.get("class", "")
         text = label(n)
-        clipped_scroll = clipped_by_scrollable_ancestor(n, parents)
+        clipped_scroll = clipped_by_scrollable_ancestor(n, parents) or screen_edge_clipped_scrollable(n, parents)
         equivalent_larger_target = has_adjacent_larger_clickable(n, parents, min_px)
         if cls not in allow_small and (w < min_px or h < min_px) and not clipped_scroll and not equivalent_larger_target:
             failures.append(f"{p.name}: clickable target below 48dp: {w}x{h}px < {min_px}px label={text or '<semantic-child>'} bounds={b}")
