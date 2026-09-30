@@ -84,6 +84,7 @@ jobs:
           node --check verify-marketplace-protection-lifecycle.mjs
           node --check verify-marketplace-accounting.mjs
           node --check verify-marketplace-fulfillment.mjs
+          node --check verify-marketplace-r6ghi-certification.mjs
           node --check verify-stage15e-performance.mjs
           node --check verify-stage15f-security.mjs
           node --check verify-stage15g-integration.mjs
@@ -180,6 +181,10 @@ jobs:
 
       - name: Run R6-G advertising canonical creative verification
         run: node verify-marketplace-ad-creative-identity.mjs
+
+      - name: Run R6-G/H/I Marketplace experience certification
+        working-directory: .
+        run: node backend/verify-marketplace-r6ghi-certification.mjs
 
       - name: Run R6-I ledger invariant verification
         run: node verify-marketplace-ledger-invariants.mjs
