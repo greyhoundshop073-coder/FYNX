@@ -38,7 +38,7 @@ check('moderator cannot remove moderators/admins', "moderators can only remove m
 check('membership controls are wired into production bootstrap', "registerGroupMembershipRoutes({ app });" in bootstrap)
 check('backend exposes an authenticated group realtime broadcast hub', 'app.locals.fynxBroadcastGroupMessage' in server and 'SELECT user_id FROM fynx_group_members' in server)
 check('group message send/action routes publish realtime updates', 'broadcastGroupMessage(groupId, message)' in group)
-check('realtime client accepts group message events', '"group_message" in realtime and 'GroupMessage' in realtime)
+check('realtime client accepts group message events', '"group_message" in realtime and "GroupMessage" in realtime)
 check('group chat subscribes to authenticated realtime updates', 'FynxRealtimeClient(' in group_panel and 'Event.GroupMessage' in group_panel)
 
 failed = [name for name, ok in checks if not ok]
