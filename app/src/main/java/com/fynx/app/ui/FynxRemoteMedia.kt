@@ -49,9 +49,8 @@ private fun resolveFynxMediaUrl(context: android.content.Context, mediaUrl: Stri
 
 private fun remoteMediaCacheFile(context: android.content.Context, resolvedUrl: String, extension: String): File? {
     val accountKey = FynxAuthStore.accountStorageKey(context) ?: return null
-    if (!FynxBackendClient.hasAccessToken(context)) return null
     val safeAccount = accountKey.map { if (it.isLetterOrDigit()) it else '_' }.joinToString("").take(80).ifBlank { return null }
-    val directory = File(context.cacheDir, "fynx_media_remote_$safeAccount")
+    val directory = File(context.filesDir, "fynx_media_remote_$safeAccount")
     if (!directory.exists() && !directory.mkdirs()) return null
     val digest = MessageDigest.getInstance("SHA-256").digest(resolvedUrl.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
     return File(directory, "media_${digest.take(32)}$extension")
