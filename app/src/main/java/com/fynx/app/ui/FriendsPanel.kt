@@ -79,11 +79,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
             busyUsername = username
             message = null
             val result = action()
-            if (result.isSuccess) {
-                refresh()
-            } else {
-                message = result.exceptionOrNull()?.message ?: "That action could not be completed."
-            }
+            if (result.isSuccess) refresh() else message = result.exceptionOrNull()?.message ?: "That action could not be completed."
             busyUsername = null
         }
     }
@@ -92,46 +88,18 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Find People", style = MaterialTheme.typography.headlineSmall)
-                Text("Connect with real FYNX accounts.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-            }
+            Column(Modifier.weight(1f)) { Text("Find People", style = MaterialTheme.typography.headlineSmall); Text("Connect with real FYNX accounts.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = {
-                    context.startActivity(Intent(context, FynxContactsActivity::class.java))
-                }, shape = FynxDesign.ControlShape, modifier = Modifier.heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
-                    Icon(Icons.Default.PersonAdd, "Open contacts", Modifier.size(17.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Contacts")
-                }
-                OutlinedButton(onClick = { showUniversalSearch = true }, modifier = Modifier.heightIn(min = 48.dp), shape = FynxDesign.ControlShape) {
-                    Icon(Icons.Default.Search, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text("Search all FYNX")
-                }
+                OutlinedButton(onClick = { context.startActivity(Intent(context, FynxContactsActivity::class.java)) }, shape = FynxDesign.ControlShape, modifier = Modifier.heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) { Icon(Icons.Default.PersonAdd, "Open contacts", Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text("Contacts") }
+                OutlinedButton(onClick = { showUniversalSearch = true }, modifier = Modifier.heightIn(min = 48.dp), shape = FynxDesign.ControlShape) { Icon(Icons.Default.Search, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text("Search all FYNX") }
             }
         }
         Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            FilterChip(searchMethod == FynxPeopleSearchMethod.USERNAME, { searchMethod = FynxPeopleSearchMethod.USERNAME; query = "" }, label = { Text("Username") })
-            FilterChip(searchMethod == FynxPeopleSearchMethod.PHONE, { searchMethod = FynxPeopleSearchMethod.PHONE; query = "" }, label = { Text("Phone") })
-            OutlinedButton(onClick = { shareFynx(context) }, modifier = Modifier.heightIn(min = 48.dp), shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)) {
-                Icon(Icons.Default.PersonAdd, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text("Invite")
-            }
-        }
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { FilterChip(searchMethod == FynxPeopleSearchMethod.USERNAME, { searchMethod = FynxPeopleSearchMethod.USERNAME; query = "" }, label = { Text("Username") }); FilterChip(searchMethod == FynxPeopleSearchMethod.PHONE, { searchMethod = FynxPeopleSearchMethod.PHONE; query = "" }, label = { Text("Phone") }); OutlinedButton(onClick = { shareFynx(context) }, modifier = Modifier.heightIn(min = 48.dp), shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)) { Icon(Icons.Default.PersonAdd, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text("Invite") } }
         Spacer(Modifier.height(7.dp))
         OutlinedTextField(query, { query = it.take(80) }, Modifier.fillMaxWidth(), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, "Search") }, placeholder = { Text(if (searchMethod == FynxPeopleSearchMethod.USERNAME) "Search @username or name" else "+234 801 234 5678") }, shape = FynxDesign.ControlShape)
-        if (searchMethod == FynxPeopleSearchMethod.PHONE && query.isNotBlank()) {
-            val validation = FynxPeopleDiscovery.validate(FynxPeopleSearchRequest(searchMethod, normalizedQuery))
-            if (validation != null) Text(validation, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
-            else Text("Exact phone matching only. Phone numbers are not returned in people results.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
-        }
-        message?.let {
-            Text(it, color = if (it.contains("could not", true) || it.contains("failed", true) || it.contains("error", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
-            if (!loading) {
-                OutlinedButton(onClick = { scope.launch { refresh() } }, modifier = Modifier.padding(top = 5.dp).heightIn(min = 44.dp), shape = FynxDesign.ControlShape) {
-                    Text("Retry")
-                }
-            }
-        }
+        if (searchMethod == FynxPeopleSearchMethod.PHONE && query.isNotBlank()) { val validation = FynxPeopleDiscovery.validate(FynxPeopleSearchRequest(searchMethod, normalizedQuery)); if (validation != null) Text(validation, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp)) else Text("Exact phone matching only. Phone numbers are not returned in people results.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp)) }
+        message?.let { Text(it, color = if (it.contains("could not", true) || it.contains("failed", true) || it.contains("error", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp)); if (!loading) OutlinedButton(onClick = { scope.launch { refresh() } }, modifier = Modifier.padding(top = 5.dp).heightIn(min = 44.dp), shape = FynxDesign.ControlShape) { Text("Retry") } }
         Spacer(Modifier.height(12.dp)); Text("Connections", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold); Spacer(Modifier.height(7.dp))
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) { listOf("Friends", "Requests", "Sent", "Discover", "Blocked").forEach { tab -> FilterChip(section == tab, { section = tab }, label = { Text(tab) }) } }
         Spacer(Modifier.height(6.dp))
@@ -152,27 +120,19 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
 private fun RemoteFriendRow(person: FynxSocialClient.User, actionText: String, busy: Boolean, onOpenProfile: (String) -> Unit, onOpenChat: (String) -> Unit = {}, secondaryAction: String? = null, onAction: () -> Unit, onSecondaryAction: () -> Unit = {}) {
     Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 7.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { onOpenProfile(person.username) }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = "Open ${person.username} profile" }) { FynxRemoteProfileAvatar(mediaId = person.profilePhotoMediaId, contentDescription = person.displayName.ifBlank { person.username }, modifier = Modifier.size(42.dp), ownerUsername = person.username) }
+            IconButton(onClick = { onOpenProfile(person.username) }, modifier = Modifier.requiredSize(48.dp).semantics { contentDescription = "Open ${person.username} profile" }) { FynxRemoteProfileAvatar(mediaId = person.profilePhotoMediaId, contentDescription = person.displayName.ifBlank { person.username }, modifier = Modifier.size(42.dp), ownerUsername = person.username) }
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) { Text(person.displayName.ifBlank { person.username }, style = MaterialTheme.typography.titleSmall, maxLines = 1); Text(if (person.username.startsWith("@")) person.username else "@${person.username}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1) }
             if (busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
             else {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { onOpenChat(person.username) }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = "Open chat" }) {
-                        Icon(Icons.Default.ChatBubbleOutline, contentDescription = "Open chat")
-                    }
-                    if (secondaryAction == null) {
-                        OutlinedButton(onClick = onAction, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = actionText }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) { Text(actionText) }
-                    } else {
-                        Button(onClick = onAction, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = actionText }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 9.dp, vertical = 5.dp)) { Text(actionText) }
-                        OutlinedButton(onClick = onSecondaryAction, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = secondaryAction ?: "Secondary action" }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 9.dp, vertical = 5.dp)) { Text(secondaryAction) }
-                    }
+                    IconButton(onClick = { onOpenChat(person.username) }, modifier = Modifier.requiredSize(48.dp).semantics { contentDescription = "Open chat" }) { Icon(Icons.Default.ChatBubbleOutline, contentDescription = "Open chat") }
+                    if (secondaryAction == null) OutlinedButton(onClick = onAction, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = actionText }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) { Text(actionText) }
+                    else { Button(onClick = onAction, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = actionText }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 9.dp, vertical = 5.dp)) { Text(actionText) }; OutlinedButton(onClick = onSecondaryAction, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = secondaryAction ?: "Secondary action" }, shape = FynxDesign.ControlShape, contentPadding = PaddingValues(horizontal = 9.dp, vertical = 5.dp)) { Text(secondaryAction) } }
                 }
             }
         }
     }
 }
 
-private fun LazyListScope.emptyState(title: String, body: String) {
-    item { Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { Text(title, style = MaterialTheme.typography.titleMedium); Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) } } }
-}
+private fun LazyListScope.emptyState(title: String, body: String) { item { Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { Text(title, style = MaterialTheme.typography.titleMedium); Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) } } } }
