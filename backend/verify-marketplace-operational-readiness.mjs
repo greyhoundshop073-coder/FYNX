@@ -3,6 +3,7 @@ import path from 'node:path';
 
 const root = process.cwd();
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
+const readFromRepoRoot = (file) => fs.readFileSync(path.join(root, '..', file), 'utf8');
 const checks = [];
 const check = (name, ok) => checks.push([name, Boolean(ok)]);
 
@@ -15,7 +16,7 @@ const reputation = read('marketplaceReputation.js');
 const settlement = read('marketplaceSettlement.js');
 const notification = read('notificationPush.js');
 const social = read('socialRoutes.js');
-const marketplaceUi = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt');
+const marketplaceUi = readFromRepoRoot('app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt');
 
 // Inventory/listing availability and atomic checkout.
 check('listings expose active and in-stock discovery', social.includes('l.active = TRUE') && social.includes('l.quantity > 0'));
@@ -51,7 +52,7 @@ check('Marketplace has category navigation', marketplaceUi.includes('Electronics
 check('Marketplace has nearby discovery', marketplaceUi.includes('Near me') && marketplaceUi.includes('nearbyMarketplaceListings'));
 check('Marketplace separates Top Sellers from Products', marketplaceUi.includes('Top Sellers (Highest Sales)') && marketplaceUi.includes('Text("Products"'));
 check('Marketplace keeps cart and orders in the primary header', marketplaceUi.includes('ShoppingCart') && marketplaceUi.includes('ReceiptLong'));
-check('Marketplace keeps selling as a prominent action', marketplaceUi.includes('Text("Sell"')) && marketplaceUi.includes('FloatingActionButton'));
+check('Marketplace keeps selling as a prominent action', marketplaceUi.includes('Text("Sell")') && marketplaceUi.includes('FloatingActionButton'));
 check('Marketplace supports exact listing deep links', marketplaceUi.includes('loadExactMarketplaceListing') && marketplaceUi.includes('initialListingId'));
 check('seller chat carries canonical listing identity', marketplaceUi.includes('chatAppLink(normalized, listingId)'));
 
