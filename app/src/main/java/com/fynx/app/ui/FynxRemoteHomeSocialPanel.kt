@@ -147,8 +147,8 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                     parsed.forEach { person -> scope.launch { FynxProfileRemoteClient.get(context, person.username).onSuccess { profile -> peopleRecommendations = peopleRecommendations.map { if (it.username.equals(person.username, true)) it.copy(photoId = profile.profilePhotoMediaId) else it } } } }
                 }
             }
+            peopleRecommendationsLoading = false
         }
-        peopleRecommendationsLoading = false
     }
     fun hydrateActiveStatuses() {
         scope.launch {
