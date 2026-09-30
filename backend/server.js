@@ -190,7 +190,17 @@ async function broadcastMessage(message) {
   broadcastToUser(message.senderId, payload);
   broadcastToUser(message.recipientId, payload);
 }
+async function broadcastGroupMessage(groupId, message) {
+  if (!pool) return;
+  const members = await pool.query(
+    "SELECT user_id FROM fynx_group_members WHERE group_id = $1",
+    [String(groupId)]
+  );
+  const payload = { type: "group_message", groupId: String(groupId), message };
+  for (const row of members.rows) broadcastToUser(row.user_id, payload);
+}
 app.locals.fynxBroadcastMessage = broadcastMessage;
+app.locals.fynxBroadcastGroupMessage = broadcastGroupMessage;
 function broadcastPresence(userId, online) {
   const payload = { type: "presence", userId: String(userId), online };
   for (const sockets of clientsByUserId.values()) for (const socket of sockets) sendSocket(socket, payload);
