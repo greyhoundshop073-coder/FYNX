@@ -45,8 +45,10 @@ class FynxSmokeTest {
 
         device.pressHome()
         instrumentation.startActivitySync(intent)
+        val reachedFynx = device.wait(Until.hasObject(By.pkg(context.packageName).depth(0)), 45_000)
         device.waitForIdle(10_000)
 
+        assertTrue("FYNX must reach the foreground after a profile deep link", reachedFynx)
         assertEquals(context.packageName, device.currentPackageName)
     }
 }
