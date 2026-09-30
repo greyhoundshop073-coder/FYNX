@@ -193,6 +193,43 @@ fun GroupChatPanel(
         }
     }
 
+    LaunchedEffect(group.id) {
+        if (!FynxBackendClient.hasAccessToken(context)) return@LaunchedEffect
+        val realtime = FynxRealtimeClient(
+            context = context,
+            onMessage = {},
+            onEvent = { event ->
+                if (event is FynxRealtimeClient.Event.GroupMessage && event.groupId == group.id) {
+                    scope.launch {
+                        FynxGroupRemoteClient.loadMessages(context, group.id)
+                            .onSuccess { remote ->
+                                val remoteMessages = remote.map {
+                                    FynxGroupRemoteClient.toChatMessage(
+                                        it,
+                                        currentUsername,
+                                        FynxBackendClient.baseUrl(context)
+                                    )
+                                }
+                                val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
+                                val pendingLocal = messages.filter { it.id !in remoteIds }
+                                messages = (remoteMessages + pendingLocal)
+                                    .distinctBy { it.id }
+                                    .sortedBy { it.timestamp }
+                                saveGroupMessages(context, group.id, messages)
+                                error = null
+                            }
+                    }
+                }
+            }
+        )
+        realtime.connect()
+        try {
+            kotlinx.coroutines.awaitCancellation()
+        } finally {
+            realtime.close()
+        }
+    }
+
     fun sendMessage(message: ChatMessage) {
         isNewGroupConversation = false
         messages = messages + message
