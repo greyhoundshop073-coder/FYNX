@@ -30,6 +30,7 @@ class FynxRealtimeClient(
         data class MessageStatus(val messageId: String, val status: Status) : Event
         data class Typing(val userId: String, val isTyping: Boolean) : Event
         data class Presence(val userId: String, val online: Boolean) : Event
+        data class GroupMessage(val groupId: String, val messageJson: String) : Event
         data class Call(val callId: String, val callType: String, val fromUserId: String, val toUserId: String, val signalType: String, val sdp: String? = null, val candidate: IceCandidatePayload? = null, val fromUsername: String? = null, val error: String? = null) : Event
     }
     data class IceCandidatePayload(val candidate: String, val sdpMid: String?, val sdpMLineIndex: Int?, val usernameFragment: String?) {
@@ -183,6 +184,11 @@ class FynxRealtimeClient(
                         "message_status" -> emitEvent(Event.MessageStatus(root.optString("messageId"), when (root.optString("status")) { "read" -> Status.READ; "delivered" -> Status.DELIVERED; else -> Status.SENT }))
                         "typing" -> emitEvent(Event.Typing(root.optString("userId"), root.optBoolean("isTyping")) )
                         "presence" -> emitEvent(Event.Presence(root.optString("userId"), root.optBoolean("online")) )
+                        "group_message" -> {
+                            val groupId = root.optString("groupId").trim()
+                            val message = root.optJSONObject("message")
+                            if (groupId.isNotBlank() && message != null) emitEvent(Event.GroupMessage(groupId, message.toString()))
+                        }
                         "call" -> parseCallEvent(root)?.let { callEvent ->
                             if (callEvent.signalType == "invite") {
                                 val caller = callEvent.fromUsername?.removePrefix("@").orEmpty().ifBlank { callEvent.fromUserId }
