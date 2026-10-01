@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Large Badge #17 — certify the complete FYNX surface journey is wired as one flow."""
 from pathlib import Path
-import re
 
 ROOT = Path(".")
 fail = []
+
 
 def read(path):
     p = ROOT / path
@@ -13,11 +13,13 @@ def read(path):
         return ""
     return p.read_text(encoding="utf-8", errors="replace")
 
+
 app = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
 auth = read("scripts/verify_authenticated_runtime_navigation.py")
 workflow = read(".github/workflows/android-build.yml")
-journey = read("scripts/verify_fynx_journey.py")
-production = read("scripts/verify_fynx_production.py")
+marketplace = read("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt")
+remote_marketplace = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt")
+remote_social = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
 
 checks = [
     ("Home exposes profile and camera entry points",
@@ -35,8 +37,17 @@ checks = [
      and 'FynxPreferencesStore.saveAppearance' in read("app/src/main/java/com/fynx/app/ui/ProfilePanel.kt")),
     ("Charcoal Black is a real theme state",
      'appearance == "Charcoal Black"' in read("app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt")),
-    ("Marketplace uses the remote client",
-     'FynxMarketplaceClient.listings' in read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt")),
+    ("Marketplace uses the active remote listing client",
+     'FynxRemoteSocialClient.listings(context, query, category)' in marketplace
+     and 'FynxRemoteSocialClient.orders(context)' in marketplace),
+    ("Marketplace nearby discovery uses the active remote listing client",
+     'FynxRemoteSocialClient.nearbyMarketplaceListings(context, query, category, nearbyLabel)' in marketplace),
+    ("Marketplace compatibility entry point delegates to the production panel",
+     'FynxMarketplacePanel(' in remote_marketplace),
+    ("Marketplace remote listing/order models exist in the shared client",
+     'data class MarketplaceListing' in remote_social
+     and 'data class MarketplaceOrder' in remote_social
+     and 'suspend fun listings' in remote_social),
     ("Group chat implementation exists",
      'FynxGroup' in read("app/src/main/java/com/fynx/app/ui/FynxGroupSettingsPanel.kt")),
     ("Full runtime certification remains wired",
