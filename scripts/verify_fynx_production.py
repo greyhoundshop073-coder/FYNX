@@ -35,16 +35,24 @@ check("bottom navigation uses the intended primary navigation", 'FynxNavItem("Ho
 check("Marketplace remains a primary destination while business and money tools remain reachable", 'FynxNavItem("Marketplace", "Marketplace", Icons.Default.ShoppingBag)' in app and '"Business Account" -> FynxBusinessAccountPanel' in app and '"Money Tools" -> MoneyCenterPanel()' in app and 'Triple("Money Tools", "Money Center"' in app)
 check("deep-link routing remains connected", all(x in deep_link for x in ["homeWebLink", "profileWebLink", "chatWebLink", "groupWebLink", "marketplaceWebLink", "storiesWebLink", "moneyWebLink"]))
 check("share layer uses FYNX deep links", "FynxDeepLinkParser.homeWebLink()" in share and "FynxDeepLinkParser.inviteWebLink(code)" in share)
-check("marketplace remains remote and protected", "FynxRemoteSocialClient.listings" in marketplace and "FynxMarketplaceClient.createListing" in marketplace and "FynxMarketplaceSafety.analyze" in marketplace and "sellerUsername" in marketplace)
+# Production Marketplace is FynxMarketplacePanel. Validate the actual remote
+# listing, seller identity, seller contact, safety, reputation, and protected-flow seams.
+check("marketplace remains remote and protected", all(x in marketplace for x in [
+    "FynxRemoteSocialClient.listings",
+    "FynxMarketplaceClient.createListing",
+    "FynxMarketplaceSafety.analyze",
+    "sellerUsername",
+    "FynxMarketplaceClient.sellerReputation",
+    "contactSeller(",
+    "FynxDeepLinkParser.chatAppLink",
+    "FynxMarketplaceCheckoutDialog",
+]))
 check("multi-media posting supports real uploaded media", "FynxProductionMessaging.uploadMedia" in multimedia and "/api/social/posts/multi" in multimedia)
 check("AI client uses authenticated backend transport", "FynxBackendClient.postJson" in ai and "/api/assistant" in ai)
 check("CI runs journey verification before the Android build", "python3 scripts/verify_fynx_journey.py" in workflow and "./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest" in workflow)
 
 secret_pattern = re.compile(r"sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}")
-client_text = "\n".join(
-    (ROOT / p).read_text(encoding="utf-8")
-    for p in REQUIRED[:6]
-)
+client_text = "\n".join((ROOT / p).read_text(encoding="utf-8") for p in REQUIRED[:6])
 check("no common API secret pattern is committed in critical client files", not secret_pattern.search(client_text))
 
 failed = [name for name, ok in checks if not ok]
