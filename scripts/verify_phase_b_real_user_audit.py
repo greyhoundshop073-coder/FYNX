@@ -73,8 +73,7 @@ check("profile uses real backend identity and counts", "FynxProfileRemoteClient"
 check("other-user profile does not expose private follower/following lists", not re.search(r"(?:followers?|following)\s+(?:list|members?|user|people|names)", other_profile, re.IGNORECASE))
 check("profile privacy is enforced server-side", "connectionsVisible:self" in profile_api and "privacy" in profile_api.lower())
 check("private chat is connected to authenticated backend flow", ("FynxProductionMessaging" in chat and "sendText" in chat and "history" in chat) or ("FynxBackendClient" in chat and ("send" in chat.lower() or "message" in chat.lower())))
-# The production Marketplace surface is FynxMarketplacePanel. The older RemotePanel
-# is only a compatibility wrapper and must never be the source of production certification.
+# The production Marketplace surface is FynxMarketplacePanel. The older RemotePanel is only a compatibility wrapper.
 check("marketplace is remote/backend-backed", "FynxRemoteSocialClient.listings" in market and "FynxMarketplaceClient.createListing" in market and "FynxMarketplaceSafety.analyze" in market)
 check("marketplace transaction protection remains server-side", all(x in market_api for x in ["marketplace_orders", "PAYMENT_PENDING", "DISPUTED", "marketplace_order_disputes", "payout:'not_released'"]))
 check("group membership and messages are server-authoritative", all(x in group_api for x in ["fynx_group_members", "fynx_group_messages", "app.get('/api/groups/:groupId/messages'", "app.post('/api/groups/:groupId/messages'", "jwt.verify"]))
@@ -97,5 +96,5 @@ failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS: " if ok else "FAIL: ") + name)
 if failed:
-    raise SystemExit("FYNX Phase B real-user audit failed: "; ".join(failed))
+    raise SystemExit("FYNX Phase B real-user audit failed: " + "; ".join(failed))
 print(f"FYNX Phase B real-user audit passed ({len(checks)} checks)")
