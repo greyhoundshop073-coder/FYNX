@@ -75,30 +75,32 @@ fun HomePanel(
                     },
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    // Do not key/recreate the entire feed on refresh. The feed owns its
-                    // persistent scroll/cache state and reconciles the refreshed data.
-                    FynxRemoteHomeSocialPanel(
-                        modifier = Modifier.fillMaxSize(),
-                        currentUsername = displayUsername,
-                        onOpenFindPeople = onOpenFindPeople,
-                        onOpenMarketplace = onOpenMarketplace,
-                        onCreatePost = { showCreateMenu = true },
-                        onOpenAuthorProfile = onOpenAuthorProfile,
-                        initialPostId = initialPostId,
-                        initialCommentId = initialCommentId,
-                        onInitialPostConsumed = onInitialPostConsumed,
-                        header = {
-                            FynxVisibleUpdatesPanel(
-                                currentUsername = displayUsername,
-                                onOpenStories = onOpenStories,
-                                onOpenAi = onOpenAi,
-                                onOpenCamera = onOpenCamera,
-                                onOpenFastCamera = onOpenFastCamera,
-                                onCreateStatus = { showMatureStatusComposer = true },
-                                onOpenStatusOwner = onOpenStatusOwner
-                            )
-                        }
-                    )
+                    // Keep the existing refresh lifecycle boundary. The feed's existing
+                    // refresh key is authoritative for its cache/reconciliation reset.
+                    key(refreshKey) {
+                        FynxRemoteHomeSocialPanel(
+                            modifier = Modifier.fillMaxSize(),
+                            currentUsername = displayUsername,
+                            onOpenFindPeople = onOpenFindPeople,
+                            onOpenMarketplace = onOpenMarketplace,
+                            onCreatePost = { showCreateMenu = true },
+                            onOpenAuthorProfile = onOpenAuthorProfile,
+                            initialPostId = initialPostId,
+                            initialCommentId = initialCommentId,
+                            onInitialPostConsumed = onInitialPostConsumed,
+                            header = {
+                                FynxVisibleUpdatesPanel(
+                                    currentUsername = displayUsername,
+                                    onOpenStories = onOpenStories,
+                                    onOpenAi = onOpenAi,
+                                    onOpenCamera = onOpenCamera,
+                                    onOpenFastCamera = onOpenFastCamera,
+                                    onCreateStatus = { showMatureStatusComposer = true },
+                                    onOpenStatusOwner = onOpenStatusOwner
+                                )
+                            }
+                        )
+                    }
                 }
             }
         }
