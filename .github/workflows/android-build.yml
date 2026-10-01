@@ -248,6 +248,9 @@ jobs:
           sudo apt-get install -y imagemagick
           compare -version
           identify -version
+      - name: Verify Large Badge #12 authenticated runtime contract
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_authenticated_runtime_navigation.py') }}
+        run: python3 scripts/verify_large_badge12_runtime_contract.py
       - name: Run Android instrumentation tests and capture the real FYNX UI
         if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py') }}
         uses: reactivecircus/android-emulator-runner@v2
