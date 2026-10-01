@@ -435,8 +435,6 @@ private fun ReactionUsersDialog(context: Context, postId: String, onDismiss: () 
                             }
                         }
                     }
-                if (loadingMore) item { Box(Modifier.width(70.dp).height(230.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp)) } }
-                item { LaunchedEffect(items.size) { if (items.size >= 26 && !loadingMore) onLoadMore() } }
                 }
             }
         }
