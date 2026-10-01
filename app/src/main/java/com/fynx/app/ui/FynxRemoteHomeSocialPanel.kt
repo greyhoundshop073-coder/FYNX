@@ -342,9 +342,12 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         videoDiscoveryOpen = true
         scope.launch { runCatching { FynxDiscoveryClient.recordView(context, postId) } }
     }
-    LaunchedEffect(Unit) { hydrateActiveStatuses(); hydratePeopleRecommendations(0, true) }
-    LaunchedEffect(Unit) { loadHomeMarketplace(true) }
-    LaunchedEffect(Unit) { loadDiscoveryVideos(true) }
+    LaunchedEffect(Unit) { hydrateActiveStatuses() }
+    LaunchedEffect(publishRefreshKey) {
+        hydratePeopleRecommendations(0, true)
+        loadHomeMarketplace(true)
+        loadDiscoveryVideos(true)
+    }
 
     LaunchedEffect(feedListState, posts.size, hasMore, discoveryHasMore, loading, loadingMore, discoveryLoadingMore, feedRequestInFlight) {
         snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }
