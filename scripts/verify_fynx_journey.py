@@ -26,6 +26,8 @@ share = read("app/src/main/java/com/fynx/app/ui/FynxShare.kt")
 gifts = read("app/src/main/java/com/fynx/app/ui/GiftsPanel.kt")
 conversation = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
 marketplace = read("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt")
+marketplace_client = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceClient.kt")
+remote_social_client = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
 transactions = read("backend/marketplaceTransactions.js")
 create_menu = read("app/src/main/java/com/fynx/app/ui/FynxHomeCreateMenu.kt")
 home_panel = read("app/src/main/java/com/fynx/app/ui/HomePanel.kt")
@@ -78,9 +80,11 @@ check("Home Create menu routes Marketplace to the real Marketplace surface", "on
 check("shareable deep-link routes cover social, chat, group, marketplace, stories and money", all(x in deep_link for x in ["homeWebLink", "profileWebLink", "chatWebLink", "groupWebLink", "marketplaceWebLink", "storiesWebLink", "moneyWebLink", "fun parse"]) and "FynxDeepLinkParser.homeWebLink()" in share and "FynxDeepLinkParser.inviteWebLink(code)" in share)
 check("deep-link destination routing is connected to the live app", all(x in app for x in ["FynxDeepLinkDestination.Profile", "FynxDeepLinkDestination.Chat", "FynxDeepLinkDestination.Group", "FynxDeepLinkDestination.Marketplace", "FynxDeepLinkDestination.Stories", "FynxDeepLinkDestination.Money"]))
 
-# The production Marketplace surface is FynxMarketplacePanel. The legacy RemotePanel
-# is only a compatibility entry point and must not be used as the journey audit source.
-check("marketplace uses real remote listings and seller contact", "FynxRemoteSocialClient.listings" in marketplace and "FynxMarketplaceClient.createListing" in marketplace and "onContact" in marketplace and "FynxMarketplaceSafety.analyze" in marketplace and "sellerUsername" in marketplace)
+# The production Marketplace UI delegates listing reads to FynxRemoteSocialClient
+# and listing creation/safety to FynxRemoteSocialClient/FynxMarketplaceClient.
+# The legacy RemotePanel is only a compatibility entry point.
+check("marketplace uses the real remote listing flow and seller contact", "FynxRemoteSocialClient.listings(context, query, category)" in marketplace and "FynxRemoteSocialClient.nearbyMarketplaceListings" in marketplace and "createMarketplaceListing" in marketplace and "onContact" in marketplace and "sellerUsername" in marketplace)
+check("marketplace client retains server-side safety validation", "FynxMarketplaceSafety.analyze" in marketplace_client and "FynxMarketplaceSafety.publishDecision" in marketplace_client)
 check("protected marketplace transaction backend remains present", (ROOT / "backend/marketplaceTransactions.js").is_file() and all(x in transactions for x in ["marketplace_orders", "PAYMENT_PENDING", "DISPUTED", "marketplace_order_disputes", "payout:'not_released'"]))
 
 check("Send a Gift remains connected to conversations", "GiftsPanel" in conversation and "showGifts" in conversation and "onGiftSelected" in gifts)
