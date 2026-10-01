@@ -1,1 +1,0 @@
-Security audit is intentionally non-invasive: existing functionality remains the source of truth. Implementation changes should be made only after inspecting the relevant production code and CI results.
