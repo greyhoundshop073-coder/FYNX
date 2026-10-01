@@ -23,6 +23,8 @@ critical_files = [
     "app/src/main/java/com/fynx/app/ui/OtherUserProfilePanel.kt",
     "app/src/main/java/com/fynx/app/ui/ConversationPanel.kt",
     "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt",
+    "app/src/main/java/com/fynx/app/ui/FynxMarketplaceClient.kt",
+    "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSafety.kt",
     "app/src/main/java/com/fynx/app/ui/FynxPrivacySettings.kt",
     "app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt",
     "app/src/main/java/com/fynx/app/ui/FynxNotificationDeviceManager.kt",
@@ -45,6 +47,8 @@ profile = read("app/src/main/java/com/fynx/app/ui/ProfilePanel.kt")
 other_profile = read("app/src/main/java/com/fynx/app/ui/OtherUserProfilePanel.kt")
 chat = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
 market = read("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt")
+market_client = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceClient.kt")
+market_safety = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceSafety.kt")
 privacy = read("app/src/main/java/com/fynx/app/ui/FynxPrivacySettings.kt")
 deep_link = read("app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt")
 fcm_client = read("app/src/main/java/com/fynx/app/ui/FynxNotificationDeviceManager.kt")
@@ -73,8 +77,8 @@ check("profile uses real backend identity and counts", "FynxProfileRemoteClient"
 check("other-user profile does not expose private follower/following lists", not re.search(r"(?:followers?|following)\s+(?:list|members?|user|people|names)", other_profile, re.IGNORECASE))
 check("profile privacy is enforced server-side", "connectionsVisible:self" in profile_api and "privacy" in profile_api.lower())
 check("private chat is connected to authenticated backend flow", ("FynxProductionMessaging" in chat and "sendText" in chat and "history" in chat) or ("FynxBackendClient" in chat and ("send" in chat.lower() or "message" in chat.lower())))
-# The production Marketplace surface is FynxMarketplacePanel. The older RemotePanel is only a compatibility wrapper.
-check("marketplace is remote/backend-backed", "FynxRemoteSocialClient.listings" in market and "FynxMarketplaceClient.createListing" in market and "FynxMarketplaceSafety.analyze" in market)
+# The production Marketplace surface is FynxMarketplacePanel. Marketplace network creation and safety live in their dedicated clients.
+check("marketplace is remote/backend-backed", "FynxRemoteSocialClient.listings" in market and "FynxMarketplaceClient.createListing" in market_client and "FynxMarketplaceSafety.analyze" in market_safety)
 check("marketplace transaction protection remains server-side", all(x in market_api for x in ["marketplace_orders", "PAYMENT_PENDING", "DISPUTED", "marketplace_order_disputes", "payout:'not_released'"]))
 check("group membership and messages are server-authoritative", all(x in group_api for x in ["fynx_group_members", "fynx_group_messages", "app.get('/api/groups/:groupId/messages'", "app.post('/api/groups/:groupId/messages'", "jwt.verify"]))
 check("friend/social actions are backend-backed", "registerSocialRoutes" in social_api and all(x in social_api for x in ["/api/friends", "/api/friends/request", "friendships"]))
