@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PersonAdd
@@ -15,6 +16,7 @@ import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -27,33 +29,41 @@ import kotlinx.coroutines.launch
 fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var query by remember { mutableStateOf("") }
-    var section by remember { mutableStateOf("Friends") }
-    var searchMethod by remember { mutableStateOf(FynxPeopleSearchMethod.USERNAME) }
-    var showUniversalSearch by remember { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var section by rememberSaveable { mutableStateOf("Friends") }
+    var searchMethod by rememberSaveable { mutableStateOf(FynxPeopleSearchMethod.USERNAME) }
+    var showUniversalSearch by rememberSaveable { mutableStateOf(false) }
     var friends by remember { mutableStateOf(emptyList<FynxSocialClient.User>()) }
     var incoming by remember { mutableStateOf(emptyList<FynxSocialClient.FriendRequest>()) }
     var outgoing by remember { mutableStateOf(emptyList<FynxSocialClient.FriendRequest>()) }
     var blocked by remember { mutableStateOf(emptyList<FynxSocialClient.User>()) }
     var searchResults by remember { mutableStateOf(emptyList<FynxSocialClient.User>()) }
     var loading by remember { mutableStateOf(true) }
+    var refreshInFlight by remember { mutableStateOf(false) }
     var busyUsername by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    val listState = rememberLazyListState()
 
     suspend fun refresh() {
+        if (refreshInFlight) return
+        refreshInFlight = true
         loading = true
         message = null
-        val fr = FynxSocialClient.friends(context)
-        val rr = FynxSocialClient.requests(context)
-        val br = FynxSocialClient.blocked(context)
-        friends = fr.getOrElse { emptyList() }
-        val requests = rr.getOrElse { emptyList() }
-        incoming = requests.filter { it.status.equals("incoming", true) }
-        outgoing = requests.filter { it.status.equals("outgoing", true) }
-        blocked = br.getOrElse { emptyList() }
-        val error = fr.exceptionOrNull() ?: rr.exceptionOrNull() ?: br.exceptionOrNull()
-        if (error != null) message = error.message ?: "Could not load your connections."
-        loading = false
+        try {
+            val fr = FynxSocialClient.friends(context)
+            val rr = FynxSocialClient.requests(context)
+            val br = FynxSocialClient.blocked(context)
+            friends = fr.getOrElse { emptyList() }
+            val requests = rr.getOrElse { emptyList() }
+            incoming = requests.filter { it.status.equals("incoming", true) }
+            outgoing = requests.filter { it.status.equals("outgoing", true) }
+            blocked = br.getOrElse { emptyList() }
+            val error = fr.exceptionOrNull() ?: rr.exceptionOrNull() ?: br.exceptionOrNull()
+            if (error != null) message = error.message ?: "Could not load your connections."
+        } finally {
+            loading = false
+            refreshInFlight = false
+        }
     }
 
     LaunchedEffect(Unit) { refresh() }
@@ -104,7 +114,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) { listOf("Friends", "Requests", "Sent", "Discover", "Blocked").forEach { tab -> FilterChip(section == tab, { section = tab }, label = { Text(tab) }) } }
         Spacer(Modifier.height(6.dp))
         if (loading) Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        else LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 10.dp)) {
+        else LazyColumn(state = listState, modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 10.dp)) {
             when (section) {
                 "Friends" -> { if (friends.isEmpty()) emptyState("No friends yet", "Accepted FYNX connections will appear here."); items(friends, key = { "friend_${it.username}" }) { p -> RemoteFriendRow(p, "Remove", busyUsername == p.username, onOpenProfile, onOpenChat = onOpenChat, onAction = { runAction(p.username) { FynxSocialClient.removeFriend(context, p.username) } }) } }
                 "Requests" -> { if (incoming.isEmpty()) emptyState("No incoming requests", "Friend requests from other FYNX accounts will appear here."); items(incoming, key = { "incoming_${it.id}" }) { r -> RemoteFriendRow(userFromRequest(r), "Confirm", busyUsername == r.username, onOpenProfile, onOpenChat = onOpenChat, secondaryAction = "Delete", onAction = { runAction(r.username) { FynxSocialClient.acceptRequest(context, r.id) } }, onSecondaryAction = { runAction(r.username) { FynxSocialClient.rejectRequest(context, r.id) } }) } }
