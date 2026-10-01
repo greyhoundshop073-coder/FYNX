@@ -144,7 +144,7 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
         AND NOT EXISTS (SELECT 1 FROM friendships f WHERE (f.user_id=$1 AND f.friend_id=u.id) OR (f.user_id=u.id AND f.friend_id=$1))
         AND NOT EXISTS (SELECT 1 FROM social_follows sf WHERE sf.follower_id=$1 AND sf.followed_id=u.id)
       ORDER BY COALESCE(mutual.mutual_count,0) DESC,COALESCE(followers.follower_count,0) DESC,u.created_at DESC
-      LIMIT 10
+      LIMIT 30
     `, [userId]);
     return { people: result.rows.map(row => ({ id:String(row.id), username:row.username, displayName:row.display_name || "", verified:Boolean(row.verified), mutualFriends:Number(row.mutual_count || 0), followerCount:Number(row.follower_count || 0), reason:row.reason })) };
   }
