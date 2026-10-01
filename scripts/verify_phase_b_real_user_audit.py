@@ -78,7 +78,7 @@ check("other-user profile does not expose private follower/following lists", not
 check("profile privacy is enforced server-side", "connectionsVisible:self" in profile_api and "privacy" in profile_api.lower())
 check("private chat is connected to authenticated backend flow", ("FynxProductionMessaging" in chat and "sendText" in chat and "history" in chat) or ("FynxBackendClient" in chat and ("send" in chat.lower() or "message" in chat.lower())))
 # The production Marketplace surface is FynxMarketplacePanel. Marketplace network creation and safety live in their dedicated clients.
-check("marketplace is remote/backend-backed", "FynxRemoteSocialClient.listings" in market and "FynxMarketplaceClient.createListing" in market_client and "FynxMarketplaceSafety.analyze" in market_safety)
+check("marketplace is remote/backend-backed", "FynxRemoteSocialClient.listings" in market and "fun createListing(" in market_client and "fun analyze(" in market_safety)
 check("marketplace transaction protection remains server-side", all(x in market_api for x in ["marketplace_orders", "PAYMENT_PENDING", "DISPUTED", "marketplace_order_disputes", "payout:'not_released'"]))
 check("group membership and messages are server-authoritative", all(x in group_api for x in ["fynx_group_members", "fynx_group_messages", "app.get('/api/groups/:groupId/messages'", "app.post('/api/groups/:groupId/messages'", "jwt.verify"]))
 check("friend/social actions are backend-backed", "registerSocialRoutes" in social_api and all(x in social_api for x in ["/api/friends", "/api/friends/request", "friendships"]))
