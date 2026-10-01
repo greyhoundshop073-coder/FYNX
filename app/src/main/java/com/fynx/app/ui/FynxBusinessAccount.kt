@@ -8,11 +8,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 @Composable
 fun FynxBusinessAccountPanel(onBack: () -> Unit = {}, onOpenAdvertising: () -> Unit = {}, onOpenDashboard: () -> Unit = {}) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
+    val loadMutex = remember { Mutex() }
     var name by remember { mutableStateOf("") }; var username by remember { mutableStateOf("") }; var category by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }; var location by remember { mutableStateOf("") }; var phone by remember { mutableStateOf("") }; var website by remember { mutableStateOf("") }
     var verified by remember { mutableStateOf(false) }; var businessId by remember { mutableStateOf<String?>(null) }
@@ -23,22 +26,24 @@ fun FynxBusinessAccountPanel(onBack: () -> Unit = {}, onOpenAdvertising: () -> U
     var linkingListingId by remember { mutableStateOf<String?>(null) }
 
     fun load() = scope.launch {
-        loading = true
-        FynxBusinessClient.load(context).onSuccess { p ->
-            businessId = p?.id
-            if (p != null) { name=p.businessName; username=p.businessUsername; category=p.category; description=p.description; location=p.location; phone=p.phone; website=p.website; verified=p.verified }
+        loadMutex.withLock {
+            loading = true
+            try {
+                FynxBusinessClient.load(context).onSuccess { p ->
+                    businessId = p?.id
+                    if (p != null) { name=p.businessName; username=p.businessUsername; category=p.category; description=p.description; location=p.location; phone=p.phone; website=p.website; verified=p.verified }
+                }
+                FynxBusinessClient.overview(context).onSuccess { o -> activeListings=o.optInt("activeListings"); campaigns=o.optInt("campaigns"); budget=o.optLong("budgetKobo"); spent=o.optLong("spentKobo") }
+                FynxMarketplaceClient.myListings(context).onSuccess { loaded ->
+                    products = loaded
+                    val links = linkedMapOf<String, String?>()
+                    loaded.forEach { product ->
+                        FynxR6GIntegrationClient.listingContext(context, product.id).onSuccess { links[product.id] = it.businessId }
+                    }
+                    linkedBusinessIds = links
+                }
+            } finally { loading = false }
         }
-        FynxBusinessClient.overview(context).onSuccess { o -> activeListings=o.optInt("activeListings"); campaigns=o.optInt("campaigns"); budget=o.optLong("budgetKobo"); spent=o.optLong("spentKobo") }
-        FynxMarketplaceClient.myListings(context).onSuccess { loaded ->
-            products = loaded
-            val links = linkedMapOf<String, String?>()
-            loaded.forEach { product ->
-                FynxR6GIntegrationClient.listingContext(context, product.id)
-                    .onSuccess { links[product.id] = it.businessId }
-            }
-            linkedBusinessIds = links
-        }
-        loading = false
     }
     LaunchedEffect(Unit) { load() }
 
@@ -64,9 +69,8 @@ fun FynxBusinessAccountPanel(onBack: () -> Unit = {}, onOpenAdvertising: () -> U
         Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
             Text("Business products",style=MaterialTheme.typography.titleMedium)
             Text("Link only the Marketplace products that belong to this business. Personal listings remain separate.", color=MaterialTheme.colorScheme.onSurfaceVariant, style=MaterialTheme.typography.bodySmall)
-            if (products.isEmpty()) {
-                Text("No Marketplace products are currently linked to this account.", color=MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
+            if (products.isEmpty()) Text("No Marketplace products are currently linked to this account.", color=MaterialTheme.colorScheme.onSurfaceVariant)
+            else {
                 products.take(5).forEach { product ->
                     val linkedToThisBusiness = businessId != null && linkedBusinessIds[product.id] == businessId
                     Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -77,17 +81,15 @@ fun FynxBusinessAccountPanel(onBack: () -> Unit = {}, onOpenAdvertising: () -> U
                         }
                         Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
                             Text("${product.currency} ${String.format(java.util.Locale.US, "%,.2f", product.price)}", style=MaterialTheme.typography.bodyMedium)
-                            if (businessId != null) {
-                                TextButton(enabled=linkingListingId == null, onClick={
-                                    linkingListingId = product.id; message = null
-                                    scope.launch {
-                                        FynxR6GIntegrationClient.linkListingToBusiness(context, product.id, if (linkedToThisBusiness) null else businessId)
-                                            .onSuccess { linkedBusinessIds = linkedBusinessIds + (product.id to if (linkedToThisBusiness) null else businessId); message = if (linkedToThisBusiness) "Product unlinked from business." else "Product linked to business." }
-                                            .onFailure { message = it.message ?: "Unable to update product linkage." }
-                                        linkingListingId = null
-                                    }
-                                }) { Text(if (linkingListingId == product.id) "Updating…" else if (linkedToThisBusiness) "Unlink" else "Link") }
-                            }
+                            if (businessId != null) TextButton(enabled=linkingListingId == null, onClick={
+                                linkingListingId = product.id; message = null
+                                scope.launch {
+                                    try { FynxR6GIntegrationClient.linkListingToBusiness(context, product.id, if (linkedToThisBusiness) null else businessId)
+                                        .onSuccess { linkedBusinessIds = linkedBusinessIds + (product.id to if (linkedToThisBusiness) null else businessId); message = if (linkedToThisBusiness) "Product unlinked from business." else "Product linked to business." }
+                                        .onFailure { message = it.message ?: "Unable to update product linkage." }
+                                    } finally { linkingListingId = null }
+                                }
+                            }) { Text(if (linkingListingId == product.id) "Updating…" else if (linkedToThisBusiness) "Unlink" else "Link") }
                         }
                     }
                 }
@@ -98,9 +100,10 @@ fun FynxBusinessAccountPanel(onBack: () -> Unit = {}, onOpenAdvertising: () -> U
             Button(onClick=onBack,modifier=Modifier.weight(1f)){Text("Back")}
             Button(enabled=!loading&&!saving&&name.isNotBlank()&&username.trim().removePrefix("@").isNotBlank()&&category.isNotBlank(),onClick={
                 saving=true; message=null; scope.launch {
-                    FynxBusinessClient.save(context,name.trim(),username.trim().removePrefix("@"),category.trim(),description.trim(),location.trim(),phone.trim(),website.trim())
+                    try { FynxBusinessClient.save(context,name.trim(),username.trim().removePrefix("@"),category.trim(),description.trim(),location.trim(),phone.trim(),website.trim())
                         .onSuccess { p -> businessId=p.id; verified=p.verified; message="Business profile saved."; load() }
-                        .onFailure { message=it.message ?: "Unable to save business profile." }; saving=false
+                        .onFailure { message=it.message ?: "Unable to save business profile." }
+                    } finally { saving=false }
                 }
             },modifier=Modifier.weight(1f)){Text(if(saving)"Saving…" else "Save Business")}
         }
