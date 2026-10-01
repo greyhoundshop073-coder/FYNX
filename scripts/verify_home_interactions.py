@@ -114,7 +114,14 @@ require_normalized(home, 'header?.let { content -> item(key = "home_ai_status") 
 home_feed_source = home.split('@Composable\nprivate fun VideoDiscoveryDialog', 1)[0]
 if home_feed_source.count('LazyColumn(') != 1:
     raise SystemExit("HOME INTERACTIONS RED: Home feed must keep exactly one vertical LazyColumn")
-require_normalized(home, 'items(items = posts, key = { it.id })', "feed posts in the shared scroll surface")
+if 'items(items = posts, key = { it.id })' in home or 'items(items=posts,key={it.id})' in normalize_source(home):
+    require_normalized(home, 'items(items = posts, key = { it.id })', "feed posts in the shared scroll surface")
+else:
+    require_normalized(home, 'posts.forEachIndexed { postIndex, post -> item(key = post.id) {', "feed posts in the shared scroll surface")
+    require(home, 'homeInsertions[postIndex]?.let', "natural Home feed interleaving insertion points")
+    require(home, 'FynxHomeMarketplaceCarousel(', "Marketplace remains in the shared Home scroll surface")
+    require(home, 'HomePeopleRecommendationsCard(', "People recommendations remain in the shared Home scroll surface")
+    require(home, 'FynxHomeDiscoverySection(', "Discovery remains in the shared Home scroll surface")
 require(visible_updates, 'onOpenAi', "Home AI entry callback")
 require(visible_updates, 'Open FYNX AI', "Home AI centralized entry action")
 if 'AiAssistantClient.' in visible_updates or 'aiInput' in visible_updates or 'AiAssistantClient.sendMessage' in visible_updates:
