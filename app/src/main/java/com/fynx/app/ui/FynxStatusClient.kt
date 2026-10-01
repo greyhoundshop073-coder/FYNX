@@ -3,6 +3,8 @@ package com.fynx.app.ui
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.io.File
 
@@ -17,6 +19,8 @@ data class FynxStatusInteractions(
 
 /** Authenticated Status API. The local store is only a cache/fallback and never the source of shared truth. */
 object FynxStatusClient {
+    private val listMutex = Mutex()
+
     suspend fun uploadMedia(context: Context, uri: Uri, mimeType: String): Result<String> = runCatching {
         val input = if (uri.scheme.equals("file", true)) uri.path?.let { File(it).inputStream() } else context.contentResolver.openInputStream(uri)
         val bytes = input?.use { stream ->
@@ -56,28 +60,30 @@ object FynxStatusClient {
         FynxBackendClient.postJson(context, "/api/statuses", body).getOrThrow()
     }
 
-    suspend fun list(context: Context): Result<List<FynxStatus>> = runCatching {
-        val raw = FynxBackendClient.get(context, "/api/statuses").getOrThrow()
-        val items = JSONObject(raw).getJSONArray("statuses")
-        buildList {
-            for (i in 0 until items.length()) {
-                val o = items.getJSONObject(i)
-                val type = runCatching { FynxStatusType.valueOf(o.getString("type")) }.getOrNull() ?: continue
-                val font = runCatching { FynxStatusTextFont.valueOf(o.optString("font", "CLASSIC")) }.getOrDefault(FynxStatusTextFont.CLASSIC)
-                val audience = runCatching { FynxStatusAudience.valueOf(o.optString("audience", if (o.optBoolean("privateStatus")) "FRIENDS" else "EVERYONE")) }.getOrDefault(FynxStatusAudience.EVERYONE)
-                val mediaId = o.optString("mediaId").ifBlank { o.optString("media_id") }.ifBlank { null }
-                val mediaUrl = o.optString("mediaUrl").ifBlank { o.optString("media_url") }.ifBlank { mediaId?.let { "/api/media/$it" } }
-                val musicCatalogueId = o.optLong("musicCatalogueId", 0L).takeIf { it > 0L }
-                add(FynxStatus(
-                    id=o.getString("id"), ownerUsername=o.getString("ownerUsername"), ownerDisplayName=o.optString("ownerDisplayName"),
-                    type=type, contentUri=mediaUrl, text=o.optString("text").ifBlank { null },
-                    createdAtMillis=o.optLong("createdAtMillis"), expiresAtMillis=o.optLong("expiresAtMillis"),
-                    textStyle=FynxStatusTextStyle(o.optLong("backgroundColor",0xFF111111),o.optLong("foregroundColor",0xFFFFFFFF),font,o.optInt("alignment",1)),
-                    privateStatus=o.optBoolean("privateStatus"), voiceDurationMs=o.optLong("voiceDurationMs",0L), audience=audience,
-                    musicCatalogueId=musicCatalogueId, musicTitle=o.optString("musicTitle").ifBlank { null }, musicArtist=o.optString("musicArtist").ifBlank { null }, musicDurationMs=o.optLong("musicDurationMs",0L).coerceAtLeast(0L)
-                ))
-            }
-        }.filterNot(FynxStatus::isExpired).sortedByDescending { it.createdAtMillis }
+    suspend fun list(context: Context): Result<List<FynxStatus>> = listMutex.withLock {
+        runCatching {
+            val raw = FynxBackendClient.get(context, "/api/statuses").getOrThrow()
+            val items = JSONObject(raw).getJSONArray("statuses")
+            buildList {
+                for (i in 0 until items.length()) {
+                    val o = items.getJSONObject(i)
+                    val type = runCatching { FynxStatusType.valueOf(o.getString("type")) }.getOrNull() ?: continue
+                    val font = runCatching { FynxStatusTextFont.valueOf(o.optString("font", "CLASSIC")) }.getOrDefault(FynxStatusTextFont.CLASSIC)
+                    val audience = runCatching { FynxStatusAudience.valueOf(o.optString("audience", if (o.optBoolean("privateStatus")) "FRIENDS" else "EVERYONE")) }.getOrDefault(FynxStatusAudience.EVERYONE)
+                    val mediaId = o.optString("mediaId").ifBlank { o.optString("media_id") }.ifBlank { null }
+                    val mediaUrl = o.optString("mediaUrl").ifBlank { o.optString("media_url") }.ifBlank { mediaId?.let { "/api/media/$it" } }
+                    val musicCatalogueId = o.optLong("musicCatalogueId", 0L).takeIf { it > 0L }
+                    add(FynxStatus(
+                        id=o.getString("id"), ownerUsername=o.getString("ownerUsername"), ownerDisplayName=o.optString("ownerDisplayName"),
+                        type=type, contentUri=mediaUrl, text=o.optString("text").ifBlank { null },
+                        createdAtMillis=o.optLong("createdAtMillis"), expiresAtMillis=o.optLong("expiresAtMillis"),
+                        textStyle=FynxStatusTextStyle(o.optLong("backgroundColor",0xFF111111),o.optLong("foregroundColor",0xFFFFFFFF),font,o.optInt("alignment",1)),
+                        privateStatus=o.optBoolean("privateStatus"), voiceDurationMs=o.optLong("voiceDurationMs",0L), audience=audience,
+                        musicCatalogueId=musicCatalogueId, musicTitle=o.optString("musicTitle").ifBlank { null }, musicArtist=o.optString("musicArtist").ifBlank { null }, musicDurationMs=o.optLong("musicDurationMs",0L).coerceAtLeast(0L)
+                    ))
+                }
+            }.filterNot(FynxStatus::isExpired).sortedByDescending { it.createdAtMillis }
+        }
     }
 
     suspend fun archive(context: Context): Result<List<FynxStatus>> = runCatching {
