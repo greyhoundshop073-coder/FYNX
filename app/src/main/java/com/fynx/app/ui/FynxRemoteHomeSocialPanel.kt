@@ -25,6 +25,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -56,6 +57,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.TimeUnit
+import java.util.Locale
 import org.json.JSONObject
 
 private const val MARKETPLACE_AD_MARKER = "[FYNX_MARKETPLACE_AD]"
@@ -1034,7 +1036,6 @@ private fun HomeAuthorStatusDialog(statuses: List<FynxStatus>, onDismiss: () -> 
 }
 
 
-@Composable
 @Composable
 private fun FynxHomeMarketplaceCarousel(
     listings: List<FynxMarketplaceClient.Listing>,
