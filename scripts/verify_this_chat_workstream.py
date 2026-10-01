@@ -13,7 +13,8 @@ def check(name, ok):
 
 remote_media = read('app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt')
 timeline = read('app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt')
-market = read('app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt')
+market = read('app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt')
+market_compat = read('app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt')
 profile = read('app/src/main/java/com/fynx/app/ui/ProfilePanel.kt')
 profile_client = read('app/src/main/java/com/fynx/app/ui/FynxProfileRemoteClient.kt')
 prefs = read('app/src/main/java/com/fynx/app/ui/FynxPreferencesStore.kt')
@@ -37,7 +38,10 @@ check('remote profile success persists authoritative avatar identity', 'saveRemo
 check('chat list clears stale avatar when server photo is removed', 'else chat.copy(avatarUri = null)' in read('app/src/main/java/com/fynx/app/ui/ChatsPanel.kt'))
 check('conversation keeps cached avatar only while remote profile is loading', 'var remoteProfileLoaded by remember(chat.username)' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt') and 'if (remoteProfileLoaded)' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt'))
 check('conversation marks remote profile loaded after successful fetch', 'remoteProfileLoaded = true' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt'))
-check('Marketplace seller avatar uses cache only until server authority arrives', 'cachedSellerPhotoId' in market and 'remoteSellerProfileLoaded' in market and 'sellerPhotoId = it.profilePhotoMediaId' in market)
+# Marketplace now has one production implementation. It delegates seller identity loading to
+# FynxProfileRemoteClient, whose get() path is cache-first and then persists server authority.
+# The old RemotePanel is only a compatibility entry point and must not be the source of truth.
+check('Marketplace seller avatar uses cache only until server authority arrives', 'FynxProfileRemoteClient.get(context, username)' in market and 'FynxPreferencesStore.loadRemoteProfilePhotoId' in profile_client and 'saveRemoteProfilePhotoId(context, normalized' in profile_client and 'FynxMarketplacePanel(' in market_compat)
 check('identity cache is account namespaced', 'KEY_REMOTE_IDENTITY_CACHE' in prefs and 'accountNamespace(context)' in prefs)
 check('identity cache is cleared at the session boundary', 'getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_$accountNamespace"' in prefs)
 check('R5B audio verifier recognizes the shared renderer', 'def contains_remote_audio_renderer(source):' in r5b_verifier and "require('remote audio renderer',contains_remote_audio_renderer(remote_media))" in r5b_verifier)
@@ -59,5 +63,3 @@ for name, ok in checks:
 if failed:
     raise SystemExit('FYNX this-chat workstream gate failed: ' + '; '.join(failed))
 print(f'FYNX this-chat workstream gate passed ({len(checks)} checks)')
-
-# Profile identity batch: server authority also governs Status and Marketplace after hydration.
