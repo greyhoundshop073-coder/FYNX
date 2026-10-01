@@ -1,0 +1,287 @@
+import crypto from "node:crypto";
+
+export function registerDiscoveryRoutes({ app, pool, auth }) {
+  let schemaPromise;
+  const ensureSchema = async () => {
+    if (!schemaPromise) schemaPromise = pool.query(`
+      CREATE TABLE IF NOT EXISTS fynx_discovery_events (
+        id BIGSERIAL PRIMARY KEY,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        event_type TEXT NOT NULL CHECK (event_type IN ('VIEW','LIKE','COMMENT','SHARE','SAVE','FOLLOW','PROFILE_VIEW','PRODUCT_CLICK','MESSAGE','PURCHASE','INTERESTED','NOT_INTERESTED','REPORT')),
+        post_id BIGINT REFERENCES social_posts(id) ON DELETE CASCADE,
+        listing_id BIGINT REFERENCES marketplace_listings(id) ON DELETE CASCADE,
+        target_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+        session_id TEXT,
+        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS fynx_discovery_events_user_idx ON fynx_discovery_events(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS fynx_discovery_events_post_idx ON fynx_discovery_events(post_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS fynx_discovery_events_listing_idx ON fynx_discovery_events(listing_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS fynx_discovery_events_type_idx ON fynx_discovery_events(event_type, created_at DESC);
+    `).catch((error) => { schemaPromise = undefined; throw error; });
+    return schemaPromise;
+  };
+
+  const cleanText = (value, max) => typeof value === "string" ? value.trim().slice(0, max) : "";
+  const validPostId = (value) => Number.isInteger(Number(value)) && Number(value) > 0 ? Number(value) : null;
+  const validListingId = (value) => Number.isInteger(Number(value)) && Number(value) > 0 ? Number(value) : null;
+
+  app.post("/api/discovery/events", auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      const allowed = new Set(['VIEW','LIKE','COMMENT','SHARE','SAVE','FOLLOW','PROFILE_VIEW','PRODUCT_CLICK','MESSAGE','PURCHASE','INTERESTED','NOT_INTERESTED','REPORT']);
+      const eventType = cleanText(req.body?.eventType, 32).toUpperCase();
+      if (!allowed.has(eventType)) return res.status(400).json({ error: "invalid discovery event" });
+      const postId = req.body?.postId == null ? null : validPostId(req.body.postId);
+      const listingId = req.body?.listingId == null ? null : validListingId(req.body.listingId);
+      const targetUserId = req.body?.targetUserId == null ? null : validPostId(req.body.targetUserId);
+      if (req.body?.postId != null && !postId) return res.status(400).json({ error: "invalid post id" });
+      if (req.body?.listingId != null && !listingId) return res.status(400).json({ error: "invalid listing id" });
+      if (req.body?.targetUserId != null && !targetUserId) return res.status(400).json({ error: "invalid target user id" });
+      const sessionId = cleanText(req.body?.sessionId, 120) || crypto.randomUUID();
+      const metadata = req.body?.metadata && typeof req.body.metadata === "object" ? req.body.metadata : {};
+      await pool.query(
+        `INSERT INTO fynx_discovery_events(user_id,event_type,post_id,listing_id,target_user_id,session_id,metadata) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)`,
+        [req.user.sub, eventType, postId, listingId, targetUserId, sessionId, JSON.stringify(metadata)]
+      );
+      return res.status(201).json({ ok: true, sessionId });
+    } catch (error) {
+      console.error("discovery event", error);
+      return res.status(500).json({ error: "discovery event failed" });
+    }
+  });
+
+  app.get("/api/discovery/trending", auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      const limit = Math.min(Math.max(Number(req.query?.limit) || 20, 1), 50);
+      const offset = Math.min(Math.max(Number(req.query?.offset) || 0, 0), 1000000);
+      const result = await pool.query(`
+        SELECT p.id,
+               p.author_id,
+               u.username AS author_username,
+               u.display_name AS author_display_name,
+               p.text,
+               p.visibility,
+               p.media_id,
+               p.media_type,
+               EXTRACT(EPOCH FROM p.created_at) * 1000 AS timestamp,
+               COALESCE(l.likes,0) AS like_count,
+               COALESCE(c.comments,0) AS comment_count,
+               COALESCE(e.shares,0) AS share_count,
+               COALESCE(e.saves,0) AS save_count,
+               (COALESCE(l.likes,0) * 3 + COALESCE(c.comments,0) * 5 + COALESCE(e.shares,0) * 7 + COALESCE(e.saves,0) * 6)
+                 * EXP(-GREATEST(EXTRACT(EPOCH FROM (NOW()-p.created_at))/3600.0,0)/48.0) AS discovery_score
+        FROM social_posts p
+        JOIN users u ON u.id=p.author_id
+        LEFT JOIN (SELECT post_id,COUNT(*) likes FROM social_post_likes GROUP BY post_id) l ON l.post_id=p.id
+        LEFT JOIN (SELECT post_id,COUNT(*) comments FROM social_post_comments GROUP BY post_id) c ON c.post_id=p.id
+        LEFT JOIN (
+          SELECT post_id,
+                 COUNT(*) FILTER (WHERE event_type='SHARE') shares,
+                 COUNT(*) FILTER (WHERE event_type='SAVE') saves
+          FROM fynx_discovery_events GROUP BY post_id
+        ) e ON e.post_id=p.id
+        WHERE p.visibility='PUBLIC'
+          AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$1))
+          AND p.author_id<>$1
+          AND NOT EXISTS (SELECT 1 FROM social_follows f WHERE f.follower_id=$1 AND f.followed_id=p.author_id)
+          AND NOT EXISTS (SELECT 1 FROM fynx_discovery_events n WHERE n.user_id=$1 AND n.post_id=p.id AND n.event_type='NOT_INTERESTED' AND n.created_at > NOW()-INTERVAL '30 days')
+        ORDER BY discovery_score DESC, p.created_at DESC, p.id DESC
+        LIMIT $2 OFFSET $3
+      `, [req.user.sub, limit + 1, offset]);
+      const hasMore = result.rows.length > limit;
+      const rows = hasMore ? result.rows.slice(0, limit) : result.rows;
+      res.set('Cache-Control', 'private, max-age=15, stale-while-revalidate=30');
+      return res.json({
+        posts: rows.map((row) => ({
+          id: String(row.id), authorId: String(row.author_id), authorUsername: row.author_username,
+          authorDisplayName: row.author_display_name, text: row.text, visibility: row.visibility,
+          mediaId: row.media_id == null ? null : String(row.media_id), mediaType: row.media_type || null,
+          mediaUrl: row.media_id == null ? null : `/api/social/media/${row.media_id}`, timestamp: Number(row.timestamp), likeCount: Number(row.like_count),
+          commentCount: Number(row.comment_count), shareCount: Number(row.share_count), saveCount: Number(row.save_count),
+          likedByCurrentUser: false, followedByCurrentUser: false, isDiscovery: true,
+          discoveryScore: Number(row.discovery_score || 0)
+        })),
+        hasMore
+      });
+    } catch (error) {
+      console.error("trending feed", error);
+      return res.status(500).json({ error: "trending feed unavailable" });
+    }
+  });
+
+  app.get("/api/marketplace/discovery", auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      const limit = Math.min(Math.max(Number(req.query?.limit) || 30, 1), 60);
+      const q = cleanText(req.query?.q, 80);
+      const category = cleanText(req.query?.category, 40);
+      const location = cleanText(req.query?.location, 160);
+      const params = [req.user.sub];
+      const where = ["l.active=TRUE", "l.quantity>0", "l.seller_id<>$1"];
+      if (q) { params.push(`%${q}%`); const n=params.length; where.push(`(l.title ILIKE $${n} OR l.description ILIKE $${n} OR u.username ILIKE $${n} OR u.display_name ILIKE $${n})`); }
+      if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category=${params.length}`); }
+      if (location) { params.push(`%${location}%`); where.push(`l.location ILIKE ${params.length}`); }
+      params.push(limit);
+      const result = await pool.query(`
+        SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,l.store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.created_at,
+          (COALESCE((SELECT COUNT(*) FROM marketplace_orders o WHERE o.listing_id=l.id AND o.status IN ('PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED')),0)*8
+           + COALESCE((SELECT COUNT(*) FROM fynx_discovery_events e WHERE e.listing_id=l.id AND e.event_type='PRODUCT_CLICK' AND e.created_at>NOW()-INTERVAL '14 days'),0)*2
+           + GREATEST(0, 72-EXTRACT(EPOCH FROM (NOW()-l.created_at))/3600.0)) AS discovery_score
+        FROM marketplace_listings l JOIN users u ON u.id=l.seller_id
+        WHERE ${where.join(" AND ")}
+        ORDER BY discovery_score DESC,l.created_at DESC LIMIT $${params.length}
+      `, params);
+      return res.json({ listings: result.rows.map((row) => ({ ...row, id:String(row.id), seller_id:String(row.seller_id), price:Number(row.price), delivery_fee:row.delivery_fee==null?null:Number(row.delivery_fee), media_ids:Array.isArray(row.media_ids)?row.media_ids.map(String):[], discovery_score:Number(row.discovery_score||0) })) });
+    } catch (error) {
+      console.error("marketplace discovery", error);
+      return res.status(500).json({ error: "marketplace discovery unavailable" });
+    }
+  });
+
+  app.get("/api/marketplace/listing/:id", auth, async (req, res) => {
+    try {
+      const listingId = validListingId(req.params?.id);
+      if (!listingId) return res.status(400).json({ error: "invalid listing id" });
+      const result = await pool.query(`
+        SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,l.store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.active,l.created_at
+        FROM marketplace_listings l
+        JOIN users u ON u.id=l.seller_id
+        WHERE l.id=$1
+        LIMIT 1
+      `, [listingId]);
+      if (!result.rows[0]) return res.status(404).json({ error: "listing not found" });
+      const row = result.rows[0];
+      if (!row.active || Number(row.quantity) <= 0) return res.status(404).json({ error: "listing unavailable" });
+      return res.json({ listing: {
+        id:String(row.id), seller_id:String(row.seller_id), seller_username:row.seller_username,
+        seller_display_name:row.seller_display_name, store_name:row.store_name, title:row.title,
+        description:row.description, price:Number(row.price), currency:row.currency, category:row.category,
+        condition:row.condition, quantity:Number(row.quantity), location:row.location,
+        delivery_available:Boolean(row.delivery_available), pickup_available:Boolean(row.pickup_available),
+        delivery_fee:row.delivery_fee == null ? null : Number(row.delivery_fee),
+        media_ids:Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], active:Boolean(row.active)
+      }});
+    } catch (error) {
+      console.error("marketplace exact listing", error);
+      return res.status(500).json({ error: "marketplace listing unavailable" });
+    }
+  });
+
+  // Home Batch 4: durable save/repost state. Unlike discovery analytics, these
+  // tables represent actual user intent and are idempotent per account/post.
+  const ensureSocialInteractionSchema = async () => {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS social_saved_posts (
+        post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (post_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS social_saved_posts_user_idx ON social_saved_posts(user_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS social_post_audience (
+        post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (post_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS social_post_audience_user_idx ON social_post_audience(user_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS social_post_reposts (
+        post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (post_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS social_post_reposts_post_idx ON social_post_reposts(post_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS social_post_reposts_user_idx ON social_post_reposts(user_id, created_at DESC);
+    `);
+  };
+
+  const visiblePost = async (postId, userId) => {
+    await ensureSchema();
+    const result = await pool.query(`
+      SELECT 1 FROM social_posts p
+       WHERE p.id=$1
+         AND (p.author_id=$2 OR p.visibility='PUBLIC'
+           OR (p.visibility='ONLY_ME' AND p.author_id=$2)
+           OR (p.visibility='FRIENDS_ONLY' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted'))
+           OR (p.visibility='SELECTED_PEOPLE' AND EXISTS (SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$2)))
+         AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$2))
+       LIMIT 1
+    `, [postId, userId]);
+    return Boolean(result.rows[0]);
+  };
+
+  app.post("/api/social/posts/:id/save", auth, async (req, res) => {
+    try {
+      await ensureSocialInteractionSchema();
+      const postId = validPostId(req.params?.id);
+      if (!postId || !(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
+      await pool.query("INSERT INTO social_saved_posts(post_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [postId, req.user.sub]);
+      const count = await pool.query("SELECT COUNT(*)::int AS count FROM social_saved_posts WHERE post_id=$1", [postId]);
+      return res.json({ saved: true, savedCount: Number(count.rows[0]?.count || 0) });
+    } catch (error) { console.error("save social post", error); return res.status(500).json({ error: "save failed" }); }
+  });
+
+  app.delete("/api/social/posts/:id/save", auth, async (req, res) => {
+    try {
+      await ensureSocialInteractionSchema();
+      const postId = validPostId(req.params?.id);
+      if (!postId || !(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
+      await pool.query("DELETE FROM social_saved_posts WHERE post_id=$1 AND user_id=$2", [postId, req.user.sub]);
+      const count = await pool.query("SELECT COUNT(*)::int AS count FROM social_saved_posts WHERE post_id=$1", [postId]);
+      return res.json({ saved: false, savedCount: Number(count.rows[0]?.count || 0) });
+    } catch (error) { console.error("unsave social post", error); return res.status(500).json({ error: "unsave failed" }); }
+  });
+
+  app.get("/api/social/saved", auth, async (req, res) => {
+    try {
+      await ensureSocialInteractionSchema();
+      const limit = Math.min(Math.max(Number(req.query?.limit) || 30, 1), 100);
+      const offset = Math.max(Number(req.query?.offset) || 0, 0);
+      const result = await pool.query(`
+        SELECT p.id,p.author_id,u.username author_username,u.display_name author_display_name,p.text,p.visibility,p.media_id,p.media_type,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp,sp.created_at saved_at
+        FROM social_saved_posts sp JOIN social_posts p ON p.id=sp.post_id JOIN users u ON u.id=p.author_id
+        WHERE sp.user_id=$1 AND (${`p.author_id=$1 OR p.visibility='PUBLIC'`} OR (p.visibility='FRIENDS_ONLY' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$1) OR (f.user_id=$1 AND f.friend_id=p.author_id)) AND f.status='accepted')))
+          AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$1))
+        ORDER BY sp.created_at DESC LIMIT $2 OFFSET $3
+      `, [req.user.sub, limit, offset]);
+      return res.json({ posts: result.rows.map(row => ({ id:String(row.id), authorId:String(row.author_id), authorUsername:row.author_username, authorDisplayName:row.author_display_name, text:row.text, visibility:row.visibility, mediaId:row.media_id==null?null:String(row.media_id), mediaType:row.media_type||null, timestamp:Number(row.timestamp), savedAtMillis:new Date(row.saved_at).getTime() })), hasMore: result.rows.length === limit });
+    } catch (error) { console.error("saved social posts", error); return res.status(500).json({ error: "saved posts lookup failed" }); }
+  });
+
+  app.post("/api/social/posts/:id/repost", auth, async (req, res) => {
+    try {
+      await ensureSocialInteractionSchema();
+      const postId = validPostId(req.params?.id);
+      if (!postId || !(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
+      await pool.query("INSERT INTO social_post_reposts(post_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [postId, req.user.sub]);
+      const count = await pool.query("SELECT COUNT(*)::int AS count FROM social_post_reposts WHERE post_id=$1", [postId]);
+      return res.json({ reposted: true, repostCount: Number(count.rows[0]?.count || 0) });
+    } catch (error) { console.error("repost social post", error); return res.status(500).json({ error: "repost failed" }); }
+  });
+
+  app.delete("/api/social/posts/:id/repost", auth, async (req, res) => {
+    try {
+      await ensureSocialInteractionSchema();
+      const postId = validPostId(req.params?.id);
+      if (!postId || !(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
+      await pool.query("DELETE FROM social_post_reposts WHERE post_id=$1 AND user_id=$2", [postId, req.user.sub]);
+      const count = await pool.query("SELECT COUNT(*)::int AS count FROM social_post_reposts WHERE post_id=$1", [postId]);
+      return res.json({ reposted: false, repostCount: Number(count.rows[0]?.count || 0) });
+    } catch (error) { console.error("unrepost social post", error); return res.status(500).json({ error: "unrepost failed" }); }
+  });
+
+  app.get("/api/social/posts/:id/interaction-state", auth, async (req, res) => {
+    try {
+      await ensureSocialInteractionSchema();
+      const postId = validPostId(req.params?.id);
+      if (!postId || !(await visiblePost(postId, req.user.sub))) return res.status(404).json({ error: "post not found" });
+      const result = await pool.query(`SELECT EXISTS(SELECT 1 FROM social_saved_posts WHERE post_id=$1 AND user_id=$2) saved, EXISTS(SELECT 1 FROM social_post_reposts WHERE post_id=$1 AND user_id=$2) reposted, (SELECT COUNT(*) FROM social_saved_posts WHERE post_id=$1)::int saved_count, (SELECT COUNT(*) FROM social_post_reposts WHERE post_id=$1)::int repost_count`, [postId, req.user.sub]);
+      const row=result.rows[0];
+      return res.json({ saved:Boolean(row.saved), reposted:Boolean(row.reposted), savedCount:Number(row.saved_count||0), repostCount:Number(row.repost_count||0) });
+    } catch (error) { console.error("social interaction state", error); return res.status(500).json({ error: "interaction state failed" }); }
+  });
+}

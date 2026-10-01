@@ -6,10 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -22,18 +20,15 @@ private val todoDateFormat = DateTimeFormatter.ISO_LOCAL_DATE
 enum class TodoFilter { ALL, TODAY, ACTIVE, COMPLETED, HIGH_PRIORITY }
 
 @Composable
-// Batch A: preserve planning list state across screen recreation.
 fun TodoPanel() {
     val context = LocalContext.current
     var nextId by remember { mutableLongStateOf(TodoStore.nextId(context)) }
-    var title by rememberSaveable { mutableStateOf("") }
-    var highPriority by rememberSaveable { mutableStateOf(false) }
-    var dueDate by rememberSaveable { mutableStateOf("") }
-    var reminder by rememberSaveable { mutableStateOf("") }
-    var search by rememberSaveable { mutableStateOf("") }
-    var filterName by rememberSaveable { mutableStateOf(TodoFilter.TODAY.name) }
-    val filter = TodoFilter.valueOf(filterName)
-    val listState = rememberLazyListState()
+    var title by remember { mutableStateOf("") }
+    var highPriority by remember { mutableStateOf(false) }
+    var dueDate by remember { mutableStateOf("") }
+    var reminder by remember { mutableStateOf("") }
+    var search by remember { mutableStateOf("") }
+    var filter by remember { mutableStateOf(TodoFilter.TODAY) }
     var todos by remember { mutableStateOf(TodoStore.load(context)) }
     var editingTodo by remember { mutableStateOf<FynxTodo?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -94,7 +89,7 @@ fun TodoPanel() {
             TodoFilter.values().forEach { option ->
                 FilterChip(
                     selected = filter == option,
-                    onClick = { filterName = option.name },
+                    onClick = { filter = option },
                     label = { Text(option.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }) },
                     shape = FynxDesign.ControlShape
                 )
@@ -153,7 +148,7 @@ fun TodoPanel() {
             }
         }
 
-        LazyColumn(Modifier.weight(1f), state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(visibleTodos, key = { it.id }) { todo ->
                 TodoRow(
                     todo,

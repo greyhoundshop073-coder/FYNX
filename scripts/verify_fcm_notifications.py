@@ -1,0 +1,68 @@
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+def read(path):
+    return (ROOT / path).read_text(encoding="utf-8")
+
+checks = []
+def check(name, condition):
+    checks.append((name, bool(condition)))
+
+manifest = read("app/src/main/AndroidManifest.xml")
+service = read("app/src/main/java/com/fynx/app/ui/FynxFirebaseMessagingService.kt")
+device = read("app/src/main/java/com/fynx/app/ui/FynxNotificationDeviceManager.kt")
+backend_devices = read("backend/notificationDevices.js")
+push = read("backend/notificationPush.js")
+bootstrap = read("backend/notificationBootstrap.js")
+realtime = read("backend/realtimeIsolationBootstrap.js")
+follow = read("backend/followRoutes.js")
+models = read("app/src/main/java/com/fynx/app/ui/NotificationModels.kt")
+package = read("backend/package.json")
+
+check("Firebase messaging dependency", 'com.google.firebase:firebase-messaging' in read("app/build.gradle.kts"))
+check("Google services plugin", 'com.google.gms.google-services' in read("app/build.gradle.kts"))
+check("Firebase service declared non-exported", 'android:name=".ui.FynxFirebaseMessagingService"' in manifest and 'android:exported="false"' in manifest)
+check("Firebase messaging event intent", 'com.google.firebase.MESSAGING_EVENT' in manifest)
+check("token refresh callback", 'override fun onNewToken' in service and 'onTokenChanged' in service)
+check("authenticated token registration", '/api/notification-devices' in device and 'hasAccessToken' in device)
+check("token ownership is account scoped", 'CREATE UNIQUE INDEX IF NOT EXISTS notification_devices_provider_token_uidx' in backend_devices and 'ON CONFLICT(provider, token)' in backend_devices)
+check("server-side FCM credential only", 'FIREBASE_SERVICE_ACCOUNT_JSON' in push and 'FIREBASE_PRIVATE_KEY' in push and 'google-services.json' not in push)
+check("no Firebase private key in Android source", 'FIREBASE_PRIVATE_KEY' not in service and 'FIREBASE_SERVICE_ACCOUNT_JSON' not in service)
+check("FCM HTTP v1 send endpoint", 'fcm.googleapis.com/v1/projects/' in push and 'firebase.messaging' in push)
+check("FCM retry and invalid-token cleanup", 'response.status !== 429' in push and 'UNREGISTERED' in push and 'enabled=FALSE' in push)
+check("privacy-safe data payload", 'You have a new message.' in bootstrap and 'body: String(message)' in push)
+check("notification deep-link routing", 'route' in service and 'Uri.parse(route)' in service)
+check("group message push hook", 'queueFynxNotification' in bootstrap and 'group-message-' in bootstrap)
+check("friend request push hook", 'friend-request-' in bootstrap and 'FRIEND_REQUEST' in bootstrap)
+check("friend accepted push hook", 'friend-accepted-' in bootstrap and 'Friend request accepted' in bootstrap)
+check("private message push hook", ('message-${message.id}' in bootstrap or 'notificationId: "message-" + message.id' in bootstrap) and 'type: "MESSAGE"' in bootstrap)
+check("Home comment push hook", "type:'COMMENT'" in bootstrap and 'comment-${result.rows[0].id}' in bootstrap)
+check("Home comment is account scoped", 'postOwner.rows[0] && String(postOwner.rows[0].author_id) !== String(req.user.sub)' in bootstrap)
+check("Home reply push hook", "type:'COMMENT'" in bootstrap and ('reply-${row.id}-${recipientId}' in bootstrap or "notificationId:'reply-' + row.id + '-' + recipientId" in bootstrap) and 'realtimeIsolationBootstrap.js' in bootstrap)
+# Reply notification code is injected into the runtime file by notificationBootstrap.js.
+# Verify the authoritative bootstrap patch rather than requiring generated runtime text
+# to already exist in the source file before startup.
+check("reply notification runtime import", 'marker: \'import { installSocialPostReactions } from "./socialPostReactionBootstrap.js";\'' in bootstrap and 'import { queueFynxNotification } from "./notificationPush.js";' in bootstrap)
+check("reply recipients exclude actor", 'String(parentAuthorId) !== String(req.user.sub)' in bootstrap and 'String(postOwnerId) !== String(req.user.sub)' in bootstrap)
+check("reply can notify parent commenter and post owner", 'replyRecipients.add(String(parentAuthorId))' in bootstrap and 'replyRecipients.add(String(postOwnerId))' in bootstrap)
+check("follow push hook", 'queueFynxNotification' in follow and 'type: "FOLLOW"' in follow and 'follow-${viewerId}-${targetId}' in follow)
+check("follow notification only on new follow", 'RETURNING follower_id, followed_id' in follow and 'inserted.rowCount > 0' in follow)
+check("follow notification model", 'FOLLOW' in models)
+check("notification rows support actor avatar lookup", 'FynxProfileRemoteClient.cachedProfilePhotoId' in read("app/src/main/java/com/fynx/app/ui/NotificationPanel.kt") and 'FynxProfileRemoteClient.get(context, username)' in read("app/src/main/java/com/fynx/app/ui/NotificationPanel.kt"))
+check("notification rows show timestamps", 'formatNotificationTimestamp(notification.timestamp)' in read("app/src/main/java/com/fynx/app/ui/NotificationPanel.kt"))
+check("notification fallback routing is type-specific", 'FynxNotificationType.MESSAGE' in read("app/src/main/java/com/fynx/app/ui/FynxApp.kt") and '"fynx://chat/"' in read("app/src/main/java/com/fynx/app/ui/FynxApp.kt") and 'FynxNotificationType.GROUP' in read("app/src/main/java/com/fynx/app/ui/FynxApp.kt"))
+check("follow notification channel", '"FRIEND_REQUEST", "FOLLOW", "STORY"' in service)
+check("backend starts through notification bootstrap", 'node notificationBootstrap.js' in package)
+check("server-side secrets are not APK dependencies", 'FIREBASE_SERVICE_ACCOUNT_JSON' not in read("app/build.gradle.kts"))
+check("backend aggregates repeated social notifications", "AGGREGATABLE_TYPES = new Set(['REACTION','COMMENT'])" in read("backend/notificationPreferences.js") and "aggregateNotifications" in read("backend/notificationPreferences.js"))
+check("aggregation counts distinct related posts and actors", "new Set(group.rows.map(row => String(row.target_id)).filter(Boolean))" in read("backend/notificationPreferences.js") and "new Set(group.rows.map(row => String(row.source_username || '').trim()).filter(Boolean))" in read("backend/notificationPreferences.js") and "other" in read("backend/notificationPreferences.js"))
+check("aggregate read state marks underlying events", "id.match(/^aggregate-(REACTION|COMMENT)" in read("backend/notificationPreferences.js") and "created_at>=to_timestamp" in read("backend/notificationPreferences.js"))
+check("FOLLOW respects Friends notification preference", 'case "FOLLOW": return "friend_requests_enabled";' in push)
+
+failed = [name for name, ok in checks if not ok]
+for name, ok in checks:
+    print(f"{'PASS' if ok else 'FAIL'}: {name}")
+if failed:
+    raise SystemExit("FCM verification failed: " + ", ".join(failed))
+print(f"FCM verification GREEN: {len(checks)} checks passed")

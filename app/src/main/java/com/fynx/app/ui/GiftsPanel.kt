@@ -90,14 +90,13 @@ fun GiftsPanel(
     var historyVersion by remember { mutableIntStateOf(0) }
     var historyTab by remember { mutableStateOf("Sent") }
     val historyStore = remember(context) { FynxGiftHistoryStore(context, ::findFynxGift) }
-    val listState = rememberScrollState()
     val recipients = buildList {
         addAll(actualProfiles)
         remoteRecipient?.let { remote -> if (none { it.username.equals(remote.username, true) }) add(remote) }
     }
 
     Column(
-        modifier = Modifier.fillMaxWidth().verticalScroll(listState),
+        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

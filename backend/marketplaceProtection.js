@@ -1,0 +1,220 @@
+import crypto from 'node:crypto';
+import pg from 'pg';
+
+const { Pool } = pg;
+const DATABASE_URL = process.env.DATABASE_URL || '';
+const JWT_SECRET = process.env.JWT_SECRET || '';
+const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false, max: 4 }) : null;
+
+let schemaPromise;
+
+function parseUuid(value) {
+  return typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value.trim()) ? value.trim() : null;
+}
+
+function auth(req, res, next) {
+  const header = req.get('authorization') || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  if (!token || !JWT_SECRET) return res.status(401).json({ error: 'authentication required' });
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) throw new Error('invalid token');
+    const [encodedHeader, encodedPayload, encodedSignature] = parts;
+    const signature = crypto.createHmac('sha256', JWT_SECRET).update(`${encodedHeader}.${encodedPayload}`).digest('base64url');
+    if (signature.length !== encodedSignature.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(encodedSignature))) throw new Error('invalid token');
+    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
+    if (!payload?.sub || (payload.exp && Number(payload.exp) <= Math.floor(Date.now() / 1000))) throw new Error('expired token');
+    req.user = payload;
+    return next();
+  } catch {
+    return res.status(401).json({ error: 'invalid or expired token' });
+  }
+}
+
+async function ensureSchema() {
+  if (!pool) throw Object.assign(new Error('DATABASE_URL is not configured'), { code: 'DATABASE_NOT_CONFIGURED' });
+  if (!schemaPromise) {
+    schemaPromise = pool.query(`
+      -- The protection/inspection worker can start before marketplace transaction routes
+      -- receive their first request. Ensure its prerequisite order table exists first.
+      CREATE TABLE IF NOT EXISTS marketplace_orders (
+        id UUID PRIMARY KEY,
+        buyer_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        seller_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        listing_id BIGINT NOT NULL REFERENCES marketplace_listings(id) ON DELETE RESTRICT,
+        quantity INTEGER NOT NULL CHECK (quantity > 0),
+        unit_price NUMERIC(14,2) NOT NULL CHECK (unit_price > 0),
+        delivery_fee NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (delivery_fee >= 0),
+        total_amount NUMERIC(14,2) NOT NULL CHECK (total_amount > 0),
+        currency TEXT NOT NULL,
+        product_snapshot JSONB NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('PAYMENT_PENDING','PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED','DISPUTED','CANCELLED','REFUNDED')),
+        payment_reference TEXT,
+        tracking_reference TEXT,
+        shipped_at TIMESTAMPTZ,
+        delivered_at TIMESTAMPTZ,
+        inspection_deadline TIMESTAMPTZ,
+        completed_at TIMESTAMPTZ,
+        cancelled_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS marketplace_orders_buyer_idx ON marketplace_orders (buyer_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS marketplace_orders_seller_idx ON marketplace_orders (seller_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS marketplace_orders_listing_idx ON marketplace_orders (listing_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS marketplace_orders_status_idx ON marketplace_orders (status, updated_at DESC);
+
+      CREATE TABLE IF NOT EXISTS marketplace_protection_cases (
+        id UUID PRIMARY KEY,
+        order_id UUID NOT NULL REFERENCES marketplace_orders(id) ON DELETE CASCADE,
+        opened_by BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        role TEXT NOT NULL CHECK (role IN ('BUYER','SELLER')),
+        case_type TEXT NOT NULL CHECK (case_type IN ('DISPUTE','REFUND_REQUEST')),
+        reason TEXT NOT NULL,
+        details TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL CHECK (status IN ('OPEN','UNDER_REVIEW','RESOLVED_BUYER','RESOLVED_SELLER','REFUNDED','CANCELLED')),
+        idempotency_key TEXT NOT NULL UNIQUE,
+        previous_order_status TEXT,
+        previous_escrow_status TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      ALTER TABLE marketplace_protection_cases ADD COLUMN IF NOT EXISTS previous_order_status TEXT;
+      ALTER TABLE marketplace_protection_cases ADD COLUMN IF NOT EXISTS previous_escrow_status TEXT;
+      CREATE INDEX IF NOT EXISTS marketplace_protection_cases_order_idx ON marketplace_protection_cases (order_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS marketplace_protection_cases_status_idx ON marketplace_protection_cases (status, updated_at DESC);
+
+      CREATE TABLE IF NOT EXISTS marketplace_protection_audit (
+        id BIGSERIAL PRIMARY KEY,
+        case_id UUID NOT NULL REFERENCES marketplace_protection_cases(id) ON DELETE CASCADE,
+        order_id UUID NOT NULL REFERENCES marketplace_orders(id) ON DELETE CASCADE,
+        actor_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+        action TEXT NOT NULL,
+        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS marketplace_protection_audit_case_idx ON marketplace_protection_audit (case_id, created_at ASC);
+    `).catch((error) => {
+      schemaPromise = undefined;
+      throw error;
+    });
+  }
+  return schemaPromise;
+}
+
+async function getOrderAndEscrow(client, orderId) {
+  const order = (await client.query('SELECT id,buyer_id,seller_id,total_amount,currency,status FROM marketplace_orders WHERE id=$1 FOR UPDATE', [orderId])).rows[0];
+  if (!order) return null;
+  const escrow = (await client.query('SELECT * FROM marketplace_escrows WHERE order_id=$1 FOR UPDATE', [orderId])).rows[0] || null;
+  return { order, escrow };
+}
+
+export async function ensureMarketplaceProtectionSchema() {
+  return ensureSchema();
+}
+
+export function registerMarketplaceProtectionRoutes({ app }) {
+  app.post('/api/marketplace/protection/order/:id/dispute', auth, async (req, res) => {
+    await createCase(req, res, 'DISPUTE');
+  });
+
+  app.post('/api/marketplace/orders/:id/disputes', auth, async (req, res) => {
+    await createCase(req, res, 'DISPUTE');
+  });
+
+  app.post('/api/marketplace/protection/order/:id/refund-request', auth, async (req, res) => {
+    await createCase(req, res, 'REFUND_REQUEST');
+  });
+
+  app.get('/api/marketplace/protection/order/:id/cases', auth, async (req, res) => {
+    const orderId = parseUuid(req.params.id);
+    if (!orderId) return res.status(400).json({ error: 'invalid order id' });
+    try {
+      await ensureSchema();
+      const order = (await pool.query('SELECT buyer_id,seller_id FROM marketplace_orders WHERE id=$1', [orderId])).rows[0];
+      if (!order) return res.status(404).json({ error: 'order not found' });
+      if (String(order.buyer_id) !== String(req.user.sub) && String(order.seller_id) !== String(req.user.sub)) return res.status(403).json({ error: 'order unavailable' });
+      const cases = await pool.query('SELECT id,case_type,reason,details,status,previous_order_status,previous_escrow_status,created_at,updated_at FROM marketplace_protection_cases WHERE order_id=$1 ORDER BY created_at DESC', [orderId]);
+      return res.json({ cases: cases.rows });
+    } catch (error) {
+      console.error('marketplace protection case lookup', error);
+      return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500).json({ error: 'protection cases unavailable' });
+    }
+  });
+}
+
+async function createCase(req, res, caseType) {
+  const orderId = parseUuid(req.params.id);
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 160) : '';
+  const details = typeof req.body?.details === 'string' ? req.body.details.trim().slice(0, 2000) : '';
+  const suppliedKey = typeof req.get('idempotency-key') === 'string' ? req.get('idempotency-key').trim().slice(0, 160) : '';
+  const idempotencyKey = suppliedKey || `FYNX-${caseType}-${orderId}-${req.user.sub}`;
+  if (!orderId) return res.status(400).json({ error: 'invalid order id' });
+  if (reason.length < 3) return res.status(400).json({ error: 'a short reason is required' });
+  try {
+    await ensureSchema();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const record = await getOrderAndEscrow(client, orderId);
+      if (!record) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
+      const { order, escrow } = record;
+      const isBuyer = String(order.buyer_id) === String(req.user.sub);
+      const isSeller = String(order.seller_id) === String(req.user.sub);
+      if (!isBuyer && !isSeller) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'order unavailable' }); }
+      if (caseType === 'REFUND_REQUEST' && !isBuyer) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the buyer can request a refund' }); }
+      if (!escrow || !['HELD','RELEASE_ELIGIBLE','DISPUTED'].includes(escrow.status)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'this order is no longer eligible for a protection request' });
+      }
+      if (!['PAID','COMPLETED','SHIPPED','DELIVERED','INSPECTION','DISPUTED'].includes(String(order.status))) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'this order is not in a protected post-payment state' });
+      }
+
+      const existing = (await client.query('SELECT id,case_type,reason,details,status,previous_order_status,previous_escrow_status,created_at,updated_at FROM marketplace_protection_cases WHERE idempotency_key=$1', [idempotencyKey])).rows[0];
+      if (existing) {
+        await client.query('ROLLBACK');
+        return res.json({ case: existing, idempotent: true });
+      }
+      const activeCase = (await client.query("SELECT id,case_type,status FROM marketplace_protection_cases WHERE order_id=$1 AND status IN ('OPEN','UNDER_REVIEW') ORDER BY created_at DESC LIMIT 1", [orderId])).rows[0];
+      if (activeCase) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'this order already has an active protection case', caseId: String(activeCase.id), caseType: activeCase.case_type, status: activeCase.status });
+      }
+
+      const caseId = crypto.randomUUID();
+      const role = isBuyer ? 'BUYER' : 'SELLER';
+      const previousOrderStatus = String(order.status);
+      const previousEscrowStatus = String(escrow.status);
+      const inserted = (await client.query(`
+        INSERT INTO marketplace_protection_cases (id,order_id,opened_by,role,case_type,reason,details,status,idempotency_key,previous_order_status,previous_escrow_status)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,'OPEN',$8,$9,$10)
+        RETURNING id,case_type,reason,details,status,previous_order_status,previous_escrow_status,created_at,updated_at
+      `, [caseId, orderId, req.user.sub, role, caseType, reason, details, idempotencyKey, previousOrderStatus, previousEscrowStatus])).rows[0];
+
+      await client.query(`
+        INSERT INTO marketplace_protection_audit (case_id,order_id,actor_id,action,metadata)
+        VALUES ($1,$2,$3,$4,$5::jsonb)
+      `, [caseId, orderId, req.user.sub, caseType === 'DISPUTE' ? 'DISPUTE_OPENED' : 'REFUND_REQUESTED', JSON.stringify({ role, reason, previousOrderStatus, previousEscrowStatus })]);
+
+      await client.query(`UPDATE marketplace_orders SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status=$2`, [orderId, previousOrderStatus]);
+      await client.query(`UPDATE marketplace_escrows SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status IN ('HELD','RELEASE_ELIGIBLE')`, [escrow.id]);
+
+      await client.query('COMMIT');
+      return res.status(201).json({ case: inserted, protection: { funds: 'DISPUTED', payoutBlocked: true, orderStatus: 'DISPUTED' } });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      if (error?.code === '23505') {
+        const existing = (await client.query('SELECT id,case_type,reason,details,status,previous_order_status,previous_escrow_status,created_at,updated_at FROM marketplace_protection_cases WHERE idempotency_key=$1', [idempotencyKey])).rows[0];
+        if (existing) return res.json({ case: existing, idempotent: true });
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('marketplace protection request', error);
+    return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500).json({ error: 'protection request unavailable' });
+  }
+}

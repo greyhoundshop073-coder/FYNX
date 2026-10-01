@@ -1,0 +1,12 @@
+{
+  "max_changed_pixels": 0,
+  "surfaces": [
+    {"name":"home","baseline":"home.png","runtime":"authenticated-home.png"},
+    {"name":"chat","baseline":"chat.png","runtime":"authenticated-chat.png"},
+    {"name":"stories","baseline":"stories.png","runtime":"authenticated-stories.png"},
+    {"name":"features","baseline":"features.png","runtime":"authenticated-features.png"},
+    {"name":"money","baseline":"money.png","runtime":"authenticated-money.png"},
+    {"name":"ai","baseline":"ai.png","runtime":"authenticated-ai.png"}
+  ],
+  "note":"PNG baselines are intentionally not invented. Add only approved FYNX reference screenshots; until then the workflow reports PENDING."
+}

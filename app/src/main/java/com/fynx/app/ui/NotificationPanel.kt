@@ -18,8 +18,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 @Composable
 fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit, onNotificationRead: (String) -> Unit = {}, onMarkAllRead: () -> Unit = {}, onUnreadCountChanged: (Int) -> Unit = {}, onNotificationOpen: (FynxNotification) -> Unit = {}) {
@@ -36,24 +34,20 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
     var selectedType by remember { mutableStateOf<FynxNotificationType?>(null) }
     var unreadOnly by remember { mutableStateOf(false) }
     var speakNotifications by remember { mutableStateOf(FynxNotificationFoundation.isSpeakNotificationsEnabled(context)) }
-    val refreshMutex = remember { Mutex() }
-    val listState = rememberLazyListState()
     val current = remember(localNotifications, remoteNotifications, notifications) { (remoteNotifications + localNotifications + notifications).distinctBy { it.id }.sortedByDescending { it.timestamp } }
     val filtered = FynxNotificationActivityCenter.unreadOnly(FynxNotificationActivityCenter.filterByType(current, selectedType), unreadOnly)
 
     fun loadRemoteNotifications() {
         scope.launch {
-            refreshMutex.withLock {
-                FynxNotificationPreferencesClient.load(context).onSuccess { notificationPreferences = it }
-                FynxNotificationRemoteClient.loadFeed(context).onSuccess { feed ->
+            FynxNotificationPreferencesClient.load(context).onSuccess { notificationPreferences = it }
+            FynxNotificationRemoteClient.loadFeed(context).onSuccess { feed ->
                 remoteNotifications = feed.notifications
                 remoteUnreadCount = feed.unreadCount
                 onUnreadCountChanged(feed.unreadCount)
                 FynxNotificationStore.save(context, feed.notifications)
                 localNotifications = FynxNotificationStore.load(context)
                 remoteError = null
-                }.onFailure { remoteError = it.message ?: "Unable to refresh notifications." }
-            }
+            }.onFailure { remoteError = it.message ?: "Unable to refresh notifications." }
         }
     }
     LaunchedEffect(Unit) { loadRemoteNotifications() }
@@ -146,7 +140,7 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
                     }
                 }
             } else {
-                LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(filtered, key = { it.id }) { notification ->
                         val containerColor = if (notification.read) FynxDesign.Surface else FynxDesign.SelectedContainer
                         Card(onClick = {
