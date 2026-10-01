@@ -221,10 +221,10 @@ jobs:
       - name: Fast build, test and lint
         run: ./gradlew lintDebug testDebugUnitTest --no-daemon --build-cache
       - name: Full build, test and lint
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == true }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
       - name: Run Android instrumentation tests and capture the real FYNX UI
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == true }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -233,7 +233,7 @@ jobs:
           profile: Pixel_6
           script: ./gradlew connectedDebugAndroidTest --no-daemon --build-cache && python3 scripts/verify_runtime_navigation.py
       - name: Upload FYNX runtime screenshots and UI hierarchies
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == true }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: FYNX-runtime-visual-check-${{ github.sha }}
