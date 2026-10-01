@@ -355,6 +355,35 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             }
     }
 
+    val homeInsertions = remember(publishRefreshKey, marketplaceListings.isNotEmpty(), peopleRecommendations.isNotEmpty(), discoveryVideos.isNotEmpty()) {
+        val seed = (publishRefreshKey * 1103515245L + 12345L).ushr(1)
+        val available = buildList {
+            if (marketplaceListings.isNotEmpty()) add("marketplace")
+            if (peopleRecommendations.isNotEmpty()) add("people")
+            if (discoveryVideos.isNotEmpty()) add("discovery")
+        }
+        val ordered = available.sortedBy { type -> seed xor type.hashCode().toLong() }
+        val count = when {
+            ordered.isEmpty() || posts.size < 3 -> 0
+            ordered.size == 1 -> 1
+            seed % 5L == 0L -> 0
+            posts.size < 8 -> 1
+            else -> 2
+        }
+        val selected = ordered.take(count)
+        if (selected.isEmpty()) {
+            emptyMap()
+        } else {
+            val first = (2 + (seed % 5L).toInt()).coerceAtMost(posts.lastIndex)
+            val second = if (posts.size > 8) {
+                (8 + ((seed / 11L) % (posts.size - 8).toLong()).toInt()).coerceAtMost(posts.lastIndex)
+            } else posts.lastIndex
+            selected.mapIndexed { index, type ->
+                (if (index == 0) first else maxOf(first + 2, second).coerceAtMost(posts.lastIndex)) to type
+            }.toMap()
+        }
+    }
+
     LazyColumn(state = feedListState, modifier = modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp)) {
         header?.let { content -> item(key = "home_ai_status") { content() } }
         item(key = "feed_header") {
@@ -363,13 +392,11 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
 
             }
         }
-        if (marketplaceListings.isNotEmpty()) item(key = "home_marketplace") { FynxHomeMarketplaceCarousel(listings = marketplaceListings, loadingMore = marketplaceLoadingMore, hasMore = marketplaceHasMore, onLoadMore = { loadHomeMarketplace() }, onOpenListing = onOpenMarketplaceListing, onOpenMarketplace = onOpenMarketplace) }
-        if (peopleRecommendations.isNotEmpty()) item(key = "people_recommendations") { HomePeopleRecommendationsCard(peopleRecommendations, onOpenProfile = { onOpenAuthorProfile(it) }, onSeeAll = onOpenFindPeople, onLoadMore = { hydratePeopleRecommendations(peopleRecommendationsOffset) }, loadingMore = peopleRecommendationsLoading && peopleRecommendations.isNotEmpty(), onDismiss = { username -> dismissedPeople = dismissedPeople + username.lowercase(); peopleRecommendations = peopleRecommendations.filterNot { it.username.equals(username, true) } }) }
-        if (discoveryVideos.isNotEmpty()) item(key = "home_discovery") { FynxHomeDiscoverySection(videos = discoveryVideos, loadingMore = discoveryVideosLoading, hasMore = discoveryVideosHasMore, onLoadMore = { loadDiscoveryVideos() }, onOpenVideo = { index -> openHomeDiscoveryViewer(index) }) }
         if (loading) item(key = "feed_loading") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         error?.let { message -> item(key = "feed_error") { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Text("Retry") } } } } }
         if (!loading && posts.isEmpty() && error == null) item(key = "feed_empty") { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Your feed is ready", style = MaterialTheme.typography.titleMedium); Text("There are no visible posts yet. Create a post or find real people to build your FYNX circle."); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = onCreatePost) { Text("Create Post") }; OutlinedButton(onClick = onOpenFindPeople) { Text("Find People") } } } } }
-        items(items = posts, key = { it.id }) { post ->
+        posts.forEachIndexed { postIndex, post ->
+            item(key = post.id) {
             val photoId = authorPhotos[post.authorUsername.removePrefix("@").trim().lowercase()]; val state = interactionStates[post.id] ?: FynxRemoteSocialClient.SocialInteractionState(false, false, 0, 0); val reaction = reactionStates[post.id] ?: FynxHomePostReactionsClient.ReactionState(); val busy = post.id in interactionBusy || "follow:${post.authorUsername.removePrefix("@").trim().lowercase()}" in interactionBusy
             RemotePostCard(post, currentUsername, photoId, activeStatusOwners.contains(post.authorUsername.removePrefix("@").trim().lowercase()), state, reaction, busy, postMedia[post.id].orEmpty(), playbackActive = focusedVideoPostId == post.id && !feedListState.isScrollInProgress, onOpenProfile = { onOpenAuthorProfile(post.authorUsername.removePrefix("@").trim()) }, onOpenStatus = { openAuthorStatus(post.authorUsername.removePrefix("@").trim()) }, onLike = { runLike(it) }, onComment = { commentsPost = post }, onFollow = { runFollow(post.authorUsername, it) }, onDelete = { deletePost = post }, onOpenAudienceEditor = { audiencePost = post }, onReport = { reportPost = post }, onInterested = { id -> scope.launch { FynxDiscoveryClient.recordInterested(context, id) } }, onNotInterested = { id -> scope.launch { FynxDiscoveryClient.recordNotInterested(context, id) } }, onSave = { id, saved -> runInteraction(id, saved, { it.saved }, { it.savedCount }, { FynxRemoteSocialClient.save(context, id, saved) }) { current, value, count -> current.copy(saved = value, savedCount = count) } }, onRepost = { id, reposted -> runInteraction(id, reposted, { it.reposted }, { it.repostCount }, { FynxRemoteSocialClient.repost(context, id, reposted) }) { current, value, count -> current.copy(reposted = value, repostCount = count) } }, onShare = { runShare(post) }, onOpenReactionPicker = { reactionPickerPostId = if (reactionPickerPostId == post.id) null else post.id }, onReact = { id, selected -> runReaction(id, selected) }, reactionPickerOpen = reactionPickerPostId == post.id, onOpenReactionUsers = { reactionUsersPostId = post.id }, onOpenMarketplace = onOpenMarketplace, onOpenVideoDiscovery = { openVideoDiscovery(post.id) }, onOpenMediaViewer = { items, index -> mediaViewerPost = post; mediaViewerItems = items; mediaViewerIndex = index })
             if (post.id != posts.lastOrNull()?.id) {
@@ -378,6 +405,43 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                     thickness = 1.dp,
                     color = FynxDesign.Outline.copy(alpha = 0.28f)
                 )
+            }
+        }
+            homeInsertions[postIndex]?.let { type ->
+                when (type) {
+                    "marketplace" -> item(key = "home_marketplace_${postIndex}") {
+                        FynxHomeMarketplaceCarousel(
+                            listings = marketplaceListings,
+                            loadingMore = marketplaceLoadingMore,
+                            hasMore = marketplaceHasMore,
+                            onLoadMore = { loadHomeMarketplace() },
+                            onOpenListing = onOpenMarketplaceListing,
+                            onOpenMarketplace = onOpenMarketplace
+                        )
+                    }
+                    "people" -> item(key = "people_recommendations_${postIndex}") {
+                        HomePeopleRecommendationsCard(
+                            peopleRecommendations,
+                            onOpenProfile = { onOpenAuthorProfile(it) },
+                            onSeeAll = onOpenFindPeople,
+                            onLoadMore = { hydratePeopleRecommendations(peopleRecommendationsOffset) },
+                            loadingMore = peopleRecommendationsLoading && peopleRecommendations.isNotEmpty(),
+                            onDismiss = { username ->
+                                dismissedPeople = dismissedPeople + username.lowercase()
+                                peopleRecommendations = peopleRecommendations.filterNot { it.username.equals(username, true) }
+                            }
+                        )
+                    }
+                    "discovery" -> item(key = "home_discovery_${postIndex}") {
+                        FynxHomeDiscoverySection(
+                            videos = discoveryVideos,
+                            loadingMore = discoveryVideosLoading,
+                            hasMore = discoveryVideosHasMore,
+                            onLoadMore = { loadDiscoveryVideos() },
+                            onOpenVideo = { index -> openHomeDiscoveryViewer(index) }
+                        )
+                    }
+                }
             }
         }
         if (loadingMore) item(key = "feed_loading_more") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
