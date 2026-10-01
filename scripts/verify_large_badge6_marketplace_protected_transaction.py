@@ -40,7 +40,7 @@ checks = [
     ("payment order creation remains idempotent", "clientOrderId" in transactions and "idempotent:true" in transactions),
     ("inventory reservation occurs inside the transaction", "reserved_quantity=reserved_quantity+$1" in transactions and "BEGIN" in transactions),
     ("existing marketplace protection gates remain in CI", "verify_r6a_marketplace_protection.py" in workflow and "verify_marketplace_integration_security.py" in workflow and "verify_marketplace_seller_flow.py" in workflow),
-    ("real Android instrumentation remains in CI", "connectedDebugAndroidTest" in workflow and "verify_runtime_navigation.py" in workflow),
+    ("real Android instrumentation remains in CI", "connectedDebugAndroidTest" in workflow and ("verify_runtime_navigation.py" in workflow or "verify_authenticated_runtime_navigation.py" in workflow)),
 ]
 
 failed = []
