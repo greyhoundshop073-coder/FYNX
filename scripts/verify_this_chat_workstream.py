@@ -38,10 +38,11 @@ check('remote profile success persists authoritative avatar identity', 'saveRemo
 check('chat list clears stale avatar when server photo is removed', 'else chat.copy(avatarUri = null)' in read('app/src/main/java/com/fynx/app/ui/ChatsPanel.kt'))
 check('conversation keeps cached avatar only while remote profile is loading', 'var remoteProfileLoaded by remember(chat.username)' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt') and 'if (remoteProfileLoaded)' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt'))
 check('conversation marks remote profile loaded after successful fetch', 'remoteProfileLoaded = true' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt'))
-# Marketplace now has one production implementation. It delegates seller identity loading to
-# FynxProfileRemoteClient, whose get() path is cache-first and then persists server authority.
-# The old RemotePanel is only a compatibility entry point and must not be the source of truth.
-check('Marketplace seller avatar uses cache only until server authority arrives', 'FynxProfileRemoteClient.get(context, username)' in market and 'FynxPreferencesStore.loadRemoteProfilePhotoId' in profile_client and 'saveRemoteProfilePhotoId(context, normalized' in profile_client and 'FynxMarketplacePanel(' in market_compat)
+# Marketplace uses the shared production avatar component. The component itself is the
+# source of truth for cache-first rendering: when mediaId is absent it resolves the
+# account-scoped cached profile photo from ownerUsername, while profile fetches persist
+# the authoritative server photo. Do not require the Marketplace card to duplicate this logic.
+check('Marketplace seller avatar uses the shared cache-first avatar authority path', 'FynxRemoteProfileAvatar(photoId' in market and 'ownerUsername = l.sellerUsername' in market and 'cachedProfilePhotoId(context, it)' in remote_media and 'saveRemoteProfilePhotoId(context, normalized, profile.profilePhotoMediaId)' in profile_client)
 check('identity cache is account namespaced', 'KEY_REMOTE_IDENTITY_CACHE' in prefs and 'accountNamespace(context)' in prefs)
 check('identity cache is cleared at the session boundary', 'getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_$accountNamespace"' in prefs)
 check('R5B audio verifier recognizes the shared renderer', 'def contains_remote_audio_renderer(source):' in r5b_verifier and "require('remote audio renderer',contains_remote_audio_renderer(remote_media))" in r5b_verifier)
