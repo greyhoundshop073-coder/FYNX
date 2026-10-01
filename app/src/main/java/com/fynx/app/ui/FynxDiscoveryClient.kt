@@ -40,10 +40,18 @@ object FynxDiscoveryClient {
             }
         }
 
-    suspend fun marketplaceDiscovery(context: Context, query: String = "", category: String = "All", limit: Int = 30, location: String = ""): Result<List<FynxMarketplaceClient.Listing>> {
-        val path = "/api/marketplace/discovery?q=${encode(query)}&category=${encode(category)}&limit=${limit.coerceIn(1, 60)}&location=${encode(location)}"
-        return FynxBackendClient.get(context, path).mapCatching(::parseListings)
+    data class MarketplaceDiscoveryPage(val items: List<FynxMarketplaceClient.Listing>, val hasMore: Boolean)
+
+    suspend fun marketplaceDiscoveryPage(context: Context, query: String = "", category: String = "All", limit: Int = 30, offset: Int = 0, location: String = ""): Result<MarketplaceDiscoveryPage> {
+        val path = "/api/marketplace/discovery?q=${encode(query)}&category=${encode(category)}&limit=${limit.coerceIn(1, 60)}&offset=${offset.coerceAtLeast(0)}&location=${encode(location)}"
+        return FynxBackendClient.get(context, path).mapCatching { raw ->
+            val json = JSONObject(raw)
+            MarketplaceDiscoveryPage(parseListings(raw), json.optBoolean("hasMore", false))
+        }
     }
+
+    suspend fun marketplaceDiscovery(context: Context, query: String = "", category: String = "All", limit: Int = 30, location: String = ""): Result<List<FynxMarketplaceClient.Listing>> =
+        marketplaceDiscoveryPage(context, query, category, limit, 0, location).map { it.items }
 
     data class TrendingPost(val id: String, val authorUsername: String, val authorDisplayName: String, val text: String, val mediaId: String?, val mediaType: String?, val timestamp: Long, val likeCount: Int, val commentCount: Int, val shareCount: Int, val saveCount: Int, val score: Double)
 
