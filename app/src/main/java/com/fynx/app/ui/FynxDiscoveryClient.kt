@@ -29,8 +29,8 @@ object FynxDiscoveryClient {
         suspend fun recordInterested(context: Context, postId: String): Result<Unit> = recordEvent(context, "INTERESTED", postId = postId)
     suspend fun recordNotInterested(context: Context, postId: String): Result<Unit> = recordEvent(context, "NOT_INTERESTED", postId = postId)
 
-    suspend fun trending(context: Context, limit: Int = 20): Result<List<TrendingPost>> =
-        FynxBackendClient.get(context, "/api/discovery/trending?limit=${limit.coerceIn(1, 50)}").mapCatching { raw ->
+    suspend fun trending(context: Context, limit: Int = 20, offset: Int = 0): Result<List<TrendingPost>> =
+        FynxBackendClient.get(context, "/api/discovery/trending?limit=${limit.coerceIn(1, 50)}&offset=${offset.coerceAtLeast(0)}").mapCatching { raw ->
             val array = JSONObject(raw).optJSONArray("posts") ?: JSONArray()
             buildList {
                 for (i in 0 until array.length()) {
