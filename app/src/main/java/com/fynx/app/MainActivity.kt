@@ -49,7 +49,7 @@ class MainActivity : ComponentActivity() {
         registerNotificationTokenIfSignedIn()
 
         setContent {
-            var showLaunch by remember { mutableStateOf(true) }
+            var showLaunch by rememberSaveable { mutableStateOf(true) }
             LaunchedEffect(Unit) {
                 delay(1100)
                 showLaunch = false
