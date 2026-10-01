@@ -126,8 +126,30 @@ fun HomePanel(
 }
 
 @Composable
-fun FynxProfileImage(name: String, uriString: String?, modifier: Modifier = Modifier) {
+fun FynxProfileImage(name: String, uriString: String?, modifier: Modifier = Modifier, ownerUsername: String? = null) {
     val context = LocalContext.current
+    val normalizedOwner = ownerUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
+    var remotePhotoId by remember(normalizedOwner) {
+        mutableStateOf(normalizedOwner?.let { FynxProfileRemoteClient.cachedProfilePhotoId(context, it) })
+    }
+
+    LaunchedEffect(normalizedOwner) {
+        if (normalizedOwner != null) {
+            FynxProfileRemoteClient.get(context, normalizedOwner)
+                .onSuccess { profile -> remotePhotoId = profile.profilePhotoMediaId }
+        }
+    }
+
+    if (!remotePhotoId.isNullOrBlank()) {
+        FynxRemoteProfileAvatar(
+            mediaId = remotePhotoId,
+            contentDescription = name,
+            modifier = modifier.clip(CircleShape),
+            ownerUsername = normalizedOwner
+        )
+        return
+    }
+
     var bitmap by remember(uriString) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(uriString) {
         bitmap = withContext(Dispatchers.IO) {
@@ -148,6 +170,6 @@ fun FynxProfileImage(name: String, uriString: String?, modifier: Modifier = Modi
             contentScale = ContentScale.Crop
         )
     } else {
-        FynxAvatar(name, modifier.clip(CircleShape))
+        FynxAvatar(name, modifier.clip(CircleShape), ownerUsername = normalizedOwner)
     }
 }

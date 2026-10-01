@@ -6,7 +6,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,11 +31,27 @@ fun FynxVerifiedBadge(modifier: Modifier = Modifier) {
 @Composable
 fun FynxAvatar(name: String, modifier: Modifier = Modifier, ownerUsername: String? = null) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val remoteMediaId = ownerUsername?.takeIf { it.isNotBlank() }?.let {
-        FynxProfileRemoteClient.cachedProfilePhotoId(context, it)
+    val normalizedOwner = ownerUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
+    var resolvedMediaId by remember(normalizedOwner) {
+        mutableStateOf(normalizedOwner?.let { FynxProfileRemoteClient.cachedProfilePhotoId(context, it) })
     }
-    if (!ownerUsername.isNullOrBlank()) {
-        FynxRemoteProfileAvatar(mediaId = remoteMediaId, contentDescription = name, modifier = modifier, ownerUsername = ownerUsername)
+
+    LaunchedEffect(normalizedOwner) {
+        if (normalizedOwner != null) {
+            FynxProfileRemoteClient.get(context, normalizedOwner)
+                .onSuccess { profile -> resolvedMediaId = profile.profilePhotoMediaId }
+        } else {
+            resolvedMediaId = null
+        }
+    }
+
+    if (normalizedOwner != null) {
+        FynxRemoteProfileAvatar(
+            mediaId = resolvedMediaId,
+            contentDescription = name,
+            modifier = modifier,
+            ownerUsername = normalizedOwner
+        )
     } else {
         FynxAvatarContent(name, null, modifier)
     }
@@ -43,12 +59,28 @@ fun FynxAvatar(name: String, modifier: Modifier = Modifier, ownerUsername: Strin
 
 @Composable
 fun FynxAvatar(name: String, avatarUri: String?, modifier: Modifier = Modifier, ownerUsername: String? = null) {
-    if (!ownerUsername.isNullOrBlank()) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val normalizedOwner = ownerUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
+    var resolvedMediaId by remember(normalizedOwner, avatarUri) {
+        mutableStateOf(
+            normalizedOwner?.let { FynxProfileRemoteClient.cachedProfilePhotoId(context, it) }
+                ?: avatarUri?.substringAfterLast("/api/media/")?.takeIf { it != avatarUri }
+        )
+    }
+
+    LaunchedEffect(normalizedOwner) {
+        if (normalizedOwner != null) {
+            FynxProfileRemoteClient.get(context, normalizedOwner)
+                .onSuccess { profile -> resolvedMediaId = profile.profilePhotoMediaId }
+        }
+    }
+
+    if (normalizedOwner != null) {
         FynxRemoteProfileAvatar(
-            mediaId = avatarUri?.substringAfterLast("/api/media/")?.takeIf { it != avatarUri },
+            mediaId = resolvedMediaId,
             contentDescription = name,
             modifier = modifier,
-            ownerUsername = ownerUsername
+            ownerUsername = normalizedOwner
         )
     } else {
         FynxAvatarContent(name, avatarUri, modifier)
