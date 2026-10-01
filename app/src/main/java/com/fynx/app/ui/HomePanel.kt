@@ -6,6 +6,8 @@ import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -13,10 +15,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** Production Home shell. Status/AI content is supplied to the feed's single scroll surface. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomePanel(
     currentUsername: String = "",
@@ -37,8 +41,10 @@ fun HomePanel(
     onInitialPostConsumed: () -> Unit = {}
 ) {
     val displayUsername = currentUsername.trim().removePrefix("@").trim()
+    val context = LocalContext.current
     var showCreateMenu by remember { mutableStateOf(false) }
     var showMatureStatusComposer by remember { mutableStateOf(false) }
+    var isPullRefreshing by remember { mutableStateOf(false) }
 
     fun dismissCreateMenu() {
         showCreateMenu = false
@@ -52,7 +58,25 @@ fun HomePanel(
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {
             FynxHomeLifecycleRefresh { refreshKey ->
-                key(refreshKey) {
+                LaunchedEffect(refreshKey) {
+                    if (refreshKey != 0L) {
+                        isPullRefreshing = true
+                        delay(1200L)
+                        isPullRefreshing = false
+                    }
+                }
+                PullToRefreshBox(
+                    isRefreshing = isPullRefreshing,
+                    onRefresh = {
+                        if (!isPullRefreshing) {
+                            isPullRefreshing = true
+                            FynxHomeLifecycleRefreshBus.request(context)
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    // Do not key/recreate the entire feed on refresh. The feed owns its
+                    // persistent scroll/cache state and reconciles the refreshed data.
                     FynxRemoteHomeSocialPanel(
                         modifier = Modifier.fillMaxSize(),
                         currentUsername = displayUsername,
