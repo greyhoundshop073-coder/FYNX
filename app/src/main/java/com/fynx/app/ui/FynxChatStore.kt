@@ -34,6 +34,11 @@ object FynxChatStore {
         val previous = prefs.getString(storageKey, null)?.let { parseMessages(it, null) }.orEmpty()
         val syncInitialized = prefs.getBoolean(syncKey(context, chatKey), false)
 
+        // A transient/failed remote history response must never erase an already
+        // established local conversation. The screen can reconcile authoritative
+        // data later, but persistence must keep the last known good history.
+        if (syncInitialized && previous.isNotEmpty() && messages.isEmpty()) return
+
         // ConversationPanel keeps local state responsive while production edit/delete
         // operations are sent to the server. The server remains the source of truth.
         if (syncInitialized && previous.isNotEmpty()) {
