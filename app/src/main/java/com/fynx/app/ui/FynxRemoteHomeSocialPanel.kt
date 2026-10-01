@@ -213,7 +213,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         discoveryVideosLoading = true
         val offset = if (reset) 0 else discoveryVideosOffset
         scope.launch {
-            FynxDiscoveryClient.trending(context, 12).onSuccess { page ->
+            FynxDiscoveryClient.trending(context, 12, offset).onSuccess { page ->
                 val videoPosts = page.filter { it.mediaId != null && it.mediaType.equals("video", true) }
                 val existing = if (reset) emptyList() else discoveryVideos
                 discoveryVideos = (existing + videoPosts).distinctBy { it.id }
