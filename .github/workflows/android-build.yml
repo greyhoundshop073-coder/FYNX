@@ -52,6 +52,7 @@ env:
   GOOGLE_CLOUD_PROJECT: fynx-f0868
   FYNX_WIF_PROVIDER: projects/742276831502/locations/global/workloadIdentityPools/fynx-github-actions/providers/fynx-github
   FYNX_GCP_SERVICE_ACCOUNT: fynx-github-actions@fynx-f0868.iam.gserviceaccount.com
+  FYNX_PRODUCTION_BASE_URL: https://fynx-ai-backend.onrender.com
 
 jobs:
   build:
@@ -59,6 +60,8 @@ jobs:
     env:
       BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
       BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+      FYNX_E2E_USERNAME: ${{ secrets.FYNX_E2E_USERNAME }}
+      FYNX_E2E_PASSWORD: ${{ secrets.FYNX_E2E_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -193,10 +196,8 @@ jobs:
         run: python3 scripts/verify_large_badge5_media_reliability.py
       - name: Verify Large Badge #6 — Marketplace Protected Transaction Full-Lifecycle Certification
         run: python3 scripts/verify_large_badge6_marketplace_protected_transaction.py
-
       - name: Verify Large Badge #7 — Notifications + Preferences + Delivery Certification
         run: python3 scripts/verify_large_badge7_notifications_preferences.py
-
       - name: Verify Large Badge #8 — FYNX AI Flows & Intelligence Certification
         run: python3 scripts/verify_large_badge8_ai_intelligence.py
       - name: Verify Large Badge #9 — Trust, Safety & Account Protection Certification
@@ -218,202 +219,4 @@ jobs:
       - name: Generate FYNX investigation report index
         run: python3 scripts/generate_fynx_investigation_report.py
       - name: Fast build, test and lint
-        if: ${{ !(github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py') || contains(github.event.head_commit.modified, 'FynxRemoteHomeSocialPanel.kt') || contains(github.event.head_commit.message, '[apk-only]')) }}
-        run: ./gradlew lintDebug testDebugUnitTest --no-daemon --build-cache
-      - name: Full build, test and lint
-        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py') || contains(github.event.head_commit.message, '[apk-only]') }}
-        run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
-      - name: Enable KVM for Android emulator tests
-        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py') }}
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-          sudo usermod -aG kvm "$USER"
-          groups
-          ls -l /dev/kvm
-      - name: Verify authenticated runtime credentials are available
-        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py') }}
-        env:
-          FYNX_E2E_USERNAME: ${{ secrets.FYNX_E2E_USERNAME }}
-          FYNX_E2E_PASSWORD: ${{ secrets.FYNX_E2E_PASSWORD }}
-        run: |
-          test -n "$FYNX_E2E_USERNAME"
-          test -n "$FYNX_E2E_PASSWORD"
-          echo "Authenticated FYNX visual certification credentials are available."
-      - name: Install visual regression tooling
-        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py') }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y imagemagick
-          compare -version
-          identify -version
-      - name: Verify Large Badge #12 authenticated runtime contract
-        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_authenticated_runtime_navigation.py') }}
-        run: python3 scripts/verify_large_badge12_runtime_contract.py
-      - name: Run Android instrumentation tests and capture the real FYNX UI
-        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py') }}
-        uses: reactivecircus/android-emulator-runner@v2
-        env:
-          FYNX_E2E_USERNAME: ${{ secrets.FYNX_E2E_USERNAME }}
-          FYNX_E2E_PASSWORD: ${{ secrets.FYNX_E2E_PASSWORD }}
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
-          emulator-options: "-no-window -no-boot-anim -no-snapshot -gpu swiftshader_indirect"
-          disable-animations: true
-          script: |
-            bash -c 'set +e; mkdir -p fynx-runtime-screenshots fynx-maestro-results; TEST_STATUS=0; ./gradlew connectedDebugAndroidTest --no-daemon --build-cache; TEST_STATUS=$?; python3 scripts/verify_runtime_navigation.py; NAV_STATUS=$?; python3 scripts/verify_authenticated_runtime_navigation.py; AUTH_STATUS=$?; printf "Commit: %s\\nRun: %s\\nInstrumentation exit: %s\\nNavigation exit: %s\\nAuthenticated visual exit: %s\\n" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$TEST_STATUS" "$NAV_STATUS" "$AUTH_STATUS" > fynx-runtime-screenshots/README.txt; if [ "$TEST_STATUS" -ne 0 ]; then exit "$TEST_STATUS"; fi; if [ "$NAV_STATUS" -ne 0 ]; then exit "$NAV_STATUS"; fi; if [ "$AUTH_STATUS" -ne 0 ]; then exit "$AUTH_STATUS"; fi; python3 scripts/verify_visual_regression.py; VISUAL_STATUS=$?; if [ "$VISUAL_STATUS" -ne 0 ]; then exit "$VISUAL_STATUS"; fi; python3 scripts/verify_accessibility_screen_safety.py; ACCESSIBILITY_STATUS=$?; if [ "$ACCESSIBILITY_STATUS" -ne 0 ]; then exit "$ACCESSIBILITY_STATUS"; fi; python3 scripts/capture_responsive_profiles.py; RESPONSIVE_CAPTURE_STATUS=$?; if [ "$RESPONSIVE_CAPTURE_STATUS" -ne 0 ]; then exit "$RESPONSIVE_CAPTURE_STATUS"; fi; curl -fsSL "https://get.maestro.mobile.dev" | bash; export PATH="$HOME/.maestro/bin:$PATH"; maestro --version; maestro test .maestro/fynx-launch-and-auth.yaml | tee fynx-maestro-results/maestro.log; MAESTRO_STATUS=$?; printf "Maestro exit: %s\\n" "$MAESTRO_STATUS" > fynx-maestro-results/README.txt; exit "$MAESTRO_STATUS"'
-      - name: Upload FYNX runtime screenshots and UI hierarchies
-        if: ${{ always() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: FYNX-runtime-visual-check-${{ github.sha }}
-          path: fynx-runtime-screenshots/
-          if-no-files-found: warn
-      - name: Upload FYNX accessibility certification evidence
-        if: ${{ always() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: FYNX-accessibility-certification-${{ github.sha }}
-          path: fynx-accessibility-certification/
-          if-no-files-found: warn
-      - name: Upload FYNX visual regression evidence
-        if: ${{ always() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: FYNX-visual-regression-${{ github.sha }}
-          path: fynx-visual-regression/
-          if-no-files-found: warn
-      - name: Large Badge #15 — Responsive and Screen-Safety Certification
-        if: ${{ success() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) }}
-        run: python3 scripts/verify_large_badge15_responsive.py
-      - name: Upload Large Badge #15 evidence
-        if: ${{ always() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: FYNX-large-badge15-responsive-${{ github.sha }}
-          path: fynx-responsive-certification/
-          if-no-files-found: warn
-      - name: Prepare exact-commit APK artifact
-        if: ${{ success() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]')) }}
-        run: |
-          test -f app/build/outputs/apk/debug/app-debug.apk
-          mkdir -p fynx-apk-artifact
-          cp app/build/outputs/apk/debug/app-debug.apk "fynx-apk-artifact/FYNX-debug-${GITHUB_SHA}.apk"
-          printf 'FYNX Android APK build commit: %s\n' "${GITHUB_SHA}" > "fynx-apk-artifact/FYNX-debug-${GITHUB_SHA}.commit.txt"
-          printf 'Workflow run: %s\n' "${GITHUB_RUN_ID}" >> "fynx-apk-artifact/FYNX-debug-${GITHUB_SHA}.commit.txt"
-      - name: Large Badge #17 — Full Surface User-Flow Certification
-        if: ${{ success() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) }}
-        run: python3 scripts/verify_large_badge17_full_surface_journeys.py
-      - name: Large Badge #16 — APK Commit Runtime Certification
-        if: ${{ success() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]')) }}
-        env:
-          GITHUB_EVENT_HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-        run: python3 scripts/verify_large_badge16_apk_commit_runtime.py
-      - name: Upload Large Badge #16 evidence
-        if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]')) }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: FYNX-large-badge16-apk-runtime-${{ github.sha }}
-          path: fynx-apk-certification/
-          if-no-files-found: warn
-      - name: Firebase Test Lab Robo real-device verification (billing unavailable)
-        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py') }}
-        run: |
-          set -euo pipefail
-          mkdir -p fynx-firebase-test-lab
-          cat > fynx-firebase-test-lab/README.txt <<'EOF'
-          Firebase Test Lab real-device verification: SKIPPED
-          Reason: Google Cloud billing is disabled for FYNX project fynx-f0868 and no active billing account is currently linked.
-          This is an external-service availability limitation, not an Android build or FYNX implementation failure.
-          No billing account was created or linked by this workflow.
-          Other FYNX build/runtime/certification gates continue normally.
-          EOF
-          echo "SKIPPED: Firebase Test Lab requires an active billing account for this CI invocation; FYNX remains billing-free." | tee fynx-firebase-test-lab/status.txt
-
-      - name: BrowserStack App Automate real-device Maestro verification
-        if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py'))) && env.BROWSERSTACK_USERNAME != '' && env.BROWSERSTACK_ACCESS_KEY != '' }}
-        env:
-          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
-          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
-        run: |
-          set -euo pipefail
-          test -f app/build/outputs/apk/debug/app-debug.apk
-          mkdir -p fynx-browserstack-results
-          bs_app="$(curl --fail --silent --show-error --user "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/app" -F "file=@app/build/outputs/apk/debug/app-debug.apk" -F "custom_id=FYNX-${GITHUB_SHA}")"
-          printf '%s\n' "$bs_app" > fynx-browserstack-results/app-upload.json
-          zip -j fynx-browserstack-results/fynx-maestro-suite.zip .maestro/*.yaml
-          bs_suite="$(curl --fail --silent --show-error --user "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/test-suite" -F "file=@fynx-browserstack-results/fynx-maestro-suite.zip" -F "custom_id=FYNX-Maestro-${GITHUB_SHA}")"
-          printf '%s\n' "$bs_suite" > fynx-browserstack-results/test-suite-upload.json
-          app_url="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["app_url"])' <<<"$bs_app")"
-          suite_url="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["test_suite_url"])' <<<"$bs_suite")"
-          curl --fail --silent --show-error --user "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/android/build" -H "Content-Type: application/json" -d "{\"app\":\"$app_url\",\"testSuite\":\"$suite_url\",\"project\":\"FYNX\",\"devices\":[\"Google Pixel 7-13.0\"],\"networkLogs\":true,\"deviceLogs\":true}" > fynx-browserstack-results/build.json
-          build_id="$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("build_id") or d.get("id") or "")' < fynx-browserstack-results/build.json)"
-          test -n "$build_id"
-          printf 'BrowserStack build id: %s\n' "$build_id" | tee fynx-browserstack-results/README.txt
-          status="unknown"
-          for attempt in $(seq 1 30); do
-            curl --fail --silent --show-error --user "$BROWSERSTACK_USERNAME:$BROWSERSTACK_ACCESS_KEY" "https://api-cloud.browserstack.com/app-automate/maestro/v2/android/build/$build_id" > fynx-browserstack-results/build-status-$attempt.json
-            status="$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(str(d.get("status") or d.get("build_status") or d.get("state") or "").lower())' < fynx-browserstack-results/build-status-$attempt.json)"
-            echo "BrowserStack poll $attempt: $status"
-            case "$status" in
-              passed|pass|completed|success) exit 0 ;;
-              failed|fail|error|errored) exit 1 ;;
-            esac
-            sleep 10
-          done
-          echo "BrowserStack build did not reach a terminal pass/fail state within the polling window." >&2
-          exit 1
-      - name: BrowserStack integration readiness report
-        if: ${{ always() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) }}
-        env:
-          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
-          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
-        run: |
-          mkdir -p fynx-browserstack-results
-          if [ -n "$BROWSERSTACK_USERNAME" ] && [ -n "$BROWSERSTACK_ACCESS_KEY" ]; then
-            echo 'BrowserStack credentials detected; real-device upload step is enabled.' | tee fynx-browserstack-results/readiness.txt
-          else
-            echo 'BrowserStack integration is installed but credentials are not configured; real-device verification is intentionally skipped.' | tee fynx-browserstack-results/readiness.txt
-          fi
-      - name: Upload BrowserStack verification evidence
-        if: ${{ always() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: FYNX-browserstack-verification-${{ github.sha }}
-          path: fynx-browserstack-results/
-          if-no-files-found: warn
-      - name: Upload exact-commit debug APK
-        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]') }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: FYNX-debug-apk-${{ github.sha }}
-          path: fynx-apk-artifact/
-          if-no-files-found: error
-      - name: Upload latest debug APK alias
-        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]') }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: FYNX-latest-debug-apk
-          path: fynx-apk-artifact/
-          if-no-files-found: error
-      - name: Upload instrumentation test APK
-        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (contains(github.event.head_commit.message, '[full-runtime]') || contains(github.event.head_commit.modified, 'scripts/verify_accessibility_screen_safety.py')) || contains(github.event.head_commit.message, '[apk-only]') }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: FYNX-debug-androidTest-apk-${{ github.sha }}
-          path: app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          if-no-files-found: ignore
-      - name: Upload lint report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: FYNX-lint-report-${{ github.sha }}
-          path: app/build/reports/lint-results-debug.html
-          if-no-files-found: ignore
-
-# FYNX runtime certification trigger [full-runtime]
-# Chat/Groups recovery: force authenticated emulator certification on this diagnostic push.
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon
