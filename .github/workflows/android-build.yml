@@ -219,7 +219,7 @@ jobs:
       - name: Generate FYNX investigation report index
         run: python3 scripts/generate_fynx_investigation_report.py
       - name: Fast build, test and lint
-        run: ./gradlew lintDebug testDebugUnitTest --no-daemon --build-cache
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
       - name: Full build, test and lint
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
@@ -231,7 +231,7 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: Pixel_6
-          script: ./gradlew connectedDebugAndroidTest --no-daemon --build-cache && python3 scripts/verify_runtime_navigation.py
+          script: ./gradlew connectedDebugAndroidTest --no-daemon --build-cache && python3 scripts/verify_authenticated_runtime_navigation.py
       - name: Upload FYNX runtime screenshots and UI hierarchies
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
         uses: actions/upload-artifact@v4
@@ -246,6 +246,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: FYNX-debug-apk-${{ github.sha }}
+          path: FYNX-debug-${{ github.sha }}.apk
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload exact-commit debug APK compatibility artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FYNX-debug-${{ github.sha }}
           path: FYNX-debug-${{ github.sha }}.apk
           if-no-files-found: error
           retention-days: 14
