@@ -36,6 +36,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val deepLinkDestinationState = mutableStateOf<FynxDeepLinkDestination?>(null)
+    private var lastHandledDeepLink: String? = null
     private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) registerNotificationTokenIfSignedIn()
     }
@@ -43,7 +44,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        deepLinkDestinationState.value = FynxDeepLinkParser.parse(intent?.data)
+        updateDeepLink(intent?.data?.toString())
         FynxNotificationFoundation.createChannels(this)
         registerNotificationTokenIfSignedIn()
 
@@ -66,7 +67,14 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        deepLinkDestinationState.value = FynxDeepLinkParser.parse(intent.data)
+        updateDeepLink(intent.data?.toString())
+    }
+
+    private fun updateDeepLink(rawUri: String?) {
+        val normalized = rawUri?.trim()?.takeIf { it.isNotEmpty() }
+        if (normalized == lastHandledDeepLink) return
+        lastHandledDeepLink = normalized
+        deepLinkDestinationState.value = FynxDeepLinkParser.parse(normalized?.let(android.net.Uri::parse))
     }
 
     override fun onDestroy() {
