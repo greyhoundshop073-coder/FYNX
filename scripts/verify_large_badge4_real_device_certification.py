@@ -17,14 +17,14 @@ runtime_path = "scripts/verify_authenticated_runtime_navigation.py" if (ROOT / "
 runtime = read(runtime_path).lower()
 
 check("real emulator runner is configured", "reactivecircus/android-emulator-runner@v2" in workflow)
-check("connected Android instrumentation is executed", "connectedDebugAndroidTest" in workflow)
-check("authenticated runtime navigation verification is executed", runtime_path in workflow)
-check("runtime screenshots and UI hierarchies are uploaded", "FYNX-runtime-visual-check-" in workflow and "fynx-runtime-screenshots/" in workflow)
+check("connected Android instrumentation is executed", "connecteddebugandroidtest" in workflow.lower())
+check("authenticated runtime navigation verification is executed", runtime_path.lower() in workflow.lower())
+check("runtime screenshots and UI hierarchies are uploaded", "fynx-runtime-visual-check-" in workflow.lower() and "fynx-runtime-screenshots/" in workflow.lower())
 check("Home, Chat, Friends, Stories and Features are reachable", all(x in app for x in ['"Home"', '"Chats"', '"Friends"', '"Stories"', '"Features"']))
 check("major secondary surfaces have real navigation routes", all(x in app for x in ['"Marketplace"', '"Calls"', '"Groups"', '"Notifications"', '"Privacy"', '"Money Tools"', '"AI"']))
 check("runtime audit captures screenshots", "screencap" in runtime)
 check("runtime audit captures UI hierarchy", "uiautomator" in runtime)
-check("runtime audit uses the real authenticated CI account", 'FYNX_E2E_USERNAME' in runtime and 'FYNX_E2E_PASSWORD' in runtime and 'backend_real_chat_target' in runtime and '/api/auth/login' in runtime)
+check("runtime audit uses the real authenticated CI account", 'fynx_e2e_username' in runtime and 'fynx_e2e_password' in runtime and 'backend_real_chat_target' in runtime and '/api/auth/login' in runtime)
 check("runtime audit does not create test accounts or application data", '/api/auth/register' not in runtime and 'create test account' not in runtime and 'fake account' not in runtime)
 
 for path in [
