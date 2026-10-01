@@ -51,12 +51,16 @@ missing_media_cache = [token for token in required_media_cache if token not in m
 if missing_media_cache:
     raise SystemExit("HOME 4F MEDIA RED: authenticated social media cache contract missing " + ", ".join(missing_media_cache))
 
-required_panel = ["FynxHomeLifecycleRefresh", "key(refreshKey)"]
+# The Home feed must remain mounted while an explicit refresh signal is consumed.
+# Re-keying the feed on refresh would recreate its LazyColumn and can discard scroll/cache state.
+required_panel = ["FynxHomeLifecycleRefresh", "LaunchedEffect(refreshKey)", "PullToRefreshBox", "FynxHomeLifecycleRefreshBus.request(context)"]
 missing_panel = [token for token in required_panel if token not in panel]
 if missing_panel:
-    raise SystemExit("HOME 4F MEDIA RED: lifecycle boundary missing " + ", ".join(missing_panel))
+    raise SystemExit("HOME 4F MEDIA RED: refresh lifecycle boundary missing " + ", ".join(missing_panel))
+if "key(refreshKey)" in panel:
+    raise SystemExit("HOME 4F MEDIA RED: refresh must not re-key/recreate the Home feed")
 
-# Home must refresh only through the explicit publish bus. Normal lifecycle resume
+# Home must refresh only through the explicit publish/refresh bus. Normal lifecycle resume
 # must not recreate the feed, because that causes unnecessary media/feed reloads.
 if "LocalLifecycleOwner" in lifecycle or "ON_RESUME" in lifecycle or "removeObserver" in lifecycle:
     raise SystemExit("HOME 4F MEDIA RED: legacy ON_RESUME lifecycle observer must not recreate Home")
@@ -85,4 +89,4 @@ missing_saved = [token for token in required_saved if token not in discovery]
 if missing_saved:
     raise SystemExit("HOME 4F SAVED RED: missing " + ", ".join(missing_saved))
 
-print("HOME 4F MEDIA/LIFECYCLE GREEN: existing Home media, authenticated social-media cache paths, accessibility, theme, re-entry cleanup, and durable Saved-post privacy/pagination boundaries are wired")
+print("HOME 4F MEDIA/LIFECYCLE GREEN: existing Home media, authenticated social-media cache paths, accessibility, theme, pull-to-refresh lifecycle, and durable Saved-post privacy/pagination boundaries are wired")
