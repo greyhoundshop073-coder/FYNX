@@ -43,9 +43,6 @@ check("profile -> chat callback is wired", "onMessage" in other)
 check("app routes profile -> chat and profile -> Status", all(x in app for x in ["OtherUserProfilePanel", "ConversationPanel", "selected = \"Stories\""]))
 
 # Push 7
-# The active production Marketplace implementation owns the live listing UI.
-# FynxMarketplaceRemotePanel is retained only as a compatibility/certification surface;
-# do not require product fields to be duplicated into that wrapper.
 check("marketplace listings are remote", "FynxMarketplaceClient.listings" in market_remote or "FynxRemoteSocialClient.listings" in market)
 check("listing seller identity is available in the active Marketplace implementation", "listing.sellerUsername" in market or "l.sellerUsername" in market)
 check("order lifecycle is server-side", all(x in market_api for x in ["PAYMENT_PENDING", "SHIPPED", "DELIVERED", "INSPECTION", "COMPLETED", "DISPUTED", "REFUNDED"]))
@@ -57,7 +54,7 @@ check("verification is tied to real user data", "verified" in profile_api)
 check("official FYNX verification is backend-enforced", "FYNX_OFFICIAL_USERNAME" in server and "UPDATE users SET verified = FALSE" in server and "verified = TRUE WHERE lower(username)" in server)
 check("badge rendering has explicit blue color support", "Color(0xFF1877F2)" in other)
 
-# Push 9 investigation: do not invent a feature if no production implementation exists.
+# Push 9 investigation
 cover_sources = []
 for p in (ROOT / "app/src/main/java").rglob("*.kt"):
     s = p.read_text(encoding="utf-8", errors="ignore").lower()
@@ -68,7 +65,13 @@ print("COVER/TAKEOVER PHOTO SOURCES:", ", ".join(cover_sources) if cover_sources
 # Push 10
 check("this gate is wired into Android CI", "verify_push5_to_push10_integration.py" in workflow)
 check("Android CI builds APK", "assembleDebug" in workflow)
-check("Android CI uploads exact-commit APK", "FYNX-debug-" in workflow and "GITHUB_SHA" in workflow)
+artifact_name = "FYNX-debug-${{ github.sha }}"
+artifact_pos = workflow.find("name: FYNX Android Build")
+build_pos = workflow.find("assembleDebug")
+upload_pos = workflow.find("uses: actions/upload-artifact@v4")
+check("Android CI uploads exact-commit APK", artifact_name in workflow and "GITHUB_SHA" in workflow)
+check("APK upload follows the debug build", build_pos >= 0 and upload_pos > build_pos)
+check("APK upload fails when the expected file is missing", "if-no-files-found: error" in workflow)
 check("Push 9 investigation is recorded without adding a duplicate feature", (ROOT / "docs/FYNX_PROFILE_COVER_TAKEOVER_INVESTIGATION.md").is_file() and not cover_sources)
 check("final integration sweep includes the active marketplace panel", "FynxMarketplacePanel" in app)
 check("final integration sweep includes the real Status deep-link parameter", "statusOpenOwner" in app and "selected = \"Stories\"" in app)
