@@ -367,6 +367,9 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     if (mediaViewerPost != null && mediaViewerItems.isNotEmpty()) {
         FynxPostMediaViewer(context = context, post = mediaViewerPost!!, media = mediaViewerItems.map { FynxPostViewerItem(it.id, it.mediaType, it.position, it.mediaUrl) }, initialIndex = mediaViewerIndex, onDismiss = { mediaViewerPost = null; mediaViewerItems = emptyList() })
     }
+    if (homeDiscoveryViewerOpen && discoveryVideos.isNotEmpty()) {
+        FynxHomeDiscoveryViewer(context = context, videos = discoveryVideos, initialIndex = homeDiscoveryViewerIndex, onLoadMore = { loadDiscoveryVideos() }, onDismiss = { homeDiscoveryViewerOpen = false })
+    }
     if (videoDiscoveryOpen) {
         VideoDiscoveryDialog(context = context, sourcePostId = videoDiscoverySourcePostId, onDismiss = { videoDiscoveryOpen = false; videoDiscoverySourcePostId = null })
     }
@@ -1030,6 +1033,7 @@ private fun HomePeopleRecommendationsCard(items: List<HomePeopleRecommendation>,
             }
             androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 2.dp)) {
                 items(items, key = { it.username }) { person ->
+                    if (items.indexOf(person) >= items.size - 4 && items.size >= 26 && loadingMore.not()) { LaunchedEffect(items.size) { onLoadMore() } }
                     val key = person.username.removePrefix("@").trim().lowercase()
                     val isFollowing = key in followedUsers
                     val requestSent = key in friendRequests
