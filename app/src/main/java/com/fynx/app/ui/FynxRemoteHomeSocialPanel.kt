@@ -80,6 +80,8 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var peopleRecommendations by remember { mutableStateOf<List<HomePeopleRecommendation>>(emptyList()) }
     var dismissedPeople by remember { mutableStateOf<Set<String>>(emptySet()) }
     var peopleRecommendationsLoading by remember { mutableStateOf(false) }
+    var peopleRecommendationsOffset by remember { mutableIntStateOf(0) }
+    var peopleRecommendationsHasMore by remember { mutableStateOf(true) }
     var authorStatusViewer by remember { mutableStateOf<List<FynxStatus>?>(null) }
     var interactionStates by remember { mutableStateOf<Map<String, FynxRemoteSocialClient.SocialInteractionState>>(emptyMap()) }
     var reactionStates by remember { mutableStateOf<Map<String, FynxHomePostReactionsClient.ReactionState>>(emptyMap()) }
@@ -97,6 +99,12 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var videoDiscoveryOpen by remember { mutableStateOf(false) }
     var videoDiscoverySourcePostId by remember { mutableStateOf<String?>(null) }
     var postMedia by remember { mutableStateOf<Map<String, List<FynxHomePostMediaClient.PostMediaItem>>>(emptyMap()) }
+    var discoveryVideos by remember { mutableStateOf<List<FynxDiscoveryClient.TrendingPost>>(emptyList()) }
+    var discoveryVideosLoading by remember { mutableStateOf(false) }
+    var discoveryVideosHasMore by remember { mutableStateOf(true) }
+    var discoveryVideosOffset by remember { mutableIntStateOf(0) }
+    var homeDiscoveryViewerOpen by remember { mutableStateOf(false) }
+    var homeDiscoveryViewerIndex by remember { mutableIntStateOf(0) }
     var mediaViewerPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
     var mediaViewerItems by remember { mutableStateOf<List<FynxHomePostMediaClient.PostMediaItem>>(emptyList()) }
     var mediaViewerIndex by remember { mutableIntStateOf(0) }
@@ -126,11 +134,14 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             authorPhotos = authorPhotos + resolved
         }
     }
-    fun hydratePeopleRecommendations() {
-        if (peopleRecommendationsLoading) return
+    fun hydratePeopleRecommendations(offset: Int = 0, replace: Boolean = false) {
+        if (peopleRecommendationsLoading || (!peopleRecommendationsHasMore && !replace)) return
         peopleRecommendationsLoading = true
         scope.launch {
-            val body = JSONObject().apply { put("name", "get_people_recommendations"); put("arguments", JSONObject()) }.toString()
+            val body = JSONObject().apply {
+                put("name", "get_people_recommendations")
+                put("arguments", JSONObject().apply { put("limit", 30); put("offset", offset) })
+            }.toString()
             FynxBackendClient.postJson(context, "/api/assistant/tools", body).onSuccess { raw ->
                 val people = JSONObject(raw).optJSONObject("result")?.optJSONArray("people")
                 if (people != null) {
@@ -143,8 +154,23 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                             add(HomePeopleRecommendation(username, p.optString("displayName").ifBlank { username }, p.optBoolean("verified"), p.optInt("mutualFriends"), p.optString("reason"), photo))
                         }
                     }
-                    peopleRecommendations = parsed.filterNot { dismissedPeople.contains(it.username.lowercase()) }
-                    parsed.forEach { person -> scope.launch { FynxProfileRemoteClient.get(context, person.username).onSuccess { profile -> peopleRecommendations = peopleRecommendations.map { if (it.username.equals(person.username, true)) it.copy(photoId = profile.profilePhotoMediaId) else it } } } }
+                    val clean = parsed.filterNot { dismissedPeople.contains(it.username.lowercase()) }
+                    val existing = if (replace) emptyList() else peopleRecommendations
+                    peopleRecommendations = (existing + clean).distinctBy { it.username.lowercase() }
+                    peopleRecommendationsOffset = offset + parsed.size
+                    peopleRecommendationsHasMore = parsed.size >= 30
+                    parsed.forEach { person ->
+                        scope.launch {
+                            FynxProfileRemoteClient.get(context, person.username).onSuccess { profile ->
+                                peopleRecommendations = peopleRecommendations.map {
+                                    if (it.username.equals(person.username, true)) it.copy(photoId = profile.profilePhotoMediaId) else it
+                                }
+                            }
+                        }
+                    }
+                } else if (replace) {
+                    peopleRecommendations = emptyList()
+                    peopleRecommendationsHasMore = false
                 }
             }
             peopleRecommendationsLoading = false
@@ -181,6 +207,27 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             val resolved = targets.map { post -> async(Dispatchers.IO) { post.id to FynxHomePostMediaClient.list(context, post.id).getOrNull().orEmpty() } }.awaitAll().toMap()
             if (resolved.isNotEmpty()) postMedia = postMedia + resolved
         }
+    }
+    fun loadDiscoveryVideos(reset: Boolean = false) {
+        if (discoveryVideosLoading || (!discoveryVideosHasMore && !reset)) return
+        discoveryVideosLoading = true
+        val offset = if (reset) 0 else discoveryVideosOffset
+        scope.launch {
+            FynxDiscoveryClient.trending(context, 12).onSuccess { page ->
+                val videoPosts = page.filter { it.mediaId != null && it.mediaType.equals("video", true) }
+                val existing = if (reset) emptyList() else discoveryVideos
+                discoveryVideos = (existing + videoPosts).distinctBy { it.id }
+                discoveryVideosOffset = offset + page.size
+                discoveryVideosHasMore = page.size >= 12
+            }
+            discoveryVideosLoading = false
+        }
+    }
+    fun openHomeDiscoveryViewer(index: Int) {
+        if (discoveryVideos.isEmpty()) return
+        homeDiscoveryViewerIndex = index.coerceIn(0, discoveryVideos.lastIndex)
+        homeDiscoveryViewerOpen = true
+        scope.launch { discoveryVideos.getOrNull(homeDiscoveryViewerIndex)?.let { FynxDiscoveryClient.recordView(context, it.id) } }
     }
     fun mergeDiscoveryPosts(base: List<FynxRemoteSocialClient.RemotePost>, suggested: List<FynxRemoteSocialClient.RemotePost>): List<FynxRemoteSocialClient.RemotePost> {
         val existing = base.map { it.id }.toSet()
@@ -273,7 +320,8 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         videoDiscoveryOpen = true
         scope.launch { runCatching { FynxDiscoveryClient.recordView(context, postId) } }
     }
-    LaunchedEffect(Unit) { hydrateActiveStatuses(); hydratePeopleRecommendations() }
+    LaunchedEffect(Unit) { hydrateActiveStatuses(); hydratePeopleRecommendations(0, true) }
+    LaunchedEffect(Unit) { loadDiscoveryVideos(true) }
 
     LaunchedEffect(feedListState, posts.size, hasMore, discoveryHasMore, loading, loadingMore, discoveryLoadingMore, feedRequestInFlight) {
         snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }
@@ -292,7 +340,8 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
 
             }
         }
-        if (peopleRecommendations.isNotEmpty()) item(key = "people_recommendations") { HomePeopleRecommendationsCard(peopleRecommendations, onOpenProfile = { onOpenAuthorProfile(it) }, onDismiss = { username -> dismissedPeople = dismissedPeople + username.lowercase(); peopleRecommendations = peopleRecommendations.filterNot { it.username.equals(username, true) } }) }
+        if (peopleRecommendations.isNotEmpty()) item(key = "people_recommendations") { HomePeopleRecommendationsCard(peopleRecommendations, onOpenProfile = { onOpenAuthorProfile(it) }, onSeeAll = onOpenFindPeople, onLoadMore = { hydratePeopleRecommendations(peopleRecommendationsOffset) }, loadingMore = peopleRecommendationsLoading && peopleRecommendations.isNotEmpty(), onDismiss = { username -> dismissedPeople = dismissedPeople + username.lowercase(); peopleRecommendations = peopleRecommendations.filterNot { it.username.equals(username, true) } }) }
+        if (discoveryVideos.isNotEmpty()) item(key = "home_discovery") { FynxHomeDiscoverySection(videos = discoveryVideos, loadingMore = discoveryVideosLoading, hasMore = discoveryVideosHasMore, onLoadMore = { loadDiscoveryVideos() }, onOpenVideo = { index -> openHomeDiscoveryViewer(index) }) }
         if (loading) item(key = "feed_loading") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         error?.let { message -> item(key = "feed_error") { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Text("Retry") } } } } }
         if (!loading && posts.isEmpty() && error == null) item(key = "feed_empty") { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Your feed is ready", style = MaterialTheme.typography.titleMedium); Text("There are no visible posts yet. Create a post or find real people to build your FYNX circle."); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = onCreatePost) { Text("Create Post") }; OutlinedButton(onClick = onOpenFindPeople) { Text("Find People") } } } } }
@@ -383,6 +432,8 @@ private fun ReactionUsersDialog(context: Context, postId: String, onDismiss: () 
                             }
                         }
                     }
+                if (loadingMore) item { Box(Modifier.width(70.dp).height(230.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp)) } }
+                item { LaunchedEffect(items.size) { if (items.size >= 26 && !loadingMore) onLoadMore() } }
                 }
             }
         }
@@ -961,7 +1012,7 @@ private fun HomeAuthorStatusDialog(statuses: List<FynxStatus>, onDismiss: () -> 
 
 
 @Composable
-private fun HomePeopleRecommendationsCard(items: List<HomePeopleRecommendation>, onOpenProfile: (String) -> Unit, onDismiss: (String) -> Unit) {
+private fun HomePeopleRecommendationsCard(items: List<HomePeopleRecommendation>, onOpenProfile: (String) -> Unit, onSeeAll: () -> Unit, onLoadMore: () -> Unit, loadingMore: Boolean, onDismiss: (String) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var busyUsername by remember { mutableStateOf<String?>(null) }
@@ -975,7 +1026,7 @@ private fun HomePeopleRecommendationsCard(items: List<HomePeopleRecommendation>,
                     Text("People You May Know", style = MaterialTheme.typography.titleMedium)
                     Text("People connected to your existing FYNX network.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
                 }
-                TextButton(onClick = { items.firstOrNull()?.let { onOpenProfile(it.username) } }, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("See all", style = MaterialTheme.typography.labelMedium) }
+                TextButton(onClick = onSeeAll, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("See all", style = MaterialTheme.typography.labelMedium) }
             }
             androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 2.dp)) {
                 items(items, key = { it.username }) { person ->
