@@ -15,7 +15,7 @@ const TOOL_DEFINITIONS = [
   { type: "function", name: "get_conversation", description: "Read the authenticated user's recent one-to-one FYNX messages with a named username. Use only when the user asks about that conversation or its messages.", strict: true, parameters: { type: "object", properties: { username: { type: "string", description: "The other FYNX user's username." } }, required: ["username"], additionalProperties: false } },
   { type: "function", name: "search_users", description: "Search real FYNX users by username or display name. Never use this to reveal phone numbers. Use when the user asks to find a person on FYNX.", strict: true, parameters: { type: "object", properties: { query: { type: "string", description: "At least 2 characters of a FYNX username or display name." } }, required: ["query"], additionalProperties: false } },
   { type: "function", name: "get_my_friends", description: "Read the authenticated user's accepted FYNX friends. Use when the user asks who their friends are or asks about their own friend list.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } },
-  { type: "function", name: "get_people_recommendations", description: "Recommend real FYNX people the authenticated user may know, using safe server-side signals such as mutual accepted friends and existing follow relationships. Exclude the user, existing friends, blocked users and users already followed by the requester. Never expose private follower/following lists or invent people.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } },
+  { type: "function", name: "get_people_recommendations", description: "Recommend real FYNX people the authenticated user may know, using safe server-side signals such as mutual accepted friends and existing follow relationships. Exclude the user, existing friends, blocked users and users already followed by the requester. Supports paginated batches for horizontal Home discovery. Never expose private follower/following lists or invent people.", strict: true, parameters: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 30 }, offset: { type: "integer", minimum: 0 } }, required: [], additionalProperties: false } },
   { type: "function", name: "search_marketplace", description: "Search real active FYNX marketplace listings available to the authenticated user. Use for product discovery only; never claim a purchase or payment happened.", strict: true, parameters: { type: "object", properties: { query: { type: "string", description: "Optional product, seller, or description search text." }, category: { type: "string", description: "Optional marketplace category." } }, required: [], additionalProperties: false } },
   { type: "function", name: "get_trending_posts", description: "Read public trending FYNX posts visible to the authenticated user. Blocked users and recent NOT_INTERESTED posts must be excluded. Use when the user asks what is trending or wants public content to discover.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } },
   { type: "function", name: "get_my_saved_posts", description: "Read the authenticated user's own saved FYNX posts, respecting post visibility and block rules. Never expose another user's private saved-post list.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } }
@@ -117,6 +117,8 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
   }
 
   if (name === "get_people_recommendations") {
+    const limit = Math.min(Math.max(Number(args.limit) || 30, 1), 30);
+    const offset = Math.max(Number(args.offset) || 0, 0);
     const result = await databasePool.query(`
       SELECT u.id,u.username,u.display_name,u.verified,
         COALESCE(mutual.mutual_count,0)::int AS mutual_count,
@@ -144,8 +146,8 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
         AND NOT EXISTS (SELECT 1 FROM friendships f WHERE (f.user_id=$1 AND f.friend_id=u.id) OR (f.user_id=u.id AND f.friend_id=$1))
         AND NOT EXISTS (SELECT 1 FROM social_follows sf WHERE sf.follower_id=$1 AND sf.followed_id=u.id)
       ORDER BY COALESCE(mutual.mutual_count,0) DESC,COALESCE(followers.follower_count,0) DESC,u.created_at DESC
-      LIMIT 30
-    `, [userId]);
+      LIMIT $2 OFFSET $3
+    `, [userId, limit, offset]);
     return { people: result.rows.map(row => ({ id:String(row.id), username:row.username, displayName:row.display_name || "", verified:Boolean(row.verified), mutualFriends:Number(row.mutual_count || 0), followerCount:Number(row.follower_count || 0), reason:row.reason })) };
   }
 
