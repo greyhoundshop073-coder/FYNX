@@ -30,7 +30,6 @@ conversation = read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt')
 production_messaging = read('app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt')
 chat_store = read('app/src/main/java/com/fynx/app/ui/FynxChatStore.kt')
 
-# This gate verifies the shared media/notification/AI integration owned by this workstream.
 check('remote media uses the authenticated central downloader', 'FynxBackendClient.downloadToFile' in remote_media and 'MAX_REMOTE_MEDIA_BYTES' in remote_media)
 check('remote media is account scoped', 'FynxAuthStore.accountStorageKey(context)' in remote_media and 'FynxBackendClient.hasAccessToken(context)' in remote_media)
 check('Status timeline uses the shared remote audio renderer', re.search(r'FynxRemoteAudio\s*\(\s*it\s*(?:,|\))', timeline) is not None)
@@ -40,10 +39,6 @@ check('remote profile success persists authoritative avatar identity', 'saveRemo
 check('chat list clears stale avatar when server photo is removed', 'else chat.copy(avatarUri = null)' in read('app/src/main/java/com/fynx/app/ui/ChatsPanel.kt'))
 check('conversation keeps cached avatar only while remote profile is loading', 'var remoteProfileLoaded by remember(chat.username)' in conversation and 'if (remoteProfileLoaded)' in conversation)
 check('conversation marks remote profile loaded after successful fetch', 'remoteProfileLoaded = true' in conversation)
-# Marketplace uses the shared production avatar component. The component itself is the
-# source of truth for cache-first rendering: when mediaId is absent it resolves the
-# account-scoped cached profile photo from ownerUsername, while profile fetches persist
-# the authoritative server photo. Do not require the Marketplace card to duplicate this logic.
 check('Marketplace seller avatar uses the shared cache-first avatar authority path', 'FynxRemoteProfileAvatar(photoId' in market and 'ownerUsername = l.sellerUsername' in market and 'cachedProfilePhotoId(context, it)' in remote_media and 'saveRemoteProfilePhotoId(context, normalized, profile.profilePhotoMediaId)' in profile_client)
 check('identity cache is account namespaced', 'KEY_REMOTE_IDENTITY_CACHE' in prefs and 'accountNamespace(context)' in prefs)
 check('identity cache is cleared at the session boundary', 'getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_$accountNamespace"' in prefs)
@@ -64,8 +59,8 @@ check('private chat reconciliation preserves local messages missing from the rem
 check('private chat opens from local conversation state before remote reconciliation', 'mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage))' in conversation and 'FynxProductionMessaging.history(context, normalizedUsername)' in conversation)
 check('private chat persists the reconciled conversation locally', 'LaunchedEffect(messages)' in conversation and 'FynxChatStore.save(context, chat.username, messages)' in conversation)
 check('group chat starts from its local message store', 'mutableStateOf(loadGroupMessages(context, group.id))' in group_panel)
-check('group chat refresh preserves pending local messages not yet visible remotely', 'val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()' in group_panel and 'val pendingLocal = messages.filter { it.id !in remoteIds }' in group_panel and '(remoteMessages + pendingLocal)' in group_panel)
-check('group chat realtime reconciliation uses the same non-destructive merge', group_panel.count('val pendingLocal = messages.filter { it.id !in remoteIds }') >= 2)
+check('group chat refresh preserves pending local messages not yet visible remotely', 'val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()' in group_panel and 'val pendingLocal = messages.filter { it.id !in remoteIds }' in group_panel and 'messages = (remoteMessages + pendingLocal)' in group_panel)
+check('group chat realtime reconciliation uses the same non-destructive merge', group_panel.count('messages = (remoteMessages + pendingLocal)') >= 2)
 
 client_sources = '\n'.join(str(p.read_text(encoding='utf-8')) for p in (ROOT / 'app/src/main/java/com/fynx/app/ui').glob('*.kt'))
 check('this chat adds no obvious client API secrets', not re.search(r'sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}', client_sources))
