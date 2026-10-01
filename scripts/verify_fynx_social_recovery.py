@@ -91,9 +91,9 @@ check("header text matches the required three states",
       'Text("FYNX"' in app and
       'Icons.Default.Verified' in app)
 
-# The current CI architecture deliberately separates the fast main-push build from
-# the optional authenticated emulator/runtime certification. Keep this gate aligned
-# with that architecture instead of requiring an obsolete unconditional instrumentation command.
+# Keep this gate aligned with the repository's current CI contract: main pushes
+# perform static/unit/lint verification and publish the exact-commit APK; the
+# authenticated emulator certification is an explicit workflow_dispatch path.
 check("main push has the full static/unit/lint Android build",
       'on:\n  push:' in workflow and
       './gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon' in workflow)
@@ -102,9 +102,13 @@ check("main push publishes an exact-commit APK artifact",
       'path: app/build/outputs/apk/debug/app-debug.apk' in workflow and
       'if-no-files-found: error' in workflow and
       'uses: actions/upload-artifact@v4' in workflow)
-check("authenticated runtime certification remains available as an explicit full-runtime path",
-      'full_runtime:' in workflow and
-      'connectedDebugAndroidTest' in workflow)
+check("authenticated runtime certification is available as the explicit full-runtime path",
+      'verify_authenticated_runtime_navigation.py' in workflow and
+      'FYNX_E2E_USERNAME' in workflow and
+      'FYNX_E2E_PASSWORD' in workflow and
+      'connectedDebugAndroidTest' in workflow and
+      "github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true'" in workflow and
+      'Upload exact-commit debug APK' in workflow)
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
