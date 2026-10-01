@@ -17,7 +17,8 @@ auth = read("app/src/main/java/com/fynx/app/ui/FynxAuthStore.kt")
 notifications = read("app/src/main/java/com/fynx/app/ui/FynxNotificationRemoteClient.kt")
 deep_link = read("app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt")
 share = read("app/src/main/java/com/fynx/app/ui/FynxShare.kt")
-marketplace = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt")
+marketplace = read("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt")
+marketplace_transactions = read("backend/marketplaceTransactions.js")
 ai_security = read("scripts/verify_ai_security.py")
 workflow = read(".github/workflows/android-build.yml")
 
@@ -30,6 +31,7 @@ required = [
     "app/src/main/java/com/fynx/app/ui/FynxNotificationRemoteClient.kt",
     "app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt",
     "app/src/main/java/com/fynx/app/ui/FynxShare.kt",
+    "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt",
     "app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt",
     "backend/server.js",
     "backend/realtimeIsolationBootstrap.js",
@@ -45,10 +47,9 @@ check("logout/session clearing remains connected", "FynxSecureTokenStore" in aut
 check("notifications have client and server wiring", "FynxBackendClient.get" in notifications and "/api/notifications" in notifications and "app.get('/api/notifications'" in read("backend/notificationPreferences.js"))
 check("deep links are shared through the same parser", "FynxDeepLinkParser" in share and "fun parse" in deep_link)
 check("deep links reach live app destinations", all(x in app for x in ["FynxDeepLinkDestination.Profile", "FynxDeepLinkDestination.Chat", "FynxDeepLinkDestination.Group", "FynxDeepLinkDestination.Marketplace", "FynxDeepLinkDestination.Stories", "FynxDeepLinkDestination.Money"]))
-check("marketplace UI uses remote data and protected transactions", "FynxMarketplaceClient.listings" in marketplace and "FynxMarketplaceClient.createListing" in marketplace and "marketplace_orders" in read("backend/marketplaceTransactions.js"))
-# Verify the actual AI security gate is wired into CI and its server-side credential/auth controls exist.
+# The production Marketplace entry point is FynxMarketplacePanel. The compatibility wrapper is not audited for implementation ownership.
+check("marketplace UI uses remote data and protected transactions", "FynxRemoteSocialClient.listings" in marketplace and "FynxMarketplaceCheckoutDialog" in marketplace and "marketplace_orders" in marketplace_transactions)
 check("AI integration remains behind the existing security gate", "verify_ai_security.py" in workflow and "OPENAI_API_KEY" in ai_security and "authenticate(req)" in ai_security and "secret" not in ai_security.lower())
-# Verify the actual CI ordering rather than requiring the journey script to reference itself.
 journey_step = workflow.find("python3 scripts/verify_fynx_journey.py")
 production_step = workflow.find("python3 scripts/verify_fynx_production.py")
 build_step = min((i for i in [workflow.find("Fast build, test and lint"), workflow.find("Full build, test and lint")] if i >= 0), default=-1)
