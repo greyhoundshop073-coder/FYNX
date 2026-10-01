@@ -24,7 +24,8 @@ check("Home, Chat, Friends, Stories and Features are reachable", all(x in app fo
 check("major secondary surfaces have real navigation routes", all(x in app for x in ['"Marketplace"', '"Calls"', '"Groups"', '"Notifications"', '"Privacy"', '"Money Tools"', '"AI"']))
 check("runtime audit captures screenshots", "screencap" in runtime)
 check("runtime audit captures UI hierarchy", "uiautomator" in runtime)
-check("runtime audit does not fabricate app data", "no fake application data is created" in runtime and "no fake account/data is created" in runtime)
+check("runtime audit uses the real authenticated CI account", 'FYNX_E2E_USERNAME' in runtime and 'FYNX_E2E_PASSWORD' in runtime and 'backend_real_chat_target' in runtime and '/api/auth/login' in runtime)
+check("runtime audit does not create test accounts or application data", '/api/auth/register' not in runtime and 'create test account' not in runtime and 'fake account' not in runtime)
 
 for path in [
     "app/src/androidTest/java/com/fynx/app/FynxSmokeTest.kt",
