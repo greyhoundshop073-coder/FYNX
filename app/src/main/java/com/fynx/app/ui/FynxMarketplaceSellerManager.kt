@@ -4,8 +4,10 @@ import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -15,30 +17,41 @@ import kotlinx.coroutines.launch
 fun FynxMarketplaceSellerManager(context: Context, onChanged: () -> Unit) {
     var listings by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
     var selected by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
-    var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var loading by rememberSaveable { mutableStateOf(false) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
+    var refreshInFlight by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
     fun load() {
+        if (refreshInFlight) return
+        refreshInFlight = true
         loading = true
         error = null
         scope.launch {
-            FynxRemoteSocialClient.myListings(context)
-                .onSuccess { listings = it }
-                .onFailure { error = it.message ?: "Unable to load your listings." }
-            loading = false
+            try {
+                FynxRemoteSocialClient.myListings(context)
+                    .onSuccess { listings = it }
+                    .onFailure { error = it.message ?: "Unable to load your listings." }
+            } finally {
+                loading = false
+                refreshInFlight = false
+            }
         }
     }
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("My listings", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = { load() }) { Text("Refresh") }
+            TextButton(enabled = !refreshInFlight, onClick = { load() }) { Text("Refresh") }
         }
         LaunchedEffect(Unit) { load() }
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(
+            state = listState,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             items(listings, key = { it.id }) { listing ->
                 Card(onClick = { selected = listing }, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -76,13 +89,7 @@ fun FynxMarketplaceSellerManager(context: Context, onChanged: () -> Unit) {
                     busy = true
                     dialogError = null
                     scope.launch {
-                        updateMarketplaceListing(
-                            context,
-                            listing.id,
-                            title,
-                            price.toDoubleOrNull() ?: -1.0,
-                            quantity.toIntOrNull() ?: -1
-                        )
+                        updateMarketplaceListing(context, listing.id, title, price.toDoubleOrNull() ?: -1.0, quantity.toIntOrNull() ?: -1)
                             .onSuccess { selected = null; load(); onChanged() }
                             .onFailure { dialogError = it.message ?: "Listing update failed." }
                         busy = false
