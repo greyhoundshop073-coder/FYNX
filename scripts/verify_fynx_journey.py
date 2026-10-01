@@ -25,7 +25,7 @@ deep_link = read("app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt")
 share = read("app/src/main/java/com/fynx/app/ui/FynxShare.kt")
 gifts = read("app/src/main/java/com/fynx/app/ui/GiftsPanel.kt")
 conversation = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
-marketplace = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt")
+marketplace = read("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt")
 transactions = read("backend/marketplaceTransactions.js")
 create_menu = read("app/src/main/java/com/fynx/app/ui/FynxHomeCreateMenu.kt")
 home_panel = read("app/src/main/java/com/fynx/app/ui/HomePanel.kt")
@@ -61,103 +61,31 @@ check("server notification API is registered", "app.get('/api/notifications'" in
 check("admin center is server-role gated", "FynxAdminClient.dashboard" in app and "adminRole" in app and 'adminRole != null' in app)
 check("privacy/safety surface is wired", "Privacy" in app and "FynxPrivacySettingsPanel" in app)
 check("profile stats are server-authoritative and self-only", "followerCount" in profile_backend and "followingCount" in profile_backend and "connectionsVisible:self" in profile_backend and "app.get('/api/social/me/followers'" in profile_backend and "app.get('/api/social/me/following'" in profile_backend and "WHERE f.followed_id=$1" in profile_backend and "WHERE f.follower_id=$1" in profile_backend and "suspend fun followers" in profile_client and "suspend fun following" in profile_client)
-check(
-    "profile stats UI matches the private connections rule",
-    'ProfileStat("Posts"' in profile_panel
-    and 'ProfileStat("Followers"' in profile_panel
-    and 'ProfileStat("Following"' in profile_panel
-    and "ProfileConnectionsDialog" in profile_panel
-    and "FynxProfileRemoteClient.followers" in profile_panel
-    and "FynxProfileRemoteClient.following" in profile_panel
-    and not re.search(r"(?:followers?|following)\s+(?:list|members?|user|people|names)", other_profile_panel, re.IGNORECASE)
-)
+check("profile stats UI matches the private connections rule", 'ProfileStat("Posts"' in profile_panel and 'ProfileStat("Followers"' in profile_panel and 'ProfileStat("Following"' in profile_panel and "ProfileConnectionsDialog" in profile_panel and "FynxProfileRemoteClient.followers" in profile_panel and "FynxProfileRemoteClient.following" in profile_panel and not re.search(r"(?:followers?|following)\s+(?:list|members?|user|people|names)", other_profile_panel, re.IGNORECASE))
 
-check(
-    "other-user profile uses real identity and server profile loading",
-    "FynxProfileRemoteClient.get(context, username)" in other_profile_panel
-    and "person.profilePhotoMediaId" in other_profile_panel
-    and "person.displayName" in other_profile_panel
-    and '"@${person.username' in other_profile_panel
-)
-check(
-    "other-user profile uses the shared clean profile content hub",
-    "FynxProfileContentSection(username = person.username" in other_profile_panel
-    and "person.profilePhotoMediaId" in other_profile_panel
-    and "person.displayName" in other_profile_panel
-    and "person.username.removePrefix" in other_profile_panel
-)
-check(
-    "profile content hub exposes real All, Videos, Photos, Audio and Marketplace tabs",
-    all(x in profile_content for x in ['"All"', '"Videos"', '"Photos"', '"Audio"', '"Marketplace"'])
-    and "FynxProfileRemoteClient.posts(context, username)" in profile_content
-    and "FynxMarketplaceClient.listings(context, username, \"\")" in profile_content
-    and "sellerUsername.equals(username, ignoreCase = true)" in profile_content
-    and "GridCells.Fixed(columns)" in profile_content
-    and "val columns = 3" in profile_content
-)
-check(
-    "profile has no fabricated Business content or repost/likes tabs",
-    "Business" not in other_profile_panel
-    and "Reposts" not in other_profile_panel
-    and "Likes" not in other_profile_panel
-)
-check(
-    "profile post and marketplace taps stay on real content paths",
-    "FynxProfilePostViewer" in profile_content
-    and "FynxProfileMarketplaceDetails" in profile_content
-    and "FynxMarketplaceClient.mediaUrl" in profile_content
-    and "selectedPost = item.post" in profile_content
-    and "ic_fynx_logo" in profile_content
-    and "aspectRatio(9f / 16f)" in profile_content
-    and "aspectRatio(4f / 5f)" in profile_content
-    and "aspectRatio(3f / 4f)" in profile_content
-    and "selectedListing = item.listing" in profile_content
-)
+check("other-user profile uses real identity and server profile loading", "FynxProfileRemoteClient.get(context, username)" in other_profile_panel and "person.profilePhotoMediaId" in other_profile_panel and "person.displayName" in other_profile_panel and '"@${person.username' in other_profile_panel)
+check("other-user profile uses the shared clean profile content hub", "FynxProfileContentSection(username = person.username" in other_profile_panel and "person.profilePhotoMediaId" in other_profile_panel and "person.displayName" in other_profile_panel and "person.username.removePrefix" in other_profile_panel)
+check("profile content hub exposes real All, Videos, Photos, Audio and Marketplace tabs", all(x in profile_content for x in ['"All"', '"Videos"', '"Photos"', '"Audio"', '"Marketplace"']) and "FynxProfileRemoteClient.posts(context, username)" in profile_content and "FynxMarketplaceClient.listings(context, username, \"\")" in profile_content and "sellerUsername.equals(username, ignoreCase = true)" in profile_content and "GridCells.Fixed(columns)" in profile_content and "val columns = 3" in profile_content)
+check("profile has no fabricated Business content or repost/likes tabs", "Business" not in other_profile_panel and "Reposts" not in other_profile_panel and "Likes" not in other_profile_panel)
+check("profile post and marketplace taps stay on real content paths", "FynxProfilePostViewer" in profile_content and "FynxProfileMarketplaceDetails" in profile_content and "FynxMarketplaceClient.mediaUrl" in profile_content and "selectedPost = item.post" in profile_content and "ic_fynx_logo" in profile_content and "aspectRatio(9f / 16f)" in profile_content and "aspectRatio(4f / 5f)" in profile_content and "aspectRatio(3f / 4f)" in profile_content and "selectedListing = item.listing" in profile_content)
 
-# Home Create is an entry menu, not a direct camera shortcut. Keep the exact three
-# FYNX creation surfaces and verify each action routes to its existing destination.
-# Count only call sites so the private composable declaration itself is not counted.
 create_menu_actions = re.findall(r"(?m)^\s*CreateMenuAction\(", create_menu)
-check(
-    "Home Create menu contains exactly Post, Status and Marketplace",
-    len(create_menu_actions) == 3
-    and '"Post"' in create_menu
-    and '"Status"' in create_menu
-    and '"Marketplace"' in create_menu
-    and "Groups" not in create_menu
-    and "Camera" not in create_menu
-    and "Money Tools" not in create_menu
-)
-check(
-    "Home Create menu routes Post to the existing post composer",
-    "onPost = {" in home_panel
-    and "onCreatePost()" in home_panel
-    and "onCreatePost = { showComposer = true" in home_hub
-)
-check(
-    "Home Create menu routes Status to the mature Status composer",
-    "onStatus = {" in home_panel
-    and "showMatureStatusComposer = true" in home_panel
-    and "FynxMatureStatusComposerPanel" in home_panel
-)
-check(
-    "Home Create menu routes Marketplace to the real Marketplace surface",
-    "onMarketplace = {" in home_panel
-    and "onOpenMarketplace()" in home_panel
-    and "onOpenMarketplace" in home_hub
-)
+check("Home Create menu contains exactly Post, Status and Marketplace", len(create_menu_actions) == 3 and '"Post"' in create_menu and '"Status"' in create_menu and '"Marketplace"' in create_menu and "Groups" not in create_menu and "Camera" not in create_menu and "Money Tools" not in create_menu)
+check("Home Create menu routes Post to the existing post composer", "onPost = {" in home_panel and "onCreatePost()" in home_panel and "onCreatePost = { showComposer = true" in home_hub)
+check("Home Create menu routes Status to the mature Status composer", "onStatus = {" in home_panel and "showMatureStatusComposer = true" in home_panel and "FynxMatureStatusComposerPanel" in home_panel)
+check("Home Create menu routes Marketplace to the real Marketplace surface", "onMarketplace = {" in home_panel and "onOpenMarketplace()" in home_panel and "onOpenMarketplace" in home_hub)
 
 check("shareable deep-link routes cover social, chat, group, marketplace, stories and money", all(x in deep_link for x in ["homeWebLink", "profileWebLink", "chatWebLink", "groupWebLink", "marketplaceWebLink", "storiesWebLink", "moneyWebLink", "fun parse"]) and "FynxDeepLinkParser.homeWebLink()" in share and "FynxDeepLinkParser.inviteWebLink(code)" in share)
 check("deep-link destination routing is connected to the live app", all(x in app for x in ["FynxDeepLinkDestination.Profile", "FynxDeepLinkDestination.Chat", "FynxDeepLinkDestination.Group", "FynxDeepLinkDestination.Marketplace", "FynxDeepLinkDestination.Stories", "FynxDeepLinkDestination.Money"]))
 
-check("marketplace uses real remote listings and seller contact", "FynxMarketplaceClient.listings" in marketplace and "FynxMarketplaceClient.createListing" in marketplace and "onContact" in marketplace and "FynxMarketplaceSafety.analyze" in marketplace)
+# The production Marketplace surface is FynxMarketplacePanel. The legacy RemotePanel
+# is only a compatibility entry point and must not be used as the journey audit source.
+check("marketplace uses real remote listings and seller contact", "FynxRemoteSocialClient.listings" in marketplace and "FynxMarketplaceClient.createListing" in marketplace and "onContact" in marketplace and "FynxMarketplaceSafety.analyze" in marketplace and "sellerUsername" in marketplace)
 check("protected marketplace transaction backend remains present", (ROOT / "backend/marketplaceTransactions.js").is_file() and all(x in transactions for x in ["marketplace_orders", "PAYMENT_PENDING", "DISPUTED", "marketplace_order_disputes", "payout:'not_released'"]))
 
 check("Send a Gift remains connected to conversations", "GiftsPanel" in conversation and "showGifts" in conversation and "onGiftSelected" in gifts)
 check("owner/admin client exposes server controls", all(x in admin for x in ["dashboard", "admins", "setAccountStatus", "grantAdmin", "revokeAdmin"]))
 check("removed AI image/video generation is not reintroduced", "image generation" not in app.lower() and "video generation" not in app.lower())
-# Final integration regression guards: preserve the agreed Home/content rules while the
-# remaining implementation is consolidated into the final badge.
 status_timeline = read("app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt")
 status_composer = read("app/src/main/java/com/fynx/app/ui/FynxMatureStatusComposerPanel.kt")
 post_client = read("app/src/main/java/com/fynx/app/ui/FynxMultiMediaPostClient.kt")
