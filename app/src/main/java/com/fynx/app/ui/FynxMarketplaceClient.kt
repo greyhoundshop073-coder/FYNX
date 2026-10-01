@@ -39,6 +39,9 @@ object FynxMarketplaceClient {
 
     data class Coverage(val country: String, val state: String = "", val city: String = "")
 
+    suspend fun discoveryPage(context: Context, query: String = "", category: String = "All", limit: Int = 12, offset: Int = 0, location: String = ""): Result<FynxDiscoveryClient.MarketplaceDiscoveryPage> =
+        FynxDiscoveryClient.marketplaceDiscoveryPage(context, query, category, limit, offset, location)
+
     suspend fun listings(context: Context, query: String = "", category: String = ""): Result<List<Listing>> {
         val discovery = FynxDiscoveryClient.marketplaceDiscovery(context, query, category)
         if (discovery.isSuccess) return discovery
