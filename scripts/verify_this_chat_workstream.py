@@ -54,7 +54,10 @@ check('Private conversation uses the shared themed wallpaper runtime', 'FynxChat
 
 # Chat reload stability: remote reconciliation must not discard a valid local
 # conversation while the server response is temporarily empty/incomplete.
-check('private chat history reconciles remote messages with the existing local store', 'mergeLocalHistory(context, username, remote)' in production_messaging and 'val local = FynxChatStore.load(context, username)' in production_messaging)
+# The reconciler now receives the already-fetched authenticated user id so the
+# network call stays inside the suspend history boundary instead of being made
+# from Result.mapCatching's non-suspend lambda.
+check('private chat history reconciles remote messages with the existing local store', ('mergeLocalHistory(context, username, remote)' in production_messaging or 'mergeLocalHistory(context, username, remote, currentUserId)' in production_messaging) and 'val local = FynxChatStore.load(context, username)' in production_messaging)
 check('private chat reconciliation preserves local messages missing from the remote response', 'val remoteIds = remote.asSequence().map { it.id }.toSet()' in production_messaging and 'val preserved = local.mapNotNull' in production_messaging and 'return (remote + preserved).distinctBy { it.id }.sortedBy { it.timestamp }' in production_messaging)
 check('private chat opens from local conversation state before remote reconciliation', 'mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage))' in conversation and 'FynxProductionMessaging.history(context, normalizedUsername)' in conversation)
 check('private chat persists the reconciled conversation locally', 'LaunchedEffect(messages)' in conversation and 'FynxChatStore.save(context, chat.username, messages)' in conversation)
