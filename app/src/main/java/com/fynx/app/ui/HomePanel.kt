@@ -75,32 +75,32 @@ fun HomePanel(
                     },
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    // Keep the existing refresh lifecycle boundary. The feed's existing
-                    // refresh key is authoritative for its cache/reconciliation reset.
-                    key(refreshKey) {
-                        FynxRemoteHomeSocialPanel(
-                            modifier = Modifier.fillMaxSize(),
-                            currentUsername = displayUsername,
-                            onOpenFindPeople = onOpenFindPeople,
-                            onOpenMarketplace = onOpenMarketplace,
-                            onCreatePost = { showCreateMenu = true },
-                            onOpenAuthorProfile = onOpenAuthorProfile,
-                            initialPostId = initialPostId,
-                            initialCommentId = initialCommentId,
-                            onInitialPostConsumed = onInitialPostConsumed,
-                            header = {
-                                FynxVisibleUpdatesPanel(
-                                    currentUsername = displayUsername,
-                                    onOpenStories = onOpenStories,
-                                    onOpenAi = onOpenAi,
-                                    onOpenCamera = onOpenCamera,
-                                    onOpenFastCamera = onOpenFastCamera,
-                                    onCreateStatus = { showMatureStatusComposer = true },
-                                    onOpenStatusOwner = onOpenStatusOwner
-                                )
-                            }
-                        )
-                    }
+                    // Keep the existing Home feed instance mounted while its authoritative
+                    // refresh runs. The refresh signal is consumed by the feed itself, so a
+                    // refresh does not recreate the LazyColumn, discard its scroll position,
+                    // or temporarily replace its cached snapshot with a new empty instance.
+                    FynxRemoteHomeSocialPanel(
+                        modifier = Modifier.fillMaxSize(),
+                        currentUsername = displayUsername,
+                        onOpenFindPeople = onOpenFindPeople,
+                        onOpenMarketplace = onOpenMarketplace,
+                        onCreatePost = { showCreateMenu = true },
+                        onOpenAuthorProfile = onOpenAuthorProfile,
+                        initialPostId = initialPostId,
+                        initialCommentId = initialCommentId,
+                        onInitialPostConsumed = onInitialPostConsumed,
+                        header = {
+                            FynxVisibleUpdatesPanel(
+                                currentUsername = displayUsername,
+                                onOpenStories = onOpenStories,
+                                onOpenAi = onOpenAi,
+                                onOpenCamera = onOpenCamera,
+                                onOpenFastCamera = onOpenFastCamera,
+                                onCreateStatus = { showMatureStatusComposer = true },
+                                onOpenStatusOwner = onOpenStatusOwner
+                            )
+                        }
+                    )
                 }
             }
         }
