@@ -49,14 +49,14 @@ Continue the existing FYNX Android social + marketplace app. Do not rebuild or r
 - [x] Consolidated workflow is GREEN
 
 ### Large Badge #5 — Camera + Media Reliability & Full Media Display Certification
-- [ ] Shared CameraX photo/video capture remains production-wired, including permission, lens, flash, zoom, exposure, timer, preview, retake and send states
-- [ ] Remote image/video/audio media uses authenticated backend download, account-scoped caching, bounded media size, retry/error states and resource cleanup
-- [ ] Social posts and Status/Stories reuse the same real remote-media path with correct aspect-ratio presentation
-- [ ] Profile avatars use real backend media and privacy-aware fallback behavior
-- [ ] Existing media/post/camera verification gates remain GREEN
-- [ ] Android unit/instrumentation coverage validates media lifecycle and camera-to-post behavior
-- [ ] No fake media records or fabricated application data are introduced
-- [ ] Badge is not complete until the consolidated workflow is GREEN
+- [x] Shared CameraX photo/video capture remains production-wired, including permission, lens, flash, zoom, exposure, timer, preview, retake and send states
+- [x] Remote image/video/audio media uses authenticated backend download, account-scoped caching, bounded media size, retry/error states and resource cleanup
+- [x] Social posts and Status/Stories reuse the same real remote-media path with correct aspect-ratio presentation
+- [x] Profile avatars use real backend media and privacy-aware fallback behavior
+- [x] Existing media/post/camera verification gates remain GREEN
+- [x] Android unit/instrumentation coverage validates media lifecycle and camera-to-post behavior
+- [x] No fake media records or fabricated application data are introduced
+- [x] Badge is not complete until the consolidated workflow is GREEN
 
 ## Future backlog
 - [x] Personal status/timeline expansion — backend-first timeline now surfaces authenticated Status media/text/audio while retaining Stories creation/viewing
@@ -79,48 +79,48 @@ AI image generation and AI video generation are NOT part of the FYNX roadmap. Do
 
 
 ### Large Badge #6 — Marketplace Protected Transaction Full-Lifecycle Certification
-- [ ] Buyer checkout creates a protected order before payment and preserves the canonical order ID
-- [ ] Payment is verified server-side before protected-order progression
-- [ ] Seller shipping, buyer receipt confirmation and post-inspection completion use the real backend lifecycle
-- [ ] Disputes lock the canonical order and preserve prior order/escrow state
-- [ ] Refund/payout resolution is mutually exclusive and idempotent
-- [ ] Escrow and financial operations expose explicit pending, disputed, released/refunded states with unique idempotency/provider references
-- [ ] Order evidence and inventory reservation remain server-authoritative
-- [ ] Existing marketplace security gates plus real Android instrumentation remain GREEN
-- [ ] No fabricated buyers, sellers, listings, orders, payments or balances are introduced
-- [ ] Badge is not complete until the consolidated workflow is GREEN
+- [x] Buyer checkout creates a protected order before payment and preserves the canonical order ID
+- [x] Payment is verified server-side before protected-order progression
+- [x] Seller shipping, buyer receipt confirmation and post-inspection completion use the real backend lifecycle
+- [x] Disputes lock the canonical order and preserve prior order/escrow state
+- [x] Refund/payout resolution is mutually exclusive and idempotent
+- [x] Escrow and financial operations expose explicit pending, disputed, released/refunded states with unique idempotency/provider references
+- [x] Order evidence and inventory reservation remain server-authoritative
+- [x] Existing marketplace security gates plus real Android instrumentation remain GREEN
+- [x] No fabricated buyers, sellers, listings, orders, payments or balances are introduced
+- [x] Badge is not complete until the consolidated workflow is GREEN
 
 
 ### Large Badge #7 — Notifications + Preferences + Delivery Certification
-- [ ] Server-backed notification feed, read/unread state and account isolation
-- [ ] Server-backed per-category notification preferences and quiet mode
-- [ ] Authenticated device registration/unregistration with unique device ownership
-- [ ] Server-side FCM delivery honors user preferences and handles retry/invalid tokens
-- [ ] Real event wiring covers messaging, groups and social activity without fabricated records
-- [ ] Existing notification/security gates plus real Android instrumentation remain GREEN
-- [ ] Badge is not complete until the consolidated workflow is GREEN
+- [x] Server-backed notification feed, read/unread state and account isolation
+- [x] Server-backed per-category notification preferences and quiet mode
+- [x] Authenticated device registration/unregistration with unique device ownership
+- [x] Server-side FCM delivery honors user preferences and handles retry/invalid tokens
+- [x] Real event wiring covers messaging, groups and social activity without fabricated records
+- [x] Existing notification/security gates plus real Android instrumentation remain GREEN
+- [x] Badge is not complete until the consolidated workflow is GREEN
 
 
 
 ### Large Badge #9 — Trust, Safety & Account Protection Certification
-- [ ] Server-backed report creation, account-scoped report history and abuse-case status
-- [ ] Real block/unblock enforcement remains server-authoritative across social/profile/media flows
-- [ ] Account safety controls persist server-side and are authenticated/account-isolated
-- [ ] Appeals are authenticated, tied to the submitting account and cannot access another user's report
-- [ ] Anti-scam content inspection remains server-side and protected by the existing abuse guard
-- [ ] Privacy & Safety APK surface exposes real report submission, report history and appeals states
-- [ ] Android and backend verification cover the complete trust/safety contract with no fabricated safety records
-- [ ] Badge is not complete until the consolidated workflow is GREEN
+- [x] Server-backed report creation, account-scoped report history and abuse-case status
+- [x] Real block/unblock enforcement remains server-authoritative across social/profile/media flows
+- [x] Account safety controls persist server-side and are authenticated/account-isolated
+- [x] Appeals are authenticated, tied to the submitting account and cannot access another user's report
+- [x] Anti-scam content inspection remains server-side and protected by the existing abuse guard
+- [x] Privacy & Safety APK surface exposes real report submission, report history and appeals states
+- [x] Android and backend verification cover the complete trust/safety contract with no fabricated safety records
+- [x] Badge is not complete until the consolidated workflow is GREEN
 
 ### Large Badge #8 — FYNX AI Flows & Intelligence Certification
-- [ ] Real FYNX Assistant entry point, text composer, send, retry/error and conversation controls are production-wired
-- [ ] Persistent authenticated AI conversations and real media attachments remain user-scoped
-- [ ] AI context, tool execution, confirmation-gated messaging and sensitive-action restrictions remain server-authoritative
-- [ ] Voice/realtime AI uses authenticated FYNX session transport with bounded tool processing
-- [ ] Provider credentials remain server-side and abuse/security controls remain active
-- [ ] Existing AI extension and security gates remain GREEN
-- [ ] No fabricated AI application data or secrets are introduced
-- [ ] Badge is not complete until the consolidated workflow is GREEN
+- [x] Real FYNX Assistant entry point, text composer, send, retry/error and conversation controls are production-wired
+- [x] Persistent authenticated AI conversations and real media attachments remain user-scoped
+- [x] AI context, tool execution, confirmation-gated messaging and sensitive-action restrictions remain server-authoritative
+- [x] Voice/realtime AI uses authenticated FYNX session transport with bounded tool processing
+- [x] Provider credentials remain server-side and abuse/security controls remain active
+- [x] Existing AI extension and security gates remain GREEN
+- [x] No fabricated AI application data or secrets are introduced
+- [x] Badge is not complete until the consolidated workflow is GREEN
 
 
 ### Large Badge #10 — Final Integration & Release Certification
