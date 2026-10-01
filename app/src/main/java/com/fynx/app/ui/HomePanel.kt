@@ -59,7 +59,7 @@ fun HomePanel(
         Box(Modifier.fillMaxSize()) {
             FynxHomeLifecycleRefresh { refreshKey ->
                 LaunchedEffect(refreshKey) {
-                    if (refreshKey != 0L) {
+                    if (refreshKey != 0) {
                         isPullRefreshing = true
                         delay(1200L)
                         isPullRefreshing = false
