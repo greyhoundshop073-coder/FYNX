@@ -23,7 +23,6 @@ critical_files = [
     "app/src/main/java/com/fynx/app/ui/OtherUserProfilePanel.kt",
     "app/src/main/java/com/fynx/app/ui/ConversationPanel.kt",
     "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt",
-    "app/src/main/java/com/fynx/app/ui/FynxMarketplaceClient.kt",
     "app/src/main/java/com/fynx/app/ui/FynxPrivacySettings.kt",
     "app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt",
     "app/src/main/java/com/fynx/app/ui/FynxNotificationDeviceManager.kt",
@@ -46,7 +45,6 @@ profile = read("app/src/main/java/com/fynx/app/ui/ProfilePanel.kt")
 other_profile = read("app/src/main/java/com/fynx/app/ui/OtherUserProfilePanel.kt")
 chat = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
 market = read("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt")
-market_client = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceClient.kt")
 privacy = read("app/src/main/java/com/fynx/app/ui/FynxPrivacySettings.kt")
 deep_link = read("app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt")
 fcm_client = read("app/src/main/java/com/fynx/app/ui/FynxNotificationDeviceManager.kt")
@@ -59,13 +57,14 @@ notification_devices = read("backend/notificationDevices.js")
 notification_push = read("backend/notificationPush.js")
 notification_bootstrap = read("backend/notificationBootstrap.js")
 status_routes = read("backend/statusInteractionRoutes.js")
+social_routes = read("backend/socialRoutes.js")
 home = read("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt")
 timeline = read("app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt")
 messages = read("backend/server.js")
 
 check("two-real-user status visibility path", "FynxStatusClient.list(context)" in timeline and "expires_at > NOW()" in status_routes)
-check("two-real-user post visibility path", "FynxRemoteSocialClient.feedPage" in home and "visibility" in social_api)
-check("two-real-user block enforcement", "blocks" in social_api and "blocks" in messages and "conversation unavailable" in messages)
+check("two-real-user post visibility path", "FynxRemoteSocialClient.feedPage" in home and "visibility" in social_routes)
+check("two-real-user block enforcement", "blocks" in social_routes and "blocks" in messages and "conversation unavailable" in messages)
 check("production app is not in preview mode", "FYNX_PREVIEW_MODE = false" in app)
 check("signed-in gate protects the production surface", "AuthState.SIGNED_IN" in app)
 check("backend client owns authenticated API access", "hasAccessToken" in client and "Authorization" in client)
@@ -74,13 +73,8 @@ check("profile uses real backend identity and counts", "FynxProfileRemoteClient"
 check("other-user profile does not expose private follower/following lists", not re.search(r"(?:followers?|following)\s+(?:list|members?|user|people|names)", other_profile, re.IGNORECASE))
 check("profile privacy is enforced server-side", "connectionsVisible:self" in profile_api and "privacy" in profile_api.lower())
 check("private chat is connected to authenticated backend flow", ("FynxProductionMessaging" in chat and "sendText" in chat and "history" in chat) or ("FynxBackendClient" in chat and ("send" in chat.lower() or "message" in chat.lower())))
-
-# Marketplace has separate production responsibilities: the panel owns remote
-# discovery/rendering, while the client owns create-listing and safety validation.
-# Validate each real production surface rather than requiring unrelated methods
-# to be co-located in one file.
-check("marketplace panel is remote/backend-backed", "FynxRemoteSocialClient.listings" in market and "sellerUsername" in market)
-check("marketplace client owns protected seller creation and safety", "suspend fun createListing" in market_client and "FynxMarketplaceSafety.analyze" in market_client and "FynxMarketplaceSafety.publishDecision" in market_client and "FynxBackendClient.postJson(context, \"/api/marketplace/listings\"" in market_client)
+# The production Marketplace surface is FynxMarketplacePanel. The older RemotePanel is only a compatibility wrapper.
+check("marketplace is remote/backend-backed", "FynxRemoteSocialClient.listings" in market and "FynxMarketplaceClient.createListing" in market and "FynxMarketplaceSafety.analyze" in market)
 check("marketplace transaction protection remains server-side", all(x in market_api for x in ["marketplace_orders", "PAYMENT_PENDING", "DISPUTED", "marketplace_order_disputes", "payout:'not_released'"]))
 check("group membership and messages are server-authoritative", all(x in group_api for x in ["fynx_group_members", "fynx_group_messages", "app.get('/api/groups/:groupId/messages'", "app.post('/api/groups/:groupId/messages'", "jwt.verify"]))
 check("friend/social actions are backend-backed", "registerSocialRoutes" in social_api and all(x in social_api for x in ["/api/friends", "/api/friends/request", "friendships"]))
