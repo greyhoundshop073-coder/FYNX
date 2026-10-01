@@ -116,6 +116,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
     try {
       await ensureSchema();
       const limit = Math.min(Math.max(Number(req.query?.limit) || 30, 1), 60);
+      const offset = Math.min(Math.max(Number(req.query?.offset) || 0, 0), 1000000);
       const q = cleanText(req.query?.q, 80);
       const category = cleanText(req.query?.category, 40);
       const location = cleanText(req.query?.location, 160);
@@ -124,7 +125,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       if (q) { params.push(`%${q}%`); const n=params.length; where.push(`(l.title ILIKE $${n} OR l.description ILIKE $${n} OR u.username ILIKE $${n} OR u.display_name ILIKE $${n})`); }
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category=${params.length}`); }
       if (location) { params.push(`%${location}%`); where.push(`l.location ILIKE ${params.length}`); }
-      params.push(limit);
+      params.push(limit + 1, offset);
       const result = await pool.query(`
         SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,l.store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.created_at,
           (COALESCE((SELECT COUNT(*) FROM marketplace_orders o WHERE o.listing_id=l.id AND o.status IN ('PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED')),0)*8
@@ -132,9 +133,11 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
            + GREATEST(0, 72-EXTRACT(EPOCH FROM (NOW()-l.created_at))/3600.0)) AS discovery_score
         FROM marketplace_listings l JOIN users u ON u.id=l.seller_id
         WHERE ${where.join(" AND ")}
-        ORDER BY discovery_score DESC,l.created_at DESC LIMIT $${params.length}
+        ORDER BY discovery_score DESC,l.created_at DESC LIMIT ${params.length - 1} OFFSET ${params.length}
       `, params);
-      return res.json({ listings: result.rows.map((row) => ({ ...row, id:String(row.id), seller_id:String(row.seller_id), price:Number(row.price), delivery_fee:row.delivery_fee==null?null:Number(row.delivery_fee), media_ids:Array.isArray(row.media_ids)?row.media_ids.map(String):[], discovery_score:Number(row.discovery_score||0) })) });
+      const hasMore = result.rows.length > limit;
+      const rows = hasMore ? result.rows.slice(0, limit) : result.rows;
+      return res.json({ listings: rows.map((row) => ({ ...row, id:String(row.id), seller_id:String(row.seller_id), price:Number(row.price), delivery_fee:row.delivery_fee==null?null:Number(row.delivery_fee), media_ids:Array.isArray(row.media_ids)?row.media_ids.map(String):[], discovery_score:Number(row.discovery_score||0) })), hasMore });
     } catch (error) {
       console.error("marketplace discovery", error);
       return res.status(500).json({ error: "marketplace discovery unavailable" });
