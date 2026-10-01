@@ -27,6 +27,8 @@ glass_wallpaper = read('app/src/main/java/com/fynx/app/ui/FynxChatWallpaper.kt')
 chat_settings = read('app/src/main/java/com/fynx/app/ui/FynxChatSettingsPanel.kt')
 group_panel = read('app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt')
 conversation = read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt')
+production_messaging = read('app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt')
+chat_store = read('app/src/main/java/com/fynx/app/ui/FynxChatStore.kt')
 
 # This gate verifies the shared media/notification/AI integration owned by this workstream.
 check('remote media uses the authenticated central downloader', 'FynxBackendClient.downloadToFile' in remote_media and 'MAX_REMOTE_MEDIA_BYTES' in remote_media)
@@ -36,8 +38,8 @@ check('Status circles use cache only until remote profile authority arrives', 'c
 check('profile cold start hydrates the cached remote avatar', 'cachedProfilePhotoId(context, it)' in profile and 'remotePhotoId = remote.profilePhotoMediaId' in profile and 'remoteProfileLoaded = true' in profile)
 check('remote profile success persists authoritative avatar identity', 'saveRemoteProfilePhotoId(context, normalized, profile.profilePhotoMediaId)' in profile_client)
 check('chat list clears stale avatar when server photo is removed', 'else chat.copy(avatarUri = null)' in read('app/src/main/java/com/fynx/app/ui/ChatsPanel.kt'))
-check('conversation keeps cached avatar only while remote profile is loading', 'var remoteProfileLoaded by remember(chat.username)' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt') and 'if (remoteProfileLoaded)' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt'))
-check('conversation marks remote profile loaded after successful fetch', 'remoteProfileLoaded = true' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt'))
+check('conversation keeps cached avatar only while remote profile is loading', 'var remoteProfileLoaded by remember(chat.username)' in conversation and 'if (remoteProfileLoaded)' in conversation)
+check('conversation marks remote profile loaded after successful fetch', 'remoteProfileLoaded = true' in conversation)
 # Marketplace uses the shared production avatar component. The component itself is the
 # source of truth for cache-first rendering: when mediaId is absent it resolves the
 # account-scoped cached profile photo from ownerUsername, while profile fetches persist
@@ -54,6 +56,16 @@ check('Chat wallpaper resolves every glass theme through the shared palette', 'F
 check('Chat settings exposes the complete glass theme catalog', 'FynxGlassThemeId.entries.map { it.label }' in chat_settings)
 check('Group chat uses its shared wallpaper runtime and active glass palette surfaces', 'FynxGroupWallpaperBackground' in group_panel and 'glassPalette' in group_panel)
 check('Private conversation uses the shared themed wallpaper runtime', 'FynxChatWallpaperBackground' in conversation and 'glassPalette' in conversation)
+
+# Chat reload stability: remote reconciliation must not discard a valid local
+# conversation while the server response is temporarily empty/incomplete.
+check('private chat history reconciles remote messages with the existing local store', 'mergeLocalHistory(context, username, remote)' in production_messaging and 'val local = FynxChatStore.load(context, username)' in production_messaging)
+check('private chat reconciliation preserves local messages missing from the remote response', 'val remoteIds = remote.asSequence().map { it.id }.toSet()' in production_messaging and 'val preserved = local.mapNotNull' in production_messaging and 'return (remote + preserved).distinctBy { it.id }.sortedBy { it.timestamp }' in production_messaging)
+check('private chat opens from local conversation state before remote reconciliation', 'mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage))' in conversation and 'FynxProductionMessaging.history(context, normalizedUsername)' in conversation)
+check('private chat persists the reconciled conversation locally', 'LaunchedEffect(messages)' in conversation and 'FynxChatStore.save(context, chat.username, messages)' in conversation)
+check('group chat starts from its local message store', 'mutableStateOf(loadGroupMessages(context, group.id))' in group_panel)
+check('group chat refresh preserves pending local messages not yet visible remotely', 'val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()' in group_panel and 'val pendingLocal = messages.filter { it.id !in remoteIds }' in group_panel and '(remoteMessages + pendingLocal)' in group_panel)
+check('group chat realtime reconciliation uses the same non-destructive merge', 'is GroupChatPanel' in group_panel and group_panel.count('val pendingLocal = messages.filter { it.id !in remoteIds }') >= 2)
 
 client_sources = '\n'.join(str(p.read_text(encoding='utf-8')) for p in (ROOT / 'app/src/main/java/com/fynx/app/ui').glob('*.kt'))
 check('this chat adds no obvious client API secrets', not re.search(r'sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}', client_sources))
