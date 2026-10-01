@@ -28,6 +28,7 @@ share = (ROOT / REQUIRED[2]).read_text(encoding="utf-8")
 marketplace = (ROOT / REQUIRED[3]).read_text(encoding="utf-8")
 marketplace_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceClient.kt").read_text(encoding="utf-8")
 marketplace_safety = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSafety.kt").read_text(encoding="utf-8")
+marketplace_checkout = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCheckout.kt").read_text(encoding="utf-8")
 multimedia = (ROOT / REQUIRED[4]).read_text(encoding="utf-8")
 ai = (ROOT / REQUIRED[5]).read_text(encoding="utf-8")
 workflow = (ROOT / REQUIRED[-1]).read_text(encoding="utf-8")
@@ -37,10 +38,10 @@ check("bottom navigation uses the intended primary navigation", 'FynxNavItem("Ho
 check("Marketplace remains a primary destination while business and money tools remain reachable", 'FynxNavItem("Marketplace", "Marketplace", Icons.Default.ShoppingBag)' in app and '"Business Account" -> FynxBusinessAccountPanel' in app and '"Money Tools" -> MoneyCenterPanel()' in app and 'Triple("Money Tools", "Money Center"' in app)
 check("deep-link routing remains connected", all(x in deep_link for x in ["homeWebLink", "profileWebLink", "chatWebLink", "groupWebLink", "marketplaceWebLink", "storiesWebLink", "moneyWebLink"]))
 check("share layer uses FYNX deep links", "FynxDeepLinkParser.homeWebLink()" in share and "FynxDeepLinkParser.inviteWebLink(code)" in share)
-# Production Marketplace splits its UI, network client, and safety layer across
-# dedicated files. Validate the real seams together instead of assuming every
-# backend/client symbol must live inside the UI panel itself.
-marketplace_contract = "\n".join([marketplace, marketplace_client, marketplace_safety])
+# Production Marketplace splits its UI, network client, safety, and protected
+# checkout dialog across dedicated files. Validate the real seams together
+# instead of assuming every Marketplace symbol must live in the UI panel.
+marketplace_contract = "\n".join([marketplace, marketplace_client, marketplace_safety, marketplace_checkout])
 check("marketplace remains remote and protected", all(x in marketplace_contract for x in [
     "FynxRemoteSocialClient.listings",
     "FynxMarketplaceClient.createListing",
