@@ -5,10 +5,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.NumberFormat
@@ -24,6 +27,7 @@ private data class PlannerCurrencySummary(val currency:String,val income:Double,
 fun MoneyPlannerPanel() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val refreshMutex = remember { Mutex() }
     var transactions by remember { mutableStateOf(emptyList<PlannerTransaction>()) }
     var budgets by remember { mutableStateOf(emptyList<PlannerBudget>()) }
     var goals by remember { mutableStateOf(emptyList<PlannerGoal>()) }
@@ -31,28 +35,30 @@ fun MoneyPlannerPanel() {
     var currencySummaries by remember { mutableStateOf(emptyList<PlannerCurrencySummary>()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    var query by remember { mutableStateOf("") }
-    var tab by remember { mutableStateOf("Overview") }
+    var query by rememberSaveable { mutableStateOf("") }
+    var tab by rememberSaveable { mutableStateOf("Overview") }
     var title by remember { mutableStateOf("") }; var amount by remember { mutableStateOf("") }; var category by remember { mutableStateOf("General") }; var txType by remember { mutableStateOf("EXPENSE") }
     var budgetCategory by remember { mutableStateOf("") }; var budgetAmount by remember { mutableStateOf("") }
     var goalName by remember { mutableStateOf("") }; var goalTarget by remember { mutableStateOf("") }; var goalDate by remember { mutableStateOf("") }
     var recurringName by remember { mutableStateOf("") }; var recurringAmount by remember { mutableStateOf("") }; var recurringDate by remember { mutableStateOf("") }
 
     fun refresh() = scope.launch {
-        loading = true; error = null
-        FynxBackendClient.get(context, "/api/money-planner").onSuccess { raw ->
-            runCatching {
-                val root=JSONObject(raw)
-                val tx=root.optJSONArray("transactions") ?: JSONArray(); val bs=root.optJSONArray("budgets") ?: JSONArray(); val gs=root.optJSONArray("goals") ?: JSONArray(); val rs=root.optJSONArray("recurring") ?: JSONArray()
-                transactions=buildList { for(i in 0 until tx.length()){val o=tx.getJSONObject(i);add(PlannerTransaction(o.getString("id"),o.getString("title"),o.getString("category"),o.getString("type"),o.getDouble("amount"),o.getString("currency"),o.getString("occurredOn"))) } }
-                budgets=buildList { for(i in 0 until bs.length()){val o=bs.getJSONObject(i);add(PlannerBudget(o.getString("id"),o.getString("category"),o.getDouble("amount"),o.getString("currency"),o.getString("period"))) } }
-                goals=buildList { for(i in 0 until gs.length()){val o=gs.getJSONObject(i);add(PlannerGoal(o.getString("id"),o.getString("name"),o.getDouble("targetAmount"),o.getDouble("savedAmount"),o.getString("currency"),if(o.isNull("targetDate"))null else o.getString("targetDate"))) } }
-                recurring=buildList { for(i in 0 until rs.length()){val o=rs.getJSONObject(i);add(PlannerRecurring(o.getString("id"),o.getString("name"),o.getString("category"),o.getDouble("amount"),o.getString("currency"),o.getString("frequency"),o.getString("nextDate"))) } }
-                val summaryRoot=root.optJSONObject("summaryByCurrency")
-                currencySummaries=if(summaryRoot==null) emptyList() else buildList { val keys=summaryRoot.keys(); while(keys.hasNext()){val key=keys.next();val o=summaryRoot.getJSONObject(key);add(PlannerCurrencySummary(o.getString("currency"),o.getDouble("income"),o.getDouble("expenses"),o.getDouble("net"))) } }.sortedBy{it.currency}
-            }.onFailure { error=it.message ?: "Could not read Money Planner data" }
-        }.onFailure { error=it.message ?: "Money Planner is unavailable" }
-        loading=false
+        refreshMutex.withLock {
+            loading = true; error = null
+            FynxBackendClient.get(context, "/api/money-planner").onSuccess { raw ->
+                runCatching {
+                    val root=JSONObject(raw)
+                    val tx=root.optJSONArray("transactions") ?: JSONArray(); val bs=root.optJSONArray("budgets") ?: JSONArray(); val gs=root.optJSONArray("goals") ?: JSONArray(); val rs=root.optJSONArray("recurring") ?: JSONArray()
+                    transactions=buildList { for(i in 0 until tx.length()){val o=tx.getJSONObject(i);add(PlannerTransaction(o.getString("id"),o.getString("title"),o.getString("category"),o.getString("type"),o.getDouble("amount"),o.getString("currency"),o.getString("occurredOn"))) } }
+                    budgets=buildList { for(i in 0 until bs.length()){val o=bs.getJSONObject(i);add(PlannerBudget(o.getString("id"),o.getString("category"),o.getDouble("amount"),o.getString("currency"),o.getString("period"))) } }
+                    goals=buildList { for(i in 0 until gs.length()){val o=gs.getJSONObject(i);add(PlannerGoal(o.getString("id"),o.getString("name"),o.getDouble("targetAmount"),o.getDouble("savedAmount"),o.getString("currency"),if(o.isNull("targetDate"))null else o.getString("targetDate"))) } }
+                    recurring=buildList { for(i in 0 until rs.length()){val o=rs.getJSONObject(i);add(PlannerRecurring(o.getString("id"),o.getString("name"),o.getString("category"),o.getDouble("amount"),o.getString("currency"),o.getString("frequency"),o.getString("nextDate"))) } }
+                    val summaryRoot=root.optJSONObject("summaryByCurrency")
+                    currencySummaries=if(summaryRoot==null) emptyList() else buildList { val keys=summaryRoot.keys(); while(keys.hasNext()){val key=keys.next();val o=summaryRoot.getJSONObject(key);add(PlannerCurrencySummary(o.getString("currency"),o.getDouble("income"),o.getDouble("expenses"),o.getDouble("net"))) } }.sortedBy{it.currency}
+                }.onFailure { error=it.message ?: "Could not read Money Planner data" }
+            }.onFailure { error=it.message ?: "Money Planner is unavailable" }
+            loading=false
+        }
     }
     LaunchedEffect(Unit) { refresh() }
 
