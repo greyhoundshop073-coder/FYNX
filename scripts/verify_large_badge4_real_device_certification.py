@@ -13,11 +13,12 @@ def check(name, ok):
 
 workflow = read(".github/workflows/android-build.yml")
 app = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
-runtime = read("scripts/verify_runtime_navigation.py").lower()
+runtime_path = "scripts/verify_authenticated_runtime_navigation.py" if (ROOT / "scripts/verify_authenticated_runtime_navigation.py").is_file() else "scripts/verify_runtime_navigation.py"
+runtime = read(runtime_path).lower()
 
 check("real emulator runner is configured", "reactivecircus/android-emulator-runner@v2" in workflow)
 check("connected Android instrumentation is executed", "connectedDebugAndroidTest" in workflow)
-check("runtime navigation verification is executed", "scripts/verify_runtime_navigation.py" in workflow)
+check("authenticated runtime navigation verification is executed", runtime_path in workflow)
 check("runtime screenshots and UI hierarchies are uploaded", "FYNX-runtime-visual-check-" in workflow and "fynx-runtime-screenshots/" in workflow)
 check("Home, Chat, Friends, Stories and Features are reachable", all(x in app for x in ['"Home"', '"Chats"', '"Friends"', '"Stories"', '"Features"']))
 check("major secondary surfaces have real navigation routes", all(x in app for x in ['"Marketplace"', '"Calls"', '"Groups"', '"Notifications"', '"Privacy"', '"Money Tools"', '"AI"']))
