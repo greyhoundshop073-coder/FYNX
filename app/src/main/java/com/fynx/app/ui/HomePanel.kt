@@ -3,6 +3,7 @@ package com.fynx.app.ui
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -84,6 +85,7 @@ fun HomePanel(
                         currentUsername = displayUsername,
                         onOpenFindPeople = onOpenFindPeople,
                         onOpenMarketplace = onOpenMarketplace,
+                        onOpenMarketplaceListing = { listingId -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FynxDeepLinkParser.marketplaceAppLink(listingId)))) },
                         onCreatePost = { showCreateMenu = true },
                         onOpenAuthorProfile = onOpenAuthorProfile,
                         initialPostId = initialPostId,
