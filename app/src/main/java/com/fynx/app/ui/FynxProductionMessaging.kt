@@ -31,8 +31,9 @@ object FynxProductionMessaging {
         val replyToId: String?, val reaction: String? = null, val messageType: String = "text", val messagePayload: Map<String, String> = emptyMap(), val mediaId: String? = null, val mediaType: String? = null, val mediaUrl: String? = null, val voiceDurationMs: Long = 0L, val pinned: Boolean = false
     )
 
-    suspend fun history(context: Context, username: String): Result<List<RemoteMessage>> =
-        FynxBackendClient.get(context, "/api/messages/${encodePathSegment(username)}").mapCatching { raw ->
+    suspend fun history(context: Context, username: String): Result<List<RemoteMessage>> {
+        val currentUserId = FynxBackendClient.currentUserId(context).getOrNull().orEmpty()
+        return FynxBackendClient.get(context, "/api/messages/${encodePathSegment(username)}").mapCatching { raw ->
             val messages = JSONObject(raw).optJSONArray("messages") ?: JSONArray()
             val remote = buildList {
                 for (index in 0 until messages.length()) {
@@ -44,14 +45,13 @@ object FynxProductionMessaging {
                         }
                 }
             }.distinctBy { it.id }
-            mergeLocalHistory(context, username, remote)
+            mergeLocalHistory(context, username, remote, currentUserId)
         }
+    }
 
-    private fun mergeLocalHistory(context: Context, username: String, remote: List<RemoteMessage>): List<RemoteMessage> {
+    private fun mergeLocalHistory(context: Context, username: String, remote: List<RemoteMessage>, currentUserId: String): List<RemoteMessage> {
         val local = FynxChatStore.load(context, username)
-        if (local.isEmpty()) return remote
-        val currentUserId = FynxBackendClient.currentUserId(context).getOrNull().orEmpty()
-        if (currentUserId.isBlank()) return remote
+        if (local.isEmpty() || currentUserId.isBlank()) return remote
         val normalizedUsername = username.trim().removePrefix("@").lowercase()
         val remoteIds = remote.asSequence().map { it.id }.toSet()
         val peerId = "local-peer:$normalizedUsername"
