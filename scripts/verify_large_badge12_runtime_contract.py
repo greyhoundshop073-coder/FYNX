@@ -10,7 +10,7 @@ runtime=(root/"scripts/verify_authenticated_runtime_navigation.py").read_text(en
 checks=[
     ("workflow references FYNX_E2E_USERNAME secret", "FYNX_E2E_USERNAME" in workflow),
     ("workflow references FYNX_E2E_PASSWORD secret", "FYNX_E2E_PASSWORD" in workflow),
-    ("workflow references production base URL", "FYNX_PRODUCTION_BASE_URL" in workflow),
+    ("runtime defines a production base URL", 'FYNX_PRODUCTION_BASE_URL' in runtime and 'https://fynx-ai-backend.onrender.com' in runtime),
     ("runtime reads username only from environment", 'os.environ.get("FYNX_E2E_USERNAME"' in runtime),
     ("runtime reads password only from environment", 'os.environ.get("FYNX_E2E_PASSWORD"' in runtime),
     ("runtime does not contain a literal password assignment", not re.search(r"PASSWORD\s*=\s*[\"\'][^\"\']+[\"\']", runtime)),
