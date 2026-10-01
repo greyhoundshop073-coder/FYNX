@@ -22,6 +22,7 @@ private val todoDateFormat = DateTimeFormatter.ISO_LOCAL_DATE
 enum class TodoFilter { ALL, TODAY, ACTIVE, COMPLETED, HIGH_PRIORITY }
 
 @Composable
+// Batch A: preserve planning list state across screen recreation.
 fun TodoPanel() {
     val context = LocalContext.current
     var nextId by remember { mutableLongStateOf(TodoStore.nextId(context)) }
