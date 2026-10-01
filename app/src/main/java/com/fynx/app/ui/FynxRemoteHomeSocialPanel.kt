@@ -1082,6 +1082,7 @@ private fun FynxHomeMarketplaceCarousel(
     }
 }
 
+@Composable
 private fun HomePeopleRecommendationsCard(items: List<HomePeopleRecommendation>, onOpenProfile: (String) -> Unit, onSeeAll: () -> Unit, onLoadMore: () -> Unit, loadingMore: Boolean, onDismiss: (String) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
