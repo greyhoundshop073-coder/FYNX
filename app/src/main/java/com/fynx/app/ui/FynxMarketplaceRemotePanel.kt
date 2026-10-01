@@ -30,6 +30,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FynxMarketplaceRemotePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> Unit = {}) {
     val context = LocalContext.current
@@ -40,19 +41,24 @@ fun FynxMarketplaceRemotePanel(currentUsername: String = "preview", onOpenProfil
     var query by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("All") }
     var loading by remember { mutableStateOf(true) }
+    var isPullRefreshing by remember { mutableStateOf(false) }
     var showSell by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<FynxMarketplaceClient.Listing?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var reputation by remember { mutableStateOf<FynxMarketplaceClient.SellerReputation?>(null) }
     var reputationLoading by remember { mutableStateOf(false) }
-    fun refresh() { scope.launch { loading = true; val result = FynxMarketplaceClient.listings(context, query, category); listings = result.getOrElse { emptyList() }; mine = FynxMarketplaceClient.myListings(context).getOrElse { mine }; message = result.exceptionOrNull()?.message; loading = false } }
+    fun refresh(userPull: Boolean = false) { scope.launch { if (userPull) isPullRefreshing = true else loading = true; val result = FynxMarketplaceClient.listings(context, query, category); listings = result.getOrElse { emptyList() }; mine = FynxMarketplaceClient.myListings(context).getOrElse { mine }; message = result.exceptionOrNull()?.message; if (userPull) isPullRefreshing = false else loading = false } }
     LaunchedEffect(query, category) { refresh() }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Marketplace", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text("Discover real listings from FYNX accounts", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; OutlinedButton(onClick = { showSell = true }, shape = FynxDesign.ControlShape) { Icon(Icons.Default.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Sell") } }
         OutlinedTextField(query, { value -> query = value.take(80) }, Modifier.fillMaxWidth().padding(horizontal = 12.dp), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("Search products or sellers") }, shape = FynxDesign.ControlShape)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 7.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) { categories.forEach { item -> FilterChip(category == item, { category = item }, label = { Text(item) }) } }
         message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 12.dp)) }
-        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() } else if (listings.isEmpty()) Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { Icon(Icons.Default.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp)); Spacer(Modifier.height(10.dp)); Text("No listings yet", style = MaterialTheme.typography.titleLarge); Text("Only real seller listings are shown here. Publish a product to make it discoverable.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(12.dp)); Button(onClick = { showSell = true }) { Text("List a product") } } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { items(listings, key = { it.id }) { listing -> RemoteMarketCard(listing, context, onOpenProfile = { onOpenProfile(listing.sellerUsername) }, onOpen = { selected = listing }, onContact = { onOpenChat(listing.sellerUsername) }) }; if (mine.isNotEmpty()) item { Text("Your active listings: ${mine.count { it.active }}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+        if (loading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() } else if (listings.isEmpty()) Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { Icon(Icons.Default.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp)); Spacer(Modifier.height(10.dp)); Text("No listings yet", style = MaterialTheme.typography.titleLarge); Text("Only real seller listings are shown here. Publish a product to make it discoverable.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(12.dp)); Button(onClick = { showSell = true }) { Text("List a product") } } else {
+            PullToRefreshBox(isRefreshing = isPullRefreshing, onRefresh = { if (!isPullRefreshing && !loading) refresh(userPull = true) }, modifier = Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { items(listings, key = { it.id }) { listing -> RemoteMarketCard(listing, context, onOpenProfile = { onOpenProfile(listing.sellerUsername) }, onOpen = { selected = listing }, onContact = { onOpenChat(listing.sellerUsername) }) }; if (mine.isNotEmpty()) item { Text("Your active listings: ${mine.count { it.active }}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+            }
+        }
     }
     if (showSell) FynxMarketplaceSellerDialog(currentUsername, onDismiss = { showSell = false }) { title, description, store, price, currency, cat, condition, quantity, location, delivery, pickup, fee, mediaUris -> scope.launch { if (mediaUris.isEmpty()) { message = "Add at least one product photo or video."; return@launch }; val uploadedIds = mutableListOf<String>(); for (uri in mediaUris.take(12)) { val mime = context.contentResolver.getType(uri).orEmpty().lowercase().ifBlank { if (uri.toString().lowercase().endsWith(".mp4")) "video/mp4" else "image/jpeg" }; if (!mime.startsWith("image/") && !mime.startsWith("video/")) { message = "Unsupported product media selected."; return@launch }; val media = FynxProductionMessaging.uploadMedia(context, uri, mime).getOrElse { error -> message = error.message ?: "Media upload failed."; return@launch }; uploadedIds += media.id }; val safety = FynxMarketplaceSafety.analyze(title, description, store, location); if (safety.isBlocking) { message = "FYNX Safety Shield blocked this listing: " + safety.signals.joinToString(", "); return@launch }; if (safety.level == FynxMarketplaceRiskLevel.MEDIUM) message = "Safety check: " + safety.signals.joinToString(", ") + ". Keep payment and delivery inside FYNX."; FynxMarketplaceClient.createListing(context, title, description, store, price, currency, cat, condition, quantity, location, delivery, pickup, fee, uploadedIds).onSuccess { showSell = false; message = if (safety.level == FynxMarketplaceRiskLevel.MEDIUM) "Product published with a safety reminder. Keep payment and delivery inside FYNX." else "Safety checked. Product published to Marketplace."; refresh() }.onFailure { error -> message = error.message ?: "Listing could not be published." } } }
     selected?.let { listing -> AlertDialog(onDismissRequest = { selected = null }, title = { Text(listing.title) }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(formatMoney(listing.price, listing.currency), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary); if (listing.mediaIds.size > 1) Text("${listing.mediaIds.size} product media items", color = MaterialTheme.colorScheme.onSurfaceVariant); if (listing.description.isNotBlank()) Text(listing.description); Text("Seller: ${listing.sellerDisplayName.ifBlank { listing.sellerUsername }}"); LaunchedEffect(listing.sellerUsername) { reputationLoading = true; reputation = FynxMarketplaceClient.sellerReputation(context, listing.sellerUsername).getOrNull(); reputationLoading = false }; if (reputationLoading) LinearProgressIndicator(Modifier.fillMaxWidth()); reputation?.let { r -> Text("Rank #${r.rank}${if (r.sellerCount > 0) " of ${r.sellerCount}" else ""} • ${r.successfulSales} successful sales", fontWeight = FontWeight.SemiBold); Text("${r.tier} • ${r.completionRate}% completion${if (r.reviewCount > 0) " • ${String.format(java.util.Locale.US, "%.1f", r.averageRating)}/5 rating" else ""}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }; if (listing.storeName.isNotBlank()) Text("Store: ${listing.storeName}", color = MaterialTheme.colorScheme.onSurfaceVariant); if (listing.location.isNotBlank()) Text("Location: ${listing.location}", color = MaterialTheme.colorScheme.onSurfaceVariant); Text(if (listing.deliveryAvailable) "Delivery available" else if (listing.pickupAvailable) "Pickup available" else "Contact seller for fulfillment", color = MaterialTheme.colorScheme.onSurfaceVariant) } }, confirmButton = { TextButton(onClick = { onOpenChat(listing.sellerUsername); selected = null }) { Icon(Icons.Default.ChatBubbleOutline, null); Spacer(Modifier.width(4.dp)); Text("Contact seller") } }, dismissButton = { TextButton(onClick = { onOpenProfile(listing.sellerUsername); selected = null }) { Text("View seller") } }) }
@@ -63,16 +69,7 @@ private fun RemoteMarketCard(listing: FynxMarketplaceClient.Listing, context: an
     val cachedSellerPhotoId = remember(listing.sellerUsername) { FynxProfileRemoteClient.cachedProfilePhotoId(context, listing.sellerUsername) }
     var sellerPhotoId by remember(listing.sellerUsername) { mutableStateOf(cachedSellerPhotoId) }
     var remoteSellerProfileLoaded by remember(listing.sellerUsername) { mutableStateOf(false) }
-    LaunchedEffect(listing.sellerUsername) {
-        FynxProfileRemoteClient.get(context, listing.sellerUsername)
-            .onSuccess {
-                sellerPhotoId = it.profilePhotoMediaId
-                remoteSellerProfileLoaded = true
-            }
-            .onFailure {
-                if (!remoteSellerProfileLoaded) sellerPhotoId = cachedSellerPhotoId
-            }
-    }
+    LaunchedEffect(listing.sellerUsername) { FynxProfileRemoteClient.get(context, listing.sellerUsername).onSuccess { sellerPhotoId = it.profilePhotoMediaId; remoteSellerProfileLoaded = true }.onFailure { if (!remoteSellerProfileLoaded) sellerPhotoId = cachedSellerPhotoId } }
     Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) {
         Column {
             Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onOpenProfile, Modifier.size(46.dp)) { FynxRemoteProfileAvatar(sellerPhotoId, listing.sellerDisplayName.ifBlank { listing.sellerUsername }, Modifier.size(40.dp).clip(RoundedCornerShape(50)), ownerUsername = listing.sellerUsername) }; Column(Modifier.weight(1f)) { Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, fontWeight = FontWeight.SemiBold); Text("@${listing.sellerUsername.removePrefix("@")}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; IconButton(onClick = onOpen) { Icon(Icons.Default.MoreHoriz, "Details") } }
@@ -83,10 +80,7 @@ private fun RemoteMarketCard(listing: FynxMarketplaceClient.Listing, context: an
 }
 
 @Composable
-private fun RemoteMarketMedia(context: android.content.Context, mediaId: String, modifier: Modifier) {
-    val mediaUrl = remember(mediaId) { FynxMarketplaceClient.mediaUrl(context, mediaId) }
-    FynxRemoteMedia(mediaUrl, "auto", modifier)
-}
+private fun RemoteMarketMedia(context: android.content.Context, mediaId: String, modifier: Modifier) { val mediaUrl = remember(mediaId) { FynxMarketplaceClient.mediaUrl(context, mediaId) }; FynxRemoteMedia(mediaUrl, "auto", modifier) }
 
 @Composable
 private fun FynxMarketplaceSellerDialog(currentUsername: String, onDismiss: () -> Unit, onPublish: (String, String, String, Double, String, String, String, Int, String, Boolean, Boolean, Double?, List<Uri>) -> Unit) {
@@ -97,4 +91,3 @@ private fun FynxMarketplaceSellerDialog(currentUsername: String, onDismiss: () -
 }
 
 private fun contextIsVideo(context: android.content.Context, uri: Uri): Boolean { val mime = context.contentResolver.getType(uri).orEmpty().lowercase(); return mime.startsWith("video/") || uri.toString().lowercase().let { it.endsWith(".mp4") || it.endsWith(".webm") || it.endsWith(".3gp") || it.endsWith(".mkv") } }
-private fun formatMoney(price: Double, currency: String): String = "${currency.uppercase()} ${String.format(java.util.Locale.US, "%,.2f", price)}"
