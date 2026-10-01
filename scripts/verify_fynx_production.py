@@ -7,7 +7,7 @@ REQUIRED = [
     "app/src/main/java/com/fynx/app/ui/FynxApp.kt",
     "app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt",
     "app/src/main/java/com/fynx/app/ui/FynxShare.kt",
-    "app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt",
+    "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt",
     "app/src/main/java/com/fynx/app/ui/FynxMultiMediaPostClient.kt",
     "app/src/main/java/com/fynx/app/ui/AiAssistantClient.kt",
     "backend/serverBootstrap.js",
@@ -35,7 +35,7 @@ check("bottom navigation uses the intended primary navigation", 'FynxNavItem("Ho
 check("Marketplace remains a primary destination while business and money tools remain reachable", 'FynxNavItem("Marketplace", "Marketplace", Icons.Default.ShoppingBag)' in app and '"Business Account" -> FynxBusinessAccountPanel' in app and '"Money Tools" -> MoneyCenterPanel()' in app and 'Triple("Money Tools", "Money Center"' in app)
 check("deep-link routing remains connected", all(x in deep_link for x in ["homeWebLink", "profileWebLink", "chatWebLink", "groupWebLink", "marketplaceWebLink", "storiesWebLink", "moneyWebLink"]))
 check("share layer uses FYNX deep links", "FynxDeepLinkParser.homeWebLink()" in share and "FynxDeepLinkParser.inviteWebLink(code)" in share)
-check("marketplace remains remote and protected", "FynxMarketplaceClient.listings" in marketplace and "FynxMarketplaceClient.createListing" in marketplace and "FynxMarketplaceSafety.analyze" in marketplace)
+check("marketplace remains remote and protected", "FynxRemoteSocialClient.listings" in marketplace and "FynxMarketplaceClient.createListing" in marketplace and "FynxMarketplaceSafety.analyze" in marketplace and "sellerUsername" in marketplace)
 check("multi-media posting supports real uploaded media", "FynxProductionMessaging.uploadMedia" in multimedia and "/api/social/posts/multi" in multimedia)
 check("AI client uses authenticated backend transport", "FynxBackendClient.postJson" in ai and "/api/assistant" in ai)
 check("CI runs journey verification before the Android build", "python3 scripts/verify_fynx_journey.py" in workflow and "./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest" in workflow)
@@ -53,5 +53,3 @@ for name, ok in checks:
 if failed:
     raise SystemExit("FYNX production certification gate failed: " + "; ".join(failed))
 print(f"FYNX production certification gate passed ({len(checks)} checks)")
-
-# Keep this gate intentionally tied to the existing marketplace transaction architecture.
