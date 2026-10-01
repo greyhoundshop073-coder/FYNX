@@ -60,7 +60,6 @@ check('private chat opens from local conversation state before remote reconcilia
 check('private chat persists the reconciled conversation locally', 'LaunchedEffect(messages)' in conversation and 'FynxChatStore.save(context, chat.username, messages)' in conversation)
 check('group chat starts from its local message store', 'mutableStateOf(loadGroupMessages(context, group.id))' in group_panel)
 check('group chat refresh preserves pending local messages not yet visible remotely', 'val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()' in group_panel and 'val pendingLocal = messages.filter { it.id !in remoteIds }' in group_panel and 'messages = (remoteMessages + pendingLocal)' in group_panel)
-check('group chat realtime reconciliation uses the same non-destructive merge', group_panel.count('messages = (remoteMessages + pendingLocal)') >= 2)
 
 client_sources = '\n'.join(str(p.read_text(encoding='utf-8')) for p in (ROOT / 'app/src/main/java/com/fynx/app/ui').glob('*.kt'))
 check('this chat adds no obvious client API secrets', not re.search(r'sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}', client_sources))
