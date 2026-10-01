@@ -63,7 +63,7 @@ private const val FEED_REFRESH_DEBOUNCE_MS = 1000L
 private data class HomePeopleRecommendation(val username: String, val displayName: String, val verified: Boolean, val mutualFriends: Int, val reason: String, val photoId: String?)
 
 @Composable
-fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, initialPostId: String? = null, initialCommentId: String? = null, onInitialPostConsumed: () -> Unit = {}, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}, header: (@Composable () -> Unit)? = null) {
+fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, initialPostId: String? = null, initialCommentId: String? = null, onInitialPostConsumed: () -> Unit = {}, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onOpenMarketplaceListing: (String) -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}, header: (@Composable () -> Unit)? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val publishRefreshKey = FynxHomeLifecycleRefreshBus.currentVersion()
@@ -105,6 +105,10 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var discoveryVideosOffset by remember { mutableIntStateOf(0) }
     var homeDiscoveryViewerOpen by remember { mutableStateOf(false) }
     var homeDiscoveryViewerIndex by remember { mutableIntStateOf(0) }
+    var marketplaceListings by remember { mutableStateOf<List<FynxMarketplaceClient.Listing>>(emptyList()) }
+    var marketplaceLoadingMore by remember { mutableStateOf(false) }
+    var marketplaceHasMore by remember { mutableStateOf(true) }
+    var marketplaceOffset by remember { mutableIntStateOf(0) }
     var mediaViewerPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
     var mediaViewerItems by remember { mutableStateOf<List<FynxHomePostMediaClient.PostMediaItem>>(emptyList()) }
     var mediaViewerIndex by remember { mutableIntStateOf(0) }
@@ -134,6 +138,22 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             authorPhotos = authorPhotos + resolved
         }
     }
+    fun loadHomeMarketplace(reset: Boolean = false) {
+        if (marketplaceLoadingMore || (!marketplaceHasMore && !reset)) return
+        val offset = if (reset) 0 else marketplaceOffset
+        marketplaceLoadingMore = true
+        scope.launch {
+            FynxMarketplaceClient.discoveryPage(context, limit = 12, offset = offset)
+                .onSuccess { page ->
+                    marketplaceListings = if (reset) page.items else (marketplaceListings + page.items).distinctBy { it.id }
+                    marketplaceOffset = offset + page.items.size
+                    marketplaceHasMore = page.hasMore
+                }
+                .onFailure { if (reset) marketplaceListings = emptyList() }
+            marketplaceLoadingMore = false
+        }
+    }
+
     fun hydratePeopleRecommendations(offset: Int = 0, replace: Boolean = false) {
         if (peopleRecommendationsLoading || (!peopleRecommendationsHasMore && !replace)) return
         peopleRecommendationsLoading = true
@@ -321,6 +341,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         scope.launch { runCatching { FynxDiscoveryClient.recordView(context, postId) } }
     }
     LaunchedEffect(Unit) { hydrateActiveStatuses(); hydratePeopleRecommendations(0, true) }
+    LaunchedEffect(Unit) { loadHomeMarketplace(true) }
     LaunchedEffect(Unit) { loadDiscoveryVideos(true) }
 
     LaunchedEffect(feedListState, posts.size, hasMore, discoveryHasMore, loading, loadingMore, discoveryLoadingMore, feedRequestInFlight) {
@@ -340,6 +361,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
 
             }
         }
+        if (marketplaceListings.isNotEmpty()) item(key = "home_marketplace") { FynxHomeMarketplaceCarousel(listings = marketplaceListings, loadingMore = marketplaceLoadingMore, hasMore = marketplaceHasMore, onLoadMore = { loadHomeMarketplace() }, onOpenListing = onOpenMarketplaceListing, onOpenMarketplace = onOpenMarketplace) }
         if (peopleRecommendations.isNotEmpty()) item(key = "people_recommendations") { HomePeopleRecommendationsCard(peopleRecommendations, onOpenProfile = { onOpenAuthorProfile(it) }, onSeeAll = onOpenFindPeople, onLoadMore = { hydratePeopleRecommendations(peopleRecommendationsOffset) }, loadingMore = peopleRecommendationsLoading && peopleRecommendations.isNotEmpty(), onDismiss = { username -> dismissedPeople = dismissedPeople + username.lowercase(); peopleRecommendations = peopleRecommendations.filterNot { it.username.equals(username, true) } }) }
         if (discoveryVideos.isNotEmpty()) item(key = "home_discovery") { FynxHomeDiscoverySection(videos = discoveryVideos, loadingMore = discoveryVideosLoading, hasMore = discoveryVideosHasMore, onLoadMore = { loadDiscoveryVideos() }, onOpenVideo = { index -> openHomeDiscoveryViewer(index) }) }
         if (loading) item(key = "feed_loading") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
@@ -1013,6 +1035,52 @@ private fun HomeAuthorStatusDialog(statuses: List<FynxStatus>, onDismiss: () -> 
 
 
 @Composable
+@Composable
+private fun FynxHomeMarketplaceCarousel(
+    listings: List<FynxMarketplaceClient.Listing>,
+    loadingMore: Boolean,
+    hasMore: Boolean,
+    onLoadMore: () -> Unit,
+    onOpenListing: (String) -> Unit,
+    onOpenMarketplace: () -> Unit
+) {
+    val context = LocalContext.current
+    Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp), shape = FynxDesign.LargeCardShape) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Marketplace", style = MaterialTheme.typography.titleMedium)
+                    Text("Products real FYNX sellers have posted.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
+                }
+                TextButton(onClick = onOpenMarketplace, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("See all", style = MaterialTheme.typography.labelMedium) }
+            }
+            androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 2.dp)) {
+                itemsIndexed(listings, key = { _, listing -> listing.id }) { index, listing ->
+                    if (index >= listings.lastIndex - 3 && hasMore && !loadingMore) { LaunchedEffect(listings.size) { onLoadMore() } }
+                    Card(
+                        Modifier.width(164.dp).clickable { onOpenListing(listing.id) },
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (listing.mediaIds.isNotEmpty()) {
+                                FynxRemoteMedia(mediaUrl = FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first()), type = "auto", modifier = Modifier.fillMaxWidth().aspectRatio(1f), contentScale = ContentScale.Crop)
+                            } else {
+                                Box(Modifier.fillMaxWidth().aspectRatio(1f).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Default.ShoppingBag, "Product", Modifier.size(34.dp), tint = MaterialTheme.colorScheme.primary) }
+                            }
+                            Column(Modifier.padding(horizontal = 9.dp, vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(listing.title, style = MaterialTheme.typography.titleSmall, maxLines = 2)
+                                Text(listing.currency.uppercase() + " " + String.format(Locale.US, "%,.2f", listing.price), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, maxLines = 1)
+                                Text(listing.sellerDisplayName.ifBlank { "@" + listing.sellerUsername.removePrefix("@") }, style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary, maxLines = 1)
+                            }
+                        }
+                    }
+                }
+                if (loadingMore) item { Box(Modifier.width(164.dp).height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+            }
+        }
+    }
+}
+
 private fun HomePeopleRecommendationsCard(items: List<HomePeopleRecommendation>, onOpenProfile: (String) -> Unit, onSeeAll: () -> Unit, onLoadMore: () -> Unit, loadingMore: Boolean, onDismiss: (String) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
