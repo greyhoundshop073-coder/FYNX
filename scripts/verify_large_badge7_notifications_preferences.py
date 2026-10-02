@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Large Badge #7: notification delivery + preferences production certification."""
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxNotificationPreferencesClient.kt").read_text(encoding="utf-8")
@@ -31,7 +32,9 @@ checks = [
     ("server push honors global and category preferences", "push_enabled" in push and "preferenceColumn" in push and "pushAllowed" in push),
     ("server push stores notification before delivery", "INSERT INTO fynx_notifications" in push and "queueFynxNotification" in push),
     ("FCM credentials remain server-side", "FIREBASE_SERVICE_ACCOUNT_JSON" in push and "FIREBASE_PRIVATE_KEY" in push and "FYNX" not in models),
-    ("push delivery has retry and invalid-token handling", "attempt < 3" in push and "UNREGISTERED" in push and "status='SENT'" in push),
+    # Normalize whitespace so the gate validates the retry/cleanup behavior rather than
+    # requiring a particular minified or formatted JavaScript style.
+    ("push delivery has retry and invalid-token handling", bool(re.search(r"attempt\\s*<\\s*3", push)) and "UNREGISTERED" in push and "status='SENT'" in push),
     ("notification route wiring covers real message/group/social events", "queueFynxNotification" in bootstrap and 'type: "MESSAGE"' in bootstrap and "type:'GROUP'" in bootstrap and "type:'COMMENT'" in bootstrap),
     ("existing notification verification gates remain in CI", "verify_notifications_settings_integration.py" in workflow),
     ("real Android instrumentation remains in CI", "connectedDebugAndroidTest" in workflow and ("verify_runtime_navigation.py" in workflow or "verify_authenticated_runtime_navigation.py" in workflow)),
