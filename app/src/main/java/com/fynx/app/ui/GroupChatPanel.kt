@@ -200,6 +200,13 @@ fun GroupChatPanel(
             onMessage = {},
             onEvent = { event ->
                 if (event is FynxRealtimeClient.Event.GroupMessage && event.groupId == group.id) {
+                    if (FynxConversationPreferences.groupNotifications(context, group.id) && !FynxConversationPreferences.groupMuted(context, group.id)) {
+                        if (FynxConversationPreferences.groupNotificationSounds(context, group.id)) FynxInChatSound.play(context)
+                        if (FynxConversationPreferences.groupNotificationVibration(context, group.id)) {
+                            if (Build.VERSION.SDK_INT >= 31) (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator?.vibrate(VibrationEffect.createOneShot(35, VibrationEffect.DEFAULT_AMPLITUDE))
+                            else @Suppress("DEPRECATION") (context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)?.vibrate(35)
+                        }
+                    }
                     scope.launch {
                         FynxGroupRemoteClient.loadMessages(context, group.id)
                             .onSuccess { remote ->

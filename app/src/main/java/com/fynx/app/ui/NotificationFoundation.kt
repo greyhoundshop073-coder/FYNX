@@ -181,7 +181,8 @@ object FynxNotificationFoundation {
     }
 
     private fun typeForChannel(channelId: String): FynxNotificationType = when (channelId) {
-        MESSAGES_CHANNEL, CALLS_CHANNEL -> FynxNotificationType.MESSAGE
+        MESSAGES_CHANNEL -> FynxNotificationType.MESSAGE
+        CALLS_CHANNEL -> FynxNotificationType.CALL
         FRIENDS_CHANNEL -> FynxNotificationType.FRIEND_REQUEST
         GIFTS_CHANNEL -> FynxNotificationType.REACTION
         MONEY_CHANNEL -> FynxNotificationType.WALLET_ACTIVITY

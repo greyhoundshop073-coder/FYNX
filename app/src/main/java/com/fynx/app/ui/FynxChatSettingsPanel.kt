@@ -55,6 +55,9 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
     var notifications by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatNotifications(context, chatUsername)) }
     var sounds by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatSounds(context, chatUsername)) }
     var vibration by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatVibration(context, chatUsername)) }
+    var previews by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatMessagePreviews(context, chatUsername)) }
+    var muteUntil by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatMuteUntil(context, chatUsername)) }
+    var showMuteDialog by rememberSaveable(chatUsername) { mutableStateOf(false) }
     var showClearDialog by rememberSaveable(chatUsername) { mutableStateOf(false) }
     var showResetDialog by rememberSaveable(chatUsername) { mutableStateOf(false) }
     var wallpaper by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatWallpaper(context, chatUsername)) }
@@ -69,6 +72,38 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
     var doodleLight by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatDoodleLight(context, chatUsername)) }
     var gradientRotation by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatGradientRotation(context, chatUsername)) }
     var backgroundGlow by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatBackgroundGlow(context, chatUsername)) }
+
+    if (showMuteDialog) {
+        AlertDialog(
+            onDismissRequest = { showMuteDialog = false },
+            title = { Text("Mute notifications") },
+            text = { Text("Choose how long this chat should stay quiet. Messages will still arrive and unread counts will continue normally.") },
+            confirmButton = {
+                Column(Modifier.fillMaxWidth()) {
+                    TextButton(onClick = {
+                        muteUntil = System.currentTimeMillis() + 8L * 60L * 60L * 1000L
+                        FynxConversationPreferences.setChatMuteUntil(context, chatUsername, muteUntil)
+                        showMuteDialog = false
+                    }, modifier = Modifier.fillMaxWidth()) { Text("8 hours") }
+                    TextButton(onClick = {
+                        muteUntil = System.currentTimeMillis() + 7L * 24L * 60L * 60L * 1000L
+                        FynxConversationPreferences.setChatMuteUntil(context, chatUsername, muteUntil)
+                        showMuteDialog = false
+                    }, modifier = Modifier.fillMaxWidth()) { Text("1 week") }
+                    TextButton(onClick = {
+                        muteUntil = Long.MAX_VALUE
+                        FynxConversationPreferences.setChatMuteUntil(context, chatUsername, muteUntil)
+                        showMuteDialog = false
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Always") }
+                    TextButton(onClick = {
+                        muteUntil = 0L
+                        FynxConversationPreferences.clearChatMute(context, chatUsername)
+                        showMuteDialog = false
+                    }, modifier = Modifier.fillMaxWidth()) { Text("Unmute") }
+                }
+            }
+        )
+    }
 
     if (showClearDialog) {
         AlertDialog(
@@ -157,6 +192,15 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
                 vibration = it
                 FynxConversationPreferences.chat(context, chatUsername).edit().putBoolean("vibration_" + chatUsername.removePrefix("@").lowercase(), it).apply()
             }
+            ChatSwitchRow("Message preview", "Show message text in FYNX notifications", previews) {
+                previews = it
+                FynxConversationPreferences.chat(context, chatUsername).edit().putBoolean("previews_" + chatUsername.removePrefix("@").lowercase(), it).apply()
+            }
+            ChatActionRow(
+                "Mute notifications",
+                if (muteUntil == Long.MAX_VALUE) "Always muted" else if (FynxConversationPreferences.chatNotificationsMuted(context, chatUsername)) "Muted until " + java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(muteUntil)) else "Not muted",
+                Icons.Default.Notifications
+            ) { showMuteDialog = true }
         }
 
         ChatSettingsSection("Appearance", Icons.Default.Palette) {

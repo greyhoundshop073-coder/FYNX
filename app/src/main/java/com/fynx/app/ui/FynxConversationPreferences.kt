@@ -59,6 +59,22 @@ object FynxConversationPreferences {
     fun chatVibration(context: Context, username: String): Boolean =
         chatBoolean(context, username, "vibration", true)
 
+    fun chatMuteUntil(context: Context, username: String): Long =
+        chatString(context, username, "muteuntil", "0").toLongOrNull()?.coerceAtLeast(0L) ?: 0L
+
+    fun chatNotificationsMuted(context: Context, username: String, now: Long = System.currentTimeMillis()): Boolean {
+        val until = chatMuteUntil(context, username)
+        return until == Long.MAX_VALUE || until > now
+    }
+
+    fun setChatMuteUntil(context: Context, username: String, until: Long) {
+        chat(context, username).edit().putString("muteuntil_${chatKey(username)}", until.coerceAtLeast(0L).toString()).apply()
+    }
+
+    fun clearChatMute(context: Context, username: String) {
+        setChatMuteUntil(context, username, 0L)
+    }
+
     fun chatReadReceipts(context: Context, username: String): Boolean =
         chatBoolean(context, username, "read", true)
 
@@ -135,8 +151,70 @@ object FynxConversationPreferences {
         group(context, groupId).edit().putBoolean("notifications", enabled).apply()
     }
 
-    fun groupMuted(context: Context, groupId: String): Boolean =
-        group(context, groupId).getBoolean("mute", false)
+    fun groupMuteUntil(context: Context, groupId: String): Long =
+        group(context, groupId).getString("muteuntil", "0")?.toLongOrNull()?.coerceAtLeast(0L) ?: 0L
+
+    fun groupMuted(context: Context, groupId: String, now: Long = System.currentTimeMillis()): Boolean {
+        val until = groupMuteUntil(context, groupId)
+        return until == Long.MAX_VALUE || until > now || group(context, groupId).getBoolean("mute", false)
+    }
+
+    fun setGroupMuteUntil(context: Context, groupId: String, until: Long) {
+        group(context, groupId).edit().putString("muteuntil", until.coerceAtLeast(0L).toString()).putBoolean("mute", until > 0L).apply()
+    }
+
+    fun clearGroupMute(context: Context, groupId: String) {
+        group(context, groupId).edit().putString("muteuntil", "0").putBoolean("mute", false).apply()
+    }
+
+    fun groupNotificationSounds(context: Context, groupId: String): Boolean =
+        group(context, groupId).getBoolean("notification_sounds", true)
+
+    fun setGroupNotificationSounds(context: Context, groupId: String, enabled: Boolean) {
+        group(context, groupId).edit().putBoolean("notification_sounds", enabled).apply()
+    }
+
+    fun groupNotificationVibration(context: Context, groupId: String): Boolean =
+        group(context, groupId).getBoolean("notification_vibration", true)
+
+    fun setGroupNotificationVibration(context: Context, groupId: String, enabled: Boolean) {
+        group(context, groupId).edit().putBoolean("notification_vibration", enabled).apply()
+    }
+
+    fun groupMessagePreviews(context: Context, groupId: String): Boolean =
+        group(context, groupId).getBoolean("message_previews", true)
+
+    fun setGroupMessagePreviews(context: Context, groupId: String, enabled: Boolean) {
+        group(context, groupId).edit().putBoolean("message_previews", enabled).apply()
+    }
+
+    fun groupMentionsEnabled(context: Context, groupId: String): Boolean =
+        group(context, groupId).getBoolean("mentions", true)
+
+    fun setGroupMentionsEnabled(context: Context, groupId: String, enabled: Boolean) {
+        group(context, groupId).edit().putBoolean("mentions", enabled).apply()
+    }
+
+    fun groupRepliesEnabled(context: Context, groupId: String): Boolean =
+        group(context, groupId).getBoolean("replies", true)
+
+    fun setGroupRepliesEnabled(context: Context, groupId: String, enabled: Boolean) {
+        group(context, groupId).edit().putBoolean("replies", enabled).apply()
+    }
+
+    fun groupEveryoneEnabled(context: Context, groupId: String): Boolean =
+        group(context, groupId).getBoolean("everyone", true)
+
+    fun setGroupEveryoneEnabled(context: Context, groupId: String, enabled: Boolean) {
+        group(context, groupId).edit().putBoolean("everyone", enabled).apply()
+    }
+
+    fun groupHighlightsEnabled(context: Context, groupId: String): Boolean =
+        group(context, groupId).getBoolean("highlights", true)
+
+    fun setGroupHighlightsEnabled(context: Context, groupId: String, enabled: Boolean) {
+        group(context, groupId).edit().putBoolean("highlights", enabled).apply()
+    }
 
     fun groupMembersCanSendMessages(context: Context, groupId: String): Boolean =
         group(context, groupId).getBoolean("send_messages", true)

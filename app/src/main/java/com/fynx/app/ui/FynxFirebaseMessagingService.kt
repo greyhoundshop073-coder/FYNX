@@ -20,8 +20,26 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
         val body = data["body"]?.takeIf { it.isNotBlank() } ?: "You have a new FYNX notification."
         val route = data["route"]?.takeIf { it.isNotBlank() } ?: "fynx://home"
         val type = data["type"]?.uppercase().orEmpty()
+        val sourceUsername = data["sourceUsername"]?.trim().orEmpty()
+        val groupId = data["targetId"]?.trim().orEmpty()
+        if (type == "MESSAGE" && sourceUsername.isNotBlank()) {
+            if (!FynxConversationPreferences.chatNotifications(this, sourceUsername) ||
+                FynxConversationPreferences.chatNotificationsMuted(this, sourceUsername)
+            ) return
+        }
+        if (type == "GROUP" && groupId.isNotBlank()) {
+            if (!FynxConversationPreferences.groupNotifications(this, groupId) ||
+                FynxConversationPreferences.groupMuted(this, groupId)
+            ) return
+        }
+        val notificationBody = when {
+            type == "MESSAGE" && sourceUsername.isNotBlank() && !FynxConversationPreferences.chatMessagePreviews(this, sourceUsername) -> "New message from @$sourceUsername"
+            type == "GROUP" && groupId.isNotBlank() && !FynxConversationPreferences.groupMessagePreviews(this, groupId) -> "New message in your FYNX group"
+            else -> body
+        }
         val channel = when (type) {
             "MESSAGE" -> FynxNotificationFoundation.MESSAGES_CHANNEL
+            "CALL" -> FynxNotificationFoundation.CALLS_CHANNEL
             "FRIEND_REQUEST", "FOLLOW", "STORY", "COMMENT", "REACTION" -> FynxNotificationFoundation.FRIENDS_CHANNEL
             "GROUP" -> FynxNotificationFoundation.MESSAGES_CHANNEL
             "MARKETPLACE_ORDER", "WALLET_ACTIVITY" -> FynxNotificationFoundation.MONEY_CHANNEL
@@ -48,7 +66,7 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
             channelId = channel,
             id = stableHash,
             title = title,
-            message = body,
+            message = notificationBody,
             stableKey = notificationId,
             contentIntent = pendingIntent
         )
