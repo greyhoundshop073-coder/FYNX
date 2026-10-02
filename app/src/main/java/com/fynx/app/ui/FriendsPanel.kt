@@ -209,22 +209,20 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
                 when (section) {
                     "Requests" -> if (incoming.isEmpty()) emptyState("No incoming requests", "Friend requests from other FYNX accounts will appear here.") else items(incoming, key = { "in_${it.id}" }) { request ->
                         RequestRow(FynxSocialClient.User(request.username, request.displayName, ""), "Confirm", "Delete", busy == request.username, onOpenProfile, onOpenChat,
-                            { act(request.username) { FynxSocialClient.acceptRequest(context, request.id) } },
-                            { act(request.username) { FynxSocialClient.rejectRequest(context, request.id) } })
+                            onPrimary = { act(request.username) { FynxSocialClient.acceptRequest(context, request.id) } },
+                            onSecondary = { act(request.username) { FynxSocialClient.rejectRequest(context, request.id) } })
                     }
                     "Sent" -> if (outgoing.isEmpty()) emptyState("No sent requests", "Requests you send will appear here until they are accepted or rejected.") else items(outgoing, key = { "out_${it.id}" }) { request ->
-                        RequestRow(FynxSocialClient.User(request.username, request.displayName, ""), "Cancel", null, busy == request.username, onOpenProfile, onOpenChat) {
-                            act(request.username) { FynxSocialClient.cancelRequest(context, request.id) }
-                        }
+                        RequestRow(FynxSocialClient.User(request.username, request.displayName, ""), "Cancel", null, busy == request.username, onOpenProfile, onOpenChat,
+                            onPrimary = { act(request.username) { FynxSocialClient.cancelRequest(context, request.id) } })
                     }
                     else -> {
                         val enough = if (searchMethod == FynxPeopleSearchMethod.PHONE) FynxPeopleDiscovery.normalizePhone(query).length >= 7 else query.trim().removePrefix("@").length >= 2
                         if (!enough) emptyState("Search for a FYNX user", "Type at least two characters of a username or display name.")
                         else if (discover.isEmpty()) emptyState("No matching people", "No available FYNX account matched that search.")
                         else items(discover, key = { "discover_${it.username}" }) { person ->
-                            RequestRow(person, "Add", null, busy == person.username, onOpenProfile, onOpenChat) {
-                                act(person.username) { FynxSocialClient.sendRequest(context, person.username) }
-                            }
+                            RequestRow(person, "Add", null, busy == person.username, onOpenProfile, onOpenChat,
+                                onPrimary = { act(person.username) { FynxSocialClient.sendRequest(context, person.username) } })
                         }
                     }
                 }
