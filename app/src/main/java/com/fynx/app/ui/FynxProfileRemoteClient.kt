@@ -13,12 +13,18 @@ object FynxProfileRemoteClient {
     data class ConnectionUser(val id:String,val username:String,val displayName:String)
     data class Report(val id:String,val status:String)
 
+    private fun JSONObject.optionalPhotoMediaId(): String? =
+        sequenceOf("profilePhotoMediaId", "profile_photo_media_id")
+            .map { key -> optString(key).trim() }
+            .firstOrNull { it.isNotBlank() && it != "null" }
+
     suspend fun get(context:Context,username:String):Result<Profile>{
         val normalized = username.trim().removePrefix("@").trim()
         val encoded=URLEncoder.encode(normalized,"UTF-8")
         return FynxBackendClient.get(context,"/api/social/profile/$encoded").mapCatching{
             val p=JSONObject(it).getJSONObject("profile")
-            val profile = Profile(p.optString("id"),p.optString("username"),p.optString("displayName"),p.optString("bio"),p.optString("country"),p.optBoolean("verified"),p.optString("profilePhotoMediaId").takeIf{v->v.isNotBlank()&&v!="null"},p.optBoolean("activityVisible"),p.optString("relationship"),p.optString("pendingRequestId").takeIf{v->v.isNotBlank()&&v!="null"},p.optBoolean("viewerSentRequest"),p.optBoolean("viewerReceivedRequest"),p.optBoolean("followedByCurrentUser"),p.optInt("mutualFriends"),p.optInt("postCount"),if(p.has("followerCount")&&!p.isNull("followerCount"))p.optInt("followerCount") else null,if(p.has("followingCount")&&!p.isNull("followingCount"))p.optInt("followingCount") else null,p.optBoolean("connectionsVisible"),p.optBoolean("canMessage"))
+            val profilePhotoMediaId = p.optionalPhotoMediaId()
+            val profile = Profile(p.optString("id"),p.optString("username").ifBlank{normalized},p.optString("displayName").ifBlank{p.optString("display_name")},p.optString("bio"),p.optString("country"),p.optBoolean("verified"),profilePhotoMediaId,p.optBoolean("activityVisible"),p.optString("relationship"),p.optString("pendingRequestId").takeIf{v->v.isNotBlank()&&v!="null"},p.optBoolean("viewerSentRequest"),p.optBoolean("viewerReceivedRequest"),p.optBoolean("followedByCurrentUser"),p.optInt("mutualFriends"),p.optInt("postCount"),if(p.has("followerCount")&&!p.isNull("followerCount"))p.optInt("followerCount") else null,if(p.has("followingCount")&&!p.isNull("followingCount"))p.optInt("followingCount") else null,p.optBoolean("connectionsVisible"),p.optBoolean("canMessage"))
             FynxPreferencesStore.saveRemoteProfilePhotoId(context, normalized, profile.profilePhotoMediaId)
             profile
         }
