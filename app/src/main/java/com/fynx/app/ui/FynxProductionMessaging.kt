@@ -20,8 +20,8 @@ object FynxProductionMessaging {
     private const val IMAGE_RECOMPRESS_THRESHOLD = 2 * 1024 * 1024
     private const val IMAGE_QUALITY = 85
     private const val MAX_MESSAGE_LENGTH = 4000
-    // Keep the Android contract aligned with the backend's authoritative 120-second voice limit.
     private const val MAX_VOICE_DURATION_MS = 120_000L
+    private val VALID_MEDIA_TYPES = setOf("image", "video", "video_note", "audio", "document")
 
     data class RemoteMedia(val id: String, val mimeType: String, val byteSize: Int)
     data class RemoteMessage(
@@ -37,12 +37,10 @@ object FynxProductionMessaging {
             val messages = JSONObject(raw).optJSONArray("messages") ?: JSONArray()
             val remote = buildList {
                 for (index in 0 until messages.length()) {
-                    runCatching { fromJson(messages.getJSONObject(index)) }
-                        .getOrNull()
-                        ?.let { message ->
-                            val safeId = message.id.trim().ifBlank { "remote-$index-${message.timestamp}" }
-                            add(if (message.id == safeId) message else message.copy(id = safeId))
-                        }
+                    runCatching { fromJson(messages.getJSONObject(index)) }.getOrNull()?.let { message ->
+                        val safeId = message.id.trim().ifBlank { "remote-$index-${message.timestamp}" }
+                        add(if (message.id == safeId) message else message.copy(id = safeId))
+                    }
                 }
             }.distinctBy { it.id }
             mergeLocalHistory(context, username, remote, currentUserId)
@@ -57,6 +55,8 @@ object FynxProductionMessaging {
         val peerId = "local-peer:$normalizedUsername"
         val preserved = local.mapNotNull { message ->
             if (message.id in remoteIds) return@mapNotNull null
+            val safeMediaType = message.attachmentType?.trim()?.lowercase()?.takeIf { it in VALID_MEDIA_TYPES }
+            val safeMediaUrl = (message.attachmentUri ?: message.voiceUri)?.trim()?.takeIf { it.isNotBlank() && safeMediaType != null }
             RemoteMessage(
                 id = message.id,
                 senderId = if (message.fromMe) currentUserId else peerId,
@@ -73,9 +73,9 @@ object FynxProductionMessaging {
                 reaction = message.reaction,
                 messageType = message.messageType,
                 messagePayload = message.messagePayload,
-                mediaId = message.mediaId,
-                mediaType = message.attachmentType,
-                mediaUrl = message.attachmentUri ?: message.voiceUri,
+                mediaId = message.mediaId?.trim()?.takeIf { it.isNotBlank() && safeMediaType != null && safeMediaUrl != null },
+                mediaType = safeMediaType?.takeIf { safeMediaUrl != null },
+                mediaUrl = safeMediaUrl,
                 voiceDurationMs = message.voiceDurationMs,
                 pinned = message.pinned
             )
@@ -136,8 +136,7 @@ object FynxProductionMessaging {
         var sample = 1
         while (width / sample > MAX_IMAGE_DIMENSION * 2 || height / sample > MAX_IMAGE_DIMENSION * 2) sample *= 2
         val options = BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.RGB_565 }
-        val bitmap = openMediaInput(context, uri).use { input -> BitmapFactory.decodeStream(input, null, options) }
-            ?: throw IllegalArgumentException("Unable to decode the selected image.")
+        val bitmap = openMediaInput(context, uri).use { input -> BitmapFactory.decodeStream(input, null, options) } ?: throw IllegalArgumentException("Unable to decode the selected image.")
         return try {
             val scale = maxOf(bitmap.width, bitmap.height).toFloat() / MAX_IMAGE_DIMENSION
             val outputBitmap = if (scale > 1f) {
@@ -150,15 +149,10 @@ object FynxProductionMessaging {
                 require(outputBitmap.compress(Bitmap.CompressFormat.JPEG, IMAGE_QUALITY, output)) { "Unable to optimize the selected image." }
                 output.toByteArray() to "image/jpeg"
             } finally { if (!outputBitmap.isRecycled) outputBitmap.recycle() }
-        } catch (error: Throwable) {
-            if (!bitmap.isRecycled) bitmap.recycle()
-            throw error
-        }
+        } catch (error: Throwable) { if (!bitmap.isRecycled) bitmap.recycle(); throw error }
     }
 
-    private fun openMediaInput(context: Context, uri: Uri): java.io.InputStream =
-        if (uri.scheme.equals("file", true)) uri.path?.let { File(it).inputStream() } ?: throw IllegalArgumentException("Unable to open the selected media.")
-        else context.contentResolver.openInputStream(uri) ?: throw IllegalArgumentException("Unable to open the selected media.")
+    private fun openMediaInput(context: Context, uri: Uri): java.io.InputStream = if (uri.scheme.equals("file", true)) uri.path?.let { File(it).inputStream() } ?: throw IllegalArgumentException("Unable to open the selected media.") else context.contentResolver.openInputStream(uri) ?: throw IllegalArgumentException("Unable to open the selected media.")
 
     suspend fun cacheRemoteMedia(context: Context, mediaId: String, mediaUrl: String): Result<Uri> = withContext(Dispatchers.IO) {
         try {
@@ -187,20 +181,14 @@ object FynxProductionMessaging {
         val cleanText = text.trim()
         if (cleanText.length > MAX_MESSAGE_LENGTH) return Result.failure(IllegalArgumentException("Message is too long. Maximum is 4000 characters."))
         if (cleanText.isBlank() && mediaId == null) return Result.failure(IllegalArgumentException("Message content is required."))
-        if (mediaType != null && mediaType !in setOf("image", "video", "video_note", "audio", "document")) return Result.failure(IllegalArgumentException("Unsupported message media type."))
+        if (mediaType != null && mediaType !in VALID_MEDIA_TYPES) return Result.failure(IllegalArgumentException("Unsupported message media type."))
         if (mediaId == null && mediaType != null) return Result.failure(IllegalArgumentException("Message media is incomplete."))
         if (voiceDurationMs !in 0L..MAX_VOICE_DURATION_MS) return Result.failure(IllegalArgumentException("Voice message duration is invalid."))
         val body = JSONObject().apply { put("recipientUsername", normalizedRecipient); put("text", cleanText); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("voiceDurationMs", voiceDurationMs) }
         val result = FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
         if (result.isSuccess) return result
         if (isAmbiguousTransportFailure(result.exceptionOrNull())) {
-            val recovered = history(context, normalizedRecipient).getOrNull()?.asReconciliationCandidate(
-                currentUsername = currentUsername,
-                text = cleanText,
-                replyToId = replyToId,
-                mediaId = mediaId,
-                mediaType = mediaType
-            )
+            val recovered = history(context, normalizedRecipient).getOrNull()?.asReconciliationCandidate(currentUsername, cleanText, replyToId, mediaId, mediaType)
             if (recovered != null) return Result.success(recovered)
         }
         return result
@@ -208,33 +196,19 @@ object FynxProductionMessaging {
 
     private fun isAmbiguousTransportFailure(error: Throwable?): Boolean {
         val message = error?.message.orEmpty().lowercase()
-        return message.contains("timeout") || message.contains("timed out") || message.contains("connection") ||
-            message.contains("network") || message.contains("socket") || message.contains("http 408") ||
-            message.contains("http 429") || message.contains("http 5") || message.contains("503") || message.contains("502")
+        return message.contains("timeout") || message.contains("timed out") || message.contains("connection") || message.contains("network") || message.contains("socket") || message.contains("http 408") || message.contains("http 429") || message.contains("http 5") || message.contains("503") || message.contains("502")
     }
 
     private fun List<RemoteMessage>.asReconciliationCandidate(currentUsername: String, text: String, replyToId: String?, mediaId: String?, mediaType: String?): RemoteMessage? {
         val now = System.currentTimeMillis()
-        return asSequence()
-            .filter { it.senderUsername?.trim()?.removePrefix("@").orEmpty().lowercase() == currentUsername }
-            .filter { it.text == text && it.replyToId == replyToId && it.mediaId == mediaId && it.mediaType == mediaType }
-            .filter { it.timestamp == 0L || kotlin.math.abs(now - it.timestamp) <= 120_000L }
-            .maxByOrNull { it.timestamp }
+        return asSequence().filter { it.senderUsername?.trim()?.removePrefix("@").orEmpty().lowercase() == currentUsername }.filter { it.text == text && it.replyToId == replyToId && it.mediaId == mediaId && it.mediaType == mediaType }.filter { it.timestamp == 0L || kotlin.math.abs(now - it.timestamp) <= 120_000L }.maxByOrNull { it.timestamp }
     }
 
     suspend fun sendStructuredMessage(context: Context, recipientUsername: String, messageType: String, payload: Map<String, String>, replyToId: String? = null, mediaId: String? = null, mediaType: String? = null): Result<RemoteMessage> {
         val allowed = setOf("location", "contact", "poll", "sticker", "gif")
         if (messageType !in allowed) return Result.failure(IllegalArgumentException("Unsupported message type."))
         if (payload.isEmpty()) return Result.failure(IllegalArgumentException("Message details are required."))
-        val body = JSONObject().apply {
-            put("recipientUsername", recipientUsername.trim().removePrefix("@").lowercase())
-            put("text", "")
-            put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL)
-            put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL)
-            put("mediaType", mediaType ?: JSONObject.NULL)
-            put("messageType", messageType)
-            put("messagePayload", JSONObject(payload))
-        }
+        val body = JSONObject().apply { put("recipientUsername", recipientUsername.trim().removePrefix("@").lowercase()); put("text", ""); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("messageType", messageType); put("messagePayload", JSONObject(payload)) }
         return FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { fromJson(JSONObject(it).getJSONObject("message")) }
     }
 
@@ -242,18 +216,12 @@ object FynxProductionMessaging {
         val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid poll id"))
         return FynxBackendClient.postJson(context, "/api/messages/$id/poll-vote", JSONObject().put("optionIndex", optionIndex).toString()).mapCatching { raw ->
             val counts = JSONObject(raw).optJSONArray("counts") ?: JSONArray()
-            buildList {
-                for (i in 0 until counts.length()) {
-                    val item = counts.getJSONObject(i)
-                    add(item.optInt("optionIndex") to item.optInt("votes"))
-                }
-            }
+            buildList { for (i in 0 until counts.length()) { val item = counts.getJSONObject(i); add(item.optInt("optionIndex") to item.optInt("votes")) } }
         }
     }
 
     suspend fun reactToMessage(context: Context, messageId: String, reaction: String?): Result<RemoteMessage> {
-        val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id"))
-        val clean = reaction?.trim()?.takeIf { it.isNotBlank() }
+        val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id")); val clean = reaction?.trim()?.takeIf { it.isNotBlank() }
         return FynxBackendClient.patchJson(context, "/api/messages/$id/reaction", JSONObject().apply { if (clean == null) put("reaction", JSONObject.NULL) else put("reaction", clean) }.toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
     }
 
@@ -263,54 +231,80 @@ object FynxProductionMessaging {
         return FynxBackendClient.patchJson(context, "/api/messages/$id", JSONObject().put("text", cleanText).toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
     }
 
-
     suspend fun setPinned(context: Context, messageId: String, pinned: Boolean): Result<RemoteMessage> {
         val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id"))
-        return FynxBackendClient.patchJson(context, "/api/messages/$id/pin", JSONObject().put("pinned", pinned).toString())
-            .mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
+        return FynxBackendClient.patchJson(context, "/api/messages/$id/pin", JSONObject().put("pinned", pinned).toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
     }
 
     suspend fun forwardMessage(context: Context, messageId: String, recipientUsername: String): Result<RemoteMessage> {
-        val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id"))
-        val recipient = recipientUsername.trim().removePrefix("@").lowercase()
+        val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id")); val recipient = recipientUsername.trim().removePrefix("@").lowercase()
         if (recipient.isBlank()) return Result.failure(IllegalArgumentException("recipient is required"))
-        return FynxBackendClient.postJson(context, "/api/messages/$id/forward", JSONObject().put("recipientUsername", recipient).toString())
-            .mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
+        return FynxBackendClient.postJson(context, "/api/messages/$id/forward", JSONObject().put("recipientUsername", recipient).toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
     }
 
-    suspend fun deleteMessage(context: Context, messageId: String): Result<Unit> {
-        val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id"))
-        return FynxBackendClient.delete(context, "/api/messages/$id").map { Unit }
-    }
+    suspend fun deleteMessage(context: Context, messageId: String): Result<Unit> { val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id")); return FynxBackendClient.delete(context, "/api/messages/$id").map { Unit } }
 
     suspend fun markRead(context: Context, messageIds: List<String>): Result<Int> = withContext(Dispatchers.IO) {
         var updated = 0; var failure: Throwable? = null
-        for (id in messageIds.mapNotNull { it.toLongOrNull() }.distinct().take(100)) {
-            val result = FynxBackendClient.postJson(context, "/api/messages/$id/read", "{}")
-            if (result.isSuccess) updated++ else if (failure == null) failure = result.exceptionOrNull()
-        }
+        for (id in messageIds.mapNotNull { it.toLongOrNull() }.distinct().take(100)) { val result = FynxBackendClient.postJson(context, "/api/messages/$id/read", "{}"); if (result.isSuccess) updated++ else if (failure == null) failure = result.exceptionOrNull() }
         if (failure != null && updated == 0) Result.failure(failure!!) else Result.success(updated)
     }
 
-    fun toChatMessage(message: RemoteMessage, currentUserId: String): ChatMessage = ChatMessage(
-        text = if (message.deleted) "Message deleted" else message.text, fromMe = message.senderId == currentUserId, id = message.id,
-        timestamp = message.timestamp, delivered = message.delivered, read = message.read, replyToId = message.replyToId, edited = message.edited,
-        attachmentUri = message.mediaUrl, attachmentType = message.mediaType, voiceUri = if (message.mediaType == "audio") message.mediaUrl else null,
-        voiceDurationMs = message.voiceDurationMs, messageType = message.messageType, messagePayload = message.messagePayload, reaction = message.reaction, mediaId = message.mediaId, pinned = message.pinned, senderName = message.senderDisplayName, senderUsername = message.senderUsername
-    )
+    fun toChatMessage(message: RemoteMessage, currentUserId: String): ChatMessage {
+        val mediaType = message.mediaType?.trim()?.lowercase()?.takeIf { it in VALID_MEDIA_TYPES }
+        val mediaUrl = message.mediaUrl?.trim()?.takeIf { it.isNotBlank() && mediaType != null && !message.mediaId.isNullOrBlank() }
+        return ChatMessage(
+            text = if (message.deleted) "Message deleted" else message.text,
+            fromMe = message.senderId == currentUserId,
+            id = message.id,
+            timestamp = message.timestamp,
+            delivered = message.delivered,
+            read = message.read,
+            replyToId = message.replyToId,
+            edited = message.edited,
+            attachmentUri = mediaUrl,
+            attachmentType = mediaType,
+            voiceUri = if (mediaType == "audio") mediaUrl else null,
+            voiceDurationMs = if (mediaType == "audio") message.voiceDurationMs else 0L,
+            messageType = message.messageType,
+            messagePayload = message.messagePayload,
+            reaction = message.reaction,
+            mediaId = if (mediaUrl != null) message.mediaId?.trim()?.takeIf { it.isNotBlank() } else null,
+            pinned = message.pinned,
+            senderName = message.senderDisplayName,
+            senderUsername = message.senderUsername
+        )
+    }
 
-    fun fromJson(item: JSONObject): RemoteMessage = RemoteMessage(
-        id = item.optString("id"), senderId = item.optString("sender_id", item.optString("senderId")),
-        senderUsername = item.optString("sender_username", item.optString("senderUsername")).takeIf { it.isNotBlank() }, senderDisplayName = item.optString("sender_display_name", item.optString("senderDisplayName")).takeIf { it.isNotBlank() },
-        recipientId = item.optString("recipient_id", item.optString("recipientId")), recipientUsername = item.optString("recipient_username", item.optString("recipientUsername")).takeIf { it.isNotBlank() }, recipientDisplayName = item.optString("recipient_display_name", item.optString("recipientDisplayName")).takeIf { it.isNotBlank() },
-        text = item.optString("text"), timestamp = item.optDouble("timestamp", 0.0).toLong(), delivered = item.optBoolean("delivered", false), read = item.optBoolean("read", false), edited = item.optBoolean("edited", false), deleted = item.optBoolean("deleted", false),
-        reaction = item.optString("reaction").takeIf { it.isNotBlank() },
-        replyToId = if (item.isNull("reply_to_id") && item.isNull("replyToId")) null else item.optString("reply_to_id", item.optString("replyToId")).takeIf { it.isNotBlank() },
-        messageType = item.optString("message_type", item.optString("messageType", "text")),
-        messagePayload = item.optJSONObject("message_payload")?.let { obj -> buildMap { val keys = obj.keys(); while (keys.hasNext()) { val key = keys.next(); val value = obj.opt(key); if (value != null && value != JSONObject.NULL) put(key, value.toString()) } } } ?: emptyMap(),
-        mediaId = if (item.isNull("media_id") && item.isNull("mediaId")) null else item.optString("media_id", item.optString("mediaId")).takeIf { it.isNotBlank() }, mediaType = item.optString("media_type", item.optString("mediaType")).takeIf { it.isNotBlank() },
-        mediaUrl = item.optString("mediaUrl").takeIf { it.isNotBlank() }, voiceDurationMs = item.optLong("voiceDurationMs", 0L), pinned = item.optBoolean("pinned", false)
-    )
+    fun fromJson(item: JSONObject): RemoteMessage {
+        val parsedMediaId = if (item.isNull("media_id") && item.isNull("mediaId")) null else item.optString("media_id", item.optString("mediaId")).takeIf { it.isNotBlank() }
+        val parsedMediaType = item.optString("media_type", item.optString("mediaType")).trim().lowercase().takeIf { it in VALID_MEDIA_TYPES }
+        val parsedMediaUrl = item.optString("mediaUrl").trim().takeIf { it.isNotBlank() && parsedMediaId != null && parsedMediaType != null }
+        return RemoteMessage(
+            id = item.optString("id"),
+            senderId = item.optString("sender_id", item.optString("senderId")),
+            senderUsername = item.optString("sender_username", item.optString("senderUsername")).takeIf { it.isNotBlank() },
+            senderDisplayName = item.optString("sender_display_name", item.optString("senderDisplayName")).takeIf { it.isNotBlank() },
+            recipientId = item.optString("recipient_id", item.optString("recipientId")),
+            recipientUsername = item.optString("recipient_username", item.optString("recipientUsername")).takeIf { it.isNotBlank() },
+            recipientDisplayName = item.optString("recipient_display_name", item.optString("recipientDisplayName")).takeIf { it.isNotBlank() },
+            text = item.optString("text"),
+            timestamp = item.optDouble("timestamp", 0.0).toLong(),
+            delivered = item.optBoolean("delivered", false),
+            read = item.optBoolean("read", false),
+            edited = item.optBoolean("edited", false),
+            deleted = item.optBoolean("deleted", false),
+            reaction = item.optString("reaction").takeIf { it.isNotBlank() },
+            replyToId = if (item.isNull("reply_to_id") && item.isNull("replyToId")) null else item.optString("reply_to_id", item.optString("replyToId")).takeIf { it.isNotBlank() },
+            messageType = item.optString("message_type", item.optString("messageType", "text")),
+            messagePayload = item.optJSONObject("message_payload")?.let { obj -> buildMap { val keys = obj.keys(); while (keys.hasNext()) { val key = keys.next(); val value = obj.opt(key); if (value != null && value != JSONObject.NULL) put(key, value.toString()) } } } ?: emptyMap(),
+            mediaId = parsedMediaId,
+            mediaType = parsedMediaType,
+            mediaUrl = parsedMediaUrl,
+            voiceDurationMs = item.optLong("voiceDurationMs", 0L),
+            pinned = item.optBoolean("pinned", false)
+        )
+    }
 
     private fun encodePathSegment(value: String): String = java.net.URLEncoder.encode(value.trim().removePrefix("@"), "UTF-8")
 }
