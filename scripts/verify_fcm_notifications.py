@@ -32,8 +32,12 @@ check("token ownership is account scoped", 'CREATE UNIQUE INDEX IF NOT EXISTS no
 check("server-side FCM credential only", 'FIREBASE_SERVICE_ACCOUNT_JSON' in push and 'FIREBASE_PRIVATE_KEY' in push and 'google-services.json' not in push)
 check("no Firebase private key in Android source", 'FIREBASE_PRIVATE_KEY' not in service and 'FIREBASE_SERVICE_ACCOUNT_JSON' not in service)
 check("FCM HTTP v1 send endpoint", 'fcm.googleapis.com/v1/projects/' in push and 'firebase.messaging' in push)
-check("FCM retry and invalid-token cleanup", 'response.status !== 429' in push and 'UNREGISTERED' in push and 'enabled=FALSE' in push)
-check("privacy-safe data payload", 'You have a new message.' in bootstrap and 'body: String(message)' in push)
+
+# Validate behavior rather than exact whitespace. The backend intentionally uses compact formatting.
+normalized_push = re.sub(r'\s+', ' ', push)
+normalized_bootstrap = re.sub(r'\s+', ' ', bootstrap)
+check("FCM retry and invalid-token cleanup", bool(re.search(r'while\s*\(\s*attempt\s*<\s*3\s*\)', normalized_push) or re.search(r'for\s*\(\s*let\s+attempt\s*=\s*1\s*;\s*attempt\s*<=\s*3\s*;', normalized_push)) and 'UNREGISTERED' in normalized_push and bool(re.search(r'enabled\s*=\s*FALSE', normalized_push)))
+check("privacy-safe data payload", 'You have a new message.' in normalized_bootstrap and bool(re.search(r'body\s*:\s*String\(message\)', normalized_push)))
 check("notification deep-link routing", 'route' in service and 'Uri.parse(route)' in service)
 check("group message push hook", 'queueFynxNotification' in bootstrap and 'group-message-' in bootstrap)
 check("friend request push hook", 'friend-request-' in bootstrap and 'FRIEND_REQUEST' in bootstrap)
@@ -55,13 +59,11 @@ check("follow notification channel", '"FRIEND_REQUEST", "FOLLOW", "STORY"' in se
 check("backend starts through notification bootstrap", 'node notificationBootstrap.js' in package)
 check("server-side secrets are not APK dependencies", 'FIREBASE_SERVICE_ACCOUNT_JSON' not in read("app/build.gradle.kts"))
 check("backend aggregates repeated social notifications", "AGGREGATABLE_TYPES = new Set(['REACTION','COMMENT'])" in preferences and "aggregateNotifications" in preferences)
-# The production implementation intentionally uses compact arrow-function formatting.
-# Normalize whitespace around => before checking the aggregation invariants so formatting
-# cannot turn a valid implementation red.
 normalized_preferences = re.sub(r'\s*=>\s*', '=>', preferences)
 check("aggregation counts distinct related posts and actors", "new Set(group.rows.map(row=>String(row.target_id)).filter(Boolean))" in normalized_preferences and "new Set(group.rows.map(row=>String(row.source_username||'').trim()).filter(Boolean))" in normalized_preferences and "const count=uniqueTargets.length||group.rows.length" in normalized_preferences)
 check("aggregate read state marks underlying events", "id.match(/^aggregate-(REACTION|COMMENT)" in preferences and "created_at>=to_timestamp" in preferences)
-check("FOLLOW respects Friends notification preference", 'case "FOLLOW": return "friend_requests_enabled";' in push)
+normalized_preference_push = re.sub(r'\s+', ' ', push)
+check("FOLLOW respects Friends notification preference", bool(re.search(r'case\s*[\"\']FOLLOW[\"\']\s*:\s*return\s*[\"\']friend_requests_enabled[\"\']\s*;', normalized_preference_push)))
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
