@@ -98,7 +98,7 @@ fun FriendsPanel(onOpenProfile:(String)->Unit={},onOpenChat:(String)->Unit={}) {
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
         Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically){
-            IconButton(onClick={(context as? Activity)?.onBackPressed(),Modifier.requiredSize(44.dp).semantics{contentDescription="Back"}}){Icon(Icons.Default.ArrowBack,"Back")}
+            IconButton(onClick={(context as? Activity)?.onBackPressed(),modifier=Modifier.requiredSize(44.dp).semantics{contentDescription="Back"}}){Icon(Icons.Default.ArrowBack,"Back")}
             Text("Friends",Modifier.weight(1f),style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold,textAlign=androidx.compose.ui.text.style.TextAlign.Center)
             Spacer(Modifier.requiredSize(44.dp))
         }
@@ -125,7 +125,7 @@ fun FriendsPanel(onOpenProfile:(String)->Unit={},onOpenChat:(String)->Unit={}) {
                 Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.55f),RoundedCornerShape(28.dp)).padding(4.dp),horizontalArrangement=Arrangement.spacedBy(2.dp)){
                     listOf("Friends","Requests","Sent","Discover").forEach{tab->
                         val selected=section==tab
-                        Surface(Modifier.weight(1f).height(48.dp).clickable{section=tab},shape=RoundedCornerShape(24.dp),color=if(selected)MaterialTheme.colorScheme.primary) {
+                        Surface(Modifier.weight(1f).height(48.dp).clickable{section=tab},shape=RoundedCornerShape(24.dp),color=if(selected)MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent){
                             Box(contentAlignment=Alignment.Center){Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(6.dp)){
                                 Text(tab,fontWeight=if(selected)FontWeight.Bold else FontWeight.SemiBold,color=if(selected)MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
                                 if(tab=="Requests"&&incoming.isNotEmpty())Surface(shape=CircleShape,color=if(selected)MaterialTheme.colorScheme.onPrimary.copy(alpha=.18f)else MaterialTheme.colorScheme.primary,modifier=Modifier.size(22.dp)){Box(contentAlignment=Alignment.Center){Text(incoming.size.toString(),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onPrimary,fontWeight=FontWeight.Bold)}}
