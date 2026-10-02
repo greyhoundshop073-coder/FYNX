@@ -4,6 +4,7 @@ package com.fynx.app.ui
 data class FynxNotificationPreferences(
     val enabled: Boolean = true,
     val pushEnabled: Boolean = true,
+    val callsEnabled: Boolean = true,
     val reactionsEnabled: Boolean = true,
     val commentsEnabled: Boolean = true,
     val friendRequestsEnabled: Boolean = true,
@@ -17,14 +18,10 @@ data class FynxNotificationPreferences(
 )
 
 object FynxNotificationControlsBatch3 {
-    fun update(
-        current: FynxNotificationPreferences,
-        enabled: Boolean? = null,
-        pushEnabled: Boolean? = null,
-        quietMode: Boolean? = null
-    ): FynxNotificationPreferences = current.copy(
+    fun update(current: FynxNotificationPreferences, enabled: Boolean? = null, pushEnabled: Boolean? = null, callsEnabled: Boolean? = null, quietMode: Boolean? = null): FynxNotificationPreferences = current.copy(
         enabled = enabled ?: current.enabled,
         pushEnabled = pushEnabled ?: current.pushEnabled,
+        callsEnabled = callsEnabled ?: current.callsEnabled,
         quietMode = quietMode ?: current.quietMode
     )
 
@@ -35,7 +32,8 @@ object FynxNotificationControlsBatch3 {
             FynxNotificationType.COMMENT -> preferences.commentsEnabled
             FynxNotificationType.FRIEND_REQUEST -> preferences.friendRequestsEnabled
             FynxNotificationType.FOLLOW -> preferences.friendRequestsEnabled
-            FynxNotificationType.MESSAGE, FynxNotificationType.CALL -> preferences.messagesEnabled
+            FynxNotificationType.MESSAGE -> preferences.messagesEnabled
+            FynxNotificationType.CALL -> preferences.callsEnabled
             FynxNotificationType.STORY -> preferences.storiesEnabled
             FynxNotificationType.REMINDER -> preferences.remindersEnabled
             FynxNotificationType.SAFETY -> true
