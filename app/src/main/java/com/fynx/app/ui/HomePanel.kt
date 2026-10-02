@@ -130,7 +130,10 @@ fun HomePanel(
 @Composable
 fun FynxProfileImage(name: String, uriString: String?, modifier: Modifier = Modifier, ownerUsername: String? = null) {
     val context = LocalContext.current
-    val normalizedOwner = ownerUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
+    val authUsername = remember(context) {
+        FynxAuthStore.load(context).username?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
+    }
+    val normalizedOwner = (ownerUsername ?: authUsername)?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
     var remotePhotoId by remember(normalizedOwner) {
         mutableStateOf(normalizedOwner?.let { FynxProfileRemoteClient.cachedProfilePhotoId(context, it) })
     }
