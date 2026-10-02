@@ -35,7 +35,7 @@ check("incoming calls use ringtone sound", "TYPE_RINGTONE" in notification_found
 check("call notification model exists", "CALL" in notification_models)
 check("call channel maps to call notification type", "CALLS_CHANNEL" in notification_foundation and "FynxNotificationType.CALL" in notification_foundation)
 check("social feedback routes through central sound policy", "FynxInteractionSound.Event.SOCIAL_POST_SUCCESS" in read("app/src/main/java/com/fynx/app/ui/FynxSocialInteractionSounds.kt") and "FynxInteractionSound.Event.SOCIAL_LIKE" in read("app/src/main/java/com/fynx/app/ui/FynxSocialInteractionSounds.kt"))
-check("active conversation does not emit duplicate incoming alert", "FynxInChatSound.play(context)" not in read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt"))
+check("active conversation uses gated in-chat sound without notification duplication", "FynxInChatSound.play(context)" in read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt") and "FynxConversationPreferences.chatSounds(context, chat.username)" in read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt"))
 check("notification channels are versioned for sound migration", "fynx_messages_v2" in notification_foundation and "fynx_calls_v2" in notification_foundation)
 check("notification controls define preference mapping", "fun shouldPush" in notification_controls and "messagesEnabled" in notification_controls and "walletEnabled" in notification_controls)
 check("notification device registration is backend-backed", "/api/notification-devices" in backend_devices)
