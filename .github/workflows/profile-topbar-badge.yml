@@ -22,12 +22,10 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
           path = Path('app/src/main/java/com/fynx/app/ui/FynxApp.kt')
           text = path.read_text()
-          old = '''                        IconButton(onClick = { selected = "Profile"; openProfileSettings = false }, modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "Open FYNX profile" }) {
-                            if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(40.dp))
-                            else FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp))
-                        }'''
+          pattern = re.compile(r'''(?ms)^\s*IconButton\(onClick = \{ selected = "Profile"; openProfileSettings = false \}, modifier = Modifier\.semantics\(mergeDescendants = true\) \{ contentDescription = "Open FYNX profile" \}\) \{\s*if \(remoteMyPhotoId != null\) FynxRemoteProfileAvatar\(remoteMyPhotoId, myProfile\.displayName, Modifier\.size\(40\.dp\)\)\s*else FynxProfileImage\(myProfile\.displayName, myPhoto, Modifier\.size\(40\.dp\)\)\s*\}''')
           new = '''                        FynxProfileButton(
                             onClick = { selected = "Profile"; openProfileSettings = false },
                             avatar = {
@@ -35,11 +33,10 @@ jobs:
                                 else FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp))
                             }
                         )'''
-          if old not in text:
-              raise SystemExit('PROFILE BADGE RED: expected Home topbar profile button block was not found; no change made')
-          if text.count(old) != 1:
-              raise SystemExit('PROFILE BADGE RED: expected exactly one Home topbar profile button block')
-          path.write_text(text.replace(old, new, 1))
+          text, count = pattern.subn(new, text, count=1)
+          if count != 1:
+              raise SystemExit('PROFILE BADGE RED: expected exactly one Home topbar profile button block was not found')
+          path.write_text(text)
           PY
 
       - name: Verify only the intended Home topbar call changed
