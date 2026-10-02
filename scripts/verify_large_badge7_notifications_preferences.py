@@ -32,9 +32,8 @@ checks = [
     ("server push honors global and category preferences", "push_enabled" in push and "preferenceColumn" in push and "pushAllowed" in push),
     ("server push stores notification before delivery", "INSERT INTO fynx_notifications" in push and "queueFynxNotification" in push),
     ("FCM credentials remain server-side", "FIREBASE_SERVICE_ACCOUNT_JSON" in push and "FIREBASE_PRIVATE_KEY" in push and "FYNX" not in models),
-    # Normalize whitespace so the gate validates the retry/cleanup behavior rather than
-    # requiring a particular minified or formatted JavaScript style.
-    ("push delivery has retry and invalid-token handling", bool(re.search(r"attempt\\s*<\\s*3", push)) and "UNREGISTERED" in push and "status='SENT'" in push),
+    # Validate behavior independently of compact/minified JavaScript whitespace.
+    ("push delivery has retry and invalid-token handling", bool(re.search(r"attempt\s*<\s*3", push)) and "UNREGISTERED" in push and bool(re.search(r"status\s*=\s*'SENT'", push))),
     ("notification route wiring covers real message/group/social events", "queueFynxNotification" in bootstrap and 'type: "MESSAGE"' in bootstrap and "type:'GROUP'" in bootstrap and "type:'COMMENT'" in bootstrap),
     ("existing notification verification gates remain in CI", "verify_notifications_settings_integration.py" in workflow),
     ("real Android instrumentation remains in CI", "connectedDebugAndroidTest" in workflow and ("verify_runtime_navigation.py" in workflow or "verify_authenticated_runtime_navigation.py" in workflow)),
