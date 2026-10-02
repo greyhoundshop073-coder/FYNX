@@ -32,25 +32,23 @@ import java.io.File
 
 @Composable
 fun FynxHomeDiscoverySection(videos: List<FynxDiscoveryClient.TrendingPost>, loadingMore: Boolean, hasMore: Boolean, onLoadMore: () -> Unit, onOpenVideo: (Int) -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp), shape = FynxDesign.LargeCardShape) {
-        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Discovery", style = MaterialTheme.typography.titleMedium)
-                    Text("Real FYNX videos people are engaging with.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
-                }
-                if (loadingMore) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Discovery", style = MaterialTheme.typography.titleMedium)
+                Text("Real FYNX videos people are engaging with.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
             }
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 2.dp)) {
-                itemsIndexed(videos, key = { _, video -> video.id }) { index, video ->
-                    FynxDiscoveryPreviewCard(video = video, onOpen = { onOpenVideo(index) })
-                    if (index >= videos.lastIndex - 3 && hasMore && !loadingMore) {
-                        LaunchedEffect(videos.size) { onLoadMore() }
-                    }
+            if (loadingMore) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+        }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 0.dp)) {
+            itemsIndexed(videos.take(30), key = { _, video -> video.id }) { index, video ->
+                FynxDiscoveryPreviewCard(video = video, onOpen = { onOpenVideo(index) })
+                if (index >= minOf(videos.size, 30) - 4 && hasMore && !loadingMore) {
+                    LaunchedEffect(videos.size) { onLoadMore() }
                 }
-                if (loadingMore) item {
-                    Box(Modifier.width(180.dp).aspectRatio(9f / 16f), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                }
+            }
+            if (loadingMore) item {
+                Box(Modifier.width(180.dp).aspectRatio(9f / 16f), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
         }
     }
