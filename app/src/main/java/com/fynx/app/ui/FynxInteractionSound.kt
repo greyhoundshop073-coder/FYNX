@@ -36,7 +36,9 @@ object FynxInteractionSound {
 
         SOCIAL_REACTION(Category.SOCIAL, 220L, listOf(987.77 to 60, 1318.51 to 80)),
         SOCIAL_COMMENT(Category.SOCIAL, 180L, listOf(698.46 to 70, 1046.5 to 100)),
-        SOCIAL_INTERACTION(Category.SOCIAL, 220L, listOf(784.0 to 70, 1174.66 to 90))
+        SOCIAL_INTERACTION(Category.SOCIAL, 220L, listOf(784.0 to 70, 1174.66 to 90)),
+        SOCIAL_POST_SUCCESS(Category.SOCIAL, 220L, listOf(784.0 to 65, 1174.66 to 85)),
+        SOCIAL_LIKE(Category.SOCIAL, 220L, listOf(987.77 to 55, 1318.51 to 75))
     }
 
     private const val PREFS = "fynx_interaction_sound_preferences"
@@ -45,9 +47,10 @@ object FynxInteractionSound {
     private const val GROUP = "group_enabled"
     private const val SOCIAL = "social_enabled"
     private val lastPlayed = mutableMapOf<Event, Long>()
+    private val recentEventIds = mutableMapOf<String, Long>()
 
     @Synchronized
-    fun play(context: Context, event: Event) {
+    fun play(context: Context, event: Event, eventId: String? = null) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (!prefs.getBoolean(MASTER, true)) return
         val categoryEnabled = when (event.category) {
@@ -60,10 +63,20 @@ object FynxInteractionSound {
         val audio = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
         if (audio.ringerMode == RINGER_MODE_SILENT) return
         if (audio.getStreamVolume(AudioManager.STREAM_NOTIFICATION) <= 0) return
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            val notifications = context.getSystemService(android.app.NotificationManager::class.java)
+            if (notifications?.currentInterruptionFilter == android.app.NotificationManager.INTERRUPTION_FILTER_NONE) return
+        }
 
         val now = System.currentTimeMillis()
         val previous = lastPlayed[event] ?: 0L
         if (now - previous < event.throttleMs) return
+        if (eventId != null) {
+            val old = recentEventIds[eventId]
+            if (old != null && now - old < 30_000L) return
+            recentEventIds[eventId] = now
+            recentEventIds.entries.removeIf { now - it.value > 30_000L }
+        }
         lastPlayed[event] = now
 
         Thread {
