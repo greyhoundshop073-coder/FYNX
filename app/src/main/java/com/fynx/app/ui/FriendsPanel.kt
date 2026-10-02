@@ -98,7 +98,7 @@ fun FriendsPanel(onOpenProfile:(String)->Unit={},onOpenChat:(String)->Unit={}) {
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
         Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically){
-            IconButton(onClick={ (context as? Activity)?.onBackPressed() },modifier=Modifier.requiredSize(44.dp).semantics{contentDescription="Back"}){Icon(Icons.Default.ArrowBack,"Back")}
+            IconButton(onClick={ (context as? Activity)?.onBackPressedDispatcher?.onBackPressed() },modifier=Modifier.requiredSize(44.dp).semantics{contentDescription="Back"}){Icon(Icons.Default.ArrowBack,"Back")}
             Text("Friends",Modifier.weight(1f),style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold,textAlign=androidx.compose.ui.text.style.TextAlign.Center)
             Spacer(Modifier.requiredSize(44.dp))
         }
