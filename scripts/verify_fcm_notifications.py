@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -19,6 +20,7 @@ realtime = read("backend/realtimeIsolationBootstrap.js")
 follow = read("backend/followRoutes.js")
 models = read("app/src/main/java/com/fynx/app/ui/NotificationModels.kt")
 package = read("backend/package.json")
+preferences = read("backend/notificationPreferences.js")
 
 check("Firebase messaging dependency", 'com.google.firebase:firebase-messaging' in read("app/build.gradle.kts"))
 check("Google services plugin", 'com.google.gms.google-services' in read("app/build.gradle.kts"))
@@ -40,9 +42,6 @@ check("private message push hook", ('message-${message.id}' in bootstrap or 'not
 check("Home comment push hook", "type:'COMMENT'" in bootstrap and 'comment-${result.rows[0].id}' in bootstrap)
 check("Home comment is account scoped", 'postOwner.rows[0] && String(postOwner.rows[0].author_id) !== String(req.user.sub)' in bootstrap)
 check("Home reply push hook", "type:'COMMENT'" in bootstrap and ('reply-${row.id}-${recipientId}' in bootstrap or "notificationId:'reply-' + row.id + '-' + recipientId" in bootstrap) and 'realtimeIsolationBootstrap.js' in bootstrap)
-# Reply notification code is injected into the runtime file by notificationBootstrap.js.
-# Verify the authoritative bootstrap patch rather than requiring generated runtime text
-# to already exist in the source file before startup.
 check("reply notification runtime import", 'marker: \'import { installSocialPostReactions } from "./socialPostReactionBootstrap.js";\'' in bootstrap and 'import { queueFynxNotification } from "./notificationPush.js";' in bootstrap)
 check("reply recipients exclude actor", 'String(parentAuthorId) !== String(req.user.sub)' in bootstrap and 'String(postOwnerId) !== String(req.user.sub)' in bootstrap)
 check("reply can notify parent commenter and post owner", 'replyRecipients.add(String(parentAuthorId))' in bootstrap and 'replyRecipients.add(String(postOwnerId))' in bootstrap)
@@ -55,9 +54,13 @@ check("notification fallback routing is type-specific", 'FynxNotificationType.ME
 check("follow notification channel", '"FRIEND_REQUEST", "FOLLOW", "STORY"' in service)
 check("backend starts through notification bootstrap", 'node notificationBootstrap.js' in package)
 check("server-side secrets are not APK dependencies", 'FIREBASE_SERVICE_ACCOUNT_JSON' not in read("app/build.gradle.kts"))
-check("backend aggregates repeated social notifications", "AGGREGATABLE_TYPES = new Set(['REACTION','COMMENT'])" in read("backend/notificationPreferences.js") and "aggregateNotifications" in read("backend/notificationPreferences.js"))
-check("aggregation counts distinct related posts and actors", "new Set(group.rows.map(row => String(row.target_id)).filter(Boolean))" in read("backend/notificationPreferences.js") and "new Set(group.rows.map(row => String(row.source_username || '').trim()).filter(Boolean))" in read("backend/notificationPreferences.js") and "other" in read("backend/notificationPreferences.js"))
-check("aggregate read state marks underlying events", "id.match(/^aggregate-(REACTION|COMMENT)" in read("backend/notificationPreferences.js") and "created_at>=to_timestamp" in read("backend/notificationPreferences.js"))
+check("backend aggregates repeated social notifications", "AGGREGATABLE_TYPES = new Set(['REACTION','COMMENT'])" in preferences and "aggregateNotifications" in preferences)
+# The production implementation intentionally uses compact arrow-function formatting.
+# Normalize whitespace around => before checking the aggregation invariants so formatting
+# cannot turn a valid implementation red.
+normalized_preferences = re.sub(r'\s*=>\s*', '=>', preferences)
+check("aggregation counts distinct related posts and actors", "new Set(group.rows.map(row=>String(row.target_id)).filter(Boolean))" in normalized_preferences and "new Set(group.rows.map(row=>String(row.source_username||'').trim()).filter(Boolean))" in normalized_preferences and "const count=uniqueTargets.length||group.rows.length" in normalized_preferences)
+check("aggregate read state marks underlying events", "id.match(/^aggregate-(REACTION|COMMENT)" in preferences and "created_at>=to_timestamp" in preferences)
 check("FOLLOW respects Friends notification preference", 'case "FOLLOW": return "friend_requests_enabled";' in push)
 
 failed = [name for name, ok in checks if not ok]
