@@ -1031,7 +1031,11 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                     }
                                 }
                                 .pointerInput(voiceMode, recordingMode, sending) {
-                                    if (!voiceMode || sending) return@pointerInput
+                                    if (sending) return@pointerInput
+                                    if (!voiceMode) {
+                                        detectTapGestures(onTap = { submitComposer() })
+                                        return@pointerInput
+                                    }
                                     detectTapGestures(
                                         onTap = {
                                             composerVideoMode = !composerVideoMode
