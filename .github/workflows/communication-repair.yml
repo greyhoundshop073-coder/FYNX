@@ -1,0 +1,58 @@
+name: Communication Integrity Repair
+
+on:
+  push:
+    paths:
+      - "communication-repair.trigger"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply verified communication fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
+          s = p.read_text()
+          old = '''                                .pointerInput(voiceMode, recordingMode, sending) {
+                                    if (!voiceMode || sending) return@pointerInput
+                                    detectTapGestures(
+                                        onTap = {
+                                            composerVideoMode = !composerVideoMode
+                                        },'''
+          new = '''                                .pointerInput(voiceMode, recordingMode, sending) {
+                                    if (sending) return@pointerInput
+                                    if (!voiceMode) {
+                                        detectTapGestures(onTap = { submitComposer() })
+                                        return@pointerInput
+                                    }
+                                    detectTapGestures(
+                                        onTap = {
+                                            composerVideoMode = !composerVideoMode
+                                        },'''
+          if old not in s:
+              raise SystemExit("Expected Send-button gesture block was not found; refusing to modify source")
+          p.write_text(s.replace(old, new, 1))
+          trigger = Path("communication-repair.trigger")
+          if trigger.exists(): trigger.unlink()
+          PY
+
+      - name: Commit verified source fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/fynx/app/ui/ConversationPanel.kt communication-repair.trigger
+          git diff --cached --check
+          git diff --cached -- app/src/main/java/com/fynx/app/ui/ConversationPanel.kt
+          git commit -m "Fix private chat Send button interaction"
+          git push origin HEAD:main
