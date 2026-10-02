@@ -59,6 +59,22 @@ object FynxConversationPreferences {
     fun chatVibration(context: Context, username: String): Boolean =
         chatBoolean(context, username, "vibration", true)
 
+    fun chatMuteUntil(context: Context, username: String): Long =
+        chatString(context, username, "muteuntil", "0").toLongOrNull()?.coerceAtLeast(0L) ?: 0L
+
+    fun chatNotificationsMuted(context: Context, username: String, now: Long = System.currentTimeMillis()): Boolean {
+        val until = chatMuteUntil(context, username)
+        return until == Long.MAX_VALUE || until > now
+    }
+
+    fun setChatMuteUntil(context: Context, username: String, until: Long) {
+        chat(context, username).edit().putString("muteuntil_${chatKey(username)}", until.coerceAtLeast(0L).toString()).apply()
+    }
+
+    fun clearChatMute(context: Context, username: String) {
+        setChatMuteUntil(context, username, 0L)
+    }
+
     fun chatReadReceipts(context: Context, username: String): Boolean =
         chatBoolean(context, username, "read", true)
 
