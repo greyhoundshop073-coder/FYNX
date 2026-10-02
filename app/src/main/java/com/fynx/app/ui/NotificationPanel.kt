@@ -227,6 +227,7 @@ private fun NotificationPreferenceSwitch(title: String, description: String, che
 
 private fun typeLabel(type: FynxNotificationType): String = when (type) {
     FynxNotificationType.MESSAGE -> "Messages"
+    FynxNotificationType.CALL -> "Calls"
     FynxNotificationType.FRIEND_REQUEST -> "Friends"
     FynxNotificationType.FOLLOW -> "Followers"
     FynxNotificationType.STORY -> "Stories"
@@ -241,6 +242,7 @@ private fun typeLabel(type: FynxNotificationType): String = when (type) {
 
 private fun notificationIcon(type: FynxNotificationType) = when (type) {
     FynxNotificationType.MESSAGE -> Icons.Default.Message
+    FynxNotificationType.CALL -> Icons.Default.Call
     FynxNotificationType.FRIEND_REQUEST -> Icons.Default.PersonAdd
     FynxNotificationType.FOLLOW -> Icons.Default.PersonAdd
     FynxNotificationType.STORY -> Icons.Default.AutoStories
