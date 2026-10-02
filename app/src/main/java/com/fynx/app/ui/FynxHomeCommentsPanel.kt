@@ -48,22 +48,17 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     var replyLoadingId by remember(post.id) { mutableStateOf<String?>(null) }
     var replyErrorId by remember(post.id) { mutableStateOf<String?>(null) }
     var expandedReplies by remember(post.id) { mutableStateOf<Map<String, List<FynxRemoteSocialClient.RemoteComment>>>(emptyMap()) }
-    var authorPhotos by remember(post.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var highlightedCommentId by remember(post.id, initialCommentId) { mutableStateOf(initialCommentId) }
     val consumedCursors = remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
     val replyingTo = replyingToId?.let { id -> comments.firstOrNull { it.id == id } }
 
     fun resolveCommenterPhotos(items: List<FynxRemoteSocialClient.RemoteComment>) {
         val names = items.map { it.authorUsername.removePrefix("@").trim() }.filter { it.isNotBlank() }.distinct()
-        val missing = names.filterNot { authorPhotos.containsKey(it.lowercase()) }
-        if (missing.isEmpty()) return
+        if (names.isEmpty()) return
         scope.launch {
-            val resolved = mutableMapOf<String, String?>()
-            missing.forEach { username ->
-                val user = FynxSocialClient.searchUsers(context, username).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(username, true) }
-                resolved[username.lowercase()] = user?.profilePhotoMediaId
+            names.forEach { username ->
+                FynxProfileRemoteClient.get(context, username)
             }
-            if (resolved.isNotEmpty()) authorPhotos = authorPhotos + resolved
         }
     }
     fun resetPagingState() { nextCursor = null; consumedCursors.value = emptySet(); loadingMore = false }
@@ -132,18 +127,12 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
             replyLoadingId = null
         }
     }
-    LaunchedEffect(post.id) { comments = emptyList(); text = ""; commentCount = post.commentCount; replyingToId = null; authorPhotos = emptyMap(); resetPagingState(); loadComments() }
+    LaunchedEffect(post.id) { comments = emptyList(); text = ""; commentCount = post.commentCount; replyingToId = null; resetPagingState(); loadComments() }
 
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         BackHandler(onBack = onClose)
-        // Keep the entire bottom-sheet surface above the IME. Applying imePadding
-        // to the outer layout moves the sheet as a unit instead of pushing only
-        // the composer row, which previously allowed the typing box to sit below
-        // the visible keyboard/screen boundary on some Android window sizes.
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.extraLarge, tonalElevation = 8.dp) {
-                // The comments sheet must resize as one unit when the IME opens.
-                // This keeps the list and composer inside the visible app window.
                 Column(Modifier.fillMaxSize()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Close comments") }
@@ -160,8 +149,8 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                             items(comments.filter { it.parentCommentId == null }, key = { it.id }) { comment ->
                                 Column(Modifier.fillMaxWidth()) {
                                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                                        val photo = authorPhotos[comment.authorUsername.removePrefix("@").trim().lowercase()]
-                                        FynxRemoteProfileAvatar(photo, comment.authorDisplayName.ifBlank { comment.authorUsername }, Modifier.size(38.dp).clip(CircleShape), ownerUsername = comment.authorUsername); Spacer(Modifier.width(10.dp))
+                                        FynxRemoteProfileAvatar(null, comment.authorDisplayName.ifBlank { comment.authorUsername }, Modifier.size(38.dp).clip(CircleShape), ownerUsername = comment.authorUsername)
+                                        Spacer(Modifier.width(10.dp))
                                         Column(Modifier.weight(1f)) {
                                             Text(comment.authorDisplayName.ifBlank { comment.authorUsername }, style = MaterialTheme.typography.labelLarge)
                                             Text(comment.text, style = MaterialTheme.typography.bodyMedium)
@@ -174,8 +163,8 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                     }
                                     expandedReplies[comment.id].orEmpty().forEach { reply ->
                                         Row(Modifier.fillMaxWidth().padding(start = 48.dp, top = 8.dp), verticalAlignment = Alignment.Top) {
-                                            val photo = authorPhotos[reply.authorUsername.removePrefix("@").trim().lowercase()]
-                                            FynxRemoteProfileAvatar(photo, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium); Text(reply.text, style = MaterialTheme.typography.bodyMedium); Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                            FynxRemoteProfileAvatar(null, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername)
+                                            Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium); Text(reply.text, style = MaterialTheme.typography.bodyMedium); Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                         }
                                     }
                                     if (replyLoadingId == comment.id) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(start = 48.dp, top = 4.dp))
@@ -189,9 +178,6 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                     HorizontalDivider()
                     if (replyingTo != null) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Text("Replying to ${replyingTo!!.authorDisplayName.ifBlank { replyingTo!!.authorUsername }}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f)); TextButton(onClick = { replyingToId = null }) { Text("Cancel") }
                     }
-                    // IME insets are handled by the parent Column. Keep only the
-                    // system navigation inset here so the composer never receives
-                    // double keyboard padding.
                     Row(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
                         Column(Modifier.weight(1f)) {
                             OutlinedTextField(
