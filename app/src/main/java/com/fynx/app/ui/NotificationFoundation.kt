@@ -56,30 +56,48 @@ object FynxNotificationFoundation {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java)
         val notificationSound = android.provider.Settings.System.DEFAULT_NOTIFICATION_URI
-        val notificationAudio = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+        val notificationAudio = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
         val ringtoneSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-        val ringtoneAudio = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+        val ringtoneAudio = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
         val channels = listOf(
-            NotificationChannel(FRIENDS_CHANNEL, "Friends", NotificationManager.IMPORTANCE_DEFAULT).apply { setSound(notificationSound, notificationAudio) },
-            NotificationChannel(MESSAGES_CHANNEL, "Messages", NotificationManager.IMPORTANCE_DEFAULT).apply { setSound(notificationSound, notificationAudio) },
+            NotificationChannel(FRIENDS_CHANNEL, "Friends", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                setSound(notificationSound, notificationAudio)
+            },
+            NotificationChannel(MESSAGES_CHANNEL, "Messages", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                setSound(notificationSound, notificationAudio)
+            },
             NotificationChannel(CALLS_CHANNEL, "Calls", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Incoming FYNX voice and video calls"
                 enableVibration(true)
                 setShowBadge(true)
                 setSound(ringtoneSound, ringtoneAudio)
             },
-            NotificationChannel(GIFTS_CHANNEL, "Gifts", NotificationManager.IMPORTANCE_DEFAULT).apply { setSound(notificationSound, notificationAudio) },
-            NotificationChannel(MONEY_CHANNEL, "Money", NotificationManager.IMPORTANCE_DEFAULT).apply { setSound(notificationSound, notificationAudio) },
-            NotificationChannel(REMINDERS_CHANNEL, "Reminders", NotificationManager.IMPORTANCE_DEFAULT).apply { setSound(notificationSound, notificationAudio) }
+            NotificationChannel(GIFTS_CHANNEL, "Gifts", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                setSound(notificationSound, notificationAudio)
+            },
+            NotificationChannel(MONEY_CHANNEL, "Money", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                setSound(notificationSound, notificationAudio)
+            },
+            NotificationChannel(REMINDERS_CHANNEL, "Reminders", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                setSound(notificationSound, notificationAudio)
+            }
         )
         manager.createNotificationChannels(channels)
     }
 
     fun isSpeakNotificationsEnabled(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(key(KEY_SPEAK, context), false)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(key(KEY_SPEAK, context), false)
 
     fun setSpeakNotificationsEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(key(KEY_SPEAK, context), enabled).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putBoolean(key(KEY_SPEAK, context), enabled).apply()
         if (!enabled) stopSpeaking()
     }
 
@@ -121,7 +139,11 @@ object FynxNotificationFoundation {
         contentIntent: PendingIntent? = null
     ) {
         createChannels(context)
-        val effectiveChannelId = if (channelId == MESSAGES_CHANNEL && title.startsWith("Incoming ")) CALLS_CHANNEL else channelId
+
+        // Only an explicit Calls channel is a call. A message titled "Incoming ..."
+        // must never be promoted to the call ringtone channel.
+        val effectiveChannelId = channelId
+        val isCall = effectiveChannelId == CALLS_CHANNEL
         val type = typeForChannel(effectiveChannelId)
         val preferences = FynxNotificationPreferencesClient.cached(context)
         if (!FynxNotificationControlsBatch3.shouldPush(preferences, type)) return
@@ -145,12 +167,14 @@ object FynxNotificationFoundation {
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(message)
-            .setPriority(if (effectiveChannelId == CALLS_CHANNEL) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(effectiveChannelId != CALLS_CHANNEL)
-            .setCategory(if (effectiveChannelId == CALLS_CHANNEL) NotificationCompat.CATEGORY_CALL else NotificationCompat.CATEGORY_MESSAGE)
-            .setDefaults(NotificationCompat.DEFAULT_VIBRATE)
+            .setPriority(if (isCall) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(!isCall)
+            .setCategory(if (isCall) NotificationCompat.CATEGORY_CALL else NotificationCompat.CATEGORY_MESSAGE)
+            .setDefaults(if (isCall) NotificationCompat.DEFAULT_ALL else NotificationCompat.DEFAULT_VIBRATE)
+
         if (contentIntent != null) builder.setContentIntent(contentIntent)
-        if (effectiveChannelId == CALLS_CHANNEL) builder.setTimeoutAfter(60_000L)
+        if (isCall) builder.setTimeoutAfter(60_000L)
+
         NotificationManagerCompat.from(context).notify(id, builder.build())
         speak(context, title, message)
     }
