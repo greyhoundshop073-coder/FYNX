@@ -35,7 +35,7 @@ object FynxNotificationControlsBatch3 {
             FynxNotificationType.COMMENT -> preferences.commentsEnabled
             FynxNotificationType.FRIEND_REQUEST -> preferences.friendRequestsEnabled
             FynxNotificationType.FOLLOW -> preferences.friendRequestsEnabled
-            FynxNotificationType.MESSAGE -> preferences.messagesEnabled
+            FynxNotificationType.MESSAGE, FynxNotificationType.CALL -> preferences.messagesEnabled
             FynxNotificationType.STORY -> preferences.storiesEnabled
             FynxNotificationType.REMINDER -> preferences.remindersEnabled
             FynxNotificationType.SAFETY -> true
