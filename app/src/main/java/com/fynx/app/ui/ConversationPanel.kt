@@ -146,16 +146,9 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 isNewConversation = false
                 messages = (messages.filterNot { it.id == remote.id } + converted).sortedBy { it.timestamp }
                 if (remote.recipientId == myId) {
-                    if (FynxConversationPreferences.chatNotifications(context, chat.username) && FynxConversationPreferences.chatSounds(context, chat.username)) {
-                        FynxInChatSound.play(context)
-                    }
-                    if (FynxConversationPreferences.chatNotifications(context, chat.username) && FynxConversationPreferences.chatVibration(context, chat.username)) {
-                        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-                        if (vibrator?.hasVibrator() == true) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) vibrator.vibrate(VibrationEffect.createOneShot(70L, VibrationEffect.DEFAULT_AMPLITUDE))
-                            else @Suppress("DEPRECATION") vibrator.vibrate(70L)
-                        }
-                    }
+                    // This conversation is currently visible, so do not emit a notification
+                    // sound/vibration for the message. Background/other-chat delivery is
+                    // handled by the shared notification foundation.
                     realtimeClient.acknowledgeMessage(remote.id)
                     conversationScope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
                 }
