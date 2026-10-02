@@ -40,16 +40,19 @@ object FynxProfileRemoteClient {
     suspend fun posts(context:Context,username:String):Result<List<ProfilePost>>{val encoded=URLEncoder.encode(username.trim().removePrefix("@"),"UTF-8");return FynxBackendClient.get(context,"/api/social/profile/$encoded/posts?limit=30").mapCatching{val a=JSONObject(it).optJSONArray("posts")?:JSONArray();buildList{for(i in 0 until a.length()){val p=a.getJSONObject(i);add(ProfilePost(p.optString("id"),p.optString("text"),p.optString("visibility"),p.optString("mediaId").takeIf{v->v.isNotBlank()&&v!="null"},p.optString("mediaType").takeIf{v->v.isNotBlank()&&v!="null"},p.optString("mediaUrl").takeIf{v->v.isNotBlank()},p.optDouble("timestamp").toLong(),p.optInt("likeCount"),p.optInt("commentCount")))}}}}
 
     suspend fun update(context:Context,displayName:String,username:String,bio:String,country:String="",profilePhotoMediaId:String?=null,removeProfilePhoto:Boolean=false):Result<Profile>{
+        val normalizedUsername = username.trim().removePrefix("@").trim()
         return FynxBackendClient.patchJson(context,"/api/social/profile/me",JSONObject().apply{
             put("displayName",displayName.trim())
-            put("username",username.trim().removePrefix("@"))
+            put("username",normalizedUsername)
             put("bio",bio.trim())
             put("country",country.trim())
             if(removeProfilePhoto) put("profilePhotoMediaId",JSONObject.NULL)
             else if(profilePhotoMediaId!=null) put("profilePhotoMediaId",profilePhotoMediaId.toLongOrNull()?:JSONObject.NULL)
         }.toString()).mapCatching{
             val p=JSONObject(it).getJSONObject("profile")
-            val profile = Profile(p.optString("id"),p.optString("username").ifBlank{p.optString("username")},p.optString("display_name").ifBlank{p.optString("displayName")},p.optString("bio"),p.optString("country"),p.optBoolean("verified"),p.optString("profile_photo_media_id").takeIf{v->v.isNotBlank()&&v!="null"},true,"self",null,false,false,false,0,p.optInt("post_count"),if(p.has("follower_count")&&!p.isNull("follower_count"))p.optInt("follower_count") else null,if(p.has("following_count")&&!p.isNull("following_count"))p.optInt("following_count") else null,true,false)
+            val responseUsername = p.optString("username").trim().removePrefix("@").ifBlank { normalizedUsername }
+            val responseDisplayName = p.optString("displayName").ifBlank { p.optString("display_name") }.ifBlank { displayName.trim() }
+            val profile = Profile(p.optString("id"),responseUsername,responseDisplayName,p.optString("bio").ifBlank { bio.trim() },p.optString("country").ifBlank { country.trim() },p.optBoolean("verified"),p.optionalPhotoMediaId(),p.optBoolean("activityVisible",true),p.optString("relationship").ifBlank { "self" },p.optString("pendingRequestId").takeIf{v->v.isNotBlank()&&v!="null"},p.optBoolean("viewerSentRequest"),p.optBoolean("viewerReceivedRequest"),p.optBoolean("followedByCurrentUser"),p.optInt("mutualFriends"),p.optInt("postCount"),if(p.has("followerCount")&&!p.isNull("followerCount"))p.optInt("followerCount") else if(p.has("follower_count")&&!p.isNull("follower_count"))p.optInt("follower_count") else null,if(p.has("followingCount")&&!p.isNull("followingCount"))p.optInt("followingCount") else if(p.has("following_count")&&!p.isNull("following_count"))p.optInt("following_count") else null,p.optBoolean("connectionsVisible",true),p.optBoolean("canMessage"))
             FynxPreferencesStore.saveRemoteProfilePhotoId(context, profile.username, profile.profilePhotoMediaId)
             profile
         }
