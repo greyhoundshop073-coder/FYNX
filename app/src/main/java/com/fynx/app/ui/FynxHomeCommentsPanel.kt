@@ -48,17 +48,22 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     var replyLoadingId by remember(post.id) { mutableStateOf<String?>(null) }
     var replyErrorId by remember(post.id) { mutableStateOf<String?>(null) }
     var expandedReplies by remember(post.id) { mutableStateOf<Map<String, List<FynxRemoteSocialClient.RemoteComment>>>(emptyMap()) }
+    var authorPhotos by remember(post.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var highlightedCommentId by remember(post.id, initialCommentId) { mutableStateOf(initialCommentId) }
     val consumedCursors = remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
     val replyingTo = replyingToId?.let { id -> comments.firstOrNull { it.id == id } }
 
     fun resolveCommenterPhotos(items: List<FynxRemoteSocialClient.RemoteComment>) {
         val names = items.map { it.authorUsername.removePrefix("@").trim() }.filter { it.isNotBlank() }.distinct()
-        if (names.isEmpty()) return
+        val missing = names.filterNot { authorPhotos.containsKey(it.lowercase()) }
+        if (missing.isEmpty()) return
         scope.launch {
-            names.forEach { username ->
-                FynxProfileRemoteClient.get(context, username)
+            val resolved = mutableMapOf<String, String?>()
+            missing.forEach { username ->
+                val profile = FynxProfileRemoteClient.get(context, username).getOrNull()
+                resolved[username.lowercase()] = profile?.profilePhotoMediaId
             }
+            if (resolved.isNotEmpty()) authorPhotos = authorPhotos + resolved
         }
     }
     fun resetPagingState() { nextCursor = null; consumedCursors.value = emptySet(); loadingMore = false }
@@ -127,7 +132,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
             replyLoadingId = null
         }
     }
-    LaunchedEffect(post.id) { comments = emptyList(); text = ""; commentCount = post.commentCount; replyingToId = null; resetPagingState(); loadComments() }
+    LaunchedEffect(post.id) { comments = emptyList(); text = ""; commentCount = post.commentCount; replyingToId = null; authorPhotos = emptyMap(); resetPagingState(); loadComments() }
 
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         BackHandler(onBack = onClose)
@@ -149,8 +154,8 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                             items(comments.filter { it.parentCommentId == null }, key = { it.id }) { comment ->
                                 Column(Modifier.fillMaxWidth()) {
                                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                                        FynxRemoteProfileAvatar(null, comment.authorDisplayName.ifBlank { comment.authorUsername }, Modifier.size(38.dp).clip(CircleShape), ownerUsername = comment.authorUsername)
-                                        Spacer(Modifier.width(10.dp))
+                                        val photo = authorPhotos[comment.authorUsername.removePrefix("@").trim().lowercase()]
+                                        FynxRemoteProfileAvatar(photo, comment.authorDisplayName.ifBlank { comment.authorUsername }, Modifier.size(38.dp).clip(CircleShape), ownerUsername = comment.authorUsername); Spacer(Modifier.width(10.dp))
                                         Column(Modifier.weight(1f)) {
                                             Text(comment.authorDisplayName.ifBlank { comment.authorUsername }, style = MaterialTheme.typography.labelLarge)
                                             Text(comment.text, style = MaterialTheme.typography.bodyMedium)
@@ -163,8 +168,8 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                     }
                                     expandedReplies[comment.id].orEmpty().forEach { reply ->
                                         Row(Modifier.fillMaxWidth().padding(start = 48.dp, top = 8.dp), verticalAlignment = Alignment.Top) {
-                                            FynxRemoteProfileAvatar(null, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername)
-                                            Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium); Text(reply.text, style = MaterialTheme.typography.bodyMedium); Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                            val photo = authorPhotos[reply.authorUsername.removePrefix("@").trim().lowercase()]
+                                            FynxRemoteProfileAvatar(photo, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium); Text(reply.text, style = MaterialTheme.typography.bodyMedium); Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                         }
                                     }
                                     if (replyLoadingId == comment.id) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(start = 48.dp, top = 4.dp))
