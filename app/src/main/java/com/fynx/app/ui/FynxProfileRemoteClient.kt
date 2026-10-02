@@ -30,8 +30,11 @@ object FynxProfileRemoteClient {
         }
     }
 
-    fun cachedProfilePhotoId(context:Context,username:String):String? =
-        FynxPreferencesStore.loadRemoteProfilePhotoId(context, username)
+    fun cachedProfilePhotoId(context:Context,username:String):String? {
+        val normalized = username.trim().removePrefix("@").trim()
+        if (normalized.isBlank()) return null
+        return FynxPreferencesStore.loadRemoteProfilePhotoId(context, normalized)
+    }
 
     suspend fun followers(context:Context):Result<List<ConnectionUser>> = FynxBackendClient.get(context,"/api/social/me/followers").mapCatching { parseConnections(it) }
     suspend fun following(context:Context):Result<List<ConnectionUser>> = FynxBackendClient.get(context,"/api/social/me/following").mapCatching { parseConnections(it) }
