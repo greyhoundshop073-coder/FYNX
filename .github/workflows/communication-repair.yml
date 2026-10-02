@@ -22,27 +22,19 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p = Path("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
           s = p.read_text()
-          old = '''                                .pointerInput(voiceMode, recordingMode, sending) {
-                                    if (!voiceMode || sending) return@pointerInput
-                                    detectTapGestures(
-                                        onTap = {
-                                            composerVideoMode = !composerVideoMode
-                                        },'''
-          new = '''                                .pointerInput(voiceMode, recordingMode, sending) {
-                                    if (sending) return@pointerInput
-                                    if (!voiceMode) {
-                                        detectTapGestures(onTap = { submitComposer() })
-                                        return@pointerInput
-                                    }
-                                    detectTapGestures(
-                                        onTap = {
-                                            composerVideoMode = !composerVideoMode
-                                        },'''
-          if old not in s:
+          pattern = r'(\.pointerInput\(voiceMode, recordingMode, sending\) \{\n)(\s*)if \(!voiceMode \|\| sending\) return@pointerInput'
+          replacement = r'''\1\2if (sending) return@pointerInput
+          \2if (!voiceMode) {
+          \2    detectTapGestures(onTap = { submitComposer() })
+          \2    return@pointerInput
+          \2}'''
+          updated, count = re.subn(pattern, replacement, s, count=1)
+          if count != 1:
               raise SystemExit("Expected Send-button gesture block was not found; refusing to modify source")
-          p.write_text(s.replace(old, new, 1))
+          p.write_text(updated)
           trigger = Path("communication-repair.trigger")
           if trigger.exists(): trigger.unlink()
           PY
