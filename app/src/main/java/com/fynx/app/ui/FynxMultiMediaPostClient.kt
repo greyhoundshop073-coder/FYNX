@@ -130,6 +130,7 @@ object FynxMultiMediaPostClient {
         }
 
         FynxHomeLifecycleRefreshBus.request(context)
+        FynxInteractionSound.play(context, FynxInteractionSound.Event.SOCIAL_INTERACTION)
         postId
     }
 
