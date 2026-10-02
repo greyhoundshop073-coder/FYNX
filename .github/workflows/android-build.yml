@@ -29,8 +29,7 @@ on:
       - "gradlew.bat"
       - "scripts/**"
       - "docs/**"
-      - ".github/workflows/android-build.yml"
-      - ".maestro/**"
+      - "*.maestro/**"
       - "visual-baselines/**"
   workflow_dispatch:
     inputs:
@@ -86,6 +85,10 @@ jobs:
           service_account: ${{ env.FYNX_GCP_SERVICE_ACCOUNT }}
       - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v3
+      - name: Verify Google Cloud authentication
+        run: |
+          gcloud auth list --filter=status:ACTIVE --format="value(account)"
+          gcloud config get-value project
       - name: Verify Google Cloud authentication
         run: |
           gcloud auth list --filter=status:ACTIVE --format="value(account)"
@@ -240,6 +243,11 @@ jobs:
           path: fynx-runtime-screenshots/
           if-no-files-found: error
           retention-days: 14
+      - name: Verify APK is built from the exact checked-out commit
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          echo "APK source commit: ${GITHUB_SHA}"
+          sha256sum app/build/outputs/apk/debug/app-debug.apk
       - name: Prepare exact-commit debug APK filename
         run: cp app/build/outputs/apk/debug/app-debug.apk "FYNX-debug-${GITHUB_SHA}.apk"
       - name: Upload exact-commit debug APK
