@@ -146,9 +146,15 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 isNewConversation = false
                 messages = (messages.filterNot { it.id == remote.id } + converted).sortedBy { it.timestamp }
                 if (remote.recipientId == myId) {
-                    // This conversation is currently visible, so do not emit a notification
-                    // sound/vibration for the message. Background/other-chat delivery is
-                    // handled by the shared notification foundation.
+                    // Keep a subtle in-chat cue when this conversation allows sounds.
+                    // Do not emit notification vibration here; background/other-chat
+                    // delivery is handled by the shared notification foundation.
+                    if (
+                        FynxConversationPreferences.chatNotifications(context, chat.username) &&
+                        FynxConversationPreferences.chatSounds(context, chat.username)
+                    ) {
+                        FynxInChatSound.play(context)
+                    }
                     realtimeClient.acknowledgeMessage(remote.id)
                     conversationScope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
                 }
