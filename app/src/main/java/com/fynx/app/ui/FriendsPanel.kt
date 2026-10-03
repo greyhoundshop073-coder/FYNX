@@ -15,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
@@ -100,13 +99,9 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
             Spacer(Modifier.requiredSize(44.dp))
         }
 
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 20.dp)) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 20.dp)) {
             item {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Surface(Modifier.size(56.dp), RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.People, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp)) } }
-                    Spacer(Modifier.width(14.dp))
-                    Column { Text("Find People", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text("Connect with people on FYNX", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                }
+                Text("Find People", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
             }
             item {
                 Box {
@@ -134,7 +129,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
                 }
             }
             if (section == "Friends") {
-                item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("Your Friends", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); Text(friends.size.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold) } }
+                item { Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) { Text("Your Friends", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); Text(friends.size.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold) } }
                 if (loading) item { Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
                 else if (friends.isEmpty()) emptyState("No friends yet", "Accepted FYNX connections will appear here.")
                 else items(friends, key = { "friend_${it.username}" }) { person -> FriendRow(person, busy == person.username, menuUser == person.username, { open -> menuUser = if (open) person.username else null }, onOpenProfile, onOpenChat) { act(person.username) { FynxSocialClient.removeFriend(context, person.username) } } }
