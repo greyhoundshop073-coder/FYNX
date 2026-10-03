@@ -131,6 +131,29 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var networkError by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
     var typingSent by remember { mutableStateOf(false) }
+    var marketplaceContextAttached by remember { mutableStateOf(false) }
+    var replySwipeOffsets by remember { mutableStateOf<Map<String, Float>>(emptyMap()) }
+    var pollVoteNotice by remember { mutableStateOf<String?>(null) }
+    var mediaPickerPurpose by remember { mutableStateOf<String?>(null) }
+    var pollQuestion by remember { mutableStateOf("") }
+    var pollOptions by remember { mutableStateOf(listOf("", "")) }
+    var showPollDialog by remember { mutableStateOf(false) }
+    val mediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        val purpose = mediaPickerPurpose
+        mediaPickerPurpose = null
+        if (purpose == "sticker" || purpose == "gif") {
+            val uri = uris.first()
+            attachment = uri
+            attachmentType = if (purpose == "gif") "gif" else "sticker"
+            attachmentMessageType = if (purpose == "gif") "gif" else "sticker"
+            showEmojiPanel = false
+        } else {
+            attachment = uris.first()
+            attachmentType = context.contentResolver.getType(uris.first()) ?: "image/*"
+            attachmentMessageType = null
+        }
+    }
     var stopRecordingAction: (() -> Unit)? = null
 
     val realtimeClient = remember(chat.username, currentUserId, recipientUserId, resolvedAvatarUri) {
