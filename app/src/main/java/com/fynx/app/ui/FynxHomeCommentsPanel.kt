@@ -54,15 +54,29 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     val replyingTo = replyingToId?.let { id -> comments.firstOrNull { it.id == id } }
 
     fun resolveCommenterPhotos(items: List<FynxRemoteSocialClient.RemoteComment>) {
-        val names = items.map { it.authorUsername.removePrefix("@").trim() }.filter { it.isNotBlank() }.distinct()
-        val missing = names.filterNot { authorPhotos.containsKey(it.lowercase()) }
+        val names = items.map { it.authorUsername.removePrefix("@").trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+        val normalized = names.map { it.lowercase() }
+        val known = authorPhotos.toMutableMap()
+        normalized.forEach { username ->
+            if (!known.containsKey(username)) {
+                known[username] = FynxProfileRemoteClient.cachedProfilePhotoId(context, username)
+            }
+        }
+        authorPhotos = known
+        val missing = names.filter { username ->
+            val key = username.lowercase()
+            !authorPhotos.containsKey(key) || authorPhotos[key].isNullOrBlank()
+        }
         if (missing.isEmpty()) return
         scope.launch {
-            val resolved = mutableMapOf<String, String?>()
-            missing.forEach { username ->
-                val profile = FynxProfileRemoteClient.get(context, username).getOrNull()
-                resolved[username.lowercase()] = profile?.profilePhotoMediaId
-            }
+            val resolved = missing.map { username ->
+                kotlinx.coroutines.async(kotlinx.coroutines.Dispatchers.IO) {
+                    val key = username.lowercase()
+                    key to FynxProfileRemoteClient.get(context, username).getOrNull()?.profilePhotoMediaId
+                }
+            }.let { jobs -> jobs.map { it.await() }.toMap() }
             if (resolved.isNotEmpty()) authorPhotos = authorPhotos + resolved
         }
     }
