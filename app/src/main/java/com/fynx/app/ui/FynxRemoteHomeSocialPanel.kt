@@ -132,11 +132,35 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     }
 
     fun resolveAuthorPhotos(items: List<FynxRemoteSocialClient.RemotePost>) {
-        val names = items.map { it.authorUsername.removePrefix("@").trim() }.filter { it.isNotBlank() }.distinct()
-        val missing = names.filterNot { authorPhotos.containsKey(it.lowercase()) }
+        val names = items.map { it.authorUsername.removePrefix("@").trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+        val normalized = names.map { it.lowercase() }
+        val cached = normalized.associateWith { username ->
+            FynxProfileRemoteClient.cachedProfilePhotoId(context, username)
+        }
+        val known = authorPhotos.toMutableMap()
+        cached.forEach { (username, photoId) ->
+            if (!known.containsKey(username)) known[username] = photoId
+        }
+        authorPhotos = known
+        val missing = names.filter { username ->
+            val key = username.lowercase()
+            !authorPhotos.containsKey(key) || authorPhotos[key].isNullOrBlank()
+        }
         if (missing.isEmpty()) return
         scope.launch {
-            val resolved = missing.map { username -> async(Dispatchers.IO) { username.lowercase() to (FynxSocialClient.searchUsers(context, username).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(username, true) }?.profilePhotoMediaId ?: FynxProfileRemoteClient.get(context, username).getOrNull()?.profilePhotoMediaId) } }.awaitAll().toMap()
+            val resolved = missing.map { username ->
+                async(Dispatchers.IO) {
+                    val key = username.lowercase()
+                    val photoId = FynxSocialClient.searchUsers(context, username)
+                        .getOrNull()
+                        ?.firstOrNull { it.username.removePrefix("@").equals(username, true) }
+                        ?.profilePhotoMediaId
+                        ?: FynxProfileRemoteClient.get(context, username).getOrNull()?.profilePhotoMediaId
+                    key to photoId
+                }
+            }.awaitAll().toMap()
             authorPhotos = authorPhotos + resolved
         }
     }
