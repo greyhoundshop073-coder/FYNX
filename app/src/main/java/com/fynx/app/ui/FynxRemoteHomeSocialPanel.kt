@@ -382,8 +382,10 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             }
     }
 
-    val homeInsertions = remember(publishRefreshKey, marketplaceListings.isNotEmpty(), peopleRecommendations.isNotEmpty(), discoveryVideos.isNotEmpty()) {
-        val seed = (publishRefreshKey * 1103515245L + 12345L).ushr(1)
+    val homeInsertions = remember(currentUsername, marketplaceListings.isNotEmpty(), peopleRecommendations.isNotEmpty(), discoveryVideos.isNotEmpty()) {
+        // Keep interleaving deterministic for this account across refreshes/re-entry.
+        // Refresh signals must update data, not reshuffle the existing Home structure.
+        val seed = currentUsername.trim().lowercase().hashCode().toLong() and 0x7fffffffL
         val available = buildList {
             if (marketplaceListings.isNotEmpty()) add("marketplace")
             if (peopleRecommendations.isNotEmpty()) add("people")
