@@ -514,13 +514,14 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
 
     LaunchedEffect(visibleMessages.size, searchQuery) {
         if (visibleMessages.isEmpty()) return@LaunchedEffect
+        if (searchQuery.isBlank() && messageListState.isScrollInProgress) return@LaunchedEffect
         delay(60L)
         if (searchQuery.isNotBlank()) {
             messageListState.scrollToItem(0)
-        } else {
+        } else if (!messageListState.isScrollInProgress) {
             val lastIndex = messageListState.layoutInfo.totalItemsCount - 1
             val lastVisible = messageListState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: -1
-            if (lastIndex >= 0 && (lastVisible < 0 || lastVisible >= lastIndex - 2)) {
+            if (lastIndex >= 0 && (lastVisible < 0 || lastVisible >= lastIndex - 1)) {
                 messageListState.animateScrollToItem(lastIndex)
             }
         }
@@ -825,6 +826,31 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                 }
                             }
                             }
+                            message.reaction?.takeIf { it.isNotBlank() }?.let { reaction ->
+                                Surface(
+                                    onClick = {
+                                        conversationScope.launch {
+                                            FynxProductionMessaging.reactToMessage(context, message.id, null)
+                                                .onSuccess { remote ->
+                                                    currentUserId?.let { myId ->
+                                                        messages = messages.map { existing ->
+                                                            if (existing.id == remote.id) FynxProductionMessaging.toChatMessage(remote, myId) else existing
+                                                        }
+                                                    }
+                                                }
+                                                .onFailure { networkError = it.message ?: "Reaction could not be removed" }
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    tonalElevation = 2.dp,
+                                    modifier = Modifier
+                                        .align(if (message.fromMe) Alignment.BottomEnd else Alignment.BottomStart)
+                                        .offset(y = 3.dp)
+                                ) {
+                                    Text(reaction, fontSize = 24.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+                                }
+                            }
                         }
                     }                }
             }
@@ -838,8 +864,11 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 ) {
                     Text("Message actions", style = MaterialTheme.typography.titleLarge)
                     Row(
-                        Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                        Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(androidx.compose.foundation.rememberScrollState())
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         listOf("❤️","😂","👍","🙏","🔥","😮","😢","👏").forEach { emoji ->
                             TextButton(
@@ -859,9 +888,9 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                         }.onFailure { networkError = it.message ?: "Reaction could not be saved" }
                                     }
                                 },
-                                modifier = Modifier.size(48.dp),
+                                modifier = Modifier.size(56.dp),
                                 contentPadding = PaddingValues(0.dp)
-                            ) { Text(emoji, style = MaterialTheme.typography.titleMedium) }
+                            ) { Text(emoji, style = MaterialTheme.typography.headlineSmall) }
                         }
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
