@@ -602,11 +602,29 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                             }
                                         }
                                     } else if (message.messageType == "contact") {
-                                        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
-                                            Column(Modifier.padding(12.dp)) {
-                                                Icon(Icons.Default.ContactPage, "Contact", tint = MaterialTheme.colorScheme.primary)
-                                                Text(message.messagePayload["displayName"].orEmpty().ifBlank { "FYNX contact" }, style = MaterialTheme.typography.titleSmall)
-                                                Text("@" + message.messagePayload["username"].orEmpty(), style = MaterialTheme.typography.bodySmall)
+                                        val contactName = message.messagePayload["displayName"].orEmpty().ifBlank { "FYNX contact" }
+                                        val contactPhone = message.messagePayload["phone"].orEmpty()
+                                        val contactUsername = message.messagePayload["username"].orEmpty().removePrefix("@").trim()
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                            shape = RoundedCornerShape(14.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(Icons.Default.ContactPage, "Contact", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+                                                    Spacer(Modifier.width(10.dp))
+                                                    Column(Modifier.weight(1f)) {
+                                                        Text(contactName, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                                                        if (contactPhone.isNotBlank()) Text(contactPhone, style = MaterialTheme.typography.bodySmall)
+                                                        if (contactUsername.isNotBlank()) Text("@$contactUsername", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                                    }
+                                                }
+                                                if (contactUsername.isNotBlank()) {
+                                                    TextButton(onClick = { onOpenProfile(contactUsername) }, modifier = Modifier.fillMaxWidth()) {
+                                                        Text("View FYNX profile")
+                                                    }
+                                                }
                                             }
                                         }
                                     } else if (message.messageType == "poll") {
