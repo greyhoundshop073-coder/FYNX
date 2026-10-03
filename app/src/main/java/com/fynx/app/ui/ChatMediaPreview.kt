@@ -1,10 +1,11 @@
 package com.fynx.app.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.runtime.Composable
 
 /**
  * Chat-only media preview surface.
@@ -25,7 +26,7 @@ fun ChatMediaPreview(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (onMediaClick != null) Modifier else Modifier),
+            .then(onMediaClick?.let { Modifier.clickable(onClick = it) } ?: Modifier),
     ) {
         FynxRemoteMedia(
             mediaUrl = mediaUrl,
