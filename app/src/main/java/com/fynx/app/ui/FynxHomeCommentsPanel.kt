@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 private const val MAX_COMMENT_LENGTH = 1000
@@ -72,7 +73,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
         if (missing.isEmpty()) return
         scope.launch {
             val resolved = missing.map { username ->
-                kotlinx.coroutines.async(kotlinx.coroutines.Dispatchers.IO) {
+                async(kotlinx.coroutines.Dispatchers.IO) {
                     val key = username.lowercase()
                     key to FynxProfileRemoteClient.get(context, username).getOrNull()?.profilePhotoMediaId
                 }
