@@ -63,43 +63,6 @@ import java.util.Locale
 @Composable
 fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, onBack: () -> Unit, onOpenProfile: (String) -> Unit = {}, onVoiceCall: () -> Unit = {}, onVideoCall: () -> Unit = {}) {
     val context = LocalContext.current
-    val contactPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        conversationScope.launch {
-            sending = true
-            try {
-                var displayName = "Contact"
-                var phone = ""
-                context.contentResolver.query(
-                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                    arrayOf(
-                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-                        ContactsContract.CommonDataKinds.Phone.NUMBER
-                    ),
-                    "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID}=?",
-                    arrayOf(uri.lastPathSegment),
-                    null
-                )?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        displayName = cursor.getString(0)?.trim().orEmpty().ifBlank { "Contact" }
-                        phone = cursor.getString(1)?.trim().orEmpty()
-                    }
-                }
-                if (phone.isBlank()) throw IllegalArgumentException("This contact has no phone number to share.")
-                val normalized = FynxPeopleDiscovery.normalizePhone(phone)
-                val matchedUsername = FynxSocialClient.searchUsers(context, normalized, phoneSearch = true)
-                    .getOrNull()?.firstOrNull()?.username.orEmpty()
-                pendingContactName = displayName
-                pendingContactPhone = phone
-                pendingContactUsername = matchedUsername
-                showContactPreview = true
-            } catch (e: Exception) {
-                networkError = e.message ?: "Contact could not be selected"
-            } finally {
-                sending = false
-            }
-        }
-    }
     val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) networkError = "Location permission is required to share your location." else showLocationDialog = true
     }
@@ -288,6 +251,44 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         } else file?.delete()
     }
     stopRecordingAction = ::stopRecording
+
+    val contactPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        conversationScope.launch {
+            sending = true
+            try {
+                var displayName = "Contact"
+                var phone = ""
+                context.contentResolver.query(
+                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                    arrayOf(
+                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                        ContactsContract.CommonDataKinds.Phone.NUMBER
+                    ),
+                    "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID}=?",
+                    arrayOf(uri.lastPathSegment),
+                    null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        displayName = cursor.getString(0)?.trim().orEmpty().ifBlank { "Contact" }
+                        phone = cursor.getString(1)?.trim().orEmpty()
+                    }
+                }
+                if (phone.isBlank()) throw IllegalArgumentException("This contact has no phone number to share.")
+                val normalized = FynxPeopleDiscovery.normalizePhone(phone)
+                val matchedUsername = FynxSocialClient.searchUsers(context, normalized, phoneSearch = true)
+                    .getOrNull()?.firstOrNull()?.username.orEmpty()
+                pendingContactName = displayName
+                pendingContactPhone = phone
+                pendingContactUsername = matchedUsername
+                showContactPreview = true
+            } catch (e: Exception) {
+                networkError = e.message ?: "Contact could not be selected"
+            } finally {
+                sending = false
+            }
+        }
+    }
 
     fun submitComposer() {
         val value = text.trim()
