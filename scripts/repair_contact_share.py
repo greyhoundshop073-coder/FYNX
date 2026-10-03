@@ -6,25 +6,19 @@ s = p.read_text()
 if 'import android.provider.ContactsContract' not in s:
     s = s.replace('import android.content.pm.PackageManager\n', 'import android.content.pm.PackageManager\nimport android.provider.ContactsContract\n', 1)
 
-# The previous repair added the picker near the top of the composable, before the
-# conversation state it uses. Move that exact launcher below the state/functions.
-start = s.find('    val contactPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickContact())')
-end = s.find('    val locationPermission = rememberLauncherForActivityResult', start)
-if start < 0 or end < 0:
-    raise SystemExit('Expected existing in-chat contact picker block was not found; refusing to modify source')
-launcher = s[start:end]
-s = s[:start] + s[end:]
-
+# Keep an existing in-chat picker wherever the current implementation already places it.
+# Only insert it when the picker is genuinely missing; never move or duplicate it.
 if '    val contactPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickContact())' not in s:
     anchor = '    stopRecordingAction = ::stopRecording\n'
     if anchor not in s:
         raise SystemExit('Expected recording state anchor was not found; refusing to modify source')
-    s = s.replace(anchor, anchor + '\n' + launcher, 1)
+    raise SystemExit('In-chat contact picker is missing; refusing to synthesize it in this card-only repair')
 
 # Ensure the Plus-menu Contact action launches the in-chat device contact picker.
 old_action = 'Triple("Contact", Icons.Default.ContactPage) { showAttachmentSheet = false; showContactDialog = true },'
 new_action = 'Triple("Contact", Icons.Default.ContactPage) { showAttachmentSheet = false; contactPicker.launch(null) },'
-s = s.replace(old_action, new_action, 1)
+if old_action in s:
+    s = s.replace(old_action, new_action, 1)
 
 # The in-chat contact preview/send UI must remain a real confirmation step.
 if 'if (showContactPreview) {' not in s:
