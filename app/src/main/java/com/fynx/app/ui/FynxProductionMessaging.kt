@@ -208,7 +208,10 @@ object FynxProductionMessaging {
         val allowed = setOf("location", "contact", "poll", "sticker", "gif")
         if (messageType !in allowed) return Result.failure(IllegalArgumentException("Unsupported message type."))
         if (payload.isEmpty()) return Result.failure(IllegalArgumentException("Message details are required."))
-        val body = JSONObject().apply { put("recipientUsername", recipientUsername.trim().removePrefix("@").lowercase()); put("text", ""); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("messageType", messageType); put("messagePayload", JSONObject(payload)) }
+        val normalizedPayload = if (messageType == "poll") {
+            payload.mapValues { (key, value) -> if (key == "options") value.replace("\\u001F", "\u001F") else value }
+        } else payload
+        val body = JSONObject().apply { put("recipientUsername", recipientUsername.trim().removePrefix("@").lowercase()); put("text", ""); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("messageType", messageType); put("messagePayload", JSONObject(normalizedPayload)) }
         return FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { fromJson(JSONObject(it).getJSONObject("message")) }
     }
 
@@ -228,7 +231,7 @@ object FynxProductionMessaging {
     suspend fun editMessage(context: Context, messageId: String, text: String): Result<RemoteMessage> {
         val id = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id")); val cleanText = text.trim()
         if (cleanText.isBlank() || cleanText.length > MAX_MESSAGE_LENGTH) return Result.failure(IllegalArgumentException("Message text is invalid."))
-        return FynxBackendClient.patchJson(context, "/api/messages/$id", JSONObject().put("text", cleanText).toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
+        return FynxBackendClient.patchJson(context, "/api/messages/$id", JSONObject().put("text", cleanText).toString()).mapCatching { fromJson(JSONObject(it).getJSONObject("message")) }
     }
 
     suspend fun setPinned(context: Context, messageId: String, pinned: Boolean): Result<RemoteMessage> {
