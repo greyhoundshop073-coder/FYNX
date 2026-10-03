@@ -1,7 +1,10 @@
 const BASE_URL = (process.env.FYNX_PRODUCTION_BASE_URL || "https://fynx-ai-backend.onrender.com").replace(/\/$/, "");
-const TIMEOUT_MS = 45_000;
-const RETRIES = 5;
-const RETRY_DELAY_MS = 5_000;
+// Render cold starts can legitimately take longer than the previous 45s request
+// budget. Keep the certification strict (health + database readiness are still
+// required) while allowing enough time for the production service to wake up.
+const TIMEOUT_MS = 120_000;
+const RETRIES = 3;
+const RETRY_DELAY_MS = 10_000;
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
