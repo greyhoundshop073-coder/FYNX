@@ -72,9 +72,13 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 var phone = ""
                 context.contentResolver.query(
                     ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                    arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER),
+                    arrayOf(
+                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                        ContactsContract.CommonDataKinds.Phone.NUMBER
+                    ),
                     "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID}=?",
-                    arrayOf(uri.lastPathSegment), null
+                    arrayOf(uri.lastPathSegment),
+                    null
                 )?.use { cursor ->
                     if (cursor.moveToFirst()) {
                         displayName = cursor.getString(0)?.trim().orEmpty().ifBlank { "Contact" }
@@ -83,208 +87,16 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 }
                 if (phone.isBlank()) throw IllegalArgumentException("This contact has no phone number to share.")
                 val normalized = FynxPeopleDiscovery.normalizePhone(phone)
-                val matchedUsername = FynxSocialClient.searchUsers(context, normalized, phoneSearch = true).getOrNull()?.firstOrNull()?.username.orEmpty()
-                val payload = buildMap {
-                    put("displayName", displayName)
-                    put("phone", phone)
-                    if (matchedUsername.isNotBlank()) put("username", matchedUsername)
-                }
-                FynxProductionMessaging.sendStructuredMessage(context, chat.username, "contact", payload)
-                    .onSuccess { remote -> messages = (messages + FynxProductionMessaging.toChatMessage(remote, currentUserId ?: "")).distinctBy { it.id }.sortedBy { it.timestamp } }
-                    .onFailure { networkError = it.message ?: "Contact could not be sent" }
+                val matchedUsername = FynxSocialClient.searchUsers(context, normalized, phoneSearch = true)
+                    .getOrNull()?.firstOrNull()?.username.orEmpty()
+                pendingContactName = displayName
+                pendingContactPhone = phone
+                pendingContactUsername = matchedUsername
+                showContactPreview = true
             } catch (e: Exception) {
-                networkError = e.message ?: "Contact could not be shared"
+                networkError = e.message ?: "Contact could not be selected"
             } finally {
                 sending = false
-            }
-        }
-    }
-    val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == FynxConversationPreferences.chatWallpaper(context, chat.username) } ?: FynxGlassThemeId.PURE_BLACK
-    val glassPalette = fynxGlassPalette(glassThemeId)
-    val messageTextSizeSp = FynxConversationPreferences.chatTextSizeSp(context, chat.username)
-    val bubbleTransparency = FynxConversationPreferences.chatBubbleTransparency(context, chat.username)
-    val bubbleLighting = FynxConversationPreferences.chatBubbleLighting(context, chat.username)
-    val bubbleGradient = FynxConversationPreferences.chatBubbleGradient(context, chat.username)
-    val clipboardManager = LocalClipboardManager.current
-    val conversationScope = rememberCoroutineScope()
-    var recipientProfile by remember(chat.username) { mutableStateOf<FynxProfileRemoteClient.Profile?>(null) }
-    var remoteProfileLoaded by remember(chat.username) { mutableStateOf(false) }
-    val resolvedAvatarUri = if (remoteProfileLoaded) {
-        recipientProfile?.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
-    } else {
-        chat.avatarUri
-    }
-    val fallbackMessage = remember(chat.lastMessage, resolvedAvatarUri) { chat.lastMessage.takeIf { it.isNotBlank() }?.let { ChatMessage(it, false, id = "initial", delivered = true, read = true, senderName = chat.name, senderUsername = chat.username, senderAvatarUri = resolvedAvatarUri) } }
-    var text by remember(chat.username) { mutableStateOf("") }
-    var messages by remember(chat.username) { mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage)) }
-    var replyToId by remember { mutableStateOf<String?>(null) }
-    val replySwipeOffsets = remember { mutableStateMapOf<String, Float>() }
-    var editingId by remember { mutableStateOf<String?>(null) }
-    var attachment by remember { mutableStateOf<Uri?>(null) }
-    var attachmentType by remember { mutableStateOf<String?>(null) }
-    var attachmentMessageType by remember { mutableStateOf<String?>(null) }
-    var mediaPickerPurpose by remember { mutableStateOf<String?>(null) }
-    var showCamera by remember { mutableStateOf(false) }
-    var isRecording by remember { mutableStateOf(false) }
-    var isRecordingPaused by remember { mutableStateOf(false) }
-    var recordingElapsed by remember { mutableLongStateOf(0L) }
-    var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
-    var recordingFile by remember { mutableStateOf<File?>(null) }
-    var recordingStartedAt by remember { mutableStateOf(0L) }
-    var recordingPausedAt by remember { mutableStateOf(0L) }
-    var recordingPausedTotalMs by remember { mutableStateOf(0L) }
-    var searchQuery by remember { mutableStateOf("") }
-    var searchOpen by remember { mutableStateOf(false) }
-    var menuMessageId by remember { mutableStateOf<String?>(null) }
-    var showForwardDialog by remember { mutableStateOf(false) }
-    var forwardMessageId by remember { mutableStateOf<String?>(null) }
-    var forwardUsername by remember { mutableStateOf("") }
-    var showGifts by remember { mutableStateOf(false) }
-    var showChatMenu by remember { mutableStateOf(false) }
-    var showChatSettings by remember { mutableStateOf(false) }
-    var showCatchMeUp by remember { mutableStateOf(false) }
-    var showConversationMoments by remember { mutableStateOf(false) }
-    var chatNotificationsEnabled by remember(chat.username) { mutableStateOf(FynxConversationPreferences.chatNotifications(context, chat.username)) }
-    var showEmojiPanel by remember { mutableStateOf(false) }
-    var showAttachmentSheet by remember { mutableStateOf(false) }
-    var showLocationDialog by remember { mutableStateOf(false) }
-    var showContactDialog by remember { mutableStateOf(false) }
-    var showPollDialog by remember { mutableStateOf(false) }
-    var contactUsername by remember { mutableStateOf("") }
-    var pollQuestion by remember { mutableStateOf("") }
-    var pollOptions by remember { mutableStateOf(listOf("", "")) }
-    var cameraInitialMode by remember { mutableStateOf(CameraMode.PHOTO) }
-    var videoNoteMode by remember { mutableStateOf(false) }
-    var composerVideoMode by remember { mutableStateOf(false) }
-    var reactionMessageId by remember { mutableStateOf<String?>(null) }
-    var pollVoteNotice by remember { mutableStateOf<String?>(null) }
-    var currentUserId by remember { mutableStateOf<String?>(null) }
-    var recipientUserId by remember { mutableStateOf<String?>(null) }
-    var recipientCreatedAt by remember(chat.username) { mutableStateOf<String?>(null) }
-    var isNewConversation by remember(chat.username) { mutableStateOf(false) }
-    var isOnline by remember(chat.username) { mutableStateOf(chat.online) }
-    var otherIsTyping by remember(chat.username) { mutableStateOf(false) }
-    var realtimeState by remember(chat.username) { mutableStateOf(FynxRealtimeClient.State.DISCONNECTED) }
-    var networkError by remember { mutableStateOf<String?>(null) }
-    var sending by remember { mutableStateOf(false) }
-    var marketplaceContextAttached by remember(chat.username, marketplaceListingId) { mutableStateOf(false) }
-    var typingSent by remember { mutableStateOf(false) }
-    var stopRecordingAction: (() -> Unit)? = null
-
-    val realtimeClient = remember(chat.username, currentUserId, recipientUserId, resolvedAvatarUri) {
-        FynxRealtimeClient(
-            context = context,
-            onMessage = { remote ->
-                val myId = currentUserId ?: return@FynxRealtimeClient
-                if (remote.senderId != myId && remote.recipientId != myId) return@FynxRealtimeClient
-                val converted = FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
-                    if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
-                }
-                isNewConversation = false
-                messages = (messages.filterNot { it.id == remote.id } + converted).sortedBy { it.timestamp }
-                if (remote.recipientId == myId) {
-                    if (FynxConversationPreferences.chatNotifications(context, chat.username) && FynxConversationPreferences.chatSounds(context, chat.username)) {
-                        FynxInChatSound.play(context)
-                    }
-                    if (FynxConversationPreferences.chatNotifications(context, chat.username) && FynxConversationPreferences.chatVibration(context, chat.username)) {
-                        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-                        if (vibrator?.hasVibrator() == true) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) vibrator.vibrate(VibrationEffect.createOneShot(70L, VibrationEffect.DEFAULT_AMPLITUDE))
-                            else @Suppress("DEPRECATION") vibrator.vibrate(70L)
-                        }
-                    }
-                    realtimeClient.acknowledgeMessage(remote.id)
-                    conversationScope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
-                }
-            },
-            onStateChanged = { state ->
-                realtimeState = state
-                if (state == FynxRealtimeClient.State.CONNECTED && !currentUserId.isNullOrBlank()) {
-                    conversationScope.launch {
-                        FynxProductionMessaging.history(context, chat.username.removePrefix("@"))
-                            .onSuccess { remoteMessages ->
-                                val myId = currentUserId ?: return@onSuccess
-                                val authoritative = remoteMessages.mapIndexedNotNull { index, remote ->
-                                    runCatching {
-                                        FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
-                                            if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
-                                        }
-                                    }.getOrNull()?.let { message ->
-                                        if (message.id.isBlank()) message.copy(id = "remote-" + index + "-" + message.timestamp) else message
-                                    }
-                                }.distinctBy { it.id }
-                                val byId = (messages + authoritative).associateBy { it.id }
-                                messages = byId.values.sortedBy { it.timestamp }
-                                networkError = null
-                            }
-                            .onFailure { error -> networkError = error.message ?: "Conversation refresh failed" }
-                    }
-                }
-            },
-            onEvent = { event ->
-                when (event) {
-                    is FynxRealtimeClient.Event.MessageStatus -> {
-                        messages = messages.map { message ->
-                            if (message.id != event.messageId) message else when (event.status) {
-                                FynxRealtimeClient.Status.READ -> message.copy(delivered = true, read = true)
-                                FynxRealtimeClient.Status.DELIVERED -> message.copy(delivered = true)
-                                FynxRealtimeClient.Status.SENT -> message
-                            }
-                        }
-                    }
-                    is FynxRealtimeClient.Event.Typing -> if (event.userId == recipientUserId) otherIsTyping = event.isTyping
-                    is FynxRealtimeClient.Event.Presence -> if (event.userId == recipientUserId) isOnline = event.online
-                }
-            }
-        )
-    }
-
-    val mediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) {
-            attachment = null
-            attachmentType = null
-            attachmentMessageType = null
-            return@rememberLauncherForActivityResult
-        }
-        val mimeType = context.contentResolver.getType(uri)?.lowercase()
-        when {
-            mediaPickerPurpose == "gif" && mimeType == "image/gif" -> {
-                attachment = uri
-                attachmentType = "image"
-                attachmentMessageType = "gif"
-                mediaPickerPurpose = null
-                showEmojiPanel = false
-                networkError = null
-            }
-            mediaPickerPurpose == "sticker" && mimeType?.startsWith("image/") == true -> {
-                attachment = uri
-                attachmentType = "image"
-                attachmentMessageType = "sticker"
-                mediaPickerPurpose = null
-                showEmojiPanel = false
-                networkError = null
-            }
-            mimeType?.startsWith("image/") == true -> {
-                attachment = uri
-                attachmentType = "image"
-                attachmentMessageType = null
-                mediaPickerPurpose = null
-                networkError = null
-            }
-            mimeType?.startsWith("video/") == true -> {
-                attachment = uri
-                attachmentType = "video"
-                attachmentMessageType = null
-                mediaPickerPurpose = null
-                networkError = null
-            }
-            else -> {
-                val purpose = mediaPickerPurpose
-                attachment = null
-                attachmentType = null
-                attachmentMessageType = null
-                mediaPickerPurpose = null
-                networkError = if (purpose == "gif") "Please choose a GIF image." else "Please choose an image or video."
             }
         }
     }
@@ -1140,6 +952,48 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             }) { Text("Share") } },
             dismissButton = { TextButton(onClick = { showLocationDialog = false }) { Text("Cancel") } })
     }
+    if (showContactPreview) {
+        AlertDialog(
+            onDismissRequest = { showContactPreview = false },
+            title = { Text("Share contact") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.ContactPage, "Contact", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(42.dp))
+                    Text(pendingContactName, style = MaterialTheme.typography.titleMedium)
+                    Text(pendingContactPhone, style = MaterialTheme.typography.bodyMedium)
+                    if (pendingContactUsername.isNotBlank()) {
+                        Text("@" + pendingContactUsername.removePrefix("@"), style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("This contact will be sent as a contact card to this chat.", style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !sending, onClick = {
+                    showContactPreview = false
+                    conversationScope.launch {
+                        sending = true
+                        val payload = buildMap {
+                            put("displayName", pendingContactName)
+                            put("phone", pendingContactPhone)
+                            if (pendingContactUsername.isNotBlank()) put("username", pendingContactUsername)
+                        }
+                        FynxProductionMessaging.sendStructuredMessage(context, chat.username, "contact", payload)
+                            .onSuccess { remote ->
+                                messages = (messages + FynxProductionMessaging.toChatMessage(remote, currentUserId ?: ""))
+                                    .distinctBy { it.id }.sortedBy { it.timestamp }
+                                pendingContactName = ""
+                                pendingContactPhone = ""
+                                pendingContactUsername = ""
+                            }
+                            .onFailure { networkError = it.message ?: "Contact could not be sent" }
+                        sending = false
+                    }
+                }) { Text("Send") }
+            },
+            dismissButton = { TextButton(onClick = { showContactPreview = false }) { Text("Cancel") } }
+        )
+    }
+
     if (showPollDialog) {
         AlertDialog(onDismissRequest = { showPollDialog = false }, title = { Text("Create poll") },
             text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
