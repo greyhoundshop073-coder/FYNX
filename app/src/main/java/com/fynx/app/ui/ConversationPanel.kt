@@ -132,7 +132,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var sending by remember { mutableStateOf(false) }
     var typingSent by remember { mutableStateOf(false) }
     var marketplaceContextAttached by remember { mutableStateOf(false) }
-    var replySwipeOffsets by remember { mutableStateOf<Map<String, Float>>(emptyMap()) }
+    val replySwipeOffsets = remember { mutableStateMapOf<String, Float>() }
     var pollVoteNotice by remember { mutableStateOf<String?>(null) }
     var mediaPickerPurpose by remember { mutableStateOf<String?>(null) }
     var pollQuestion by remember { mutableStateOf("") }
