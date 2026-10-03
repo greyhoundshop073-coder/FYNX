@@ -70,6 +70,7 @@ fun FynxCameraCapturePanel(
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.COMPATIBLE; scaleType = PreviewView.ScaleType.FILL_CENTER } }
     val scope = rememberCoroutineScope()
+    val videoNoteMaxDurationMs = 60_000L
     var profilePhotoId by remember { mutableStateOf<String?>(null) }
     var profileDisplayName by remember { mutableStateOf("") }
     val session = FynxAuthStore.load(context)
@@ -120,7 +121,16 @@ fun FynxCameraCapturePanel(
     var timerCountingDown by remember { mutableIntStateOf(0) }
     var showGrid by remember { mutableStateOf(false) }
 
-    LaunchedEffect(recording != null, recordingStartedAt) { while (recording != null) { recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L); delay(200L) } }
+    LaunchedEffect(recording != null, recordingStartedAt, videoNoteMode) {
+        while (recording != null) {
+            recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L)
+            if (videoNoteMode && recordingElapsed >= videoNoteMaxDurationMs) {
+                recording?.stop()
+                break
+            }
+            delay(200L)
+        }
+    }
     LaunchedEffect(showCaptureControls, pendingUri, recording) { if (showCaptureControls && pendingUri == null && recording == null && timerCountingDown == 0) { delay(5000L); showCaptureControls = false } }
     LaunchedEffect(timerCountingDown) { if (timerCountingDown > 0) { delay(1000L); timerCountingDown -= 1 } }
     LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner) {
@@ -134,21 +144,10 @@ fun FynxCameraCapturePanel(
                 if (!provider.hasCamera(selector)) { error = if (lens == CameraSelector.LENS_FACING_FRONT) "Front camera is not available on this device." else "Back camera is not available on this device."; if (lens == CameraSelector.LENS_FACING_FRONT) lens = CameraSelector.LENS_FACING_BACK; return@runCatching }
                 val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
                 val targetRotation = previewView.display?.rotation ?: android.view.Surface.ROTATION_0
-                val capture = ImageCapture.Builder()
-                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                    .setTargetRotation(targetRotation)
-                    .build()
-                val qualitySelector = QualitySelector.fromOrderedList(
-                    listOf(Quality.UHD, Quality.FHD, Quality.HD, Quality.SD),
-                    FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD)
-                )
-                val recorder = Recorder.Builder()
-                    .setQualitySelector(qualitySelector)
-                    .build()
-                val video = VideoCapture.Builder(recorder)
-                    .setTargetRotation(targetRotation)
-                    .setMirrorMode(MirrorMode.MIRROR_MODE_ON_FRONT_ONLY)
-                    .build()
+                val capture = ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).setTargetRotation(targetRotation).build()
+                val qualitySelector = QualitySelector.fromOrderedList(listOf(Quality.UHD, Quality.FHD, Quality.HD, Quality.SD), FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD))
+                val recorder = Recorder.Builder().setQualitySelector(qualitySelector).build()
+                val video = VideoCapture.Builder(recorder).setTargetRotation(targetRotation).setMirrorMode(MirrorMode.MIRROR_MODE_ON_FRONT_ONLY).build()
                 provider.unbindAll(); if (generation != bindGeneration || pendingUri != null) return@runCatching
                 val camera = if (mode == CameraMode.PHOTO) provider.bindToLifecycle(lifecycleOwner, selector, preview, capture) else provider.bindToLifecycle(lifecycleOwner, selector, preview, video)
                 cameraProvider = provider; imageCapture = capture; videoCapture = video; cameraControl = camera.cameraControl; cameraInfo = camera.cameraInfo
@@ -163,152 +162,25 @@ fun FynxCameraCapturePanel(
     fun deleteUri(uri: Uri?) { if (uri?.scheme == "file") File(uri.path ?: "").delete() }
     fun retake() { deleteUri(pendingUri); deleteUri(pendingOriginalUri); pendingUri = null; pendingOriginalUri = null; pendingType = null; filter = CameraFilter.NATURAL; filterIntensity = 1f; enhancing = false; error = null }
     fun rotatePhoto() { val uri = pendingUri ?: return; if (pendingType != "image") return; val source = uri.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val matrix = Matrix().apply { postRotate(90f) }; val rotated = android.graphics.Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,true); FileOutputStream(source).use { check(rotated.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); rotated.recycle() }.onFailure { error = it.message ?: "Photo rotation failed" } }
-    fun applyFilterToPhoto(selected: CameraFilter, intensity: Float = filterIntensity) { val current = pendingUri ?: return; val original = pendingOriginalUri ?: current; if (pendingType != "image") return; val source = original.path?.let { File(it) } ?: return; val target = current.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val strength = intensity.coerceIn(0f, 1f)
-            val matrix = ColorMatrix().apply {
-                setFynxFilter(
-                    1f + (selected.saturation - 1f) * strength,
-                    selected.brightness * strength,
-                    1f + (selected.contrast - 1f) * strength,
-                    1f
-                )
-            }; val outputBitmap=android.graphics.Bitmap.createBitmap(bitmap.width,bitmap.height,android.graphics.Bitmap.Config.ARGB_8888); android.graphics.Canvas(outputBitmap).drawBitmap(bitmap,0f,0f,android.graphics.Paint().apply { colorFilter=ColorMatrixColorFilter(matrix) }); FileOutputStream(target).use { check(outputBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); outputBitmap.recycle(); filter=selected; filterIntensity=intensity; error=null }.onFailure { error=it.message ?: "Filter could not be applied" } }
+    fun applyFilterToPhoto(selected: CameraFilter, intensity: Float = filterIntensity) { val current = pendingUri ?: return; val original = pendingOriginalUri ?: current; if (pendingType != "image") return; val source = original.path?.let { File(it) } ?: return; val target = current.path?.let { File(it) } ?: return; runCatching { val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo"); val strength = intensity.coerceIn(0f, 1f); val matrix = ColorMatrix().apply { setFynxFilter(1f + (selected.saturation - 1f) * strength, selected.brightness * strength, 1f + (selected.contrast - 1f) * strength, 1f) }; val outputBitmap=android.graphics.Bitmap.createBitmap(bitmap.width,bitmap.height,android.graphics.Bitmap.Config.ARGB_8888); android.graphics.Canvas(outputBitmap).drawBitmap(bitmap,0f,0f,android.graphics.Paint().apply { colorFilter=ColorMatrixColorFilter(matrix) }); FileOutputStream(target).use { check(outputBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)) }; bitmap.recycle(); outputBitmap.recycle(); filter=selected; filterIntensity=intensity; error=null }.onFailure { error=it.message ?: "Filter could not be applied" } }
     fun enhancePhoto() { val source=pendingUri ?: return; if(pendingType!="image" || enhancing)return; enhancing=true; error=null; scope.launch { val result=withContext(Dispatchers.IO){FynxAiPhotoEnhancer.enhance(context,source)}; result.onSuccess { enhancedUri -> deleteUri(source); pendingUri=enhancedUri; filter=CameraFilter.NATURAL; filterIntensity=1f; error=null }.onFailure { error=it.message ?: "AI photo enhancement failed" }; enhancing=false } }
-    fun capturePhotoNow() {
-        val capture = imageCapture ?: run { error = "Camera is still starting"; return }
-        val stamp = System.currentTimeMillis()
-        val file = File(context.cacheDir, "fynx_photo_"+stamp+".jpg")
-        val original = File(context.cacheDir, "fynx_photo_original_"+stamp+".jpg")
-        capture.takePicture(ImageCapture.OutputFileOptions.Builder(file).build(), ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageSavedCallback {
-            override fun onImageSaved(result: ImageCapture.OutputFileResults) {
-                runCatching { normalizeCapturedPhoto(file, lens == CameraSelector.LENS_FACING_FRONT); file.copyTo(original, overwrite = true) }
-                    .onSuccess { pendingUri = Uri.fromFile(file); pendingOriginalUri = Uri.fromFile(original); pendingType = "image"; filter = CameraFilter.NATURAL; error = null; showCaptureControls = true }
-                    .onFailure { file.delete(); original.delete(); error = it.message ?: "Photo could not be prepared"; showCaptureControls = true }
-            }
-            override fun onError(exception: ImageCaptureException) { error = exception.message ?: "Photo capture failed"; showCaptureControls = true }
-        })
-    }
+    fun capturePhotoNow() { val capture = imageCapture ?: run { error = "Camera is still starting"; return }; val stamp = System.currentTimeMillis(); val file = File(context.cacheDir, "fynx_photo_"+stamp+".jpg"); val original = File(context.cacheDir, "fynx_photo_original_"+stamp+".jpg"); capture.takePicture(ImageCapture.OutputFileOptions.Builder(file).build(), ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageSavedCallback { override fun onImageSaved(result: ImageCapture.OutputFileResults) { runCatching { normalizeCapturedPhoto(file, lens == CameraSelector.LENS_FACING_FRONT); file.copyTo(original, overwrite = true) }.onSuccess { pendingUri = Uri.fromFile(file); pendingOriginalUri = Uri.fromFile(original); pendingType = "image"; filter = CameraFilter.NATURAL; error = null; showCaptureControls = true }.onFailure { file.delete(); original.delete(); error = it.message ?: "Photo could not be prepared"; showCaptureControls = true } } override fun onError(exception: ImageCaptureException) { error = exception.message ?: "Photo capture failed"; showCaptureControls = true } }) }
 
     if (!hasCamera) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
     val previewUri=pendingUri; val previewType=pendingType
-    if(previewUri!=null && previewType!=null){
-        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
-            if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.FIT_CENTER}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize()) else AndroidView(factory={android.widget.VideoView(it).apply{setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()}}},update={view->if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.start()}},modifier=Modifier.fillMaxSize())
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=12.dp)){
-                error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))}
-                if(previewType=="image"){Text("Edit photo",style=MaterialTheme.typography.labelLarge)
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)){
-                        CameraFilter.values().forEach{option->
-                            FilterChip(
-                                selected=filter==option,
-                                enabled=!enhancing,
-                                onClick={applyFilterToPhoto(option, if(option==CameraFilter.NATURAL) 0f else filterIntensity)},
-                                label={Text(option.label)}
-                            )
-                        }
-                    }
-                    if(filter != CameraFilter.NATURAL){
-                        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-                            Text("Intensity",style=MaterialTheme.typography.labelMedium,modifier=Modifier.width(56.dp))
-                            Slider(value=filterIntensity,onValueChange={filterIntensity=it},onValueChangeFinished={applyFilterToPhoto(filter, filterIntensity)},valueRange=0f..1f,modifier=Modifier.weight(1f))
-                        }
-                    }
-                    OutlinedButton(onClick={::enhancePhoto},enabled=!enhancing,modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){Text(if(enhancing)"Enhancing…" else "✨ Auto Enhance")}}
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){OutlinedButton(onClick={if(!enhancing)retake()},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Text("Retake")};if(previewType=="image")OutlinedButton(onClick={if(!enhancing)rotatePhoto()},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.RotateRight,null);Spacer(Modifier.width(4.dp));Text("Rotate")};Button(onClick={if(!enhancing)onCaptured(previewUri,previewType)},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.Send,null);Spacer(Modifier.width(4.dp));Text("Send")}}
-            }
-        };return
-    }
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).clickable { if (recording == null) showCaptureControls = true }){
-        AndroidView(factory={previewView},modifier=Modifier.fillMaxSize())
-        if (showGrid && pendingUri == null && recording == null) {
-            Canvas(Modifier.fillMaxSize()) {
-                val stroke = androidx.compose.ui.unit.Dp.Hairline
-                drawLine(Color.White.copy(alpha = 0.32f), androidx.compose.ui.geometry.Offset(size.width / 3f, 0f), androidx.compose.ui.geometry.Offset(size.width / 3f, size.height), stroke.toPx())
-                drawLine(Color.White.copy(alpha = 0.32f), androidx.compose.ui.geometry.Offset(size.width * 2f / 3f, 0f), androidx.compose.ui.geometry.Offset(size.width * 2f / 3f, size.height), stroke.toPx())
-                drawLine(Color.White.copy(alpha = 0.32f), androidx.compose.ui.geometry.Offset(0f, size.height / 3f), androidx.compose.ui.geometry.Offset(size.width, size.height / 3f), stroke.toPx())
-                drawLine(Color.White.copy(alpha = 0.32f), androidx.compose.ui.geometry.Offset(0f, size.height * 2f / 3f), androidx.compose.ui.geometry.Offset(size.width, size.height * 2f / 3f), stroke.toPx())
-            }
-        }
-        if (timerCountingDown > 0) {
-            Surface(modifier = Modifier.align(Alignment.Center), shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)) {
-                Text(timerCountingDown.toString(), style = MaterialTheme.typography.displayLarge, modifier = Modifier.padding(horizontal = 28.dp, vertical = 18.dp))
-            }
-        }
-        if (pendingUri == null) {
-            Surface(
-                modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 8.dp),
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)
-            ) {
-                Row(Modifier.padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                    profilePhotoId?.takeIf { it.isNotBlank() }?.let { photoId ->
-                        FynxRemoteMedia("/api/media/$photoId", "image", Modifier.size(34.dp), contentScale = androidx.compose.ui.layout.ContentScale.Crop, rounded = true)
-                    } ?: Surface(Modifier.size(34.dp), shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {}
-                    Spacer(Modifier.width(8.dp))
-                    Text(profileDisplayName.ifBlank { session.username?.removePrefix("@").orEmpty() }, maxLines = 1, style = MaterialTheme.typography.labelLarge)
-                }
-            }
-        }
-        if (showCaptureControls && recording == null && !fastCapture) {
-            Surface(modifier=Modifier.align(Alignment.Center),shape=MaterialTheme.shapes.extraLarge,color=MaterialTheme.colorScheme.surface.copy(alpha=0.88f),tonalElevation=3.dp) {
-                Row(modifier=Modifier.padding(horizontal=6.dp,vertical=4.dp),horizontalArrangement=Arrangement.spacedBy(2.dp),verticalAlignment=Alignment.CenterVertically) {
-                    listOf(1f,2f,3f,4f).forEach { value ->
-                        TextButton(onClick={zoomRatio=value;cameraControl?.setZoomRatio(value);showCaptureControls=true},modifier=Modifier.heightIn(min=44.dp),colors=ButtonDefaults.textButtonColors(contentColor=if(kotlin.math.abs(zoomRatio-value)<0.05f)MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)){Text(value.toInt().toString()+"x")}
-                    }
-                }
-            }
-        }
+    if(previewUri!=null && previewType!=null){ Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){ if(previewType=="image") AndroidView(factory={android.widget.ImageView(it).apply{scaleType=android.widget.ImageView.ScaleType.FIT_CENTER}},update={it.setImageURI(previewUri)},modifier=Modifier.fillMaxSize()) else AndroidView(factory={android.widget.VideoView(it).apply{setVideoURI(previewUri);setOnPreparedListener{p->p.isLooping=true;start()}}},update={view->if(view.tag!=previewUri.toString()){view.tag=previewUri.toString();view.setVideoURI(previewUri);view.start()}},modifier=Modifier.fillMaxSize()); Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=12.dp)){ error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))}; if(previewType=="image"){Text("Edit photo",style=MaterialTheme.typography.labelLarge); Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)){CameraFilter.values().forEach{option->FilterChip(selected=filter==option,enabled=!enhancing,onClick={applyFilterToPhoto(option,if(option==CameraFilter.NATURAL)0f else filterIntensity)},label={Text(option.label)})}};if(filter!=CameraFilter.NATURAL){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Intensity",style=MaterialTheme.typography.labelMedium,modifier=Modifier.width(56.dp));Slider(value=filterIntensity,onValueChange={filterIntensity=it},onValueChangeFinished={applyFilterToPhoto(filter,filterIntensity)},valueRange=0f..1f,modifier=Modifier.weight(1f))}};OutlinedButton(onClick={::enhancePhoto},enabled=!enhancing,modifier=Modifier.fillMaxWidth().padding(bottom=8.dp)){Text(if(enhancing)"Enhancing…" else "✨ Auto Enhance")}};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){OutlinedButton(onClick={if(!enhancing)retake()},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Text("Retake")};if(previewType=="image")OutlinedButton(onClick={if(!enhancing)rotatePhoto()},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.RotateRight,null);Spacer(Modifier.width(4.dp));Text("Rotate")};Button(onClick={if(!enhancing)onCaptured(previewUri,previewType)},enabled=!enhancing,modifier=Modifier.weight(1f).heightIn(min=52.dp)){Icon(Icons.Default.Send,null);Spacer(Modifier.width(4.dp));Text("Send")}} } };return }
+    Box(Modifier.fillMaxSize()) { AndroidView(factory={previewView},modifier=Modifier.fillMaxSize()); if(showGrid){ Canvas(Modifier.fillMaxSize()){val w=size.width;val h=size.height;drawLine(Color.White.copy(alpha=.25f),androidx.compose.ui.geometry.Offset(w/3f,0f),androidx.compose.ui.geometry.Offset(w/3f,h));drawLine(Color.White.copy(alpha=.25f),androidx.compose.ui.geometry.Offset(w*2f/3f,0f),androidx.compose.ui.geometry.Offset(w*2f/3f,h));drawLine(Color.White.copy(alpha=.25f),androidx.compose.ui.geometry.Offset(0f,h/3f),androidx.compose.ui.geometry.Offset(w,h/3f));drawLine(Color.White.copy(alpha=.25f),androidx.compose.ui.geometry.Offset(0f,h*2f/3f),androidx.compose.ui.geometry.Offset(w,h*2f/3f))} }
         if (showCaptureControls || recording != null) Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)).imePadding().padding(start=18.dp,end=18.dp,top=8.dp,bottom=52.dp),horizontalAlignment=Alignment.CenterHorizontally){
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){IconButton(onClick={if(recording==null)onDismiss()}){Icon(Icons.Default.Close,"Close camera")};Spacer(Modifier.weight(1f));IconButton(onClick={if(recording==null){error=null;lens=if(lens==CameraSelector.LENS_FACING_BACK)CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK;showCaptureControls=true}}){Icon(Icons.Default.Cameraswitch,"Switch front/back camera")};IconButton(onClick={if(recording==null){if(cameraInfo?.hasFlashUnit()==true){torchEnabled=!torchEnabled;cameraControl?.enableTorch(torchEnabled)}else error="Flash is not available on this camera.";showCaptureControls=true}}){Icon(Icons.Default.FlashOn,if(torchEnabled)"Turn flash off" else "Turn flash on")};TextButton(onClick={if(recording==null){showGrid=!showGrid;showCaptureControls=true}}){Text(if(showGrid)"Grid ✓" else "Grid")}}
-            error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};if(recording!=null)Text(if (videoNoteMode) "Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium)
-            if(recording==null && !fastCapture){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Zoom",style=MaterialTheme.typography.labelMedium);Slider(value=zoomRatio.coerceIn(1f,4f),onValueChange={zoomRatio=it;cameraControl?.setZoomRatio(it)},valueRange=1f..4f,modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Exposure",style=MaterialTheme.typography.labelMedium);val r=cameraInfo?.exposureState?.exposureCompensationRange;val lower=(r?.lower ?: -2).toFloat();val upper=(r?.upper ?: 2).toFloat();Slider(value=exposure.toFloat().coerceIn(lower,upper),onValueChange={exposure=it.toInt();cameraControl?.setExposureCompensationIndex(exposure)},valueRange=lower..upper,steps=((upper-lower).toInt()-1).coerceAtLeast(0),modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){Text("Timer",style=MaterialTheme.typography.labelMedium);FilterChip(selected=captureTimerSeconds==0,onClick={captureTimerSeconds=0},label={Text("Off")});FilterChip(selected=captureTimerSeconds==3,onClick={captureTimerSeconds=3},label={Text("3s")});FilterChip(selected=captureTimerSeconds==10,onClick={captureTimerSeconds=10},label={Text("10s")})}}
+            error?.let{Text(it,color=MaterialTheme.colorScheme.error,modifier=Modifier.padding(bottom=8.dp))};if(recording!=null)Text(if(videoNoteMode)"Video note ${formatCameraRecordingTime(recordingElapsed)}" else "Recording ${formatCameraRecordingTime(recordingElapsed)}",style=MaterialTheme.typography.titleMedium)
+            if(recording==null && !fastCapture){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Zoom",style=MaterialTheme.typography.labelMedium);Slider(value=zoomRatio.coerceIn(1f,4f),onValueChange={zoomRatio=it;cameraControl?.setZoomRatio(it)},valueRange=1f..4f,modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Exposure",style=MaterialTheme.typography.labelMedium);val r=cameraInfo?.exposureState?.exposureCompensationRange;val lower=(r?.lower?:-2).toFloat();val upper=(r?.upper?:2).toFloat();Slider(value=exposure.toFloat().coerceIn(lower,upper),onValueChange={exposure=it.toInt();cameraControl?.setExposureCompensationIndex(exposure)},valueRange=lower..upper,steps=((upper-lower).toInt()-1).coerceAtLeast(0),modifier=Modifier.weight(1f))};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){Text("Timer",style=MaterialTheme.typography.labelMedium);FilterChip(selected=captureTimerSeconds==0,onClick={captureTimerSeconds=0},label={Text("Off")});FilterChip(selected=captureTimerSeconds==3,onClick={captureTimerSeconds=3},label={Text("3s")});FilterChip(selected=captureTimerSeconds==10,onClick={captureTimerSeconds=10},label={Text("10s")})}}
             Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically){FilterChip(selected=mode==CameraMode.PHOTO,onClick={if(recording==null){mode=CameraMode.PHOTO;showCaptureControls=true}},label={Text("Photo")},leadingIcon={Icon(Icons.Default.PhotoCamera,null)});FilledIconButton(onClick={
-                if(mode==CameraMode.PHOTO){if(captureTimerSeconds>0){if(timerCountingDown==0){timerCountingDown=captureTimerSeconds;showCaptureControls=false;scope.launch{delay(captureTimerSeconds*1000L);timerCountingDown=0;capturePhotoNow()}}}else capturePhotoNow()}else{val active=recording;if(active!=null)active.stop()else{if(!hasAudio){audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);return@FilledIconButton};val capture=videoCapture?:run{error="Video camera is still starting";return@FilledIconButton};val file=File(context.cacheDir,"fynx_video_${System.currentTimeMillis()}.mp4");val pending=capture.output.prepareRecording(context,FileOutputOptions.Builder(file).build());val withAudio=if(hasAudio)pending.withAudioEnabled() else pending;recordingStartedAt=System.currentTimeMillis();recording=withAudio.start(ContextCompat.getMainExecutor(context)){event->if(event is VideoRecordEvent.Finalize){if(!event.hasError()&&file.exists()&&file.length()>0L){pendingUri=Uri.fromFile(file);pendingType="video";error=null}else{file.delete();error="Video capture failed (${event.error})"};recording=null}}}}},modifier=Modifier.size(80.dp),shape=androidx.compose.foundation.shape.CircleShape,colors=IconButtonDefaults.filledIconButtonColors(containerColor=Color.White,contentColor=Color.Black)){
-                                Box(Modifier.fillMaxSize(), contentAlignment=Alignment.Center) {
-                                    if (videoNoteMode && recording != null) {
-                                        val progress = (recordingElapsed.toFloat() / 60_000f).coerceIn(0f, 1f)
-                                        Canvas(Modifier.fillMaxSize().padding(2.dp)) { drawArc(Color(0xFF8B7BE8), -90f, 360f * progress, false, style = androidx.compose.ui.graphics.drawscope.Stroke(5.dp.toPx())) }
-                                    }
-                                    Icon(if(mode==CameraMode.PHOTO)Icons.Default.PhotoCamera else if(recording!=null)Icons.Default.Stop else Icons.Default.Videocam,if(recording!=null)"Stop video note" else if(mode==CameraMode.PHOTO)"Take photo" else "Record video note")
-                                }
-                            };FilterChip(selected=mode==CameraMode.VIDEO,onClick={if(recording==null){mode=CameraMode.VIDEO;showCaptureControls=true}},label={Text("Video")},leadingIcon={Icon(Icons.Default.Videocam,null)})}
+                if(mode==CameraMode.PHOTO){if(captureTimerSeconds>0){if(timerCountingDown==0){timerCountingDown=captureTimerSeconds;showCaptureControls=false;scope.launch{delay(captureTimerSeconds*1000L);timerCountingDown=0;capturePhotoNow()}}}else capturePhotoNow()}else{val active=recording;if(active!=null)active.stop()else{if(!hasAudio){audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);return@FilledIconButton};val capture=videoCapture?:run{error="Video camera is still starting";return@FilledIconButton};val file=File(context.cacheDir,"fynx_video_${System.currentTimeMillis()}.mp4");val pending=capture.output.prepareRecording(context,FileOutputOptions.Builder(file).build());val withAudio=if(hasAudio)pending.withAudioEnabled() else pending;recordingStartedAt=System.currentTimeMillis();recording=withAudio.start(ContextCompat.getMainExecutor(context)){event->if(event is VideoRecordEvent.Finalize){if(!event.hasError()&&file.exists()&&file.length()>0L){pendingUri=Uri.fromFile(file);pendingType="video";error=null}else{file.delete();error="Video capture failed (${event.error})"};recording=null}}}}},modifier=Modifier.size(80.dp),shape=androidx.compose.foundation.shape.CircleShape,colors=IconButtonDefaults.filledIconButtonColors(containerColor=Color.White,contentColor=Color.Black)){Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){if(videoNoteMode&&recording!=null){val progress=(recordingElapsed.toFloat()/videoNoteMaxDurationMs).coerceIn(0f,1f);Canvas(Modifier.fillMaxSize().padding(2.dp)){drawArc(Color(0xFF8B7BE8),-90f,360f*progress,false,style=androidx.compose.ui.graphics.drawscope.Stroke(5.dp.toPx()))}};Icon(if(mode==CameraMode.PHOTO)Icons.Default.PhotoCamera else if(recording!=null)Icons.Default.Stop else Icons.Default.Videocam,if(recording!=null)"Stop video note" else if(mode==CameraMode.PHOTO)"Take photo" else "Record video note")}};FilterChip(selected=mode==CameraMode.VIDEO,onClick={if(recording==null){mode=CameraMode.VIDEO;showCaptureControls=true}},label={Text("Video"),leadingIcon={Icon(Icons.Default.Videocam,null)})}
         }
     }
 }
 private fun formatCameraRecordingTime(milliseconds:Long):String{val totalSeconds=milliseconds/1000L;return "%02d:%02d".format(totalSeconds/60L,totalSeconds%60L)}
 enum class CameraMode{PHOTO,VIDEO}
-enum class CameraFilter(val label:String,val saturation:Float,val brightness:Float,val contrast:Float){
-    NATURAL("Natural",1f,0f,1f),
-    PORTRAIT("Portrait",0.96f,0.025f,1.01f),
-    BRIGHT("Bright",1.03f,0.08f,1.02f),
-    WARM("Warm",1.10f,0.04f,1.02f),
-    COOL("Cool",0.92f,0.02f,1.02f),
-    VINTAGE("Vintage",0.82f,0.015f,0.94f),
-    BW("B&W",0f,0f,1.08f)
-}
+enum class CameraFilter(val label:String,val saturation:Float,val brightness:Float,val contrast:Float){NATURAL("Natural",1f,0f,1f),PORTRAIT("Portrait",0.96f,0.025f,1.01f),BRIGHT("Bright",1.03f,0.08f,1.02f),WARM("Warm",1.10f,0.04f,1.02f),COOL("Cool",0.92f,0.02f,1.02f),VINTAGE("Vintage",0.82f,0.015f,0.94f),BW("B&W",0f,0f,1.08f)}
 private fun ColorMatrix.setFynxFilter(saturation:Float,brightness:Float,contrast:Float,alpha:Float){setSaturation(saturation);val scale=contrast;val translate=brightness*255f;postConcat(ColorMatrix(floatArrayOf(scale,0f,0f,0f,translate,0f,scale,0f,0f,translate,0f,0f,scale,0f,translate,0f,0f,0f,alpha,0f)))}
-private fun normalizeCapturedPhoto(file: File, mirrorFront: Boolean) {
-    val exif = ExifInterface(file.absolutePath)
-    val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-    val rotation = when (orientation) {
-        ExifInterface.ORIENTATION_ROTATE_90 -> 90f
-        ExifInterface.ORIENTATION_ROTATE_180 -> 180f
-        ExifInterface.ORIENTATION_ROTATE_270 -> 270f
-        else -> 0f
-    }
-    if (!mirrorFront && rotation == 0f) return
-    val bitmap = BitmapFactory.decodeFile(file.absolutePath) ?: error("Unable to decode captured photo")
-    val matrix = Matrix().apply {
-        if (rotation != 0f) postRotate(rotation)
-        if (mirrorFront) postScale(-1f, 1f)
-    }
-    val normalized = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-    FileOutputStream(file).use {
-        check(normalized.compress(android.graphics.Bitmap.CompressFormat.JPEG, 94, it)) { "Unable to save normalized photo" }
-    }
-    bitmap.recycle()
-    normalized.recycle()
-    ExifInterface(file.absolutePath).apply {
-        setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
-        saveAttributes()
-    }
-}
+private fun normalizeCapturedPhoto(file: File, mirrorFront: Boolean) { val exif=ExifInterface(file.absolutePath);val orientation=exif.getAttributeInt(ExifInterface.TAG_ORIENTATION,ExifInterface.ORIENTATION_NORMAL);val rotation=when(orientation){ExifInterface.ORIENTATION_ROTATE_90->90f;ExifInterface.ORIENTATION_ROTATE_180->180f;ExifInterface.ORIENTATION_ROTATE_270->270f;else->0f};if(!mirrorFront&&rotation==0f)return;val bitmap=BitmapFactory.decodeFile(file.absolutePath)?:error("Unable to decode captured photo");val matrix=Matrix().apply{if(rotation!=0f)postRotate(rotation);if(mirrorFront)postScale(-1f,1f)};val normalized=android.graphics.Bitmap.createBitmap(bitmap,0,0,bitmap.width,bitmap.height,matrix,true);FileOutputStream(file).use{check(normalized.compress(android.graphics.Bitmap.CompressFormat.JPEG,94,it)){"Unable to save normalized photo"}};bitmap.recycle();normalized.recycle();ExifInterface(file.absolutePath).apply{setAttribute(ExifInterface.TAG_ORIENTATION,ExifInterface.ORIENTATION_NORMAL.toString());saveAttributes()}}
