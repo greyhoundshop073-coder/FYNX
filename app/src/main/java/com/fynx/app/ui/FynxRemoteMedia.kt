@@ -29,6 +29,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import android.graphics.ImageDecoder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -149,8 +150,27 @@ fun FynxRemoteMedia(
             )
         }
         "image" -> bitmap?.let {
-            val imageModifier = if (rounded) modifier.clip(RoundedCornerShape(14.dp)) else modifier
-            Image(it.asImageBitmap(), "Media", imageModifier, contentScale = contentScale)
+            var showFullScreen by remember(resolvedUrl) { mutableStateOf(false) }
+            val imageModifier = (if (rounded) modifier.clip(RoundedCornerShape(14.dp)) else modifier)
+                .clickable { showFullScreen = true }
+            Image(it.asImageBitmap(), "Open image", imageModifier, contentScale = contentScale)
+            if (showFullScreen) {
+                Dialog(onDismissRequest = { showFullScreen = false }) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = Color.Black
+                    ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Image(
+                                bitmap = it.asImageBitmap(),
+                                contentDescription = "Full-screen image",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Fit
+                            )
+                        }
+                    }
+                }
+            }
         }
         "video" -> localFile?.let { file ->
             val videoModifier = if (rounded) modifier.clip(RoundedCornerShape(14.dp)) else modifier
