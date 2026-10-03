@@ -5,7 +5,6 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +43,7 @@ class FynxAppConnectionManager(
     private var lifecycleOwner: LifecycleOwner? = null
     private var callback: ConnectivityManager.NetworkCallback? = null
     private var probeJob: Job? = null
+    private var drainJob: Job? = null
     private var generation = 0L
     private var started = false
 
@@ -70,6 +70,8 @@ class FynxAppConnectionManager(
         unregisterCallback()
         probeJob?.cancel()
         probeJob = null
+        drainJob?.cancel()
+        drainJob = null
         generation++
         _state.value = State.WAITING_FOR_NETWORK
     }
@@ -81,6 +83,8 @@ class FynxAppConnectionManager(
         unregisterCallback()
         probeJob?.cancel()
         probeJob = null
+        drainJob?.cancel()
+        drainJob = null
         scope.cancel()
     }
 
@@ -123,12 +127,12 @@ class FynxAppConnectionManager(
             generation++
             probeJob?.cancel()
             probeJob = null
+            drainJob?.cancel()
+            drainJob = null
             _state.value = State.WAITING_FOR_NETWORK
             return
         }
 
-        // Android may deliver repeated capability callbacks while a network settles.
-        // Keep one probe alive instead of cancelling and restarting it on every callback.
         if (probeJob?.isActive == true) return
 
         _state.value = State.CONNECTING
@@ -144,9 +148,8 @@ class FynxAppConnectionManager(
                 val reachable = FynxBackendClient.health(appContext).isSuccess
                 if (reachable && currentGeneration == generation && started && hasUsableTransport()) {
                     _state.value = State.CONNECTED
+                    drainOfflineOutbox()
                     attempt = 0
-                    // Revalidate periodically so a backend outage is reflected without
-                    // requiring a network toggle or app restart.
                     delay(CONNECTED_RECHECK_DELAY_MS)
                     continue
                 }
@@ -160,6 +163,13 @@ class FynxAppConnectionManager(
             if (currentGeneration == generation && started && !hasUsableTransport()) {
                 _state.value = State.WAITING_FOR_NETWORK
             }
+        }
+    }
+
+    private fun drainOfflineOutbox() {
+        if (drainJob?.isActive == true) return
+        drainJob = scope.launch(Dispatchers.IO) {
+            runCatching { FynxOfflineSync.drain(appContext) }
         }
     }
 }
