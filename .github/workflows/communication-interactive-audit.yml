@@ -1,0 +1,17 @@
+name: Communication Interactive Audit
+
+on:
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify interactive message implementations exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R -n -E 'Location|Contact|Poll|reaction|Reaction' app/src/main/java/com/fynx/app/ui app/src/main/java/com/fynx/app 2>/dev/null | head -n 300
+          test -n "$(grep -R -E 'Location|Contact|Poll|reaction|Reaction' app/src/main/java/com/fynx/app 2>/dev/null | head -n 1)"
+          echo "Interactive communication implementation markers found."
