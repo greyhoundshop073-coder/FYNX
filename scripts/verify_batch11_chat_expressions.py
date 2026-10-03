@@ -14,7 +14,7 @@ checks = {
     "emoji panel exists": 'fun FynxChatEmojiPanel' in emoji,
     "emoji categories": 'FynxEmojiCategories' in emoji and 'Smileys' in emoji,
     "private emoji entry": 'showEmojiPanel' in conversation and 'FynxChatEmojiPanel' in conversation,
-    "private quick reactions": 'reactionMessageId' in conversation and 'listOf("❤️","😂","👍","🙏","🔥","😮","😢","👏")' in conversation,
+    # Private chat uses menuMessageId as the selected-message state for the reaction/action sheet.\n    "private quick reactions": 'menuMessageId' in conversation and 'listOf("❤️","😂","👍","🙏","🔥","😮","😢","👏")' in conversation and 'FynxProductionMessaging.reactToMessage' in conversation,
     "private reaction client": 'reactToMessage' in messaging and '"/api/messages/$id/reaction"' in messaging,
     "private reaction model": 'reaction: String?' in messaging and 'optString("reaction")' in messaging,
     "private reaction schema": 'ADD COLUMN IF NOT EXISTS reaction TEXT' in server,
