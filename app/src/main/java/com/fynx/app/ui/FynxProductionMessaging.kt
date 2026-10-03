@@ -12,6 +12,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.UUID
 
 /** Production messaging boundary. The server is the source of truth for chat state. */
 object FynxProductionMessaging {
@@ -173,7 +174,7 @@ object FynxProductionMessaging {
         catch (error: Throwable) { Result.failure(error) }
     }
 
-    suspend fun sendText(context: Context, recipientUsername: String, text: String, replyToId: String? = null, mediaId: String? = null, mediaType: String? = null, voiceDurationMs: Long = 0L): Result<RemoteMessage> {
+    suspend fun sendText(context: Context, recipientUsername: String, text: String, replyToId: String? = null, mediaId: String? = null, mediaType: String? = null, voiceDurationMs: Long = 0L, allowOfflineQueue: Boolean = true): Result<RemoteMessage> {
         val normalizedRecipient = recipientUsername.trim().removePrefix("@").lowercase()
         val currentUsername = (FynxAuthStore.load(context).username ?: "").trim().removePrefix("@").lowercase()
         if (normalizedRecipient.isBlank()) return Result.failure(IllegalArgumentException("A recipient is required."))
@@ -190,6 +191,40 @@ object FynxProductionMessaging {
         if (isAmbiguousTransportFailure(result.exceptionOrNull())) {
             val recovered = history(context, normalizedRecipient).getOrNull()?.asReconciliationCandidate(currentUsername, cleanText, replyToId, mediaId, mediaType)
             if (recovered != null) return Result.success(recovered)
+            if (allowOfflineQueue) {
+                val localId = "offline-${System.currentTimeMillis()}-${UUID.randomUUID()}"
+                val currentUserId = FynxBackendClient.currentUserId(context).getOrNull().orEmpty()
+                val item = FynxOfflineOutbox.Item(
+                    id = localId,
+                    recipient = normalizedRecipient,
+                    text = cleanText,
+                    replyToId = replyToId,
+                    mediaId = mediaId,
+                    mediaType = mediaType,
+                    voiceDurationMs = voiceDurationMs,
+                    createdAt = System.currentTimeMillis()
+                )
+                FynxOfflineOutbox.enqueue(context, item)
+                return Result.success(
+                    RemoteMessage(
+                        id = localId,
+                        senderId = currentUserId,
+                        senderUsername = currentUsername.ifBlank { null },
+                        recipientId = "local-peer:$normalizedRecipient",
+                        recipientUsername = normalizedRecipient,
+                        text = cleanText,
+                        timestamp = item.createdAt,
+                        delivered = false,
+                        read = false,
+                        edited = false,
+                        deleted = false,
+                        replyToId = replyToId,
+                        mediaId = mediaId,
+                        mediaType = mediaType,
+                        voiceDurationMs = voiceDurationMs
+                    )
+                )
+            }
         }
         return result
     }
