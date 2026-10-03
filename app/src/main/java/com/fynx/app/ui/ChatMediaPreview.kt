@@ -2,16 +2,18 @@ package com.fynx.app.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 
 /**
- * Chat-only media preview surface.
+ * Chat-only media presentation surface.
  *
- * Keeps the 9:16 presentation decision outside ConversationPanel while leaving
- * FynxRemoteMedia responsible for loading/caching/decoding the original media.
+ * ConversationPanel remains the coordinator, while this component owns the
+ * presentation of photo/video attachments. FynxRemoteMedia remains the shared
+ * loader/cache/decoder and is intentionally not modified.
  */
 @Composable
 fun ChatMediaPreview(
@@ -26,12 +28,13 @@ fun ChatMediaPreview(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .aspectRatio(9f / 16f)
             .then(onMediaClick?.let { Modifier.clickable(onClick = it) } ?: Modifier),
     ) {
         FynxRemoteMedia(
             mediaUrl = mediaUrl,
             type = type,
-            modifier = chatMediaPreviewModifier(),
+            modifier = Modifier.fillMaxWidth(),
             loopVideo = loopVideo,
             onVideoCompleted = onVideoCompleted,
             contentScale = ContentScale.Fit,
