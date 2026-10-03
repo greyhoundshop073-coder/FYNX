@@ -65,6 +65,9 @@ import java.util.Locale
 @Composable
 fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, onBack: () -> Unit, onOpenProfile: (String) -> Unit = {}, onVoiceCall: () -> Unit = {}, onVideoCall: () -> Unit = {}) {
     val context = LocalContext.current
+    val screenWidthDp = context.resources.displayMetrics.widthPixels / context.resources.displayMetrics.density
+    val messageBubbleMaxWidth = (screenWidthDp.dp * 0.82f).coerceAtMost(360.dp)
+    val voiceNoteMaxWidth = (screenWidthDp.dp * 0.68f).coerceAtMost(300.dp)
     val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == FynxConversationPreferences.chatWallpaper(context, chat.username) } ?: FynxGlassThemeId.PURE_BLACK
     val glassPalette = fynxGlassPalette(glassThemeId)
     val messageTextSizeSp = FynxConversationPreferences.chatTextSizeSp(context, chat.username)
@@ -674,7 +677,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                 border = if (mediaOnly) null else BorderStroke(0.7.dp, glassPalette.bubbleRim.copy(alpha = (bubbleLighting * bubbleTransparency).coerceIn(0f, 1f))),
                                 tonalElevation = 0.dp,
                                 modifier = Modifier
-                                    .widthIn(max = 300.dp)
+                                    .widthIn(max = messageBubbleMaxWidth)
                                     .offset { IntOffset((replySwipeOffsets[message.id] ?: 0f).roundToInt(), 0) }
                                     .then(if (mediaOnly) Modifier else Modifier.background(bubbleBrush, bubbleShape))
                                     .pointerInput(message.id) {
@@ -740,7 +743,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                 if (message.voiceUri != null) {
                                     FynxRemoteAudio(
                                         mediaUrl = message.voiceUri,
-                                        modifier = Modifier.fillMaxWidth(),
+                                        modifier = Modifier.widthIn(max = voiceNoteMaxWidth),
                                         maxDurationMs = message.voiceDurationMs.takeIf { it > 0L }
                                     )
                                 } else {
