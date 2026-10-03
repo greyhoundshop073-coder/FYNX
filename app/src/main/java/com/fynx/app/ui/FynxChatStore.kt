@@ -93,6 +93,13 @@ object FynxChatStore {
             .apply()
     }
 
+    /** Replace a local pending/outbox message with the authoritative server message. */
+    fun replaceMessage(context: Context, chatKey: String, localId: String, replacement: ChatMessage) {
+        val current = load(context, chatKey)
+        if (current.none { it.id == localId }) return
+        save(context, chatKey, current.map { if (it.id == localId) replacement else it })
+    }
+
     private suspend fun retryServerOperation(operation: suspend () -> Result<*>) {
         repeat(3) { attempt ->
             val success = runCatching { operation().getOrThrow() }.isSuccess
