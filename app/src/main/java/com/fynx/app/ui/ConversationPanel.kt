@@ -9,6 +9,7 @@ import android.os.Vibrator
 import android.location.LocationManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.provider.ContactsContract
 import android.annotation.SuppressLint
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.core.content.ContextCompat
@@ -62,6 +63,42 @@ import java.util.Locale
 @Composable
 fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, onBack: () -> Unit, onOpenProfile: (String) -> Unit = {}, onVoiceCall: () -> Unit = {}, onVideoCall: () -> Unit = {}) {
     val context = LocalContext.current
+    val contactPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        conversationScope.launch {
+            sending = true
+            try {
+                var displayName = "Contact"
+                var phone = ""
+                context.contentResolver.query(
+                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                    arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER),
+                    "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID}=?",
+                    arrayOf(uri.lastPathSegment), null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        displayName = cursor.getString(0)?.trim().orEmpty().ifBlank { "Contact" }
+                        phone = cursor.getString(1)?.trim().orEmpty()
+                    }
+                }
+                if (phone.isBlank()) throw IllegalArgumentException("This contact has no phone number to share.")
+                val normalized = FynxPeopleDiscovery.normalizePhone(phone)
+                val matchedUsername = FynxSocialClient.searchUsers(context, normalized, phoneSearch = true).getOrNull()?.firstOrNull()?.username.orEmpty()
+                val payload = buildMap {
+                    put("displayName", displayName)
+                    put("phone", phone)
+                    if (matchedUsername.isNotBlank()) put("username", matchedUsername)
+                }
+                FynxProductionMessaging.sendStructuredMessage(context, chat.username, "contact", payload)
+                    .onSuccess { remote -> messages = (messages + FynxProductionMessaging.toChatMessage(remote, currentUserId ?: "")).distinctBy { it.id }.sortedBy { it.timestamp } }
+                    .onFailure { networkError = it.message ?: "Contact could not be sent" }
+            } catch (e: Exception) {
+                networkError = e.message ?: "Contact could not be shared"
+            } finally {
+                sending = false
+            }
+        }
+    }
     val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == FynxConversationPreferences.chatWallpaper(context, chat.username) } ?: FynxGlassThemeId.PURE_BLACK
     val glassPalette = fynxGlassPalette(glassThemeId)
     val messageTextSizeSp = FynxConversationPreferences.chatTextSizeSp(context, chat.username)
@@ -1103,25 +1140,6 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             }) { Text("Share") } },
             dismissButton = { TextButton(onClick = { showLocationDialog = false }) { Text("Cancel") } })
     }
-    if (showContactDialog) {
-        AlertDialog(onDismissRequest = { showContactDialog = false }, title = { Text("Share contact") },
-            text = { OutlinedTextField(value = contactUsername, onValueChange = { contactUsername = it }, label = { Text("FYNX username") }, singleLine = true) },
-            confirmButton = { TextButton(enabled = contactUsername.isNotBlank() && !sending, onClick = {
-                val value = contactUsername.trim().removePrefix("@")
-                showContactDialog = false
-                contactUsername = ""
-                conversationScope.launch {
-                    sending = true
-                    FynxProfileRemoteClient.get(context, value).onSuccess { profile ->
-                        FynxProductionMessaging.sendStructuredMessage(context, chat.username, "contact", mapOf("username" to profile.username, "displayName" to profile.displayName, "country" to profile.country))
-                            .onSuccess { remote -> messages = (messages + FynxProductionMessaging.toChatMessage(remote, currentUserId ?: "")).distinctBy { it.id }.sortedBy { it.timestamp } }
-                            .onFailure { networkError = it.message ?: "Contact could not be sent" }
-                    }.onFailure { networkError = it.message ?: "Contact not found" }
-                    sending = false
-                }
-            }) { Text("Share") } },
-            dismissButton = { TextButton(onClick = { showContactDialog = false }) { Text("Cancel") } })
-    }
     if (showPollDialog) {
         AlertDialog(onDismissRequest = { showPollDialog = false }, title = { Text("Create poll") },
             text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1161,7 +1179,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 Triple("Gallery", Icons.Default.PhotoLibrary) { showAttachmentSheet = false; mediaPicker.launch(arrayOf("image/*", "video/*")) },
                 Triple("Files", Icons.Default.Description) { showAttachmentSheet = false; mediaPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) },
                 Triple("Location", Icons.Default.LocationOn) { showAttachmentSheet = false; locationPermission.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
-                Triple("Contact", Icons.Default.ContactPage) { showAttachmentSheet = false; showContactDialog = true },
+                Triple("Contact", Icons.Default.ContactPage) { showAttachmentSheet = false; contactPicker.launch(null) },
                 Triple("Poll", Icons.Default.Poll) { showAttachmentSheet = false; showPollDialog = true },
                 Triple("Video note", Icons.Default.Videocam) { showAttachmentSheet = false; videoNoteMode = true; cameraInitialMode = CameraMode.VIDEO; showCamera = true }
             )
