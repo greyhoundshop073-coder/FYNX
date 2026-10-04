@@ -30,6 +30,7 @@ check("incoming call can be restored from notification intent", all(x in calls f
 check("incoming notification uses Android CallStyle and answer/decline actions", all(x in notify for x in ["NotificationCompat.CallStyle.forIncomingCall", "answerIntent", "declineIntent"]))
 check("incoming notification can launch full-screen call UI", "setFullScreenIntent" in notify and "USE_FULL_SCREEN_INTENT" in manifest)
 check("realtime call notifications carry call identity", "incomingCall = FynxIncomingCall" in realtime)
+check("call signaling survives short realtime reconnects", "PendingCallPayload" in realtime and "flushPendingCallSignals" in realtime and 'if (type == "call")' in realtime)
 check("backend relays call signaling and validates SDP/ICE", all(x in backend for x in ["relayCallSignal", "validateSignalPayload", "offer", "answer", "ice"]))
 check("backend bounds active calls and handles unavailable/busy", all(x in backend for x in ["activeCalls", '"busy"', '"unavailable"']))
 check("call transport tests cover voice and video types", all(x in read("app/src/androidTest/java/com/fynx/app/FynxCallTransportHardeningTest.kt") for x in ['"voice"', '"video"']))
