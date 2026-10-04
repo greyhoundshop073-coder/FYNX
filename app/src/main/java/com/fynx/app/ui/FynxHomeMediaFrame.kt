@@ -7,6 +7,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.Composable
@@ -35,10 +36,11 @@ fun FynxHomeMediaFrame(
     onOpenMedia: () -> Unit = {}
 ) {
     var aspect by remember(file) { mutableFloatStateOf(1f) }
+    val isVideo = type.equals("video", ignoreCase = true)
 
-    LaunchedEffect(file, type) {
+    LaunchedEffect(file, isVideo) {
         aspect = withContext(Dispatchers.IO) {
-            if (type == "video") {
+            if (isVideo) {
                 runCatching {
                     val retriever = MediaMetadataRetriever()
                     try {
@@ -55,7 +57,9 @@ fun FynxHomeMediaFrame(
                 runCatching {
                     val options = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
                     android.graphics.BitmapFactory.decodeFile(file.absolutePath, options)
-                    if (options.outWidth > 0 && options.outHeight > 0) options.outWidth.toFloat() / options.outHeight.toFloat() else 1f
+                    if (options.outWidth > 0 && options.outHeight > 0) {
+                        options.outWidth.toFloat() / options.outHeight.toFloat()
+                    } else 1f
                 }.getOrDefault(1f)
             }
         }.coerceIn(0.05f, 20f)
@@ -65,25 +69,29 @@ fun FynxHomeMediaFrame(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 72.dp, max = 720.dp)
-            .aspectRatio(aspect.coerceIn(0.05f, 20f), matchHeightConstraintsFirst = false)
+            .aspectRatio(aspect, matchHeightConstraintsFirst = false)
             .clickable(onClick = onOpenMedia)
     ) {
-        if (type == "video") {
+        if (isVideo) {
             var player by remember(file) { mutableStateOf<VideoView?>(null) }
             AndroidView(
                 factory = { context ->
                     VideoView(context).apply {
                         player = this
                         layoutParams = ViewGroup.LayoutParams(-1, -1)
+                        keepScreenOn = true
                         setVideoPath(file.absolutePath)
-                        setOnPreparedListener { mp -> mp.isLooping = true }
+                        setOnPreparedListener { mp ->
+                            mp.isLooping = true
+                        }
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxSize()
             )
             DisposableEffect(file) {
                 onDispose {
                     player?.stopPlayback()
+                    player?.keepScreenOn = false
                     player = null
                 }
             }
@@ -98,7 +106,7 @@ fun FynxHomeMediaFrame(
                 Image(
                     bitmap = image.asImageBitmap(),
                     contentDescription = "Post media",
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit
                 )
             }
