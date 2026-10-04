@@ -45,7 +45,7 @@ private const val FYNX_PREVIEW_MODE = false
 private data class FynxNavItem(val key: String, val label: String, val icon: ImageVector)
 
 @Composable
-fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
+fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, incomingCall: FynxIncomingCall? = null) {
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val appConnectionManager = remember(context) { FynxAppConnectionManager(context.applicationContext) }
@@ -534,7 +534,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             )
             "Share" -> FynxSharePanel()
             "Invite" -> FynxInvitePanel(code = inviteCode, onShare = { FynxShareActions.share(context, FynxShareActions.defaultPayload()) }, onBack = { selected = "Features" })
-            "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo, initialOutgoing = callTarget != null)
+            "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo, initialOutgoing = callTarget != null, initialIncomingCall = incomingCall)
             "To-Do" -> TodoPanel()
             "Privacy" -> FynxPrivacySettingsPanel(onBack = { selected = "Profile" })
             "Saved Posts" -> FynxSavedPostsPanel(onOpenAuthorProfile = { profileUser = it })
