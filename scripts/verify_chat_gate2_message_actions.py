@@ -29,12 +29,13 @@ conversation = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
 messaging = read("app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt")
 backend = read("backend/server.js")
 
-# Existing client capabilities: verify before adding anything new.
-for method in ("editMessage", "deleteMessage", "setReaction", "setPinned"):
+# Existing production client capabilities. Reaction is intentionally named
+# reactToMessage in FYNX; do not invent a duplicate setReaction API.
+for method in ("editMessage", "deleteMessage", "reactToMessage", "setPinned"):
     require(messaging, rf"suspend fun {method}\(", f"Production messaging must retain {method}()")
 
 # Existing UI must actually invoke the message actions.
-for method in ("editMessage", "deleteMessage", "setReaction", "setPinned"):
+for method in ("editMessage", "deleteMessage", "reactToMessage", "setPinned"):
     require(conversation, rf"FynxProductionMessaging\.{method}\(", f"ConversationPanel must invoke {method}()")
 
 # Reply state is already part of the production send contract.
