@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -14,11 +13,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 /**
- * Stable Chat composer boundary.
+ * Presentation boundary for the Chat composer.
  *
- * This component intentionally exposes actions as callbacks. Existing attachment,
- * location, gift, camera, recording and sending implementations stay owned by
- * ConversationPanel until each responsibility is migrated and verified.
+ * The composer emits user intents through callbacks. Ownership of message state,
+ * uploads, recording, permissions, realtime delivery and attachment completion
+ * remains with the existing Chat state owner until each path is migrated and
+ * verified. This keeps the component reusable and prevents feature code from
+ * leaking back into ConversationPanel.
  */
 @Composable
 fun ChatComposer(
@@ -29,6 +30,12 @@ fun ChatComposer(
     onVoice: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    onCamera: (() -> Unit)? = null,
+    onLocation: (() -> Unit)? = null,
+    onGift: (() -> Unit)? = null,
+    onDocument: (() -> Unit)? = null,
+    onContact: (() -> Unit)? = null,
+    onVideoNote: (() -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -37,6 +44,8 @@ fun ChatComposer(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        // The existing Plus/attachment implementation remains the source of
+        // truth until its individual actions are migrated into this boundary.
         IconButton(onClick = onAttachment, enabled = enabled) {
             Text("+")
         }
