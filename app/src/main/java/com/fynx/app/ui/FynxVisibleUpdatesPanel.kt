@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -25,18 +24,14 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Button
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -105,8 +100,8 @@ fun FynxVisibleUpdatesPanel(
         }
     }
 
-    // Home now preserves the feed across ordinary app resume. Statuses therefore refresh
-    // on Home composition/explicit Home refresh, not on every ON_RESUME event.
+    // Home preserves the feed across ordinary resume. Statuses refresh on Home composition
+    // or explicit Home refresh, not on every ON_RESUME event.
     LaunchedEffect(currentUsername) { refreshStatuses() }
 
     val current = currentUsername.removePrefix("@").trim().lowercase()
@@ -118,7 +113,7 @@ fun FynxVisibleUpdatesPanel(
 
     Column(
         Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -126,21 +121,21 @@ fun FynxVisibleUpdatesPanel(
             colors = CardDefaults.cardColors(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface),
             border = null
         ) {
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Status", Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                    TextButton(onClick = onOpenStories, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp), modifier = Modifier.semantics { contentDescription = "Open Stories" }) { Text("See all") }
+                    TextButton(onClick = onOpenStories, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp), modifier = Modifier.semantics { contentDescription = "Open Stories" }) { Text("See all") }
                 }
                 LazyRow(
-                    contentPadding = PaddingValues(start = 8.dp, end = 80.dp, top = 2.dp, bottom = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(start = 12.dp, end = 16.dp, top = 2.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     item {
                         Row(
-                            Modifier.width(138.dp),
+                            Modifier.width(146.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             FynxStatusPreviewCircle(
@@ -152,7 +147,7 @@ fun FynxVisibleUpdatesPanel(
                                 own?.second ?: 0,
                                 ownerPhotoIds[current]
                             )
-                            IconButton(onClick = onCreateStatus, modifier = Modifier.requiredSize(48.dp)
+                            IconButton(onClick = onCreateStatus, modifier = Modifier.requiredSize(44.dp)
                                 .background(MaterialTheme.colorScheme.primary, CircleShape)
                                 .semantics { contentDescription = "Create your status" }
                             ) {
@@ -184,42 +179,51 @@ fun FynxVisibleUpdatesPanel(
         }
 
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
             shape = FynxDesign.LargeCardShape,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f))
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
         ) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Box(
-                    Modifier.size(36.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
-                    contentAlignment = Alignment.Center
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Box(
+                        Modifier.size(40.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(21.dp))
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text("FYNX Assistance", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        Text("Ask, create, translate and get help", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    }
+                    IconButton(
+                        onClick = onOpenFastCamera,
+                        modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape)
+                    ) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = "Open FYNX camera", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(21.dp))
+                    }
                 }
-                Spacer(Modifier.width(8.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("FYNX Assistance", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                    Text("Ask, create, translate and get help", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                }
-                IconButton(
-                    onClick = onOpenFastCamera,
-                    modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape)
+                Row(
+                    Modifier.fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f), FynxDesign.SmallCardShape)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.CameraAlt, contentDescription = "Open FYNX camera", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(21.dp))
-                }
-            }
-            Row(
-                Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Ask FYNX anything…", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                TextButton(onClick = onOpenAi, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
-                    Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(17.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Open FYNX AI")
+                    Text("Ask FYNX anything…", Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                    TextButton(onClick = onOpenAi, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)) {
+                        Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Open FYNX AI")
+                    }
                 }
             }
         }
