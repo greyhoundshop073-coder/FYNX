@@ -22,6 +22,12 @@ This matrix is the finite worklist for certifying Chat. It must be updated from 
 | 7. Notifications/realtime | foreground/background, mute, previews, sounds/vibration, push+realtime dedupe, typing/presence | 🟡 | Preserve already-green notification work |
 | 8. Production certification | build/tests/verifiers, APK-visible integration, navigation, real journey, regression | 🔴 | Final gate; cannot pass until Gates 1–7 are green |
 
+## Current certification state
+
+**Chat is NOT YET CERTIFIED COMPLETE.**
+
+This is deliberate: the matrix was created before claiming completion. Existing implementations must be re-verified against the contract and only concrete gaps should be changed.
+
 ## Certification rule
 
 Do not mark a gate GREEN merely because code or a verifier marker exists. Follow `docs/FYNX_REALITY_AUDIT_CODEX_INSTRUCTIONS.md`: trace the real user flow, verify the relevant backend/storage/realtime path, build the Android APK, and test the applicable journey.
