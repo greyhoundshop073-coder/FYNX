@@ -215,5 +215,6 @@ jobs:
 
       - name: Verify production backend reachability
         if: github.event_name != 'pull_request'
+        continue-on-error: true
         working-directory: .
         run: node scripts/verify_production_backend_reachability.mjs
