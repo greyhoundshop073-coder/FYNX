@@ -92,15 +92,17 @@ fun HomePanel(
                         initialCommentId = initialCommentId,
                         onInitialPostConsumed = onInitialPostConsumed,
                         header = {
-                            FynxVisibleUpdatesPanel(
-                                currentUsername = displayUsername,
-                                onOpenStories = onOpenStories,
-                                onOpenAi = onOpenAi,
-                                onOpenCamera = onOpenCamera,
-                                onOpenFastCamera = onOpenFastCamera,
-                                onCreateStatus = { showMatureStatusComposer = true },
-                                onOpenStatusOwner = onOpenStatusOwner
-                            )
+                            FynxHomeHeaderFrame {
+                                FynxVisibleUpdatesPanel(
+                                    currentUsername = displayUsername,
+                                    onOpenStories = onOpenStories,
+                                    onOpenAi = onOpenAi,
+                                    onOpenCamera = onOpenCamera,
+                                    onOpenFastCamera = onOpenFastCamera,
+                                    onCreateStatus = { showMatureStatusComposer = true },
+                                    onOpenStatusOwner = onOpenStatusOwner
+                                )
+                            }
                         }
                     )
                 }
@@ -128,12 +130,25 @@ fun HomePanel(
 }
 
 @Composable
+private fun FynxHomeHeaderFrame(
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        content = content
+    )
+}
+
+@Composable
 fun FynxProfileImage(name: String, uriString: String?, modifier: Modifier = Modifier, ownerUsername: String? = null) {
     val context = LocalContext.current
     val authUsername = remember(context) {
-        FynxAuthStore.load(context).username?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
+        FynxAuthStore.load(context).username?.removePrefix("@").trim()?.takeIf { it.isNotBlank() }
     }
-    val normalizedOwner = (ownerUsername ?: authUsername)?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
+    val normalizedOwner = (ownerUsername ?: authUsername)?.removePrefix("@").trim()?.takeIf { it.isNotBlank() }
     var remotePhotoId by remember(normalizedOwner) {
         mutableStateOf(normalizedOwner?.let { FynxProfileRemoteClient.cachedProfilePhotoId(context, it) })
     }
