@@ -29,6 +29,10 @@ data class ChatMessage(
     val senderUsername: String? = null,
     val senderAvatarUri: String? = null,
     val pinned: Boolean = false,
-    val messageType: String = "text",
-    val messagePayload: Map<String, String> = emptyMap()
+    val messageType: String = "text", // text | poll
+    val messagePayload: Map<String, String> = emptyMap(),
+    /** Effective disappearing-message lifetime inherited from the conversation. */
+    val disappearingSeconds: Long = 0L,
+    /** Absolute expiration time in epoch milliseconds; 0 means the message does not expire. */
+    val expiresAt: Long = 0L
 )

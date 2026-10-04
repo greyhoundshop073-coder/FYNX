@@ -16,7 +16,6 @@ import org.json.JSONObject
  * UI contract so edit/delete actions remain authoritative on the production backend.
  */
 object FynxChatStore {
-    /** Emits a chat username whenever its local preview may have changed. */
     val previewUpdates = MutableSharedFlow<String>(extraBufferCapacity = 64)
 
     private const val PREFS = "fynx_chat_store"
@@ -33,14 +32,8 @@ object FynxChatStore {
         val storageKey = key(context, chatKey)
         val previous = prefs.getString(storageKey, null)?.let { parseMessages(it, null) }.orEmpty()
         val syncInitialized = prefs.getBoolean(syncKey(context, chatKey), false)
-
-        // A transient/failed remote history response must never erase an already
-        // established local conversation. The screen can reconcile authoritative
-        // data later, but persistence must keep the last known good history.
         if (syncInitialized && previous.isNotEmpty() && messages.isEmpty()) return
 
-        // ConversationPanel keeps local state responsive while production edit/delete
-        // operations are sent to the server. The server remains the source of truth.
         if (syncInitialized && previous.isNotEmpty()) {
             val previousById = previous.associateBy { it.id }
             val currentById = messages.associateBy { it.id }
@@ -66,26 +59,26 @@ object FynxChatStore {
 
         val array = JSONArray()
         messages.forEach { message ->
-            array.put(
-                JSONObject().apply {
-                    put("text", message.text)
-                    put("fromMe", message.fromMe)
-                    put("id", message.id)
-                    put("timestamp", message.timestamp)
-                    put("delivered", message.delivered)
-                    put("read", message.read)
-                    put("replyToId", message.replyToId ?: "")
-                    put("reaction", message.reaction ?: "")
-                    put("edited", message.edited)
-                    put("attachmentUri", message.attachmentUri ?: "")
-                    put("attachmentType", message.attachmentType ?: "")
-                    put("voiceUri", message.voiceUri ?: "")
-                    put("voiceDurationMs", message.voiceDurationMs)
-                    put("mediaId", message.mediaId ?: "")
-                    put("messageType", message.messageType)
-                    put("messagePayload", JSONObject(message.messagePayload))
-                }
-            )
+            array.put(JSONObject().apply {
+                put("text", message.text)
+                put("fromMe", message.fromMe)
+                put("id", message.id)
+                put("timestamp", message.timestamp)
+                put("delivered", message.delivered)
+                put("read", message.read)
+                put("replyToId", message.replyToId ?: "")
+                put("reaction", message.reaction ?: "")
+                put("edited", message.edited)
+                put("attachmentUri", message.attachmentUri ?: "")
+                put("attachmentType", message.attachmentType ?: "")
+                put("voiceUri", message.voiceUri ?: "")
+                put("voiceDurationMs", message.voiceDurationMs)
+                put("mediaId", message.mediaId ?: "")
+                put("messageType", message.messageType)
+                put("messagePayload", JSONObject(message.messagePayload))
+                put("disappearingSeconds", message.disappearingSeconds)
+                put("expiresAt", message.expiresAt)
+            })
         }
         prefs.edit()
             .putString(storageKey, array.toString())
@@ -93,7 +86,6 @@ object FynxChatStore {
             .apply()
     }
 
-    /** Replace a local pending/outbox message with the authoritative server message. */
     fun replaceMessage(context: Context, chatKey: String, localId: String, replacement: ChatMessage) {
         val current = load(context, chatKey)
         if (current.none { it.id == localId }) return
@@ -184,28 +176,28 @@ object FynxChatStore {
             for (index in 0 until array.length()) {
                 val item = array.getJSONObject(index)
                 val storedId = item.optString("id").trim()
-                add(
-                    ChatMessage(
-                        text = item.optString("text"),
-                        fromMe = item.optBoolean("fromMe"),
-                        id = storedId.ifBlank { "local-${index}-${item.optLong("timestamp")}" },
-                        timestamp = item.optLong("timestamp"),
-                        delivered = item.optBoolean("delivered"),
-                        read = item.optBoolean("read"),
-                        replyToId = item.optString("replyToId").takeIf { it.isNotEmpty() },
-                        reaction = item.optString("reaction").takeIf { it.isNotEmpty() },
-                        edited = item.optBoolean("edited"),
-                        attachmentUri = item.optString("attachmentUri").takeIf { it.isNotEmpty() },
-                        attachmentType = item.optString("attachmentType").takeIf { it.isNotEmpty() },
-                        voiceUri = item.optString("voiceUri").takeIf { it.isNotEmpty() },
-                        voiceDurationMs = item.optLong("voiceDurationMs"),
-                        mediaId = item.optString("mediaId").takeIf { it.isNotEmpty() },
-                        messageType = item.optString("messageType").ifBlank { "text" },
-                        messagePayload = item.optJSONObject("messagePayload")?.let { payload ->
-                            payload.keys().asSequence().associateWith { key -> payload.optString(key) }
-                        }.orEmpty()
-                    )
-                )
+                add(ChatMessage(
+                    text = item.optString("text"),
+                    fromMe = item.optBoolean("fromMe"),
+                    id = storedId.ifBlank { "local-${index}-${item.optLong("timestamp")}" },
+                    timestamp = item.optLong("timestamp"),
+                    delivered = item.optBoolean("delivered"),
+                    read = item.optBoolean("read"),
+                    replyToId = item.optString("replyToId").takeIf { it.isNotEmpty() },
+                    reaction = item.optString("reaction").takeIf { it.isNotEmpty() },
+                    edited = item.optBoolean("edited"),
+                    attachmentUri = item.optString("attachmentUri").takeIf { it.isNotEmpty() },
+                    attachmentType = item.optString("attachmentType").takeIf { it.isNotEmpty() },
+                    voiceUri = item.optString("voiceUri").takeIf { it.isNotEmpty() },
+                    voiceDurationMs = item.optLong("voiceDurationMs"),
+                    mediaId = item.optString("mediaId").takeIf { it.isNotEmpty() },
+                    messageType = item.optString("messageType").ifBlank { "text" },
+                    messagePayload = item.optJSONObject("messagePayload")?.let { payload ->
+                        payload.keys().asSequence().associateWith { key -> payload.optString(key) }
+                    }.orEmpty(),
+                    disappearingSeconds = item.optLong("disappearingSeconds", 0L).coerceAtLeast(0L),
+                    expiresAt = item.optLong("expiresAt", 0L).coerceAtLeast(0L)
+                ))
             }
         }.distinctBy { it.id }
     }.getOrElse { fallback?.let { listOf(it) } ?: emptyList() }
@@ -214,12 +206,7 @@ object FynxChatStore {
         FynxAuthStore.storedUsername(context)?.trim()?.lowercase()?.ifBlank { "preview" } ?: "preview"
 
     private fun previewKey(context: Context): String = "chat_previews_${safeKey(accountKey(context))}"
-
-    private fun key(context: Context, chatKey: String): String =
-        "chat_${safeKey(accountKey(context))}_${safeKey(chatKey)}"
-
-    private fun syncKey(context: Context, chatKey: String): String =
-        key(context, chatKey) + SYNC_INITIALIZED_SUFFIX
-
+    private fun key(context: Context, chatKey: String): String = "chat_${safeKey(accountKey(context))}_${safeKey(chatKey)}"
+    private fun syncKey(context: Context, chatKey: String): String = key(context, chatKey) + SYNC_INITIALIZED_SUFFIX
     private fun safeKey(value: String): String = value.replace(Regex("[^A-Za-z0-9_@.-]"), "_")
 }

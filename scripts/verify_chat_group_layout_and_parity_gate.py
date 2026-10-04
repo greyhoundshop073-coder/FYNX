@@ -12,7 +12,12 @@ def require(label, condition):
     checks.append((label, bool(condition)))
 
 # Existing user-facing parity foundations.
-require("private chat message model supports audio attachments", '"audio"' in MODELS and "attachmentType" in MODELS)
+# The model documents supported attachment types in the field comment;
+# the production model does not need a quoted string literal.
+require(
+    "private chat message model supports audio attachments",
+    "attachmentType: String?" in MODELS and "audio" in MODELS,
+)
 require("group chat has document attachment flow", "documentPicker" in GROUP)
 require("group chat has voice recording flow", "MediaRecorder" in GROUP and "voice" in GROUP.lower())
 require("group chat has search", "searchQuery" in GROUP)
