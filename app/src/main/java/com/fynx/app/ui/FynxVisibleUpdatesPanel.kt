@@ -100,8 +100,6 @@ fun FynxVisibleUpdatesPanel(
         }
     }
 
-    // Home preserves the feed across ordinary resume. Statuses refresh on Home composition
-    // or explicit Home refresh, not on every ON_RESUME event.
     LaunchedEffect(currentUsername) { refreshStatuses() }
 
     val current = currentUsername.removePrefix("@").trim().lowercase()
@@ -134,10 +132,7 @@ fun FynxVisibleUpdatesPanel(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     item {
-                        Row(
-                            Modifier.width(146.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(Modifier.width(146.dp), verticalAlignment = Alignment.CenterVertically) {
                             FynxStatusPreviewCircle(
                                 own?.first,
                                 currentUsername.ifBlank { "You" },
@@ -147,57 +142,27 @@ fun FynxVisibleUpdatesPanel(
                                 own?.second ?: 0,
                                 ownerPhotoIds[current]
                             )
-                            IconButton(onClick = onCreateStatus, modifier = Modifier.requiredSize(44.dp)
-                                .background(MaterialTheme.colorScheme.primary, CircleShape)
-                                .semantics { contentDescription = "Create your status" }
-                            ) {
-                                Icon(
-                                    Icons.Default.Add,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(17.dp)
-                                )
+                            IconButton(onClick = onCreateStatus, modifier = Modifier.requiredSize(44.dp).background(MaterialTheme.colorScheme.primary, CircleShape).semantics { contentDescription = "Create your status" }) {
+                                Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(17.dp))
                             }
                         }
                     }
-                    items(
-                        grouped.filterNot { it.first.ownerUsername.equals(currentUsername, true) },
-                        key = { it.first.ownerUsername }
-                    ) { (status, count) ->
-                        FynxStatusPreviewCircle(
-                            status,
-                            status.ownerUsername,
-                            status.ownerDisplayName.ifBlank { status.ownerUsername },
-                            true,
-                            { onOpenStatusOwner(status.ownerUsername.removePrefix("@").trim()) },
-                            count,
-                            ownerPhotoIds[status.ownerUsername.removePrefix("@").trim().lowercase()]
-                        )
+                    items(grouped.filterNot { it.first.ownerUsername.equals(currentUsername, true) }, key = { it.first.ownerUsername }) { (status, count) ->
+                        FynxStatusPreviewCircle(status, status.ownerUsername, status.ownerDisplayName.ifBlank { status.ownerUsername }, true, { onOpenStatusOwner(status.ownerUsername.removePrefix("@").trim()) }, count, ownerPhotoIds[status.ownerUsername.removePrefix("@").trim().lowercase()])
                     }
                 }
             }
         }
 
         Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             shape = FynxDesign.LargeCardShape,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
         ) {
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        Modifier.size(40.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(40.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape), contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(21.dp))
                     }
                     Spacer(Modifier.width(10.dp))
@@ -205,16 +170,13 @@ fun FynxVisibleUpdatesPanel(
                         Text("FYNX Assistance", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                         Text("Ask, create, translate and get help", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                     }
-                    IconButton(
-                        onClick = onOpenFastCamera,
-                        modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape)
-                    ) {
+                    IconButton(onClick = onOpenFastCamera, modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape)) {
                         Icon(Icons.Default.CameraAlt, contentDescription = "Open FYNX camera", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(21.dp))
                     }
                 }
                 Row(
                     Modifier.fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f), FynxDesign.SmallCardShape)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f), FynxDesign.CardShape)
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
