@@ -18,7 +18,8 @@ def check(name, ok):
     checks.append((name, bool(ok)))
 
 # Server-authoritative membership management: the UI must not be the security boundary.
-check("member list requires authenticated group membership", "GET '/api/groups/:groupId/members'" in backend and "group membership required" in backend)
+# Match the actual Express route declaration instead of depending on HTTP-method prose.
+check("member list requires authenticated group membership", re.search(r"app\.get\('/api/groups/:groupId/members'", backend) is not None and "group membership required" in backend)
 check("only admins can promote members", "members/:username/promote" in backend and "isAdmin(actor?.role)" in backend)
 check("only admins can demote members", "members/:username/demote" in backend and "isAdmin(actor?.role)" in backend)
 check("owner/admin cannot be demoted", "group owner/admin cannot be demoted" in backend)
