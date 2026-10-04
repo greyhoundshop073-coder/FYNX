@@ -1,0 +1,20 @@
+name: FYNX Chat Badge 3 — Message Parity
+
+on:
+  push:
+    branches: ["fynx-chat-badge-3-message-parity"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  badge3:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Message parity certification
+        run: python3 scripts/verify_chat_badge3_message_parity.py
+      - name: Android unit tests, lint and debug APK
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
