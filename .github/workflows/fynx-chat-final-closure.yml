@@ -2,9 +2,12 @@ name: FYNX Chat Final Closure
 
 on:
   push:
-    branches: ["fynx-chat-final-closure-mainline"]
+    branches:
+      - main
+      - "fynx-chat-final-closure-mainline"
   pull_request:
     branches: ["main"]
+  workflow_dispatch:
 
 jobs:
   chat-closure:
