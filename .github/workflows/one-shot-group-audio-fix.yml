@@ -1,0 +1,64 @@
+name: One-shot Group Audio Picker Fix
+
+on:
+  push:
+    branches: ["fix/group-audio-picker"]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'Apply group audio picker fix') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch Group Chat audio picker
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt')
+          s = p.read_text(encoding='utf-8')
+
+          old = '''            attachment = uri
+            attachmentType = if (context.contentResolver.getType(uri)?.startsWith("video/") == true) "video" else "image"
+            attachmentName = null'''
+          new = '''            attachment = uri
+            val mime = context.contentResolver.getType(uri).orEmpty()
+            attachmentType = when {
+                mime.startsWith("video/") -> "video"
+                mime.startsWith("audio/") -> "audio"
+                else -> "image"
+            }
+            attachmentName = null'''
+          if old not in s:
+              raise SystemExit('audio picker fix: attachment MIME handler anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = 'picker.launch(arrayOf("image/*", "video/*"))'
+          new = 'picker.launch(arrayOf("image/*", "video/*", "audio/*"))'
+          if old not in s:
+              raise SystemExit('audio picker fix: attachment picker launch anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = '"document" -> "Document"; else -> "Photo"'
+          new = '"document" -> "Document"; "audio" -> "Audio"; else -> "Photo"'
+          if old not in s:
+              raise SystemExit('audio picker fix: message label anchor not found')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Verify patch is real
+        run: |
+          grep -F 'audio/*' app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt
+          grep -F 'mime.startsWith("audio/")' app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt
+
+      - name: Commit patched Group Chat and remove one-shot workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt .github/workflows/one-shot-group-audio-fix.yml
+          git commit -m 'Apply group audio picker fix'
+          git push
