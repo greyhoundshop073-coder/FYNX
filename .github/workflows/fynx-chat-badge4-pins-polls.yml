@@ -1,0 +1,22 @@
+name: FYNX Chat Badge 4 — Pins + Polls
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ fynx-chat-badge-4-pins-polls ]
+
+jobs:
+  badge4:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Verify pins and polls contracts
+        run: python3 scripts/verify_chat_badge4_pins_polls.py
