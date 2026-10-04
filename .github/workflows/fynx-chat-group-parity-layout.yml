@@ -1,0 +1,20 @@
+name: FYNX Chat Group Parity + Layout Safety
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  parity-layout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Verify Chat and Group parity/layout contracts
+        run: python3 scripts/verify_chat_group_layout_and_parity_gate.py
+      - name: Android regression build
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
