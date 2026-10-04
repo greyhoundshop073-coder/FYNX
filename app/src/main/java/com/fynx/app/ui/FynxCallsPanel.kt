@@ -29,7 +29,7 @@ import org.webrtc.VideoTrack
 enum class FynxCallHistoryFilter { ALL, MISSED, VIDEO, VOICE }
 
 @Composable
-fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, initialOutgoing: Boolean = false) {
+fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, initialOutgoing: Boolean = false, initialIncomingCall: FynxIncomingCall? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var activeCall by remember { mutableStateOf(initialName?.removePrefix("@").orEmpty().ifBlank { initialName }) }
@@ -189,6 +189,58 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     }
 
     LaunchedEffect(initialName, initialOutgoing) { if (initialOutgoing && !initialName.isNullOrBlank()) beginOutgoing(initialName, initialVideo) }
+
+    LaunchedEffect(initialIncomingCall?.callId) {
+        val incoming = initialIncomingCall ?: return@LaunchedEffect
+        if (session?.id == incoming.callId) return@LaunchedEffect
+        mediaEngine.disconnect()
+        mediaConnected = false
+        localVideoTrack = null
+        remoteVideoTrack = null
+        video = incoming.video
+        activeCall = incoming.fromUsername.removePrefix("@").trim().ifBlank { incoming.fromUserId }
+        targetUserId = incoming.fromUserId
+        targetUsername = activeCall
+        errorMessage = null
+        session = FynxCallSession(
+            incoming.callId,
+            incoming.fromUsername,
+            listOf("@"+activeCall),
+            if (incoming.video) FynxCallType.VIDEO else FynxCallType.VOICE,
+            FynxCallState.RINGING
+        )
+        FynxCallsStore.add(context, FynxCallRecord(incoming.callId, "@"+activeCall, if (incoming.video) "Video call" else "Voice call", "Just now", missed = true, status = "Incoming"))
+        calls = FynxCallsStore.load(context)
+        if (incoming.action.equals("DECLINE", true)) {
+            realtimeClient.sendCallEnd(incoming.callId, incoming.fromUserId, incoming.video)
+            FynxCallsStore.updateStatus(context, incoming.callId, "Declined", missed = false)
+            calls = FynxCallsStore.load(context)
+            mediaEngine.disconnect()
+            mediaConnected = false
+            activeCall = null
+            session = null
+            pendingIncomingAccept = false
+        }
+    }
+
+    LaunchedEffect(initialIncomingCall?.callId, initialIncomingCall?.action, session?.id) {
+        if (initialIncomingCall?.action.equals("ANSWER", true) && session?.id == initialIncomingCall?.callId) {
+            val current = session ?: return@LaunchedEffect
+            val required = if (current.type == FynxCallType.VIDEO) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)
+            if (required.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
+                if (!mediaConnected) {
+                    mediaEngine.connect(current)
+                    mediaConnected = true
+                }
+                realtimeClient.sendCallAccept(current.id, targetUserId ?: current.callerUsername, current.type == FynxCallType.VIDEO)
+                session = current.copy(state = FynxCallState.CONNECTING)
+                pendingIncomingAccept = false
+            } else {
+                pendingIncomingAccept = true
+                permissionLauncher.launch(required)
+            }
+        }
+    }
 
     LaunchedEffect(session?.id, session?.state) {
         if (session?.state != FynxCallState.CONNECTED) {
