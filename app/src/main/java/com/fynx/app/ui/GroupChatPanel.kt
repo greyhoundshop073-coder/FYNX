@@ -92,7 +92,12 @@ fun GroupChatPanel(
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             attachment = uri
-            attachmentType = if (context.contentResolver.getType(uri)?.startsWith("video/") == true) "video" else "image"
+            val mime = context.contentResolver.getType(uri).orEmpty()
+            attachmentType = when {
+                mime.startsWith("video/") -> "video"
+                mime.startsWith("audio/") -> "audio"
+                else -> "image"
+            }
             attachmentName = null
         }
     }
@@ -285,7 +290,7 @@ fun GroupChatPanel(
         if (text.isBlank() && attachment == null) return
         val selected = attachment
         val message = ChatMessage(
-            text.trim().ifBlank { when (attachmentType) { "video_note" -> "Video note"; "video" -> "Video"; "document" -> "Document"; else -> "Photo" } },
+            text.trim().ifBlank { when (attachmentType) { "video_note" -> "Video note"; "video" -> "Video"; "document" -> "Document"; "audio" -> "Audio"; else -> "Photo" } },
             true,
             UUID.randomUUID().toString(),
             delivered = true,
@@ -502,7 +507,7 @@ fun GroupChatPanel(
                         }
                     } else {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { picker.launch("image/* video/*") }, modifier = Modifier.size(48.dp)) {
+                            IconButton(onClick = { picker.launch("image/* video/* audio/*") }, modifier = Modifier.size(48.dp)) {
                                 Icon(Icons.Default.Add, "Attachments", tint = glassPalette.messageText)
                             }
                             IconButton(onClick = { documentPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) }, modifier = Modifier.size(48.dp)) {

@@ -11,8 +11,12 @@ checks = []
 def require(label, condition):
     checks.append((label, bool(condition)))
 
-# Existing user-facing parity foundations.
-require("private chat message model supports audio attachments", '"audio"' in MODELS and "attachmentType" in MODELS)
+# Certify the real shared message contract instead of requiring a brittle
+# literal string that may only appear in comments or formatting.
+require(
+    "private chat message model supports audio attachments",
+    "attachmentType: String?" in MODELS and "audio" in MODELS and "ChatMessage" in MODELS,
+)
 require("group chat has document attachment flow", "documentPicker" in GROUP)
 require("group chat has voice recording flow", "MediaRecorder" in GROUP and "voice" in GROUP.lower())
 require("group chat has search", "searchQuery" in GROUP)
