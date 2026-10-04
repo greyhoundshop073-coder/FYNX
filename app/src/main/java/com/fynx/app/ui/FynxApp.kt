@@ -76,6 +76,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, incomingCall: 
     var aiCaptionDraft by remember { mutableStateOf<String?>(null) }
     var homeCameraRequest by remember { mutableIntStateOf(0) }
     var navigationDirection by remember { mutableIntStateOf(1) }
+    LaunchedEffect(incomingCall?.callId) {
+        if (incomingCall != null) {
+            callTarget = null
+            selected = "Calls"
+        }
+    }
     DisposableEffect(Unit) {
         FynxStatusNavigation.opener = { username -> statusOpenOwner = username; statusOpenId = null; selected = "Stories" }
         onDispose { if (FynxStatusNavigation.opener != null) FynxStatusNavigation.opener = null }
