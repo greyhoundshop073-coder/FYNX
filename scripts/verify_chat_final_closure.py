@@ -17,8 +17,10 @@ missing = [name for name, path in required.items() if not path.exists()]
 if missing:
     raise SystemExit("CHAT CLOSURE RED: missing required surfaces: " + ", ".join(missing))
 
+# Verify implementation contracts rather than guessing a specific function name.
 checks = [
-    ("private conversation", "ConversationPanel.kt", "sendMessage"),
+    ("private conversation", "ConversationPanel.kt", "FynxProductionMessaging"),
+    ("private conversation persistence", "ConversationPanel.kt", "FynxChatStore"),
     ("group history", "GroupChatPanel.kt", "loadMessages"),
     ("group realtime", "GroupChatPanel.kt", "GroupMessage"),
     ("group search", "GroupChatPanel.kt", "searchQuery"),
