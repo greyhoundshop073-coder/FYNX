@@ -57,9 +57,7 @@ fun FynxHomeMediaFrame(
                 runCatching {
                     val options = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
                     android.graphics.BitmapFactory.decodeFile(file.absolutePath, options)
-                    if (options.outWidth > 0 && options.outHeight > 0) {
-                        options.outWidth.toFloat() / options.outHeight.toFloat()
-                    } else 1f
+                    if (options.outWidth > 0 && options.outHeight > 0) options.outWidth.toFloat() / options.outHeight.toFloat() else 1f
                 }.getOrDefault(1f)
             }
         }.coerceIn(0.05f, 20f)
@@ -81,9 +79,7 @@ fun FynxHomeMediaFrame(
                         layoutParams = ViewGroup.LayoutParams(-1, -1)
                         keepScreenOn = true
                         setVideoPath(file.absolutePath)
-                        setOnPreparedListener { mp ->
-                            mp.isLooping = true
-                        }
+                        setOnPreparedListener { mp -> mp.isLooping = true }
                     }
                 },
                 modifier = Modifier.fillMaxSize()
