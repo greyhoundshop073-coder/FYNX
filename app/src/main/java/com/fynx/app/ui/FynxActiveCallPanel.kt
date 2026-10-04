@@ -38,7 +38,7 @@ fun FynxActiveCallPanel(
         FynxCallState.IDLE -> "Ready"
         FynxCallState.RINGING -> "Incoming ${if (video) "video" else "voice"} call"
         FynxCallState.CONNECTING -> if (realtimeState == FynxRealtimeClient.State.CONNECTED) "Connecting…" else "Reconnecting…"
-        FynxCallState.CONNECTED -> "${if (video) "Video" else "Voice"} call • ${FynxCallExperienceBatch2.formatDuration(durationSeconds)}"
+        FynxCallState.CONNECTED -> "${if (video) "Video" else "Voice"} call"
         FynxCallState.ENDED -> "Call ended"
     }
 
