@@ -1,0 +1,42 @@
+name: FYNX Chat Gate 7D — group history, search and navigation
+
+on:
+  push:
+    branches: ["fynx-chat-gate7d-group-history-search"]
+    paths:
+      - "app/**"
+      - "scripts/verify_chat_gate7d_group_history_search.py"
+      - ".github/workflows/chat-gate7d-group-history-search.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "app/**"
+      - "scripts/verify_chat_gate7d_group_history_search.py"
+      - ".github/workflows/chat-gate7d-group-history-search.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Verify Group Gate 7D — history, search and navigation
+        run: python3 scripts/verify_chat_gate7d_group_history_search.py
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+      - name: Build Android debug APK
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
