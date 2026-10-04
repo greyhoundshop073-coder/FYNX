@@ -41,9 +41,9 @@ check("connected state requires successful FYNX backend health", 'FynxBackendCli
 check("header text matches the required three states", '"Waiting for network..."' in app and '"Connecting" + ".".repeat(connectingDotCount)' in app and 'Text("FYNX"' in app and 'Icons.Default.Verified' in app)
 
 check("main push has the full static/unit/lint Android build", 'on:\n  push:' in workflow and './gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon' in workflow)
-# The artifact is intentionally commit-named at the artifact level and file level.
-# Do not require the obsolete app-debug.apk upload path when the exact-commit copy is used.
-check("main push publishes an exact-commit APK artifact", 'name: FYNX-debug-${{ github.sha }}' in workflow and 'FYNX-debug-${{ github.sha }}.apk' in workflow and 'GITHUB_SHA' in workflow and 'if-no-files-found: error' in workflow and 'uses: actions/upload-artifact@v4' in workflow)
+# The exact-commit APK is copied from the debug output and uploaded under an artifact name
+# that includes the same commit SHA. Keep this contract aligned with the real workflow names.
+check("main push publishes an exact-commit APK artifact", 'name: FYNX-debug-apk-${{ github.sha }}' in workflow and 'path: FYNX-debug-${{ github.sha }}.apk' in workflow and 'GITHUB_SHA' in workflow and 'if-no-files-found: error' in workflow and 'uses: actions/upload-artifact@v4' in workflow)
 check("authenticated runtime certification is available as the explicit full-runtime path", 'verify_authenticated_runtime_navigation.py' in workflow and 'FYNX_E2E_USERNAME' in workflow and 'FYNX_E2E_PASSWORD' in workflow and 'connectedDebugAndroidTest' in workflow and "github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true'" in workflow and 'Upload exact-commit debug APK' in workflow)
 
 failed = [name for name, ok in checks if not ok]
