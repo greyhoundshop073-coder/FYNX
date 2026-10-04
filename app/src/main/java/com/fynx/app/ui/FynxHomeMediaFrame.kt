@@ -1,6 +1,5 @@
 package com.fynx.app.ui
 
-import android.media.MediaMetadataRetriever
 import android.view.ViewGroup
 import android.widget.VideoView
 import androidx.compose.foundation.Image
@@ -35,32 +34,13 @@ fun FynxHomeMediaFrame(
     modifier: Modifier = Modifier,
     onOpenMedia: () -> Unit = {}
 ) {
-    var aspect by remember(file) { mutableFloatStateOf(1f) }
+    var aspect by remember(file, type) { mutableFloatStateOf(1f) }
     val isVideo = type.equals("video", ignoreCase = true)
 
-    LaunchedEffect(file, isVideo) {
+    LaunchedEffect(file, type) {
         aspect = withContext(Dispatchers.IO) {
-            if (isVideo) {
-                runCatching {
-                    val retriever = MediaMetadataRetriever()
-                    try {
-                        retriever.setDataSource(file.absolutePath)
-                        val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 1f
-                        val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 1f
-                        val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
-                        if (rotation == 90 || rotation == 270) height / width else width / height
-                    } finally {
-                        retriever.release()
-                    }
-                }.getOrDefault(1f)
-            } else {
-                runCatching {
-                    val options = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    android.graphics.BitmapFactory.decodeFile(file.absolutePath, options)
-                    if (options.outWidth > 0 && options.outHeight > 0) options.outWidth.toFloat() / options.outHeight.toFloat() else 1f
-                }.getOrDefault(1f)
-            }
-        }.coerceIn(0.05f, 20f)
+            FynxHomeMediaSizing.aspect(file, type)
+        }
     }
 
     Box(
@@ -79,6 +59,7 @@ fun FynxHomeMediaFrame(
                         layoutParams = ViewGroup.LayoutParams(-1, -1)
                         keepScreenOn = true
                         setVideoPath(file.absolutePath)
+                        // Do not call start(): Home must not autoplay media on feed entry.
                         setOnPreparedListener { mp -> mp.isLooping = true }
                     }
                 },
@@ -95,7 +76,18 @@ fun FynxHomeMediaFrame(
             var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
             LaunchedEffect(file) {
                 bitmap = withContext(Dispatchers.IO) {
-                    runCatching { android.graphics.BitmapFactory.decodeFile(file.absolutePath) }.getOrNull()
+                    runCatching {
+                        val options = android.graphics.BitmapFactory.Options().apply {
+                            inJustDecodeBounds = true
+                        }
+                        android.graphics.BitmapFactory.decodeFile(file.absolutePath, options)
+                        if (options.outWidth <= 0 || options.outHeight <= 0) return@runCatching null
+                        val sample = FynxHomeMediaSizing.sampleSize(options.outWidth, options.outHeight)
+                        val decodeOptions = android.graphics.BitmapFactory.Options().apply {
+                            inSampleSize = sample
+                        }
+                        android.graphics.BitmapFactory.decodeFile(file.absolutePath, decodeOptions)
+                    }.getOrNull()
                 }
             }
             bitmap?.let { image ->
