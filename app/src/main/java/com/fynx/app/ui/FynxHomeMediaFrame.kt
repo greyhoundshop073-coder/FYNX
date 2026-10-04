@@ -40,12 +40,15 @@ fun FynxHomeMediaFrame(
         aspect = withContext(Dispatchers.IO) {
             if (type == "video") {
                 runCatching {
-                    MediaMetadataRetriever().use { retriever ->
+                    val retriever = MediaMetadataRetriever()
+                    try {
                         retriever.setDataSource(file.absolutePath)
                         val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 1f
                         val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 1f
                         val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
                         if (rotation == 90 || rotation == 270) height / width else width / height
+                    } finally {
+                        retriever.release()
                     }
                 }.getOrDefault(1f)
             } else {
