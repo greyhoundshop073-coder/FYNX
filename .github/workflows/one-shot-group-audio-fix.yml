@@ -17,35 +17,41 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p = Path('app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt')
           s = p.read_text(encoding='utf-8')
 
-          old = '''            attachment = uri
-            attachmentType = if (context.contentResolver.getType(uri)?.startsWith("video/") == true) "video" else "image"
-            attachmentName = null'''
-          new = '''            attachment = uri
-            val mime = context.contentResolver.getType(uri).orEmpty()
-            attachmentType = when {
-                mime.startsWith("video/") -> "video"
-                mime.startsWith("audio/") -> "audio"
-                else -> "image"
-            }
-            attachmentName = null'''
-          if old not in s:
-              raise SystemExit('audio picker fix: attachment MIME handler anchor not found')
-          s = s.replace(old, new, 1)
+          # The existing group attachment picker is the real user entry point.
+          # Expand it to audio while preserving the existing photo/video behavior.
+          if 'audio/*' not in s:
+              if 'picker.launch("image/* video/*")' in s:
+                  s = s.replace('picker.launch("image/* video/*")', 'picker.launch("image/* video/* audio/*")', 1)
+              elif 'picker.launch(arrayOf("image/*", "video/*"))' in s:
+                  s = s.replace('picker.launch(arrayOf("image/*", "video/*"))', 'picker.launch(arrayOf("image/*", "video/*", "audio/*"))', 1)
+              else:
+                  raise SystemExit('audio picker fix: existing attachment picker launch not found')
 
-          old = 'picker.launch(arrayOf("image/*", "video/*"))'
-          new = 'picker.launch(arrayOf("image/*", "video/*", "audio/*"))'
-          if old not in s:
-              raise SystemExit('audio picker fix: attachment picker launch anchor not found')
-          s = s.replace(old, new, 1)
+          # Classify the selected URI by its actual MIME type. This is required
+          # so an audio file is sent as an audio attachment rather than an image.
+          if 'mime.startsWith("audio/")' not in s:
+              pattern = r'(attachmentType\s*=\s*if\s*\(\s*context\.contentResolver\.getType\(uri\)\?\.startsWith\("video/"\)\s*==\s*true\s*\)\s*"video"\s*else\s*"image")'
+              replacement = '''val mime = context.contentResolver.getType(uri).orEmpty()\n            attachmentType = when {\n                mime.startsWith("video/") -> "video"\n                mime.startsWith("audio/") -> "audio"\n                else -> "image"\n            }'''
+              s, count = re.subn(pattern, replacement, s, count=1)
+              if count == 0:
+                  # Also handle a nullable MIME expression with slightly different spacing.
+                  pattern2 = r'attachmentType\s*=\s*if\s*\([^\n]*startsWith\("video/"\)[^\n]*\n?[^\n]*else\s*"image"'
+                  s, count = re.subn(pattern2, replacement, s, count=1)
+              if count == 0:
+                  raise SystemExit('audio picker fix: attachment MIME classification not found')
 
-          old = '"document" -> "Document"; else -> "Photo"'
-          new = '"document" -> "Document"; "audio" -> "Audio"; else -> "Photo"'
-          if old not in s:
-              raise SystemExit('audio picker fix: message label anchor not found')
-          s = s.replace(old, new, 1)
+          # Give the composer a meaningful message label for selected audio.
+          if '"audio" -> "Audio"' not in s:
+              if '"document" -> "Document"; else -> "Photo"' in s:
+                  s = s.replace('"document" -> "Document"; else -> "Photo"', '"document" -> "Document"; "audio" -> "Audio"; else -> "Photo"', 1)
+              elif '"document" -> "Document"' in s:
+                  s = s.replace('"document" -> "Document"', '"document" -> "Document"; "audio" -> "Audio"', 1)
+              else:
+                  raise SystemExit('audio picker fix: attachment label mapping not found')
 
           p.write_text(s, encoding='utf-8')
           PY
