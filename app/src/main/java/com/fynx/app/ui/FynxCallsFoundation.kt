@@ -4,6 +4,14 @@ package com.fynx.app.ui
 enum class FynxCallType { VOICE, VIDEO }
 enum class FynxCallState { IDLE, RINGING, CONNECTING, CONNECTED, ENDED }
 
+data class FynxIncomingCall(
+    val callId: String,
+    val fromUserId: String,
+    val fromUsername: String,
+    val video: Boolean,
+    val action: String = "VIEW"
+)
+
 data class FynxCallSession(
     val id: String,
     val callerUsername: String,
