@@ -3,16 +3,10 @@ name: FYNX Backend CI
 on:
   push:
     branches: [ "main" ]
-    paths:
-      - "backend/**"
-      - "scripts/**"
-      - ".github/workflows/fynx-backend-ci.yml"
+    paths: ["backend/**", "scripts/**", ".github/workflows/fynx-backend-ci.yml"]
   pull_request:
     branches: [ "main" ]
-    paths:
-      - "backend/**"
-      - "scripts/**"
-      - ".github/workflows/fynx-backend-ci.yml"
+    paths: ["backend/**", "scripts/**", ".github/workflows/fynx-backend-ci.yml"]
   workflow_dispatch:
 
 permissions:
@@ -98,6 +92,9 @@ jobs:
       - name: Run Chat Gate 3 media contract certification
         working-directory: .
         run: python3 scripts/verify_chat_gate3_media_contract.py
+      - name: Run Chat Gate 4 organization certification
+        working-directory: .
+        run: python3 scripts/verify_chat_gate4_organization.py
       - name: Run consolidated Stage 14 verification
         run: node verify-stage14.mjs
       - name: Run Stage 15 settlement verification
