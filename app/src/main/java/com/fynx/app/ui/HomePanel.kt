@@ -92,17 +92,15 @@ fun HomePanel(
                         initialCommentId = initialCommentId,
                         onInitialPostConsumed = onInitialPostConsumed,
                         header = {
-                            FynxHomeHeaderFrame {
-                                FynxVisibleUpdatesPanel(
-                                    currentUsername = displayUsername,
-                                    onOpenStories = onOpenStories,
-                                    onOpenAi = onOpenAi,
-                                    onOpenCamera = onOpenCamera,
-                                    onOpenFastCamera = onOpenFastCamera,
-                                    onCreateStatus = { showMatureStatusComposer = true },
-                                    onOpenStatusOwner = onOpenStatusOwner
-                                )
-                            }
+                            FynxVisibleUpdatesPanel(
+                                currentUsername = displayUsername,
+                                onOpenStories = onOpenStories,
+                                onOpenAi = onOpenAi,
+                                onOpenCamera = onOpenCamera,
+                                onOpenFastCamera = onOpenFastCamera,
+                                onCreateStatus = { showMatureStatusComposer = true },
+                                onOpenStatusOwner = onOpenStatusOwner
+                            )
                         }
                     )
                 }
@@ -127,19 +125,6 @@ fun HomePanel(
             }
         )
     }
-}
-
-@Composable
-private fun FynxHomeHeaderFrame(
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        content = content
-    )
 }
 
 @Composable
