@@ -1,0 +1,23 @@
+name: FYNX Chat Final Closure
+
+on:
+  push:
+    branches: ["fynx-chat-final-closure-mainline"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  chat-closure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Final chat closure checks
+        run: |
+          python3 scripts/verify_chat_final_closure.py
+          python3 scripts/verify_chat_settings_contract.py
+          python3 scripts/verify_chat_attachment_audio_contract.py
+      - name: Android unit tests, lint and debug APK
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
