@@ -23,6 +23,41 @@ A theoretical feature comparison with WhatsApp, Telegram, Signal, or another mes
 
 Future improvements are recorded as **UPGRADES**, not as unfinished V1 work.
 
+## Chat coordination and anti-duplication rules
+
+This is an existing live project. **Never assume a feature is missing because it is not visible in the current screen, file, or first search result.**
+
+Before changing or pushing Chat work:
+
+1. Inspect the actual GitHub repository and current `main` state.
+2. Search the whole repository for the feature, function, component, route, verifier, service, API, storage path, and backend/realtime support before creating anything new.
+3. Trace callers/usages and follow the real user journey from entry point through state, backend/realtime, persistence, and completion where applicable.
+4. Check existing Chat work before implementation. Reuse, upgrade, or repair existing behavior instead of rebuilding or duplicating it.
+5. If the capability already exists, make the smallest correct improvement to the existing implementation rather than introducing a competing implementation.
+6. If a large file is involved, do not keep adding unrelated responsibilities to it. Extract the new responsibility into a focused component/module while preserving existing behavior.
+7. Do not modify `main` directly for experimental work. Use a dedicated branch/PR for larger or risky changes and keep `main` stable until verified.
+8. Do not claim a feature is working from source presence alone. The applicable build, tests, CI/verifiers, APK behavior, and user journey must support the claim.
+9. If another Chat branch/PR is already working on the same area, coordinate with that implementation. Do not create competing code or parallel versions of the same responsibility.
+10. Before every push, compare the proposed change against the current repository state and the active Chat branches/PRs so existing work is not duplicated, overwritten, or regressed.
+
+### Existing Chat modular presentation boundaries
+
+The current Chat work already has focused presentation boundaries for:
+
+- media
+- voice
+- video notes
+- reactions
+- replies
+- message bubbles
+- composer/attachment UI
+
+These are existing responsibilities. **Do not recreate them under new names or create a second implementation.** Upgrade/fix the existing boundary when the task genuinely belongs there.
+
+The existing messaging, realtime, persistence, upload, playback, attachment, and backend systems remain the source of truth unless a specific verified defect requires a change.
+
+The purpose of modularization is to reduce risk and review size, not to increase file count or duplicate functionality.
+
 ## Required completion gates
 
 ### Gate 1 — Core messaging
@@ -145,19 +180,22 @@ For every Chat batch:
 
 1. Inspect live `main` and latest commit.
 2. Inspect existing implementation and callers/routes.
-3. Trace the user journey from entry point to completion.
-4. Trace client state, realtime/API, backend authority and storage when applicable.
-5. Inspect relevant tests, verifiers and CI workflows.
-6. Identify the first concrete broken or missing link.
-7. Define the smallest correct fix; reuse existing systems.
-8. Group only related, compatible fixes into a batch.
-9. Run local/static verification available.
-10. Push only after the pre-push investigation is complete.
-11. Inspect the resulting commit/diff after push.
-12. Check Android build/test/lint and relevant verifiers.
-13. Verify APK-visible behavior and applicable real-device journey.
-14. Check regression against previously GREEN Chat behavior.
-15. Mark the batch GREEN only when evidence supports it.
+3. Search the whole repository for existing implementations before creating a new one.
+4. Check active Chat branches/PRs for overlapping work.
+5. Trace the user journey from entry point to completion.
+6. Trace client state, realtime/API, backend authority and storage when applicable.
+7. Inspect relevant tests, verifiers and CI workflows.
+8. Identify the first concrete broken or missing link.
+9. Define the smallest correct fix; reuse existing systems.
+10. If a large file is involved, extract only the new responsibility into an appropriate focused module while preserving callers and behavior.
+11. Group only related, compatible fixes into a batch.
+12. Run local/static verification available.
+13. Push only after the pre-push investigation is complete.
+14. Inspect the resulting commit/diff after push.
+15. Check Android build/test/lint and relevant verifiers.
+16. Verify APK-visible behavior and applicable real-device journey.
+17. Check regression against previously GREEN Chat behavior.
+18. Mark the batch GREEN only when evidence supports it.
 
 A verifier, compile result, or source-code presence is not sufficient by itself.
 
