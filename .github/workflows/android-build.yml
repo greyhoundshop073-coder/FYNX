@@ -225,8 +225,11 @@ jobs:
       - name: Final Home H12 source and APK certification gate
         run: |
           set -euo pipefail
-          test -f app/src/main/java/com/fynx/app/ui/FynxHomeMediaFrame.kt
-          test -f app/src/main/java/com/fynx/app/ui/FynxHomeMediaSizing.kt
+          test -f app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt
+          test -f app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt
+          test -f app/src/main/java/com/fynx/app/ui/FynxHomeLifecycle.kt
+          test -f app/src/main/java/com/fynx/app/ui/FynxHomeDiscoverySection.kt
+          test -f app/src/main/java/com/fynx/app/ui/FynxHomePostReactionsClient.kt
           python3 scripts/verify_home_interactions.py
           python3 scripts/verify_home_post_reactions.py
           python3 scripts/verify_home_multimedia_posts.py
