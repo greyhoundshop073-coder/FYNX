@@ -92,15 +92,25 @@ fun HomePanel(
                         initialCommentId = initialCommentId,
                         onInitialPostConsumed = onInitialPostConsumed,
                         header = {
-                            FynxVisibleUpdatesPanel(
-                                currentUsername = displayUsername,
-                                onOpenStories = onOpenStories,
-                                onOpenAi = onOpenAi,
-                                onOpenCamera = onOpenCamera,
-                                onOpenFastCamera = onOpenFastCamera,
-                                onCreateStatus = { showMatureStatusComposer = true },
-                                onOpenStatusOwner = onOpenStatusOwner
-                            )
+                            // Explicit Home geometry frame: keep the existing Status + AI
+                            // components together as one intentional upper-feed region. This
+                            // controls their horizontal rhythm without changing their wiring.
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                FynxVisibleUpdatesPanel(
+                                    currentUsername = displayUsername,
+                                    onOpenStories = onOpenStories,
+                                    onOpenAi = onOpenAi,
+                                    onOpenCamera = onOpenCamera,
+                                    onOpenFastCamera = onOpenFastCamera,
+                                    onCreateStatus = { showMatureStatusComposer = true },
+                                    onOpenStatusOwner = onOpenStatusOwner
+                                )
+                            }
                         }
                     )
                 }
