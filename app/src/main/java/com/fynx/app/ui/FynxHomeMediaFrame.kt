@@ -4,12 +4,11 @@ import android.media.MediaMetadataRetriever
 import android.view.ViewGroup
 import android.widget.VideoView
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -19,7 +18,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -28,10 +26,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/**
- * Home feed media surface. Preserves the source media aspect ratio instead of
- * forcing every post into one crop box. The source remains fully visible.
- */
+/** Home feed media surface: preserves source dimensions and avoids forced crop. */
 @Composable
 fun FynxHomeMediaFrame(
     file: File,
@@ -60,14 +55,14 @@ fun FynxHomeMediaFrame(
                     if (options.outWidth > 0 && options.outHeight > 0) options.outWidth.toFloat() / options.outHeight.toFloat() else 1f
                 }.getOrDefault(1f)
             }
-        }.coerceAtLeast(0.05f)
+        }.coerceIn(0.05f, 20f)
     }
 
-    val safeAspect = aspect.coerceAtLeast(0.05f)
     Box(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 72.dp, max = 720.dp)
+            .aspectRatio(aspect.coerceIn(0.05f, 20f), matchHeightConstraintsFirst = false)
             .clickable(onClick = onOpenMedia)
     ) {
         if (type == "video") {
@@ -81,9 +76,7 @@ fun FynxHomeMediaFrame(
                         setOnPreparedListener { mp -> mp.isLooping = true }
                     }
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .sizeIn(minHeight = 72.dp, maxHeight = 720.dp)
+                modifier = Modifier.fillMaxWidth()
             )
             DisposableEffect(file) {
                 onDispose {
