@@ -32,7 +32,7 @@ fun FynxHomeMediaFrame(
     file: File,
     type: String,
     modifier: Modifier = Modifier,
-    onOpenMedia: () -> Unit = {}
+    onOpenMedia: () -> Unit = {},
 ) {
     var aspect by remember(file, type) { mutableFloatStateOf(1f) }
     val isVideo = type.equals("video", ignoreCase = true)
@@ -48,7 +48,7 @@ fun FynxHomeMediaFrame(
             .fillMaxWidth()
             .heightIn(min = 72.dp, max = 720.dp)
             .aspectRatio(aspect, matchHeightConstraintsFirst = false)
-            .clickable(onClick = onOpenMedia)
+            .clickable(onClick = onOpenMedia),
     ) {
         if (isVideo) {
             var player by remember(file) { mutableStateOf<VideoView?>(null) }
@@ -59,11 +59,11 @@ fun FynxHomeMediaFrame(
                         layoutParams = ViewGroup.LayoutParams(-1, -1)
                         keepScreenOn = true
                         setVideoPath(file.absolutePath)
-                        // Do not call start(): Home must not autoplay media on feed entry.
+                        // Home media must not autoplay on feed entry.
                         setOnPreparedListener { mp -> mp.isLooping = true }
                     }
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
             )
             DisposableEffect(file) {
                 onDispose {
@@ -77,16 +77,14 @@ fun FynxHomeMediaFrame(
             LaunchedEffect(file) {
                 bitmap = withContext(Dispatchers.IO) {
                     runCatching {
-                        val options = android.graphics.BitmapFactory.Options().apply {
+                        val bounds = android.graphics.BitmapFactory.Options().apply {
                             inJustDecodeBounds = true
                         }
+                        android.graphics.BitmapFactory.decodeFile(file.absolutePath, bounds)
+                        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+                        val sample = FynxHomeMediaSizing.sampleSize(bounds.outWidth, bounds.outHeight)
+                        val options = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
                         android.graphics.BitmapFactory.decodeFile(file.absolutePath, options)
-                        if (options.outWidth <= 0 || options.outHeight <= 0) return@runCatching null
-                        val sample = FynxHomeMediaSizing.sampleSize(options.outWidth, options.outHeight)
-                        val decodeOptions = android.graphics.BitmapFactory.Options().apply {
-                            inSampleSize = sample
-                        }
-                        android.graphics.BitmapFactory.decodeFile(file.absolutePath, decodeOptions)
                     }.getOrNull()
                 }
             }
@@ -95,7 +93,7 @@ fun FynxHomeMediaFrame(
                     bitmap = image.asImageBitmap(),
                     contentDescription = "Post media",
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit
+                    contentScale = ContentScale.Fit,
                 )
             }
         }
