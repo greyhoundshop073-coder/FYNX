@@ -97,6 +97,10 @@ jobs:
         working-directory: .
         run: python3 scripts/verify_chat_end_to_end.py
 
+      - name: Run Chat Gate 2 message-actions certification
+        working-directory: .
+        run: python3 scripts/verify_chat_gate2_message_actions.py
+
       - name: Run consolidated Stage 14 verification
         run: node verify-stage14.mjs
 
