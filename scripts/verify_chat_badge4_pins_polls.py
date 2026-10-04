@@ -5,6 +5,7 @@ UI = ROOT / "app/src/main/java/com/fynx/app/ui"
 BACKEND = ROOT / "backend"
 
 GROUP = (UI / "GroupChatPanel.kt").read_text(encoding="utf-8")
+SOCIAL = (UI / "FynxGroupSocialBatch.kt").read_text(encoding="utf-8")
 MODELS = (UI / "ChatModels.kt").read_text(encoding="utf-8")
 REMOTE = (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8")
 ROUTES = (BACKEND / "groupContentRoutes.js").read_text(encoding="utf-8")
@@ -19,8 +20,10 @@ require("group chat exposes pin/unpin message action", ("Pin message" in GROUP o
 require("group remote client carries pinned-message state", "pinned" in REMOTE.lower())
 require("group backend exposes message pin persistence", "pinned" in ROUTES.lower())
 
-# Polls must be part of the conversation surface and persist through the group messaging path.
-require("group chat exposes poll creation", "Poll" in GROUP and ("poll" in GROUP.lower()))
+# Poll creation already lives in the authenticated Group Tools/content surface.
+# The verifier must follow the real shared implementation instead of requiring a
+# duplicate poll composer to be embedded directly in GroupChatPanel.kt.
+require("group tools expose poll creation", "Poll" in SOCIAL and "createPoll" in SOCIAL)
 require("group chat model represents poll messages", "poll" in MODELS.lower())
 require("group remote client carries poll data", "poll" in REMOTE.lower())
 require("group backend persists poll data", "poll" in ROUTES.lower())
