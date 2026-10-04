@@ -193,7 +193,7 @@ class FynxRealtimeClient(
                             if (callEvent.signalType == "invite") {
                                 val caller = callEvent.fromUsername?.removePrefix("@").orEmpty().ifBlank { callEvent.fromUserId }
                                 val kind = if (callEvent.callType == "video") "Video call" else "Voice call"
-                                FynxNotificationFoundation.show(context, FynxNotificationFoundation.MESSAGES_CHANNEL, callEvent.callId.hashCode(), "Incoming $kind 📞", "@$caller is calling you.", stableKey = "incoming-call:${callEvent.callId}")
+                                FynxNotificationFoundation.show(context, FynxNotificationFoundation.MESSAGES_CHANNEL, callEvent.callId.hashCode(), "Incoming $kind 📞", "@$caller is calling you.", stableKey = "incoming-call:${callEvent.callId}", incomingCall = FynxIncomingCall(callEvent.callId, callEvent.fromUserId, caller, callEvent.callType == "video"))
                             }
                             emitEvent(callEvent)
                         }
