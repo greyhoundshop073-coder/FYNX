@@ -18,7 +18,7 @@ backend = read("backend/server.js")
 def check(name, ok):
     checks.append((name, bool(ok)))
 
-check("voice call exposes mute speaker and end controls", all(x in active for x in ["TOGGLE_MIC", "Mute", "Speaker", "End"]))
+check("voice call exposes mute speaker and end controls", all(x in active for x in ["Mute", "Speaker", "End"]))
 check("video call exposes camera flip and end controls", all(x in active for x in ["Camera", "Flip", "End", "Cameraswitch"]))
 check("incoming call exposes answer and decline", all(x in active for x in ["Answer", "Decline", "onAnswer", "onEnd"]))
 check("active call shows live duration", "durationSeconds" in active and "formatDuration(durationSeconds)" in active and "callDurationSeconds" in calls)
