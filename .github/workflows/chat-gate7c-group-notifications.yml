@@ -1,0 +1,27 @@
+name: FYNX Chat Gate 7C — group notifications and realtime
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "app/**"
+      - "backend/**"
+      - "scripts/verify_chat_gate7c_group_notifications.py"
+      - ".github/workflows/chat-gate7c-group-notifications.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Verify Chat Gate 7C — group notifications and realtime
+        run: python3 scripts/verify_chat_gate7c_group_notifications.py
