@@ -28,7 +28,8 @@ fun FynxActiveCallPanel(
     onToggleCamera: () -> Unit,
     onSwitchCamera: () -> Unit,
     onToggleSpeaker: () -> Unit,
-    onEnd: () -> Unit
+    onEnd: () -> Unit,
+    durationSeconds: Long = 0L
 ) {
     val incoming = session.state == FynxCallState.RINGING
     val connected = session.state == FynxCallState.CONNECTED
@@ -37,7 +38,7 @@ fun FynxActiveCallPanel(
         FynxCallState.IDLE -> "Ready"
         FynxCallState.RINGING -> "Incoming ${if (video) "video" else "voice"} call"
         FynxCallState.CONNECTING -> if (realtimeState == FynxRealtimeClient.State.CONNECTED) "Connecting…" else "Reconnecting…"
-        FynxCallState.CONNECTED -> "${if (video) "Video" else "Voice"} call"
+        FynxCallState.CONNECTED -> "${if (video) "Video" else "Voice"} call • ${FynxCallExperienceBatch2.formatDuration(durationSeconds)}"
         FynxCallState.ENDED -> "Call ended"
     }
 
@@ -89,6 +90,10 @@ fun FynxActiveCallPanel(
                 Text(name, style = MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(6.dp))
                 Text(callStatus, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (connected) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(FynxCallExperienceBatch2.formatDuration(durationSeconds), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
+                }
                 if (video && !incoming) {
                     Spacer(Modifier.height(28.dp))
                     Text("Your camera is ready", color = MaterialTheme.colorScheme.onSurfaceVariant)
