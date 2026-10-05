@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 fun NavigationBar(
     modifier: Modifier = Modifier,
     containerColor: Color = NavigationBarDefaults.containerColor,
-    contentColor: Color = NavigationBarDefaults.contentColor,
+    contentColor: Color = Color.Unspecified,
     tonalElevation: androidx.compose.ui.unit.Dp = NavigationBarDefaults.Elevation,
     windowInsets: WindowInsets = NavigationBarDefaults.windowInsets,
     content: @Composable RowScope.() -> Unit,
