@@ -28,6 +28,10 @@ fun fynxUnreadBadgeLabel(count: Int): String = when {
     else -> count.toString()
 }
 
+/** Aggregate unread private-chat messages for the Chat bottom-navigation badge. */
+fun fynxChatUnreadCount(previews: List<ChatPreview>): Int =
+    previews.sumOf { it.unreadCount.coerceAtLeast(0) }
+
 @Composable
 fun FynxGreenUnreadBadge(
     count: Int,
