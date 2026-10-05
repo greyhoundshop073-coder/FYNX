@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Guard the shared profile-avatar identity contract across FYNX surfaces."""
+"""Guard the shared profile-avatar identity and invalidation contract across FYNX surfaces."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "app/src/main/java/com/fynx/app/ui"
 
 REQUIRED = {
-    "FynxRemoteMedia.kt": ["fun FynxRemoteProfileAvatar(", "FynxProfileRemoteClient.cachedProfilePhotoId"],
+    "FynxRemoteMedia.kt": ["fun FynxRemoteProfileAvatar(", "FynxProfileRemoteClient.cachedProfilePhotoId", "FynxAvatarIdentityStore.revisions()"],
+    "FynxAvatarIdentityStore.kt": ["object FynxAvatarIdentityStore", "fun publish("],
     "ProfilePanel.kt": ["FynxRemoteProfileAvatar(", "FynxProfileRemoteClient"],
     "OtherUserProfilePanel.kt": ["FynxRemoteProfileAvatar(", "FynxProfileRemoteClient"],
     "FriendsPanel.kt": ["FynxRemoteProfileAvatar(", "profilePhotoMediaId"],
@@ -16,7 +17,7 @@ REQUIRED = {
     "FynxHomeCommentsPanel.kt": ["FynxRemoteProfileAvatar(", "profilePhotoMediaId"],
     "FynxStatusTimelinePanel.kt": ["FynxRemoteProfileAvatar(", "profilePhotoMediaId"],
     "FynxMarketplacePanel.kt": ["FynxProfileRemoteClient", "photoId"],
-    "FynxProfileRemoteClient.kt": ["profilePhotoMediaId", "saveRemoteProfilePhotoId"],
+    "FynxProfileRemoteClient.kt": ["profilePhotoMediaId", "saveRemoteProfilePhotoId", "FynxAvatarIdentityStore.publish"],
     "FynxPreferencesStore.kt": ["loadRemoteProfilePhotoId", "saveRemoteProfilePhotoId"],
 }
 
@@ -36,6 +37,8 @@ if "FynxPreferencesStore.saveRemoteProfilePhotoId(context, normalized, profile.p
     errors.append("profile GET does not persist the server-authoritative avatar id")
 if "FynxPreferencesStore.saveRemoteProfilePhotoId(context, profile.username, profile.profilePhotoMediaId)" not in client:
     errors.append("profile UPDATE does not persist the server-authoritative avatar id")
+if client.count("FynxAvatarIdentityStore.publish(") < 2:
+    errors.append("profile GET and UPDATE must both publish avatar invalidation")
 
 if errors:
     print("PROFILE AVATAR CONTRACT RED")
@@ -45,4 +48,4 @@ if errors:
 
 print("PROFILE AVATAR CONTRACT GREEN")
 print(f"Verified {len(REQUIRED)} identity surfaces use the shared remote-avatar contract.")
-print("Verified profile GET/UPDATE persist the server-authoritative profilePhotoMediaId, including null removal.")
+print("Verified profile GET/UPDATE persist the server-authoritative profilePhotoMediaId and publish invalidation, including null removal.")
