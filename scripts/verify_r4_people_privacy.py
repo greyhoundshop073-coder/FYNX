@@ -34,6 +34,7 @@ check("username changes are collision checked", "lower(username)=lower($1) AND i
 check("privacy settings have server-side constraints", "privacy_settings" in privacy and "OPTIONS=new Set([\"Everyone\",DEFAULT_VISIBILITY,\"Nobody\"])" in privacy)
 check("privacy enforcement is registered in production bootstrap", "registerPrivacyRoutes({ app });" in scalability)
 check("message privacy is enforced server-side", "messages_visibility" in privacy and ("you must both follow each other to send a message" in privacy or "you must be friends with this user to send a message" in privacy))
+check("mutual-follow messaging is authoritative in the private profile guard", "const viewerFollows=Boolean" in privacy and "const mutualFollow=followed&&Boolean" in privacy and "canMessage:messagesVisibility!==\"Nobody\"&&(messagesVisibility===\"Everyone\"||mutualFollow)" in privacy)
 check("status privacy is enforced server-side", "status_visibility" in privacy and "status posting is disabled" in privacy)
 check("profile privacy guard runs before profile route", "insertBeforeRoute(app,\"get\",\"/api/social/profile/:username\"" in privacy)
 check("live follow routes are registered in production bootstrap", "import { registerFollowRoutes } from \"./followRoutes.js\";" in scalability and "registerFollowRoutes({ app });" in scalability)
