@@ -23,7 +23,8 @@ checks = [
     ("group history", "GroupChatPanel.kt", "loadMessages"),
     ("group realtime", "GroupChatPanel.kt", "GroupMessage"),
     ("group search", "GroupChatPanel.kt", "searchQuery"),
-    ("chat settings", "FynxChatSettingsPanel.kt", "Chat settings"),
+    # The production panel uses the title-cased UI label "Chat Settings".
+    ("chat settings", "FynxChatSettingsPanel.kt", "Chat Settings"),
     ("wallpaper", "FynxChatWallpaper.kt", "FynxChatWallpaperBackground"),
     ("unread model", "ChatModels.kt", "unreadCount"),
     ("persistent chat state", "FynxChatStore.kt", "unreadCount"),
