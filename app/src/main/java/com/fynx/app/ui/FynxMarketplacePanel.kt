@@ -175,43 +175,205 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         }
     }
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+
+    val midnight = Color(0xFF07152F)
+    val midnightSurface = Color(0xFF0D2145)
+    val accent = Color(0xFF7C5CFF)
+
+    Box(Modifier.fillMaxSize().background(midnight)) {
         Column(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 18.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Marketplace", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text(if (nearbyMode && nearbyLabel.isNotBlank()) "Showing products near $nearbyLabel" else "Discover products from FYNX sellers", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Marketplace", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(
+                        if (nearbyMode && nearbyLabel.isNotBlank()) "Products near ${nearbyLabel}" else "Buy, sell and discover on FYNX",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFB7C5E3)
+                    )
                 }
-                BadgedBox(badge = { if (cart.isNotEmpty()) Badge { Text(cart.size.toString()) } }) { IconButton(onClick = { showCart = true }) { Icon(Icons.Default.ShoppingCart, "Cart") } }
-                IconButton(onClick = { showOrders = true }) { Icon(Icons.Default.ReceiptLong, "Orders") }
-                IconButton(onClick = { reload() }) { Icon(Icons.Default.Refresh, "Refresh") }
+                BadgedBox(badge = { if (cart.isNotEmpty()) Badge { Text(cart.size.toString()) } }) {
+                    IconButton(onClick = { showCart = true }) { Icon(Icons.Default.ShoppingCart, "Cart", tint = Color.White) }
+                }
+                IconButton(onClick = { showOrders = true }) { Icon(Icons.Default.ReceiptLong, "Orders", tint = Color.White) }
             }
-            OutlinedTextField(value = query, onValueChange = { query = it.take(80) }, modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("Search products or sellers") }, shape = FynxDesign.ControlShape)
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = nearbyMode, onClick = { toggleNearby() }, label = { if (nearbyLoading) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp) else Icon(Icons.Default.LocationOn, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text(if (nearbyMode) "Near ${nearbyLabel.substringBefore(",").ifBlank { "me" }}" else "Near me") })
-                categories.forEach { item -> FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item) }) }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(18.dp),
+                color = midnightSurface
+            ) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it.take(80) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFFB7C5E3)) },
+                    trailingIcon = {
+                        if (query.isNotBlank()) IconButton(onClick = { query = "" }) {
+                            Icon(Icons.Default.Close, "Clear search", tint = Color(0xFFB7C5E3))
+                        }
+                    },
+                    placeholder = { Text("Search products or sellers", color = Color(0xFF8FA3C9)) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = accent,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = accent
+                    ),
+                    shape = RoundedCornerShape(18.dp)
+                )
             }
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) }
-            if (loading && listings.isNotEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
+
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = nearbyMode,
+                    onClick = { toggleNearby() },
+                    label = { Text(if (nearbyMode) "Near ${nearbyLabel.substringBefore(",").ifBlank { "me" }}" else "Nearby") },
+                    leadingIcon = { Icon(Icons.Default.LocationOn, null, Modifier.size(16.dp)) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = midnightSurface,
+                        labelColor = Color(0xFFDCE6FF),
+                        selectedContainerColor = accent,
+                        selectedLabelColor = Color.White
+                    )
+                )
+                categories.forEach { item ->
+                    FilterChip(
+                        selected = category == item,
+                        onClick = { category = item },
+                        label = { Text(item) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = midnightSurface,
+                            labelColor = Color(0xFFDCE6FF),
+                            selectedContainerColor = accent,
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+            }
+
+            error?.let {
+                Text(it, color = Color(0xFFFF8A9A), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
+            }
+            if (loading && listings.isNotEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth(), color = accent)
+
             when {
-                loading && listings.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                listings.isEmpty() -> Box(Modifier.fillMaxSize().padding(24.dp), Alignment.Center) {
+                loading && listings.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                    CircularProgressIndicator(color = accent)
+                }
+
+                listings.isEmpty() -> Box(Modifier.fillMaxSize().padding(28.dp), Alignment.Center) {
                     val filtered = query.isNotBlank() || category != "All" || nearbyMode
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(52.dp))
-                        Spacer(Modifier.height(10.dp))
-                        Text(if (filtered) "No matching products" else "No products yet", style = MaterialTheme.typography.titleLarge)
-                        Text(if (filtered) "Try another search or clear the current filters." else "Be the first seller on FYNX", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Surface(shape = RoundedCornerShape(28.dp), color = midnightSurface) {
+                            Icon(Icons.Default.Storefront, null, tint = accent, modifier = Modifier.padding(22.dp).size(48.dp))
+                        }
+                        Text(
+                            if (filtered) "Nothing matches your search" else "Your Marketplace is waiting",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            if (filtered) "Try another search or category." else "There are no real listings here yet. Be the first to sell something.",
+                            color = Color(0xFFB7C5E3),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
                         if (filtered) {
-                            Spacer(Modifier.height(8.dp))
-                            TextButton(onClick = { query = ""; category = "All"; if (nearbyMode) toggleNearby() }) { Text("Clear filters") }
+                            OutlinedButton(onClick = { query = ""; category = "All"; if (nearbyMode) toggleNearby() }) { Text("Clear filters") }
+                        } else {
+                            Button(onClick = { showSell = true }, colors = ButtonDefaults.buttonColors(containerColor = accent)) {
+                                Icon(Icons.Default.Add, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Sell something")
+                            }
                         }
                     }
                 }
-                else -> LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 132.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) { if (visibleSellerListings.isNotEmpty()) { item(span = { GridItemSpan(maxLineSpan) }) { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { Text("Top Sellers (Highest Sales)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("Highest successful sales from sellers currently represented here", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }; item(span = { GridItemSpan(maxLineSpan) }) { LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(start = 0.dp, end = 16.dp)) { items(visibleSellerListings, key = { it.sellerUsername.removePrefix("@").trim().lowercase() }) { seller -> MarketplaceSellerCard(seller, sellerReputations[seller.sellerUsername.removePrefix("@").trim().lowercase()]!!, sellerPhotoIds[seller.sellerUsername.removePrefix("@").trim().lowercase()], { onOpenProfile(seller.sellerUsername) }) } } }; item(span = { GridItemSpan(maxLineSpan) }) { Text("Products", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp)) } }; gridItems(listings, key = { it.id }) { listing -> MarketplaceCard(l = listing, onProfile = { onOpenProfile(listing.sellerUsername) }, onContact = { contactSeller(listing.sellerUsername, listing.id) }, onOpen = { selected = listing }) } }
+
+                else -> LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Highlights", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Real FYNX listings from the marketplace", style = MaterialTheme.typography.bodySmall, color = Color(0xFF8FA3C9))
+                            }
+                            TextButton(onClick = { category = "All"; query = ""; if (nearbyMode) toggleNearby() }) { Text("View all", color = Color(0xFFBCAEFF)) }
+                        }
+                    }
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 8.dp)) {
+                            items(listings.take(4), key = { "highlight-${it.id}" }) { listing ->
+                                MarketplaceHighlightCard(
+                                    l = listing,
+                                    onOpen = { selected = listing },
+                                    onProfile = { onOpenProfile(listing.sellerUsername) }
+                                )
+                            }
+                        }
+                    }
+                    if (visibleSellerListings.isNotEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Sellers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Real sellers represented in these listings", style = MaterialTheme.typography.bodySmall, color = Color(0xFF8FA3C9))
+                            }
+                        }
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(end = 8.dp)) {
+                                items(visibleSellerListings, key = { "seller-${it.sellerUsername.removePrefix("@").trim().lowercase()}" }) { seller ->
+                                    MarketplaceSellerCard(
+                                        seller,
+                                        sellerReputations[seller.sellerUsername.removePrefix("@").trim().lowercase()]!!,
+                                        sellerPhotoIds[seller.sellerUsername.removePrefix("@").trim().lowercase()],
+                                        { onOpenProfile(seller.sellerUsername) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Products", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.weight(1f))
+                            Text(${listings.size.toString()}, style = MaterialTheme.typography.labelMedium, color = Color(0xFF8FA3C9))
+                        }
+                    }
+                    gridItems(listings, key = { it.id }) { listing ->
+                        MarketplaceCard(
+                            l = listing,
+                            onProfile = { onOpenProfile(listing.sellerUsername) },
+                            onContact = { contactSeller(listing.sellerUsername, listing.id) },
+                            onOpen = { selected = listing }
+                        )
+                    }
+                }
             }
         }
-        FloatingActionButton(onClick = { showSell = true }, modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().imePadding().padding(end = 18.dp, bottom = 18.dp), shape = RoundedCornerShape(18.dp)) { Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Sell", modifier = Modifier.padding(end = 14.dp)) }
+
+        FloatingActionButton(
+            onClick = { showSell = true },
+            modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().imePadding().padding(end = 18.dp, bottom = 18.dp),
+            shape = RoundedCornerShape(18.dp),
+            containerColor = accent,
+            contentColor = Color.White
+        ) {
+            Icon(Icons.Default.Add, contentDescription = null)
+            Spacer(Modifier.width(6.dp))
+            Text("Sell", modifier = Modifier.padding(end = 14.dp))
+        }
     }
 
     if (showSell) MarketplaceSellDialog(context, onPublished = { showSell = false; reload() }, onCancel = { showSell = false })
