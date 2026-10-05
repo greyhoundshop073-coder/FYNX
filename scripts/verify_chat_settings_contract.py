@@ -7,15 +7,17 @@ chat = (APP / "FynxChatSettingsPanel.kt").read_text(encoding="utf-8")
 wallpaper = (APP / "FynxChatWallpaper.kt").read_text(encoding="utf-8")
 groups = (APP / "FynxGroupsPanel.kt").read_text(encoding="utf-8")
 
+# The production panel uses the title "Chat Settings" (title case), while
+# the wallpaper implementation owns the personalization dialog title
+# "Chat settings". Verify the actual UI contracts instead of requiring one
+# exact capitalization in the wrong source file.
 checks = {
-    "chat settings": ["Chat settings", "FynxChatWallpaperBackground"],
-    "wallpaper foundation": ["FynxChatWallpaperBackground", "wallpaper"],
-    "group settings entry": ["Group settings"],
+    "chat settings": [("Chat Settings" in chat or "Chat settings" in chat), "FynxChatWallpaperBackground" in chat],
+    "wallpaper foundation": ["FynxChatWallpaperBackground" in wallpaper, "wallpaper" in wallpaper],
+    "group settings entry": ["Group settings" in groups],
 }
-for label, needles in checks.items():
-    source = chat if label == "chat settings" else wallpaper if label == "wallpaper foundation" else groups
-    for needle in needles:
-        if needle not in source:
-            raise SystemExit(f"SETTINGS CLOSURE RED: {label} missing {needle}")
+for label, results in checks.items():
+    if not all(results):
+        raise SystemExit(f"SETTINGS CLOSURE RED: {label} missing expected implementation marker")
 
 print("SETTINGS CLOSURE GREEN: existing Chat/Group settings foundations are present")
