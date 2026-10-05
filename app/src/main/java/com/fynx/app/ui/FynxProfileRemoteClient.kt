@@ -26,6 +26,7 @@ object FynxProfileRemoteClient {
             val profilePhotoMediaId = p.optionalPhotoMediaId()
             val profile = Profile(p.optString("id"),p.optString("username").ifBlank{normalized},p.optString("displayName").ifBlank{p.optString("display_name")},p.optString("bio"),p.optString("country"),p.optBoolean("verified"),profilePhotoMediaId,p.optBoolean("activityVisible"),p.optString("relationship"),p.optString("pendingRequestId").takeIf{v->v.isNotBlank()&&v!="null"},p.optBoolean("viewerSentRequest"),p.optBoolean("viewerReceivedRequest"),p.optBoolean("followedByCurrentUser"),p.optInt("mutualFriends"),p.optInt("postCount"),if(p.has("followerCount")&&!p.isNull("followerCount"))p.optInt("followerCount") else null,if(p.has("followingCount")&&!p.isNull("followingCount"))p.optInt("followingCount") else null,p.optBoolean("connectionsVisible"),p.optBoolean("canMessage"))
             FynxPreferencesStore.saveRemoteProfilePhotoId(context, normalized, profile.profilePhotoMediaId)
+            FynxAvatarIdentityStore.publish(profile.username, profile.profilePhotoMediaId)
             profile
         }
     }
@@ -57,6 +58,7 @@ object FynxProfileRemoteClient {
             val responseDisplayName = p.optString("displayName").ifBlank { p.optString("display_name") }.ifBlank { displayName.trim() }
             val profile = Profile(p.optString("id"),responseUsername,responseDisplayName,p.optString("bio").ifBlank { bio.trim() },p.optString("country").ifBlank { country.trim() },p.optBoolean("verified"),p.optionalPhotoMediaId(),p.optBoolean("activityVisible",true),p.optString("relationship").ifBlank { "self" },p.optString("pendingRequestId").takeIf{v->v.isNotBlank()&&v!="null"},p.optBoolean("viewerSentRequest"),p.optBoolean("viewerReceivedRequest"),p.optBoolean("followedByCurrentUser"),p.optInt("mutualFriends"),p.optInt("postCount"),if(p.has("followerCount")&&!p.isNull("followerCount"))p.optInt("followerCount") else if(p.has("follower_count")&&!p.isNull("follower_count"))p.optInt("follower_count") else null,if(p.has("followingCount")&&!p.isNull("followingCount"))p.optInt("followingCount") else if(p.has("following_count")&&!p.isNull("following_count"))p.optInt("following_count") else null,p.optBoolean("connectionsVisible",true),p.optBoolean("canMessage"))
             FynxPreferencesStore.saveRemoteProfilePhotoId(context, profile.username, profile.profilePhotoMediaId)
+            FynxAvatarIdentityStore.publish(profile.username, profile.profilePhotoMediaId)
             profile
         }
     }
