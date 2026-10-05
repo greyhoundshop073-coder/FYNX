@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: fynx-notifications-fast-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   notifications-fast-gate:
     name: Notifications Fast Gate
@@ -25,20 +29,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Grant Gradle execute permission
-        run: chmod +x gradlew
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
 
       - name: Run notification integration verification
         run: python3 scripts/verify_notifications_settings_integration.py
 
       - name: Run notification preference delivery verification
-        run: python3 scripts/verify_notification_preferences_delivery_contract.py
+        run: python3 scripts/verify_large_badge7_notifications_preferences.py
 
-      - name: Run FCM integration verification
-        run: python3 scripts/verify_fcm_integration.py
+      - name: Run FCM notification verification
+        run: python3 scripts/verify_fcm_notifications.py
 
-      - name: Android unit tests and lint
-        run: ./gradlew testDebugUnitTest lintDebug --no-daemon
-
-      - name: Android debug build
-        run: ./gradlew assembleDebug --no-daemon
+      - name: Android unit tests, lint, and debug build
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
