@@ -22,4 +22,15 @@ class FynxNotificationBadgeTest {
         assertEquals("99+", fynxUnreadBadgeLabel(100))
         assertEquals("99+", fynxUnreadBadgeLabel(1000))
     }
+
+    @Test
+    fun chatUnreadCount_aggregatesOnlyPositiveUnreadCounts() {
+        val previews = listOf(
+            ChatPreview("A", "@a", "hello", "Now", unreadCount = 2),
+            ChatPreview("B", "@b", "hi", "Now", unreadCount = 0),
+            ChatPreview("C", "@c", "hey", "Now", unreadCount = 4),
+            ChatPreview("D", "@d", "", "Now", unreadCount = -1),
+        )
+        assertEquals(6, fynxChatUnreadCount(previews))
+    }
 }
