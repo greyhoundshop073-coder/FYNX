@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Large Badge #7: notification delivery + preferences production certification."""
+# CI trigger: run the corrected notification gate on the existing notification branch.
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
