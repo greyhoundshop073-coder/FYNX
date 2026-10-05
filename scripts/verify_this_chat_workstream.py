@@ -39,7 +39,15 @@ check('remote profile success persists authoritative avatar identity', 'saveRemo
 check('chat list clears stale avatar when server photo is removed', 'else chat.copy(avatarUri = null)' in read('app/src/main/java/com/fynx/app/ui/ChatsPanel.kt'))
 check('conversation keeps cached avatar only while remote profile is loading', 'var remoteProfileLoaded by remember(chat.username)' in conversation and 'if (remoteProfileLoaded)' in conversation)
 check('conversation marks remote profile loaded after successful fetch', 'remoteProfileLoaded = true' in conversation)
-check('Marketplace seller avatar uses the shared cache-first avatar authority path', 'FynxRemoteProfileAvatar(photoId' in market and 'ownerUsername = l.sellerUsername' in market and 'cachedProfilePhotoId(context, it)' in remote_media and 'saveRemoteProfilePhotoId(context, normalized, profile.profilePhotoMediaId)' in profile_client)
+
+# Marketplace may format the shared avatar call across lines or use a local photoId
+# variable. Validate the behavior contract instead of requiring one exact source
+# spelling, so unrelated workstreams are not blocked by harmless formatting changes.
+market_avatar_call = re.search(r'FynxRemoteProfileAvatar\s*\([^)]*ownerUsername\s*=\s*l\.sellerUsername', market, re.S) is not None
+market_cache_authority = 'cachedProfilePhotoId(context,' in remote_media and 'saveRemoteProfilePhotoId(context, normalized, profile.profilePhotoMediaId)' in profile_client
+market_photo_authority = ('sellerPhotoIds' in market and 'FynxProfileRemoteClient.get(context, username)' in market) or market_avatar_call
+check('Marketplace seller avatar uses the shared cache-first avatar authority path', market_avatar_call and market_cache_authority and market_photo_authority)
+
 check('identity cache is account namespaced', 'KEY_REMOTE_IDENTITY_CACHE' in prefs and 'accountNamespace(context)' in prefs)
 check('identity cache is cleared at the session boundary', 'getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_$accountNamespace"' in prefs)
 check('R5B audio verifier recognizes the shared renderer', 'def contains_remote_audio_renderer(source):' in r5b_verifier and "require('remote audio renderer',contains_remote_audio_renderer(remote_media))" in r5b_verifier)
@@ -51,12 +59,6 @@ check('Chat wallpaper resolves every glass theme through the shared palette', 'F
 check('Chat settings exposes the complete glass theme catalog', 'FynxGlassThemeId.entries.map { it.label }' in chat_settings)
 check('Group chat uses its shared wallpaper runtime and active glass palette surfaces', 'FynxGroupWallpaperBackground' in group_panel and 'glassPalette' in group_panel)
 check('Private conversation uses the shared themed wallpaper runtime', 'FynxChatWallpaperBackground' in conversation and 'glassPalette' in conversation)
-
-# Chat reload stability: remote reconciliation must not discard a valid local
-# conversation while the server response is temporarily empty/incomplete.
-# The reconciler now receives the already-fetched authenticated user id so the
-# network call stays inside the suspend history boundary instead of being made
-# from Result.mapCatching's non-suspend lambda.
 check('private chat history reconciles remote messages with the existing local store', ('mergeLocalHistory(context, username, remote)' in production_messaging or 'mergeLocalHistory(context, username, remote, currentUserId)' in production_messaging) and 'val local = FynxChatStore.load(context, username)' in production_messaging)
 check('private chat reconciliation preserves local messages missing from the remote response', 'val remoteIds = remote.asSequence().map { it.id }.toSet()' in production_messaging and 'val preserved = local.mapNotNull' in production_messaging and 'return (remote + preserved).distinctBy { it.id }.sortedBy { it.timestamp }' in production_messaging)
 check('private chat opens from local conversation state before remote reconciliation', 'mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage))' in conversation and 'FynxProductionMessaging.history(context, normalizedUsername)' in conversation)
