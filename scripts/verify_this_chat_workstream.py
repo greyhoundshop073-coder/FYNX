@@ -43,7 +43,7 @@ check('conversation marks remote profile loaded after successful fetch', 'remote
 # Marketplace may format the shared avatar call across lines or use a local photoId
 # variable. Validate the behavior contract instead of requiring one exact source
 # spelling, so unrelated workstreams are not blocked by harmless formatting changes.
-market_avatar_call = re.search(r'FynxRemoteProfileAvatar\s*\([^)]*ownerUsername\s*=\s*l\.sellerUsername', market, re.S) is not None
+market_avatar_call = re.search(r'FynxRemoteProfileAvatar\s*\([^)]*ownerUsername\s*=\s*(?:l|listing)\.sellerUsername', market, re.S) is not None
 market_cache_authority = 'cachedProfilePhotoId(context,' in remote_media and 'saveRemoteProfilePhotoId(context, normalized, profile.profilePhotoMediaId)' in profile_client
 market_photo_authority = ('sellerPhotoIds' in market and 'FynxProfileRemoteClient.get(context, username)' in market) or market_avatar_call
 check('Marketplace seller avatar uses the shared cache-first avatar authority path', market_avatar_call and market_cache_authority and market_photo_authority)
