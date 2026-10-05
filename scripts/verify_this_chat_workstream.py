@@ -54,7 +54,7 @@ check('Marketplace seller avatar uses the shared cache-first avatar authority pa
 check('identity cache is account namespaced', 'KEY_REMOTE_IDENTITY_CACHE' in prefs and 'accountNamespace(context)' in prefs)
 check('identity cache is cleared at the session boundary', 'getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_$accountNamespace"' in prefs)
 check('R5B audio verifier recognizes the shared renderer', 'def contains_remote_audio_renderer(source):' in r5b_verifier and "require('remote audio renderer',contains_remote_audio_renderer(remote_media))" in r5b_verifier)
-check('media privacy guard remains installed', 'app.use("/api/media", media_privacy)' in media_privacy)
+check('media privacy guard remains installed', 'app.use("/api/media", mediaGuard)' in media_privacy)
 check('FCM notification gate remains present', 'notification deep-link routing' in fcm_verifier and 'FCM verification GREEN' in fcm_verifier)
 check('AI security gate remains present', 'AI provider key stays server-side' in ai_security and 'AI security gate GREEN' in ai_security)
 check('Chat/Group glass theme catalog contains all eight approved themes', all(label in glass_theme for label in ['Pure Black Glass', 'Aurora Glass', 'Light Glass', 'Deep Emerald Glass', 'Sunset Glass', 'Rose Glass', 'Golden Glass', 'Turquoise Glass']))
