@@ -175,43 +175,205 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         }
     }
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+
+    val midnight = Color(0xFF07152F)
+    val midnightSurface = Color(0xFF0D2145)
+    val accent = Color(0xFF7C5CFF)
+
+    Box(Modifier.fillMaxSize().background(midnight)) {
         Column(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 18.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Marketplace", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text(if (nearbyMode && nearbyLabel.isNotBlank()) "Showing products near $nearbyLabel" else "Discover products from FYNX sellers", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Marketplace", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(
+                        if (nearbyMode && nearbyLabel.isNotBlank()) "Products near ${nearbyLabel}" else "Buy, sell and discover on FYNX",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFB7C5E3)
+                    )
                 }
-                BadgedBox(badge = { if (cart.isNotEmpty()) Badge { Text(cart.size.toString()) } }) { IconButton(onClick = { showCart = true }) { Icon(Icons.Default.ShoppingCart, "Cart") } }
-                IconButton(onClick = { showOrders = true }) { Icon(Icons.Default.ReceiptLong, "Orders") }
-                IconButton(onClick = { reload() }) { Icon(Icons.Default.Refresh, "Refresh") }
+                BadgedBox(badge = { if (cart.isNotEmpty()) Badge { Text(cart.size.toString()) } }) {
+                    IconButton(onClick = { showCart = true }) { Icon(Icons.Default.ShoppingCart, "Cart", tint = Color.White) }
+                }
+                IconButton(onClick = { showOrders = true }) { Icon(Icons.Default.ReceiptLong, "Orders", tint = Color.White) }
             }
-            OutlinedTextField(value = query, onValueChange = { query = it.take(80) }, modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("Search products or sellers") }, shape = FynxDesign.ControlShape)
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = nearbyMode, onClick = { toggleNearby() }, label = { if (nearbyLoading) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp) else Icon(Icons.Default.LocationOn, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text(if (nearbyMode) "Near ${nearbyLabel.substringBefore(",").ifBlank { "me" }}" else "Near me") })
-                categories.forEach { item -> FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item) }) }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(18.dp),
+                color = midnightSurface
+            ) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it.take(80) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFFB7C5E3)) },
+                    trailingIcon = {
+                        if (query.isNotBlank()) IconButton(onClick = { query = "" }) {
+                            Icon(Icons.Default.Close, "Clear search", tint = Color(0xFFB7C5E3))
+                        }
+                    },
+                    placeholder = { Text("Search products or sellers", color = Color(0xFF8FA3C9)) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = accent,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = accent
+                    ),
+                    shape = RoundedCornerShape(18.dp)
+                )
             }
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) }
-            if (loading && listings.isNotEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
+
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = nearbyMode,
+                    onClick = { toggleNearby() },
+                    label = { Text(if (nearbyMode) "Near ${nearbyLabel.substringBefore(",").ifBlank { "me" }}" else "Nearby") },
+                    leadingIcon = { Icon(Icons.Default.LocationOn, null, Modifier.size(16.dp)) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = midnightSurface,
+                        labelColor = Color(0xFFDCE6FF),
+                        selectedContainerColor = accent,
+                        selectedLabelColor = Color.White
+                    )
+                )
+                categories.forEach { item ->
+                    FilterChip(
+                        selected = category == item,
+                        onClick = { category = item },
+                        label = { Text(item) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = midnightSurface,
+                            labelColor = Color(0xFFDCE6FF),
+                            selectedContainerColor = accent,
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+            }
+
+            error?.let {
+                Text(it, color = Color(0xFFFF8A9A), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
+            }
+            if (loading && listings.isNotEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth(), color = accent)
+
             when {
-                loading && listings.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                listings.isEmpty() -> Box(Modifier.fillMaxSize().padding(24.dp), Alignment.Center) {
+                loading && listings.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                    CircularProgressIndicator(color = accent)
+                }
+
+                listings.isEmpty() -> Box(Modifier.fillMaxSize().padding(28.dp), Alignment.Center) {
                     val filtered = query.isNotBlank() || category != "All" || nearbyMode
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(52.dp))
-                        Spacer(Modifier.height(10.dp))
-                        Text(if (filtered) "No matching products" else "No products yet", style = MaterialTheme.typography.titleLarge)
-                        Text(if (filtered) "Try another search or clear the current filters." else "Be the first seller on FYNX", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Surface(shape = RoundedCornerShape(28.dp), color = midnightSurface) {
+                            Icon(Icons.Default.Storefront, null, tint = accent, modifier = Modifier.padding(22.dp).size(48.dp))
+                        }
+                        Text(
+                            if (filtered) "Nothing matches your search" else "Your Marketplace is waiting",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            if (filtered) "Try another search or category." else "There are no real listings here yet. Be the first to sell something.",
+                            color = Color(0xFFB7C5E3),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
                         if (filtered) {
-                            Spacer(Modifier.height(8.dp))
-                            TextButton(onClick = { query = ""; category = "All"; if (nearbyMode) toggleNearby() }) { Text("Clear filters") }
+                            OutlinedButton(onClick = { query = ""; category = "All"; if (nearbyMode) toggleNearby() }) { Text("Clear filters") }
+                        } else {
+                            Button(onClick = { showSell = true }, colors = ButtonDefaults.buttonColors(containerColor = accent)) {
+                                Icon(Icons.Default.Add, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Sell something")
+                            }
                         }
                     }
                 }
-                else -> LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 132.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) { if (visibleSellerListings.isNotEmpty()) { item(span = { GridItemSpan(maxLineSpan) }) { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { Text("Top Sellers (Highest Sales)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("Highest successful sales from sellers currently represented here", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }; item(span = { GridItemSpan(maxLineSpan) }) { LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(start = 0.dp, end = 16.dp)) { items(visibleSellerListings, key = { it.sellerUsername.removePrefix("@").trim().lowercase() }) { seller -> MarketplaceSellerCard(seller, sellerReputations[seller.sellerUsername.removePrefix("@").trim().lowercase()]!!, sellerPhotoIds[seller.sellerUsername.removePrefix("@").trim().lowercase()], { onOpenProfile(seller.sellerUsername) }) } } }; item(span = { GridItemSpan(maxLineSpan) }) { Text("Products", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp)) } }; gridItems(listings, key = { it.id }) { listing -> MarketplaceCard(l = listing, onProfile = { onOpenProfile(listing.sellerUsername) }, onContact = { contactSeller(listing.sellerUsername, listing.id) }, onOpen = { selected = listing }) } }
+
+                else -> LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Highlights", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Real FYNX listings from the marketplace", style = MaterialTheme.typography.bodySmall, color = Color(0xFF8FA3C9))
+                            }
+                            TextButton(onClick = { category = "All"; query = ""; if (nearbyMode) toggleNearby() }) { Text("View all", color = Color(0xFFBCAEFF)) }
+                        }
+                    }
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 8.dp)) {
+                            items(listings.take(4), key = { "highlight-${it.id}" }) { listing ->
+                                MarketplaceHighlightCard(
+                                    l = listing,
+                                    onOpen = { selected = listing },
+                                    onProfile = { onOpenProfile(listing.sellerUsername) }
+                                )
+                            }
+                        }
+                    }
+                    if (visibleSellerListings.isNotEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Sellers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Real sellers represented in these listings", style = MaterialTheme.typography.bodySmall, color = Color(0xFF8FA3C9))
+                            }
+                        }
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(end = 8.dp)) {
+                                items(visibleSellerListings, key = { "seller-${it.sellerUsername.removePrefix("@").trim().lowercase()}" }) { seller ->
+                                    MarketplaceSellerCard(
+                                        seller,
+                                        sellerReputations[seller.sellerUsername.removePrefix("@").trim().lowercase()]!!,
+                                        sellerPhotoIds[seller.sellerUsername.removePrefix("@").trim().lowercase()],
+                                        { onOpenProfile(seller.sellerUsername) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Products", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.weight(1f))
+                            Text(${listings.size.toString()}, style = MaterialTheme.typography.labelMedium, color = Color(0xFF8FA3C9))
+                        }
+                    }
+                    gridItems(listings, key = { it.id }) { listing ->
+                        MarketplaceCard(
+                            l = listing,
+                            onProfile = { onOpenProfile(listing.sellerUsername) },
+                            onContact = { contactSeller(listing.sellerUsername, listing.id) },
+                            onOpen = { selected = listing }
+                        )
+                    }
+                }
             }
         }
-        FloatingActionButton(onClick = { showSell = true }, modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().imePadding().padding(end = 18.dp, bottom = 18.dp), shape = RoundedCornerShape(18.dp)) { Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Sell", modifier = Modifier.padding(end = 14.dp)) }
+
+        FloatingActionButton(
+            onClick = { showSell = true },
+            modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().imePadding().padding(end = 18.dp, bottom = 18.dp),
+            shape = RoundedCornerShape(18.dp),
+            containerColor = accent,
+            contentColor = Color.White
+        ) {
+            Icon(Icons.Default.Add, contentDescription = null)
+            Spacer(Modifier.width(6.dp))
+            Text("Sell", modifier = Modifier.padding(end = 14.dp))
+        }
     }
 
     if (showSell) MarketplaceSellDialog(context, onPublished = { showSell = false; reload() }, onCancel = { showSell = false })
@@ -229,69 +391,166 @@ private fun MarketplaceProtectedOrderDialog(order: FynxRemoteSocialClient.Market
 }
 
 @Composable
+@Composable
 private fun MarketplaceCard(l: FynxRemoteSocialClient.MarketplaceListing, onProfile: () -> Unit, onContact: () -> Unit, onOpen: () -> Unit) {
     val context = LocalContext.current
     val username = l.sellerUsername.removePrefix("@").trim()
     var photoId by remember(username) { mutableStateOf<String?>(null) }
-    LaunchedEffect(username) { if (username.isNotBlank()) FynxProfileRemoteClient.get(context, username).onSuccess { photoId = it.profilePhotoMediaId } }
-    Surface(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
-        Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                IconButton(onClick = onProfile, modifier = Modifier.size(34.dp)) { FynxRemoteProfileAvatar(photoId, l.sellerDisplayName.ifBlank { l.sellerUsername }, Modifier.size(30.dp).clip(RoundedCornerShape(50)), ownerUsername = l.sellerUsername) }
-                Column(Modifier.weight(1f).padding(start = 2.dp)) {
-                    Text(l.sellerDisplayName.ifBlank { l.sellerUsername.removePrefix("@") }, fontWeight = FontWeight.SemiBold, maxLines = 1, style = MaterialTheme.typography.labelLarge)
-                    Text(l.storeName.ifBlank { "FYNX seller" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+    LaunchedEffect(username) {
+        if (username.isNotBlank()) FynxProfileRemoteClient.get(context, username).onSuccess { photoId = it.profilePhotoMediaId }
+    }
+    Surface(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), color = Color(0xFF102A55)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (l.mediaIds.isNotEmpty()) {
+                RemoteMarketMedia(context, l.mediaIds.first(), Modifier.fillMaxWidth().aspectRatio(0.94f).clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)))
+            } else {
+                Box(Modifier.fillMaxWidth().aspectRatio(0.94f).clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)).background(Color(0xFF163666)), Alignment.Center) {
+                    Icon(Icons.Default.ShoppingBag, "Product", Modifier.size(42.dp), tint = Color(0xFF9B83FF))
                 }
             }
-            if (l.mediaIds.isNotEmpty()) RemoteMarketMedia(context, l.mediaIds.first(), Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp)))
-            else Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { Icon(Icons.Default.ShoppingBag, "Product", Modifier.size(42.dp), tint = MaterialTheme.colorScheme.primary) }
-            Text(l.title, fontWeight = FontWeight.Bold, maxLines = 2, minLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
-            Text(l.currency.uppercase() + " " + String.format(Locale.US, "%,.2f", l.price), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            TextButton(onClick = onContact, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 0.dp)) { Icon(Icons.Default.Phone, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Contact") }
+            Column(Modifier.padding(horizontal = 11.dp, vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(l.title, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall, color = Color.White)
+                Text(l.currency.uppercase() + " " + String.format(Locale.US, "%,.2f", l.price), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFFBCAEFF))
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    FynxRemoteProfileAvatar(photoId, l.sellerDisplayName.ifBlank { l.sellerUsername }, Modifier.size(26.dp).clip(RoundedCornerShape(50)), ownerUsername = l.sellerUsername)
+                    Column(Modifier.weight(1f).padding(start = 7.dp)) {
+                        Text(l.sellerDisplayName.ifBlank { l.sellerUsername.removePrefix("@") }, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium, color = Color(0xFFDCE6FF))
+                        if (l.location.isNotBlank()) Text(l.location, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = Color(0xFF8FA3C9))
+                    }
+                    IconButton(onClick = onContact, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.ChatBubbleOutline, "Contact seller", Modifier.size(18.dp), tint = Color(0xFFBCAEFF)) }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun MarketplaceSellerCard(listing: FynxRemoteSocialClient.MarketplaceListing, reputation: FynxMarketplaceClient.SellerReputation, photoId: String?, onProfile: () -> Unit) {
-    Surface(Modifier.width(190.dp), shape = RoundedCornerShape(12.dp), color = Color(0xFF2A2A2A)) {
-        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            FynxRemoteProfileAvatar(photoId, listing.sellerDisplayName.ifBlank { listing.sellerUsername }, Modifier.size(42.dp).clip(RoundedCornerShape(50)), ownerUsername = listing.sellerUsername)
-            Spacer(Modifier.width(8.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
-                Text(listing.category + " • " + reputation.successfulSales + " sales", maxLines = 1, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (reputation.reviewCount > 0) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Star, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary); Text(" " + String.format(Locale.US, "%.1f", reputation.averageRating), style = MaterialTheme.typography.labelSmall) } }
-                TextButton(onClick = onProfile, contentPadding = PaddingValues(0.dp)) { Text("View Store") }
+private fun MarketplaceHighlightCard(l: FynxRemoteSocialClient.MarketplaceListing, onOpen: () -> Unit, onProfile: () -> Unit) {
+    val context = LocalContext.current
+    Surface(onClick = onOpen, modifier = Modifier.width(250.dp), shape = RoundedCornerShape(20.dp), color = Color(0xFF102A55)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (l.mediaIds.isNotEmpty()) {
+                RemoteMarketMedia(context, l.mediaIds.first(), Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)))
+            } else {
+                Box(Modifier.fillMaxWidth().height(150.dp).background(Color(0xFF163666)), Alignment.Center) {
+                    Icon(Icons.Default.ShoppingBag, "Product", Modifier.size(40.dp), tint = Color(0xFF9B83FF))
+                }
+            }
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(l.title, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(l.currency.uppercase() + " " + String.format(Locale.US, "%,.2f", l.price), fontWeight = FontWeight.Bold, color = Color(0xFFBCAEFF))
+                TextButton(onClick = onProfile, contentPadding = PaddingValues(0.dp)) { Text(l.sellerDisplayName.ifBlank { l.sellerUsername.removePrefix("@") }, color = Color(0xFFDCE6FF)) }
             }
         }
     }
 }
+
+@Composable
+@Composable
+private fun MarketplaceSellerCard(listing: FynxRemoteSocialClient.MarketplaceListing, reputation: FynxMarketplaceClient.SellerReputation, photoId: String?, onProfile: () -> Unit) {
+    Surface(onClick = onProfile, modifier = Modifier.width(215.dp), shape = RoundedCornerShape(18.dp), color = Color(0xFF0D2145)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FynxRemoteProfileAvatar(photoId, listing.sellerDisplayName.ifBlank { listing.sellerUsername }, Modifier.size(44.dp).clip(RoundedCornerShape(50)), ownerUsername = listing.sellerUsername)
+                Spacer(Modifier.width(9.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = Color.White)
+                    Text(listing.storeName.ifBlank { "FYNX seller" }, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = Color(0xFF8FA3C9))
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column {
+                    Text(reputation.successfulSales.toString(), fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("sales", style = MaterialTheme.typography.labelSmall, color = Color(0xFF8FA3C9))
+                }
+                if (reputation.reviewCount > 0) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Star, null, Modifier.size(14.dp), tint = Color(0xFFFFC857))
+                            Spacer(Modifier.width(3.dp))
+                            Text(String.format(Locale.US, "%.1f", reputation.averageRating), fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                        Text(reputation.reviewCount.toString() + " reviews", style = MaterialTheme.typography.labelSmall, color = Color(0xFF8FA3C9))
+                    }
+                }
+            }
+            Text("View store", style = MaterialTheme.typography.labelLarge, color = Color(0xFFBCAEFF))
+        }
+    }
+}
+
 @Composable
 private fun RemoteMarketMedia(context: android.content.Context, mediaId: String, modifier: Modifier) { val mediaUrl = remember(mediaId) { FynxMarketplaceClient.mediaUrl(context, mediaId) }; FynxRemoteMedia(mediaUrl, "auto", modifier) }
 
 @Composable
+@Composable
 private fun MarketplaceDetails(l: FynxRemoteSocialClient.MarketplaceListing, onProfile: () -> Unit, onContact: () -> Unit, onBuyNow: () -> Unit, onAddToCart: () -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
-    AlertDialog(onDismissRequest = onClose, title = { Text(l.title, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, text = { Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding(), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-        if (l.mediaIds.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(l.mediaIds.take(12)) { mediaId -> RemoteMarketMedia(LocalContext.current, mediaId, Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(12.dp))) } }
-        Text("${l.currency} ${String.format(Locale.US, "%,.2f", l.price)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-        if (l.description.isNotBlank()) Text(l.description)
-        Text("Seller: ${l.sellerDisplayName.ifBlank { l.sellerUsername }}")
-        Text("${l.quantity} available • ${l.condition}")
-        if (l.location.isNotBlank()) Text("Location: ${l.location}")
-        if (l.deliveryAvailable) Text("Delivery available${l.deliveryFee?.let { " • ${l.currency} ${String.format(Locale.US, "%,.2f", it)} fee" } ?: ""}")
-        if (l.pickupAvailable) Text("Pickup available")
-        Text("🛡 FYNX protected payment", fontWeight = FontWeight.SemiBold)
-        Text("Payment stays protected through the existing FYNX order lifecycle until the appropriate completion state.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    } }, confirmButton = { Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title)) }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Share, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Share Marketplace listing") }
-        OutlinedButton(onClick = onContact, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.ChatBubbleOutline, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Contact seller") }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onAddToCart, enabled = l.quantity > 0, modifier = Modifier.weight(1f)) { Icon(Icons.Default.ShoppingCart, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text("Add to cart") }
-            Button(onClick = onBuyNow, enabled = l.quantity > 0, modifier = Modifier.weight(1f)) { Text("Buy now") }
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxWidth().fillMaxHeight(0.94f).padding(horizontal = 8.dp), shape = RoundedCornerShape(26.dp), color = Color(0xFF07152F)) {
+            Box(Modifier.fillMaxSize()) {
+                Column(Modifier.fillMaxSize()) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onClose) { Icon(Icons.Default.Close, "Close", tint = Color.White) }
+                        Text("Product details", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                        IconButton(onClick = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title)) }) { Icon(Icons.Default.Share, "Share", tint = Color(0xFFBCAEFF)) }
+                    }
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (l.mediaIds.isNotEmpty()) {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(l.mediaIds.take(12), key = { it }) { mediaId ->
+                                    RemoteMarketMedia(context, mediaId, Modifier.width(310.dp).height(250.dp).clip(RoundedCornerShape(20.dp)))
+                                }
+                            }
+                        } else {
+                            Box(Modifier.fillMaxWidth().height(250.dp).clip(RoundedCornerShape(20.dp)).background(Color(0xFF163666)), Alignment.Center) {
+                                Icon(Icons.Default.ShoppingBag, "Product", Modifier.size(54.dp), tint = Color(0xFF9B83FF))
+                            }
+                        }
+                        Text(l.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(l.currency.uppercase() + " " + String.format(Locale.US, "%,.2f", l.price), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color(0xFFBCAEFF))
+                        Surface(shape = RoundedCornerShape(18.dp), color = Color(0xFF0D2145), modifier = Modifier.fillMaxWidth()) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                val username = l.sellerUsername.removePrefix("@").trim()
+                                var photoId by remember(username) { mutableStateOf<String?>(null) }
+                                LaunchedEffect(username) { if (username.isNotBlank()) FynxProfileRemoteClient.get(context, username).onSuccess { photoId = it.profilePhotoMediaId } }
+                                FynxRemoteProfileAvatar(photoId, l.sellerDisplayName.ifBlank { l.sellerUsername }, Modifier.size(48.dp).clip(RoundedCornerShape(50)), ownerUsername = l.sellerUsername)
+                                Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                                    Text(l.sellerDisplayName.ifBlank { l.sellerUsername }, fontWeight = FontWeight.SemiBold, color = Color.White)
+                                    Text(l.storeName.ifBlank { "FYNX seller" }, style = MaterialTheme.typography.bodySmall, color = Color(0xFF8FA3C9))
+                                }
+                                TextButton(onClick = onProfile) { Text("View store", color = Color(0xFFBCAEFF)) }
+                            }
+                        }
+                        if (l.location.isNotBlank()) Text("Location  •  " + l.location, color = Color(0xFFDCE6FF))
+                        Text(l.quantity.toString() + " available  •  " + l.condition, color = Color(0xFFB7C5E3))
+                        if (l.deliveryAvailable) Text("Delivery available" + (l.deliveryFee?.let { "  •  " + l.currency + " " + String.format(Locale.US, "%,.2f", it) } ?: ""), color = Color(0xFFB7C5E3))
+                        if (l.pickupAvailable) Text("Pickup available", color = Color(0xFFB7C5E3))
+                        if (l.description.isNotBlank()) {
+                            Text("Description", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(l.description, color = Color(0xFFDCE6FF))
+                        }
+                        Surface(shape = RoundedCornerShape(16.dp), color = Color(0xFF0D2145), modifier = Modifier.fillMaxWidth()) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF7C5CFF))
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text("FYNX protected payment", fontWeight = FontWeight.SemiBold, color = Color.White)
+                                    Text("Payment stays protected through the existing order lifecycle.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF8FA3C9))
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(84.dp))
+                    }
+                }
+                Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color(0xFF07152F)).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onContact, modifier = Modifier.weight(1f)) { Icon(Icons.Default.ChatBubbleOutline, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text("Contact") }
+                    OutlinedButton(onClick = onAddToCart, enabled = l.quantity > 0, modifier = Modifier.weight(1f)) { Icon(Icons.Default.ShoppingCart, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text("Cart") }
+                    Button(onClick = onBuyNow, enabled = l.quantity > 0, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C5CFF))) { Text("Buy now") }
+                }
+            }
         }
-    } }, dismissButton = { TextButton(onClick = onProfile) { Text("View seller") } })
+    }
 }
 
 @Composable
