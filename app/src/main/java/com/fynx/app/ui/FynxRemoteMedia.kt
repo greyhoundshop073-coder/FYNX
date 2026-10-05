@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -156,17 +157,9 @@ fun FynxRemoteMedia(
             Image(it.asImageBitmap(), "Open image", imageModifier, contentScale = contentScale)
             if (showFullScreen) {
                 Dialog(onDismissRequest = { showFullScreen = false }) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = Color.Black
-                    ) {
+                    Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Image(
-                                bitmap = it.asImageBitmap(),
-                                contentDescription = "Full-screen image",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Fit
-                            )
+                            Image(bitmap = it.asImageBitmap(), contentDescription = "Full-screen image", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
                         }
                     }
                 }
@@ -190,16 +183,7 @@ fun FynxRemoteMedia(
                         if (view.tag != file.absolutePath) {
                             view.tag = file.absolutePath
                             view.setVideoPath(file.absolutePath)
-                            view.setOnPreparedListener { player ->
-                                preparedPlayer = player
-                                player.isLooping = loopVideo
-                                if (autoPlay && playbackActive) {
-                                    player.start()
-                                    videoPlaying = true
-                                } else {
-                                    videoPlaying = false
-                                }
-                            }
+                            view.setOnPreparedListener { player -> preparedPlayer = player; player.isLooping = loopVideo; if (autoPlay && playbackActive) { player.start(); videoPlaying = true } else videoPlaying = false }
                             view.setOnCompletionListener { videoPlaying = false; onVideoCompleted?.invoke() }
                             view.setOnErrorListener { _, _, _ -> videoPlaying = false; true }
                         }
@@ -214,8 +198,7 @@ fun FynxRemoteMedia(
             }
         }
         "error" -> Box(modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { Icon(Icons.Default.BrokenImage, "Media unavailable"); Text("Media unavailable", style = MaterialTheme.typography.labelSmall); TextButton(onClick = { reloadNonce++ }) { Text("Retry") }
-            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { Icon(Icons.Default.BrokenImage, "Media unavailable"); Text("Media unavailable", style = MaterialTheme.typography.labelSmall); TextButton(onClick = { reloadNonce++ }) { Text("Retry") } }
         }
         else -> Box(modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     }
@@ -232,14 +215,7 @@ private object FynxStatusPresenceStore {
     suspend fun activeOwners(context: android.content.Context): Set<String> {
         val now = System.currentTimeMillis()
         if (now - loadedAt < 30_000L) return activeOwners
-        return runCatching { FynxStatusClient.list(context).getOrNull() }
-            .getOrNull()
-            ?.filterNot(FynxStatus::isExpired)
-            ?.map { it.ownerUsername.removePrefix("@").trim().lowercase() }
-            ?.filter { it.isNotBlank() }
-            ?.toSet()
-            ?.also { activeOwners = it; loadedAt = now }
-            ?: activeOwners
+        return runCatching { FynxStatusClient.list(context).getOrNull() }.getOrNull()?.filterNot(FynxStatus::isExpired)?.map { it.ownerUsername.removePrefix("@").trim().lowercase() }?.filter { it.isNotBlank() }?.toSet()?.also { activeOwners = it; loadedAt = now } ?: activeOwners
     }
 }
 
@@ -252,37 +228,34 @@ fun FynxRemoteProfileAvatar(
     onStatusClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
-    // Resolve a known person photo from the existing cache when the caller has no media id.
-    val resolvedMediaId = mediaId?.takeIf { it.isNotBlank() } ?: ownerUsername
-        ?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
-        ?.let { FynxProfileRemoteClient.cachedProfilePhotoId(context, it) }
+    val normalizedOwner = ownerUsername?.removePrefix("@")?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+    val avatarRevisions by FynxAvatarIdentityStore.revisions().collectAsState()
+    val revision = normalizedOwner?.let { avatarRevisions[it] }
+    val resolvedMediaId = if (normalizedOwner != null) {
+        // Re-read the authoritative per-account cache whenever Profile publishes a change.
+        FynxProfileRemoteClient.cachedProfilePhotoId(context, normalizedOwner)
+    } else {
+        mediaId?.takeIf { it.isNotBlank() }
+    }
     var hasActiveStatus by remember(ownerUsername) { mutableStateOf(false) }
     LaunchedEffect(ownerUsername) {
         val owner = ownerUsername?.removePrefix("@")?.trim()?.lowercase().orEmpty()
-        if (owner.isBlank()) {
-            hasActiveStatus = false
-        } else {
-            hasActiveStatus = runCatching {
-                FynxStatusPresenceStore.activeOwners(context).contains(owner)
-            }.getOrDefault(false)
-        }
+        if (owner.isBlank()) hasActiveStatus = false
+        else hasActiveStatus = runCatching { FynxStatusPresenceStore.activeOwners(context).contains(owner) }.getOrDefault(false)
     }
-    val avatar: @Composable () -> Unit = {
-        if (resolvedMediaId.isNullOrBlank()) {
-            Box(Modifier.fillMaxSize().clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
-                Text(contentDescription.orEmpty().trim().firstOrNull()?.uppercase() ?: "F", color = MaterialTheme.colorScheme.onPrimaryContainer)
+    // Keep revision as an explicit composition key so a published avatar removal also clears the old media.
+    key(normalizedOwner, revision, resolvedMediaId) {
+        val avatar: @Composable () -> Unit = {
+            if (resolvedMediaId.isNullOrBlank()) {
+                Box(Modifier.fillMaxSize().clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+                    Text(contentDescription.orEmpty().trim().firstOrNull()?.uppercase() ?: "F", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            } else {
+                FynxRemoteMedia("/api/media/${resolvedMediaId.trim()}", "image", Modifier.fillMaxSize().clip(RoundedCornerShape(50)))
             }
-        } else {
-            FynxRemoteMedia("/api/media/${resolvedMediaId.trim()}", "image", Modifier.fillMaxSize().clip(RoundedCornerShape(50)))
         }
+        Box(modifier = modifier.then(if (hasActiveStatus) Modifier.border(2.dp, Color(0xFF22C55E), RoundedCornerShape(50)).padding(2.dp) else Modifier).clip(RoundedCornerShape(50)).then(if (hasActiveStatus && onStatusClick != null) Modifier.clickable { onStatusClick() } else Modifier), contentAlignment = Alignment.Center) { avatar() }
     }
-    Box(
-        modifier = modifier
-            .then(if (hasActiveStatus) Modifier.border(2.dp, Color(0xFF22C55E), RoundedCornerShape(50)).padding(2.dp) else Modifier)
-            .clip(RoundedCornerShape(50))
-            .then(if (hasActiveStatus && onStatusClick != null) Modifier.clickable { onStatusClick() } else Modifier),
-        contentAlignment = Alignment.Center
-    ) { avatar() }
 }
 
 private sealed interface MediaLoadResult { data class Image(val bitmap: android.graphics.Bitmap) : MediaLoadResult; data class Gif(val drawable: Drawable, val file: File) : MediaLoadResult; data class Video(val file: File) : MediaLoadResult }
@@ -299,152 +272,33 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier, maxDuration
     var positionMs by remember(resolvedUrl) { mutableLongStateOf(0L) }
     var durationMs by remember(resolvedUrl) { mutableLongStateOf(maxDurationMs ?: 0L) }
 
-    DisposableEffect(resolvedUrl) {
-        onDispose { player?.release(); player = null }
-    }
+    DisposableEffect(resolvedUrl) { onDispose { player?.release(); player = null } }
+    LaunchedEffect(playing, player) { while (playing) { positionMs = player?.currentPosition?.toLong() ?: positionMs; delay(120L) } }
 
-    LaunchedEffect(playing, player) {
-        while (playing) {
-            positionMs = player?.currentPosition?.toLong() ?: positionMs
-            delay(120L)
-        }
-    }
-
-    Row(
-        modifier = modifier.padding(horizontal = 2.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            modifier = Modifier.size(42.dp),
-            shape = RoundedCornerShape(50),
-            color = MaterialTheme.colorScheme.primaryContainer
-        ) {
-            IconButton(
-                enabled = !loading,
-                onClick = {
-                    if (playing) {
-                        player?.pause()
-                        playing = false
-                        return@IconButton
-                    }
-                    if (player != null) {
-                        player?.start()
-                        playing = true
-                        return@IconButton
-                    }
-                    loading = true
-                    error = null
-                    scope.launch {
-                        try {
-                            val cached = remoteMediaCacheFile(context, resolvedUrl, ".audio")
-                            val target = cached ?: File.createTempFile("fynx_audio_", ".audio", context.cacheDir)
-                            val result = if (cached?.exists() == true && cached.length() > 0L) {
-                                Result.success(FynxBackendClient.DownloadedMedia(null, cached.length()))
-                            } else if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE || !FynxBackendClient.hasAccessToken(context)) {
-                                Result.failure(IllegalStateException("Audio is offline and not cached"))
-                            } else {
-                                downloadRemoteMedia(context, resolvedUrl, target)
-                            }
-                            result.getOrThrow()
-                            if (!target.exists() || target.length() == 0L) throw IllegalStateException("Downloaded voice media is empty")
-                            val finalFile = target
-                            val p = MediaPlayer().apply {
-                                setAudioAttributes(
-                                    AudioAttributes.Builder()
-                                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                                        .build()
-                                )
-                                setDataSource(finalFile.absolutePath)
-                                setOnPreparedListener {
-                                    durationMs = maxDurationMs?.takeIf { it > 0L } ?: it.duration.toLong()
-                                    positionMs = 0L
-                                    loading = false
-                                    playing = true
-                                    it.start()
-                                }
-                                setOnCompletionListener {
-                                    positionMs = 0L
-                                    playing = false
-                                    release()
-                                    player = null
-                                }
-                                setOnErrorListener { mp, _, _ ->
-                                    loading = false
-                                    playing = false
-                                    error = "Voice message could not be played."
-                                    runCatching { mp.reset() }
-                                    runCatching { mp.release() }
-                                    player = null
-                                    true
-                                }
-                            }
-                            player = p
-                            p.prepareAsync()
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (failure: Throwable) {
-                            loading = false
-                            playing = false
-                            error = failure.message ?: "Voice message could not be loaded."
-                            player?.release()
-                            player = null
+    Row(modifier = modifier.padding(horizontal = 2.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Surface(modifier = Modifier.size(42.dp), shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primaryContainer) {
+            IconButton(enabled = !loading, onClick = {
+                if (playing) { player?.pause(); playing = false; return@IconButton }
+                if (player != null) { player?.start(); playing = true; return@IconButton }
+                loading = true; error = null
+                scope.launch {
+                    try {
+                        val cached = remoteMediaCacheFile(context, resolvedUrl, ".audio")
+                        val target = cached ?: File.createTempFile("fynx_audio_", ".audio", context.cacheDir)
+                        if (cached?.exists() != true) downloadRemoteMedia(context, resolvedUrl, target).getOrThrow()
+                        val next = MediaPlayer().apply {
+                            setAudioAttributes(AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).setUsage(AudioAttributes.USAGE_MEDIA).build())
+                            setDataSource(target.absolutePath)
+                            setOnPreparedListener { durationMs = it.duration.toLong(); loading = false; player = it; it.start(); playing = true }
+                            setOnCompletionListener { playing = false }
+                            setOnErrorListener { _, _, _ -> loading = false; error = "Audio unavailable"; true }
+                            prepareAsync()
                         }
-                    }
+                        player = next
+                    } catch (t: Throwable) { loading = false; error = t.message ?: "Audio unavailable" }
                 }
-            ) {
-                if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                else Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause voice message" else "Play voice message")
-            }
+            }) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause audio" else "Play audio") }
         }
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f)) {
-            val waveformPlayedColor = MaterialTheme.colorScheme.primary
-            val waveformIdleColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.42f)
-            Canvas(Modifier.fillMaxWidth().height(34.dp)) {
-                val bars = 32
-                val gap = 3.dp.toPx()
-                val barWidth = ((size.width - gap * (bars - 1)) / bars).coerceAtLeast(1f)
-                val progress = if (durationMs > 0L) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
-                for (i in 0 until bars) {
-                    val phase = ((i * 37) % 17) / 17f
-                    val normalized = (0.25f + 0.75f * kotlin.math.abs(kotlin.math.sin(i * 0.73f + phase))).coerceIn(0.22f, 1f)
-                    val height = size.height * normalized
-                    val x = i * (barWidth + gap)
-                    val y = (size.height - height) / 2f
-                    val played = i.toFloat() / bars <= progress
-                    drawRoundRect(
-                        color = if (played) waveformPlayedColor else waveformIdleColor,
-                        topLeft = androidx.compose.ui.geometry.Offset(x, y),
-                        size = androidx.compose.ui.geometry.Size(barWidth, height),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2f, barWidth / 2f)
-                    )
-                }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(
-                    formatVoiceDuration(positionMs),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    formatVoiceDuration(durationMs),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            error?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, maxLines = 1) }
-        }
+        Column(Modifier.weight(1f).padding(start = 8.dp)) { LinearProgressIndicator(progress = { if (durationMs > 0) (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f }, modifier = Modifier.fillMaxWidth()); Text(error ?: "Audio", style = MaterialTheme.typography.labelSmall) }
     }
-}
-
-private fun formatVoiceDuration(durationMs: Long): String {
-    val totalSeconds = (durationMs.coerceAtLeast(0L) / 1000L)
-    return "%d:%02d".format(totalSeconds / 60L, totalSeconds % 60L)
-}
-
-/** Video surface stays passive so parent LazyColumn/LazyRow containers keep ownership of drag gestures. */
-internal class FynxPassiveVideoView(context: android.content.Context) : android.widget.VideoView(context) {
-    override fun onTouchEvent(event: android.view.MotionEvent): Boolean = false
-    override fun performClick(): Boolean = false
 }
