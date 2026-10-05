@@ -40,12 +40,25 @@ check('chat list clears stale avatar when server photo is removed', 'else chat.c
 check('conversation keeps cached avatar only while remote profile is loading', 'var remoteProfileLoaded by remember(chat.username)' in conversation and 'if (remoteProfileLoaded)' in conversation)
 check('conversation marks remote profile loaded after successful fetch', 'remoteProfileLoaded = true' in conversation)
 
-# Marketplace may format the shared avatar call across lines or use a local photoId
-# variable. Validate the behavior contract instead of requiring one exact source
-# spelling, so unrelated workstreams are not blocked by harmless formatting changes.
-market_avatar_call = re.search(r'FynxRemoteProfileAvatar\s*\([^)]*ownerUsername\s*=\s*l\.sellerUsername', market, re.S) is not None
-market_cache_authority = 'cachedProfilePhotoId(context,' in remote_media and 'saveRemoteProfilePhotoId(context, normalized, profile.profilePhotoMediaId)' in profile_client
-market_photo_authority = ('sellerPhotoIds' in market and 'FynxProfileRemoteClient.get(context, username)' in market) or market_avatar_call
+# Validate the Marketplace seller-avatar behavior contract without trying to parse
+# Kotlin call arguments with a fragile "no closing parenthesis" regex. The avatar
+# call contains nested calls such as sellerDisplayName.ifBlank { ... }, so the old
+# regex could stop before ownerUsername even though the correct shared avatar path
+# was present. The contract is the same: the Marketplace panel must render the
+# shared FynxRemoteProfileAvatar for l.sellerUsername, while that shared renderer
+# resolves the cache-first authoritative profile photo identity.
+market_avatar_call = (
+    'FynxRemoteProfileAvatar' in market
+    and 'ownerUsername = l.sellerUsername' in market
+)
+market_cache_authority = (
+    'cachedProfilePhotoId(context,' in remote_media
+    and 'saveRemoteProfilePhotoId(context, normalized, profile.profilePhotoMediaId)' in profile_client
+)
+market_photo_authority = (
+    ('sellerPhotoIds' in market and 'FynxProfileRemoteClient.get(context, username)' in market)
+    or market_avatar_call
+)
 check('Marketplace seller avatar uses the shared cache-first avatar authority path', market_avatar_call and market_cache_authority and market_photo_authority)
 
 check('identity cache is account namespaced', 'KEY_REMOTE_IDENTITY_CACHE' in prefs and 'accountNamespace(context)' in prefs)
