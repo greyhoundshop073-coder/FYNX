@@ -3,6 +3,7 @@ package com.fynx.app.ui
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Matrix
 import android.media.MediaRecorder
 import android.net.Uri
 import android.view.ViewGroup
@@ -44,7 +45,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -57,6 +57,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.UUID
+import kotlin.math.max
 
 private val MATURE_STATUS_BACKGROUNDS = listOf(
     0xFF111111, 0xFF4527A0, 0xFF1565C0, 0xFF00695C, 0xFF2E7D32,
@@ -110,7 +111,6 @@ fun FynxMatureStatusComposerPanel(
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var recordingFile by remember { mutableStateOf<File?>(null) }
     var showColors by remember { mutableStateOf(false) }
-    var showTools by remember { mutableStateOf(false) }
     var showMediaTools by remember { mutableStateOf(false) }
     var cameraOpen by remember { mutableStateOf(false) }
     var showPreview by remember { mutableStateOf(false) }
@@ -127,7 +127,7 @@ fun FynxMatureStatusComposerPanel(
             val mime = context.contentResolver.getType(it).orEmpty().lowercase()
             type = if (mime.startsWith("video/")) FynxStatusType.VIDEO else FynxStatusType.PHOTO
             showColors = false
-            showTools = false
+            showMediaTools = false
             showPreview = false
             error = null
         }
@@ -182,14 +182,14 @@ fun FynxMatureStatusComposerPanel(
         mediaUri = null; selectedMusic = null; text = ""; type = FynxStatusType.TEXT
         background = MATURE_STATUS_BACKGROUNDS.first(); foreground = 0xFFFFFFFF
         font = FynxStatusTextFont.CLASSIC; alignment = 1; showColors = false
-        showTools = false; showMediaTools = false; showPreview = false; cropMedia = false; error = null
+        showMediaTools = false; showPreview = false; cropMedia = false; error = null
     }
 
     fun publish() {
         if (publishing || recording) return
         if (type == FynxStatusType.TEXT && text.isBlank()) { error = "Write something first."; return }
         if (type != FynxStatusType.TEXT && mediaUri == null) { error = "Add your media first."; return }
-        publishing = true; error = null; showTools = false; showMediaTools = false; showPreview = false
+        publishing = true; error = null; showMediaTools = false; showPreview = false
         scope.launch {
             try {
                 val source = mediaUri
@@ -235,16 +235,14 @@ fun FynxMatureStatusComposerPanel(
         }
     }
 
-    BackHandler(enabled = !publishing && !recording) {
-        when {
-            cameraOpen -> cameraOpen = false
-            showMusicPicker -> showMusicPicker = false
-            showPreview -> showPreview = false
-            showColors -> showColors = false
-            showMediaTools -> showMediaTools = false
-            else -> onClose()
-        }
-    }
+    // Keep the primary back action simple and safe. More specific overlay handlers are
+    // registered below and therefore take priority while an overlay is visible.
+    BackHandler(enabled = !publishing && !recording) { onClose() }
+    if (cameraOpen) BackHandler(enabled = !publishing && !recording) { cameraOpen = false }
+    if (showMusicPicker) BackHandler(enabled = !publishing && !recording) { showMusicPicker = false; musicSearch = "" }
+    if (showPreview) BackHandler(enabled = !publishing && !recording) { showPreview = false }
+    if (showColors) BackHandler(enabled = !publishing && !recording) { showColors = false }
+    if (showMediaTools) BackHandler(enabled = !publishing && !recording) { showMediaTools = false }
 
     if (showPreview) {
         FynxStatusCreationPreview(
@@ -275,7 +273,7 @@ fun FynxMatureStatusComposerPanel(
             onFontChange = { font = it }, onAlignmentChange = { alignment = it },
             onAudienceChange = { audience = it }, onPickMedia = { pickMedia.launch(arrayOf("image/*", "video/*")) },
             onPickPhoto = { pickPhoto.launch(arrayOf("image/*")) }, onPickVideo = { pickVideo.launch(arrayOf("video/*")) },
-            onCamera = { cameraOpen = true; showColors = false; showTools = false; error = null },
+            onCamera = { cameraOpen = true; showColors = false; error = null },
             onVoice = ::openVoice, onStopVoice = {
                 stopMatureVoiceRecording(recorder, recordingFile) { uri, message ->
                     if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."
@@ -390,18 +388,24 @@ private fun FynxStatusEditorSurface(
     onRemoveMusic: () -> Unit, onCropToggle: () -> Unit, onPreview: () -> Unit, onClear: () -> Unit,
     onEmoji: (String) -> Unit
 ) {
-    val textAlign = when (alignment) { 0 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
-    val weight = if (font == FynxStatusTextFont.BOLD) FontWeight.Bold else FontWeight.Normal
+    val editorTextAlign = when (alignment) { 0 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
+    val editorWeight = if (font == FynxStatusTextFont.BOLD) FontWeight.Bold else FontWeight.Normal
     val fontFamily = matureStatusFont(font)
     Box(Modifier.fillMaxSize().background(Color(background)).windowInsetsPadding(WindowInsets.safeDrawing)) {
         when (type) {
             FynxStatusType.TEXT -> BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                val responsiveTextSize = when {
+                    text.length > 240 -> 24f
+                    text.length > 160 -> 28f
+                    else -> ((maxWidth.value * .085f).coerceIn(24f, 42f))
+                }
+                val responsiveLineHeight = (responsiveTextSize * 1.22f).coerceIn(30f, 52f)
                 OutlinedTextField(
                     value = text, onValueChange = onTextChange,
-                    placeholder = { Text("Type a Status", color = Color(foreground).copy(alpha = .55f), textAlign = textAlign, modifier = Modifier.fillMaxWidth()) },
-                    textStyle = LocalTextStyle.current.copy(color = Color(foreground), textAlign = textAlign, fontFamily = fontFamily, fontWeight = weight, fontSize = ((maxWidth.value * .085f).coerceIn(24f, 42f)).sp, lineHeight = ((maxWidth.value * .105f).coerceIn(30f, 52f)).sp),
+                    placeholder = { Text("Type a Status", color = Color(foreground).copy(alpha = .55f), textAlign = editorTextAlign, modifier = Modifier.fillMaxWidth()) },
+                    textStyle = LocalTextStyle.current.copy(color = Color(foreground), textAlign = editorTextAlign, fontFamily = fontFamily, fontWeight = editorWeight, fontSize = responsiveTextSize.sp, lineHeight = responsiveLineHeight.sp),
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent, cursorColor = Color(foreground), focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 74.dp, bottom = if (showColors || showMediaTools) 220.dp else 132.dp).imePadding(),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 74.dp, bottom = if (showColors || showMediaTools) 220.dp else 120.dp).imePadding(),
                     minLines = 2, maxLines = 10
                 )
             }
@@ -426,7 +430,7 @@ private fun FynxStatusEditorSurface(
                     FynxProfileImage(username, FynxPreferencesStore.loadProfilePhoto(context), Modifier.size(36.dp).clip(CircleShape))
                     Spacer(Modifier.width(10.dp)); Text(displayName, color = Color.White, style = MaterialTheme.typography.titleLarge, maxLines = 1)
                 }
-                IconButton(onClick = { onShowColors(type == FynxStatusType.TEXT) }, enabled = !recording && !publishing) { Icon(if (type == FynxStatusType.TEXT) Icons.Default.TextFields else Icons.Default.MusicNote, "Status tools", tint = Color.White) }
+                IconButton(onClick = { if (type == FynxStatusType.TEXT) onShowColors(!showColors) else onShowMediaTools(!showMediaTools) }, enabled = !recording && !publishing) { Icon(if (type == FynxStatusType.TEXT) Icons.Default.TextFields else Icons.Default.MusicNote, "Status tools", tint = Color.White) }
             }
 
             Spacer(Modifier.weight(1f))
@@ -444,6 +448,7 @@ private fun FynxStatusEditorSurface(
                 if (showColors && type == FynxStatusType.TEXT) {
                     Surface(color = Color.Black.copy(alpha = .58f), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(9.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            Text("Text style", color = Color.White, style = MaterialTheme.typography.labelLarge)
                             Text("Background", color = Color.White, style = MaterialTheme.typography.labelLarge)
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(9.dp)) { items(MATURE_STATUS_BACKGROUNDS) { value -> Surface(shape = CircleShape, color = Color(value), modifier = Modifier.size(42.dp).clickable(enabled = !recording && !publishing) { onBackgroundChange(value) }) {} } }
                             Text("Text color", color = Color.White, style = MaterialTheme.typography.labelLarge)
@@ -465,7 +470,7 @@ private fun FynxStatusEditorSurface(
 
                 if (showMediaTools) {
                     LazyRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(17.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
-                        item { MatureStatusModeButton(Icons.Default.TextFields, "Text", type == FynxStatusType.TEXT, !recording && !publishing) { onShowMediaTools(false); onShowColors(false) } }
+                        item { MatureStatusModeButton(Icons.Default.TextFields, "Text", type == FynxStatusType.TEXT, !recording && !publishing) { onShowMediaTools(false); onShowColors(true) } }
                         item { MatureStatusModeButton(Icons.Default.Photo, "Photo", type == FynxStatusType.PHOTO, !recording && !publishing, onPickPhoto) }
                         item { MatureStatusModeButton(Icons.Default.Videocam, "Video", type == FynxStatusType.VIDEO, !recording && !publishing, onPickVideo) }
                         item { MatureStatusModeButton(Icons.Default.CameraAlt, "Camera", false, !recording && !publishing, onCamera) }
@@ -504,9 +509,10 @@ private fun FynxStatusEditorSurface(
                     OutlinedButton(onClick = onPreview, enabled = !publishing && !recording && ((type == FynxStatusType.TEXT && text.isNotBlank()) || (type != FynxStatusType.TEXT && mediaUri != null)), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White), border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .45f))) { Text("Preview") }
                 }
 
-                Button(onClick = { onShowMediaTools(!showMediaTools) }, enabled = !recording && !publishing, modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = .12f), contentColor = Color.White), shape = RoundedCornerShape(15.dp)) {
-                    Icon(if (showMediaTools) Icons.Default.Close else Icons.Default.AddAPhoto, if (showMediaTools) "Hide tools" else "Add media tools")
-                    Spacer(Modifier.width(7.dp)); Text(if (showMediaTools) "Hide editing tools" else "Editing tools")
+                Button(onClick = onPreview, enabled = !publishing && !recording && ((type == FynxStatusType.TEXT && text.isNotBlank()) || (type != FynxStatusType.TEXT && mediaUri != null)), modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00D5A8), contentColor = Color(0xFF00251D))) {
+                    Icon(Icons.Default.Send, "Send")
+                    Spacer(Modifier.width(7.dp))
+                    Text(if (publishing) "Sending…" else "Send", fontWeight = FontWeight.Bold)
                 }
                 if (publishing) LinearProgressIndicator(Modifier.fillMaxWidth())
                 error?.let { Text(it, color = Color.White, style = MaterialTheme.typography.bodySmall) }
@@ -522,10 +528,16 @@ private fun FynxStatusCreationPreview(
     onBack: () -> Unit, onShare: () -> Unit, onAudienceChange: (FynxStatusAudience) -> Unit
 ) {
     val textAlign = when (alignment) { 0 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
+    val weight = if (font == FynxStatusTextFont.BOLD) FontWeight.Bold else FontWeight.Normal
     Box(Modifier.fillMaxSize().background(Color.Black).windowInsetsPadding(WindowInsets.safeDrawing)) {
         when (type) {
-            FynxStatusType.TEXT -> Box(Modifier.fillMaxSize().background(Color(background)).padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
-                Text(text, color = Color(foreground), textAlign = textAlign, fontFamily = matureStatusFont(font), fontWeight = if (font == FynxStatusTextFont.BOLD) FontWeight.Bold else FontWeight.Normal, fontSize = 30.sp, modifier = Modifier.fillMaxWidth())
+            FynxStatusType.TEXT -> BoxWithConstraints(Modifier.fillMaxSize().background(Color(background)).padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
+                val previewSize = when {
+                    text.length > 240 -> 24f
+                    text.length > 160 -> 28f
+                    else -> (maxWidth.value * .085f).coerceIn(24f, 42f)
+                }
+                Text(text, color = Color(foreground), textAlign = textAlign, fontFamily = matureStatusFont(font), fontWeight = weight, fontSize = previewSize.sp, modifier = Modifier.fillMaxWidth())
             }
             FynxStatusType.PHOTO -> uri?.let { MatureStatusMedia(it, false, cropMedia, Modifier.fillMaxSize()) }
             FynxStatusType.VIDEO -> uri?.let { MatureStatusMedia(it, true, cropMedia, Modifier.fillMaxSize()) }
@@ -545,7 +557,20 @@ private fun FynxStatusCreationPreview(
             }
             Spacer(Modifier.weight(1f))
             Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                selectedMusic?.let { Surface(color = Color.Black.copy(alpha = .42f), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) { Row(Modifier.padding(9.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.MusicNote, null, tint = Color.White); Spacer(Modifier.width(8.dp)); Column { Text(it.title.ifBlank { "FYNX Music" }, color = Color.White); Text(it.artist.ifBlank { "FYNX" }, color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.labelSmall) } } } }
+                selectedMusic?.let { music ->
+                    Surface(color = Color.Black.copy(alpha = .42f), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                        Row(Modifier.padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.MusicNote, null, tint = Color.White)
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(music.title.ifBlank { "FYNX Music" }, color = Color.White, maxLines = 1)
+                                Text(music.artist.ifBlank { "FYNX" }, color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                            }
+                            FynxRemoteAudio("/api/social/music/catalogue/${music.id}/media", Modifier.width(92.dp), music.durationMs.coerceAtLeast(1_000L))
+                            IconButton(onClick = {}) { Icon(Icons.Default.Check, "Music selected", tint = Color.White) }
+                        }
+                    }
+                }
                 Surface(color = Color.Black.copy(alpha = .48f), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("Who can see this Status?", color = Color.White, style = MaterialTheme.typography.labelMedium)
@@ -595,15 +620,37 @@ private fun MatureStatusMedia(uri: Uri, video: Boolean, crop: Boolean, modifier:
                 setVideoURI(uri)
                 setOnPreparedListener { it.isLooping = true; it.start() }
             } else ImageView(context).apply {
-                scaleType = if (crop) ImageView.ScaleType.CENTER_CROP else ImageView.ScaleType.FIT_CENTER
+                scaleType = if (crop) ImageView.ScaleType.MATRIX else ImageView.ScaleType.FIT_CENTER
                 setImageURI(uri)
+                post { applyMatureImageScale(this, crop) }
             }
         },
         update = { view ->
             if (view is VideoView) { view.setVideoURI(uri); view.scaleX = 1f; view.scaleY = 1f }
-            else { view as ImageView; view.scaleType = if (crop) ImageView.ScaleType.CENTER_CROP else ImageView.ScaleType.FIT_CENTER; view.setImageURI(uri) }
+            else { view as ImageView; view.scaleType = if (crop) ImageView.ScaleType.MATRIX else ImageView.ScaleType.FIT_CENTER; view.setImageURI(uri); view.post { applyMatureImageScale(view, crop) } }
         }
     )
+}
+
+private fun applyMatureImageScale(view: ImageView, crop: Boolean) {
+    if (!crop) {
+        view.imageMatrix = Matrix()
+        return
+    }
+    val drawable = view.drawable ?: return
+    val sourceWidth = drawable.intrinsicWidth.toFloat().coerceAtLeast(1f)
+    val sourceHeight = drawable.intrinsicHeight.toFloat().coerceAtLeast(1f)
+    val viewWidth = view.width.toFloat().coerceAtLeast(1f)
+    val viewHeight = view.height.toFloat().coerceAtLeast(1f)
+    val scale = max(viewWidth / sourceWidth, viewHeight / sourceHeight)
+    val scaledWidth = sourceWidth * scale
+    val scaledHeight = sourceHeight * scale
+    val dx = (viewWidth - scaledWidth) / 2f
+    val dy = (viewHeight - scaledHeight) / 2f
+    view.imageMatrix = Matrix().apply {
+        setScale(scale, scale)
+        postTranslate(dx, dy)
+    }
 }
 
 private fun matureStatusFont(font: FynxStatusTextFont): FontFamily = when (font) {
