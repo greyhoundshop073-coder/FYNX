@@ -18,7 +18,7 @@ def contains_remote_audio_renderer(source):
     return (
         'downloadRemoteMedia(context, resolvedUrl, target)' in source
         and 'MediaPlayer()' in source
-        and re.search(r'(?<![A-Za-z0-9_])setDataSource\(finalFile\.absolutePath\)', source) is not None
+        and re.search(r'(?<![A-Za-z0-9_])setDataSource\((?:target|finalFile)\.absolutePath\)', source) is not None
     )
 
 checks=[]
@@ -91,15 +91,15 @@ require('legacy composer voice recording','MediaRecorder' in composer and 'FYNX_
 require('legacy composer friends-only wording','Friends only' in composer and 'Only me' not in composer)
 require('mature composer exists','fun FynxMatureStatusComposerPanel' in mature)
 require('mature Text mode','FynxStatusType.TEXT' in mature and 'Type a Status' in mature)
-require('mature creation controls fit small screens','LazyRow(' in mature and 'Text(\"Stop • ${formatMatureTime(elapsed)}\")' in mature)
+require('mature creation controls fit small screens','LazyRow(' in mature and 'Text("Stop • ${formatMatureTime(elapsed)}")' in mature)
 require('mature combined Photo/Video gallery mode','FynxStatusType.PHOTO' in mature and 'FynxStatusType.VIDEO' in mature and 'val pickMedia = rememberLauncherForActivityResult' in mature and 'pickMedia.launch(arrayOf("image/*", "video/*"))' in mature)
 require('mature media picker distinguishes photo and video','mime.startsWith("video/")' in mature and 'FynxStatusType.VIDEO' in mature and 'FynxStatusType.PHOTO' in mature)
 require('mature Voice mode','FynxStatusType.VOICE' in mature and 'beginMatureVoiceRecording' in mature and 'stopMatureVoiceRecording' in mature)
 require('mature audience control','FynxStatusAudience.EVERYONE' in mature and 'FynxStatusAudience.FRIENDS' in mature and 'FynxStatusAudience.ONLY_ME' in mature)
-require('mature visible Send action','Icons.Default.Send' in mature and 'Text(if (publishing) \"Sending…\" else \"Send\")' in mature)
+require('mature visible Send action','Icons.Default.Send' in mature and 'Text(if (publishing) "Sending…" else "Send")' in mature)
 require('mature Send is not a field trailing action','trailingIcon' not in mature)
 require('mature text limit indicator only appears at limit','if (text.length >= FYNX_STATUS_MAX_TEXT_LENGTH)' in mature and 'Text("$FYNX_STATUS_MAX_TEXT_LENGTH/$FYNX_STATUS_MAX_TEXT_LENGTH"' in mature)
-require('mature text style controls consume layout','Text(\"Text style\"' in mature and 'showColors && type == FynxStatusType.TEXT' in mature and 'FormatAlignCenter' in mature)
+require('mature text style controls consume layout','Text("Text style"' in mature and 'showColors && type == FynxStatusType.TEXT' in mature and 'FormatAlignCenter' in mature)
 require('mature text style applies alignment in editor','editorTextAlign = when (alignment)' in mature and 'textAlign = editorTextAlign' in mature)
 require('mature text style weight matches viewer','editorWeight = if (font == FynxStatusTextFont.BOLD)' in mature and 'fontWeight = editorWeight' in mature and 'fontWeight = weight' in timeline)
 require('mature text preview sizing is responsive','BoxWithConstraints' in mature and 'maxWidth.value' in mature and '.coerceIn(24f, 42f)' in mature and 'text.length > 240' in mature)
