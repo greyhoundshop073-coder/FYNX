@@ -23,20 +23,20 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material.icons.filled.Accessibility
-import androidx.compose.material.icons.filled.HelpOutline
+
+
+
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.Contrast
-import androidx.compose.material.icons.filled.SettingsBrightness
+
+
+
+
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -362,16 +362,16 @@ fun SettingsPanel(
     val query = search.trim().lowercase()
     val categories = listOf(
         SettingsCategory("account", "Account & Profile", "Profile, username, phone & email", Icons.Default.Person, Color(0xFF2F8CFF)),
-        SettingsCategory("privacy", "Privacy & Security", "Privacy, blocking, security & sessions", Icons.Default.Shield, Color(0xFF25B864)),
+        SettingsCategory("privacy", "Privacy & Security", "Privacy, blocking, security & sessions", Icons.Default.Security, Color(0xFF25B864)),
         SettingsCategory("notifications", "Notifications", "Messages, calls, social activity & sounds", Icons.Default.Notifications, Color(0xFF9B5CFF)),
-        SettingsCategory("chat", "Chat", "Chat settings remain inside Chat", Icons.Default.ChatBubble, Color(0xFF19A9F5)),
+        SettingsCategory("chat", "Chat", "Chat settings remain inside Chat", Icons.Default.ChatBubbleOutline, Color(0xFF19A9F5)),
         SettingsCategory("stories", "Stories & Status", "Stories, replies, reactions & archive", Icons.Default.AutoStories, Color(0xFFFF8A1F)),
         SettingsCategory("appearance", "Appearance", "Theme, colors & app style", Icons.Default.Palette, Color(0xFF7C5CFF)),
         SettingsCategory("media", "Media & Storage", "Downloads, storage & cache", Icons.Default.Image, Color(0xFF00AFA6)),
         SettingsCategory("data", "Data & Network", "Data usage, upload/download & network", Icons.Default.Language, Color(0xFF0AA7D8)),
-        SettingsCategory("language", "Language", "App language", Icons.Default.Translate, Color(0xFFFFB000)),
-        SettingsCategory("accessibility", "Accessibility", "Text size and accessible presentation", Icons.Default.Accessibility, Color(0xFF5968D8)),
-        SettingsCategory("help", "Help & Support", "Help center, report a problem & support", Icons.Default.HelpOutline, Color(0xFF24B96B)),
+        SettingsCategory("language", "Language", "App language", Icons.Default.Language, Color(0xFFFFB000)),
+        SettingsCategory("accessibility", "Accessibility", "Text size and accessible presentation", Icons.Default.Settings, Color(0xFF5968D8)),
+        SettingsCategory("help", "Help & Support", "Help center, report a problem & support", Icons.Default.Info, Color(0xFF24B96B)),
         SettingsCategory("about", "About FYNX", "Version, terms & privacy", Icons.Default.Info, Color(0xFF2F8CFF))
     )
     val sections = listOf(
@@ -473,7 +473,7 @@ private fun AppearanceSettingsDetail(currentAppearance: String, currentAccent: F
         Card(Modifier.fillMaxWidth().padding(top = 6.dp), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .28f))) {
             listOf("System", "Light", "Dark", "Black AMOLED").forEach { option ->
                 Row(Modifier.fillMaxWidth().clickable { onAppearanceChanged(option) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(if (option == "Light") Icons.Default.LightMode else if (option == "Dark") Icons.Default.DarkMode else if (option == "Black AMOLED") Icons.Default.Contrast else Icons.Default.SettingsBrightness, null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(if (option == "Light") Icons.Default.Settings else if (option == "Dark") Icons.Default.Settings else if (option == "Black AMOLED") Icons.Default.Settings else Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(12.dp)); Text(option, Modifier.weight(1f)); RadioButton(selected = currentAppearance == option, onClick = { onAppearanceChanged(option) })
                 }
             }
@@ -518,13 +518,3 @@ private fun LanguageSelectionPanel(onBack: () -> Unit) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("English", style = MaterialTheme.typography.titleMedium)
-                        Text("Current language", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Text("✓", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleLarge)
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-            Text("English is currently the supported FYNX app language.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-        }
-    }
-}
