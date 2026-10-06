@@ -327,7 +327,6 @@ fun SettingsPanel(
     val context = LocalContext.current
     var appearance by remember { mutableStateOf(FynxPreferencesStore.loadAppearance(context)) }
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
-    var showAppearance by remember { mutableStateOf(false) }
     var showAppearancePanel by remember { mutableStateOf(false) }
     var showColors by remember { mutableStateOf(false) }
     var showChatPersonalization by remember { mutableStateOf(false) }
@@ -414,6 +413,13 @@ fun SettingsPanel(
             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
             singleLine = true,
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search settings") },
+            trailingIcon = {
+                if (search.isNotBlank()) {
+                    IconButton(onClick = { search = "" }) {
+                        Icon(Icons.Default.Clear, contentDescription = "Clear settings search")
+                    }
+                }
+            },
             placeholder = { Text("Search settings") },
             shape = RoundedCornerShape(16.dp)
         )
@@ -479,13 +485,6 @@ fun SettingsPanel(
         }
     }
 
-    if (showAppearance) {
-        AppearanceDialog(
-            appearance,
-            { value -> appearance = value; FynxPreferencesStore.saveAppearance(context, value); onAppearanceChanged(value); showAppearance = false },
-            { showAppearance = false }
-        )
-    }
     if (showColors) {
         AccentDialog(
             accent,
@@ -759,19 +758,12 @@ private fun SettingsDetailPanel(title: String, onBack: () -> Unit, onOpen: () ->
         Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
         Text(
-            "Open the settings for this area without changing the existing feature implementation.",
+            "This setting is already handled by the existing FYNX feature. Open it below to keep the current implementation intact.",
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(Modifier.height(18.dp))
-        if (title in listOf("Account & Profile", "Privacy & Security", "Notifications", "Appearance", "Chat", "Language & Accessibility")) {
-            Button(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                Text("Open settings")
-            }
-        } else {
-            Text(
-                "This section is reserved for the related FYNX settings as they are added, keeping the main Settings page organized.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Button(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            Text("Open settings")
         }
     }
 }
