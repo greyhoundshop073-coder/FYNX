@@ -352,8 +352,7 @@ fun SettingsPanel(
             "appearance" -> AppearanceSettingsDetail(appearance, accent, onBack = { detail = null }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it); onAppearanceChanged(it) }, onAccentChanged = { accent = it; FynxPreferencesStore.saveAccent(context, it); onAccentChanged(it) })
             "media" -> SettingsDetailPanel("Media & Storage", "Downloads, storage and cache", "media", onBack = { detail = null }, onOpen = { detail = null })
             "data" -> SettingsDetailPanel("Data & Network", "Data usage and upload/download preferences", "data", onBack = { detail = null }, onOpen = { detail = null })
-            "language" -> LanguageSelectionPanel(onBack = { detail = null })
-            "accessibility" -> SettingsDetailPanel("Accessibility", "Text size and accessible presentation", "accessibility", onBack = { detail = null }, onOpen = { detail = null })
+            "language" -> SettingsDetailPanel("Language & Accessibility", "Language, text size and accessible presentation", "language", onBack = { detail = null }, onOpen = { detail = null })
             "help" -> SettingsDetailPanel("Help & Support", "Help center, reports and support", "help", onBack = { detail = null }, onOpen = { detail = null })
             "about" -> SettingsDetailPanel("About FYNX", "Version, terms and privacy", "about", onBack = { detail = null }, onOpen = { detail = null })
         }
@@ -370,8 +369,7 @@ fun SettingsPanel(
         SettingsCategory("appearance", "Appearance", "Theme, colors & app style", Icons.Default.Palette, Color(0xFF7C5CFF)),
         SettingsCategory("media", "Media & Storage", "Downloads, storage & cache", Icons.Default.Image, Color(0xFF00AFA6)),
         SettingsCategory("data", "Data & Network", "Data usage, upload/download & network", Icons.Default.Language, Color(0xFF0AA7D8)),
-        SettingsCategory("language", "Language", "App language", Icons.Default.Language, Color(0xFFFFB000)),
-        SettingsCategory("accessibility", "Accessibility", "Text size and accessible presentation", Icons.Default.Settings, Color(0xFF5968D8)),
+        SettingsCategory("language", "Language & Accessibility", "Language, text size and accessible presentation", Icons.Default.Language, Color(0xFFFFB000)),
         SettingsCategory("help", "Help & Support", "Help center, report a problem & support", Icons.Default.Info, Color(0xFF24B96B)),
         SettingsCategory("about", "About FYNX", "Version, terms & privacy", Icons.Default.Info, Color(0xFF2F8CFF))
     )
@@ -379,7 +377,7 @@ fun SettingsPanel(
         "ACCOUNT" to listOf("account", "privacy"),
         "COMMUNICATION" to listOf("notifications", "chat", "stories"),
         "PERSONALIZATION" to listOf("appearance"),
-        "APP & DATA" to listOf("media", "data", "language", "accessibility"),
+        "APP & DATA" to listOf("media", "data", "language"),
         "FYNX" to listOf("help", "about")
     )
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp).widthIn(max = 720.dp).statusBarsPadding()) {
@@ -440,7 +438,7 @@ private fun SettingsDetailPanel(title: String, subtitle: String, kind: String, o
             "stories" -> { SettingsDetailCard("Stories & Status Preferences", "Replies, reactions, mentions and archive", Icons.Default.AutoStories, Color(0xFFFF8A1F)) { }; Spacer(Modifier.height(8.dp)); SettingsInfoCard("Feature-local controls", "Stories and Status controls remain with the existing feature so we do not create duplicate settings.") }
             "media" -> SettingsInfoCard("Media & Storage", "Downloads, saved media, storage usage and cache controls will be grouped here without changing existing media behavior.")
             "data" -> SettingsInfoCard("Data & Network", "Data usage and upload/download preferences will be grouped here without changing existing network behavior.")
-            "accessibility" -> SettingsInfoCard("Accessibility", "Text size, readable contrast and accessible presentation controls will be grouped here.")
+            "language" -> SettingsInfoCard("Language & Accessibility", "English is currently supported. Language, text size and accessible presentation controls are grouped here.")
             "help" -> SettingsInfoCard("Help & Support", "Help center, report a problem and support entry points.")
             "about" -> SettingsInfoCard("About FYNX", "Version information, terms and privacy information.")
         }
@@ -472,7 +470,7 @@ private fun AppearanceSettingsDetail(currentAppearance: String, currentAccent: F
         Spacer(Modifier.height(12.dp))
         Text("Theme", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp))
         Card(Modifier.fillMaxWidth().padding(top = 6.dp), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .28f))) {
-            listOf("System", "Light", "Dark", "Black AMOLED").forEach { option ->
+            listOf("System", "Light", "Charcoal Black", "Dark", "Black AMOLED").forEach { option ->
                 Row(Modifier.fillMaxWidth().clickable { onAppearanceChanged(option) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(if (option == "Light") Icons.Default.Settings else if (option == "Dark") Icons.Default.Settings else if (option == "Black AMOLED") Icons.Default.Settings else Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(12.dp)); Text(option, Modifier.weight(1f)); RadioButton(selected = currentAppearance == option, onClick = { onAppearanceChanged(option) })
@@ -525,6 +523,3 @@ private fun LanguageSelectionPanel(onBack: () -> Unit) {
             }
             Spacer(Modifier.height(10.dp))
             Text("English is currently the supported FYNX app language.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-        }
-    }
-}
