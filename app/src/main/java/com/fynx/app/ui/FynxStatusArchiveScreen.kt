@@ -93,7 +93,7 @@ private fun StatusArchiveCard(status: FynxStatus, onOpen: () -> Unit, onDelete: 
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(status.text?.ifBlank { null } ?: archiveTypeLabel(status.type), maxLines = 2, fontWeight = FontWeight.Medium)
-                Text(formatStatusTimestamp(status.createdAtMillis) + " • Expired", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(statusArchiveTimestamp(status.createdAtMillis) + " • Expired", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, "Delete archived Status") }
         }
