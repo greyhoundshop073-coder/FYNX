@@ -77,3 +77,16 @@ jobs:
         with:
           node-version: "22"
       - name: Authenticate to Google Cloud with Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.FYNX_WIF_PROVIDER }}
+          service_account: ${{ env.FYNX_GCP_SERVICE_ACCOUNT }}
+      - name: Run backend verification
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: fynx-debug-apk-${{ github.sha }}
+          path: app/build/outputs/apk/debug/*.apk
