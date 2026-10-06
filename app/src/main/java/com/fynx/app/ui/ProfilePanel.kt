@@ -2,6 +2,8 @@ package com.fynx.app.ui
 
 import android.app.Activity
 import android.net.Uri
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -363,21 +365,26 @@ fun SettingsPanel(
     }
 
     if (detail != null) {
-        SettingsDetailPanel(
-            title = detail!!,
-            onBack = { detail = null },
-            onOpen = {
-                when (detail) {
-                    "Account & Profile" -> onOpenAccountProfile()
-                    "Privacy & Security" -> onOpenPrivacy()
-                    "Notifications" -> onOpenNotifications()
-                    "Appearance" -> showAppearancePanel = true
-                    "Chat" -> showChatPersonalization = true
-                    "Language & Accessibility" -> showLanguage = true
-                    "About FYNX" -> showAbout = true
+        when (detail) {
+            "Media & Storage" -> MediaStorageSettingsPanel(context, onBack = { detail = null })
+            "Data & Network" -> DataNetworkSettingsPanel(context, onBack = { detail = null })
+            "Help & Support" -> HelpSupportSettingsPanel(onBack = { detail = null })
+            else -> SettingsDetailPanel(
+                title = detail!!,
+                onBack = { detail = null },
+                onOpen = {
+                    when (detail) {
+                        "Account & Profile" -> onOpenAccountProfile()
+                        "Privacy & Security" -> onOpenPrivacy()
+                        "Notifications" -> onOpenNotifications()
+                        "Appearance" -> showAppearancePanel = true
+                        "Chat" -> showChatPersonalization = true
+                        "Language & Accessibility" -> showLanguage = true
+                        "About FYNX" -> showAbout = true
+                    }
                 }
-            }
-        )
+            )
+        }
         return
     }
 
@@ -643,6 +650,98 @@ private fun SettingsActionCard(
             Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+@Composable
+private fun MediaStorageSettingsPanel(context: android.content.Context, onBack: () -> Unit) {
+    val cacheBytes = remember { context.cacheDir.walkTopDown().filter { it.isFile }.sumOf { it.length() } }
+    val filesBytes = remember { context.filesDir.walkTopDown().filter { it.isFile }.sumOf { it.length() } }
+    SettingsInfoPanel(
+        title = "Media & Storage",
+        icon = Icons.Default.Folder,
+        iconColor = androidx.compose.ui.graphics.Color(0xFF14B8A6),
+        onBack = onBack
+    ) {
+        SettingsInfoCard("Cache", formatStorageSize(cacheBytes), "Temporary app files that can be recreated.")
+        SettingsInfoCard("App storage", formatStorageSize(filesBytes), "FYNX files stored locally on this device.")
+        SettingsInfoCard("Media", "Managed by FYNX media cache", "Remote media uses the existing authenticated media/cache system.")
+    }
+}
+
+@Composable
+private fun DataNetworkSettingsPanel(context: android.content.Context, onBack: () -> Unit) {
+    val connectivity = remember { context.getSystemService(ConnectivityManager::class.java) }
+    val status = remember {
+        val network = connectivity?.activeNetwork
+        val caps = network?.let { connectivity.getNetworkCapabilities(it) }
+        when {
+            caps == null -> "Offline"
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi connected"
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "Mobile data connected"
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet connected"
+            else -> "Network connected"
+        }
+    }
+    SettingsInfoPanel(
+        title = "Data & Network",
+        icon = Icons.Default.Public,
+        iconColor = androidx.compose.ui.graphics.Color(0xFF06B6D4),
+        onBack = onBack
+    ) {
+        SettingsInfoCard("Connection", status, "Current network state reported by Android.")
+        SettingsInfoCard("Remote media", "Authenticated downloads", "FYNX uses its existing protected media download path and cache.")
+        SettingsInfoCard("Data controls", "Handled by Android and existing FYNX features", "No duplicate network controls are introduced here.")
+    }
+}
+
+@Composable
+private fun HelpSupportSettingsPanel(onBack: () -> Unit) {
+    SettingsInfoPanel(
+        title = "Help & Support",
+        icon = Icons.Default.Help,
+        iconColor = androidx.compose.ui.graphics.Color(0xFF22C55E),
+        onBack = onBack
+    ) {
+        SettingsInfoCard("Need help?", "Use the relevant feature's help or error controls", "FYNX keeps support close to the feature that needs it so troubleshooting context is preserved.")
+        SettingsInfoCard("Report a problem", "Keep the error message and screen context", "When reporting an issue, include what you were doing and the exact error shown.")
+        SettingsInfoCard("Safety", "Never share passwords or verification codes", "FYNX will not ask you to send sensitive account credentials through support.")
+    }
+}
+
+@Composable
+private fun SettingsInfoPanel(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconColor: androidx.compose.ui.graphics.Color,
+    onBack: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().padding(horizontal = 12.dp)) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack) { Text("‹ Back") }
+            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+    }
+}
+
+@Composable
+private fun SettingsInfoCard(title: String, value: String, description: String) {
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .35f))) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(value, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.height(4.dp))
+            Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+private fun formatStorageSize(bytes: Long): String = when {
+    bytes >= 1024L * 1024L * 1024L -> String.format("%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+    bytes >= 1024L * 1024L -> String.format("%.1f MB", bytes / (1024.0 * 1024.0))
+    bytes >= 1024L -> String.format("%.1f KB", bytes / 1024.0)
+    else -> "$bytes B"
 }
 
 @Composable
