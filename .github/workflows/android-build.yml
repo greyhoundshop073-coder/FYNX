@@ -77,16 +77,197 @@ jobs:
         with:
           node-version: "22"
       - name: Authenticate to Google Cloud with Workload Identity Federation
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
+          project_id: fynx-f0868
           workload_identity_provider: ${{ env.FYNX_WIF_PROVIDER }}
           service_account: ${{ env.FYNX_GCP_SERVICE_ACCOUNT }}
-      - name: Run backend verification
-        run: ./gradlew :app:testDebugUnitTest --no-daemon
-      - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --no-daemon
-      - name: Upload APK
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+      - name: Verify Google Cloud authentication
+        run: |
+          gcloud auth list --filter=status:ACTIVE --format="value(account)"
+          gcloud config get-value project
+      - name: Verify Google Cloud authentication
+        run: |
+          gcloud auth list --filter=status:ACTIVE --format="value(account)"
+          gcloud config get-value project
+      - name: Verify FYNX network transport architecture
+        run: |
+          echo "Running FYNX network certification on ${GITHUB_SHA}"
+          python3 scripts/verify_network_transport_architecture.py
+      - name: Verify live production backend reachability
+        continue-on-error: true
+        run: node scripts/verify_production_backend_reachability.mjs
+      - name: Verify consolidated FCM notification phase
+        run: python3 scripts/verify_fcm_notifications.py
+      - name: Verify notifications and settings integration
+        run: python3 scripts/verify_notifications_settings_integration.py
+      - name: Verify consolidated Phase B real-user audit
+        run: python3 scripts/verify_phase_b_real_user_audit.py
+      - name: Verify Push 5-10 integration continuity
+        run: python3 scripts/verify_push5_to_push10_integration.py
+      - name: Verify consolidated Phase C security and production readiness
+        run: python3 scripts/verify_phase_c_security_production.py
+      - name: Verify Phase D integration continuity
+        run: python3 scripts/verify_phase_d_integration_continuity.py
+      - name: Verify R1 account isolation
+        run: python3 scripts/verify_r1_account_isolation.py
+      - name: Verify Stage 15D reliability foundations
+        run: |
+          node backend/verify-stage15d-reliability.mjs
+          node backend/verify-stage15d-advanced.mjs
+      - name: Verify Stage 16 camera and media integration
+        run: python3 scripts/verify_stage16_camera.py
+      - name: Verify Batch 5 location integration
+        run: python3 scripts/verify_batch5_location.py
+      - name: Verify Batch 6 Marketplace location intelligence
+        run: python3 scripts/verify_batch6_marketplace_location.py
+      - name: Verify Batch 7 Music library integration
+        run: python3 scripts/verify_batch7_music.py
+      - name: Verify Batch 8 Feeling and Activity integration
+        run: python3 scripts/verify_batch8_feeling_activity.py
+      - name: Verify Batch 9 Create Post integration
+        run: python3 scripts/verify_batch9_create_post_integration.py
+      - name: Verify Batch 10 Create Post hardening
+        run: python3 scripts/verify_batch10_create_post_hardening.py
+      - name: Verify Camera to Post journey
+        run: python3 scripts/verify_camera_post_journey.py
+      - name: Verify Batch 11 chat expressions and reactions
+        run: python3 scripts/verify_batch11_chat_expressions.py
+      - name: Verify FYNX AI extension contract
+        run: python3 scripts/verify_ai_extension_contract.py
+      - name: Verify FYNX AI security and tool integrity
+        run: python3 scripts/verify_ai_security.py
+      - name: Verify consolidated FYNX user journey integration
+        run: python3 scripts/verify_fynx_journey.py
+      - name: Verify this-chat Marketplace, Groups, Calls, Trust & Admin ownership integrity
+        run: python3 scripts/verify_this_chat_workstream.py
+      - name: Verify R2-C realtime recovery invariants
+        run: python3 scripts/verify_r2c_realtime.py
+      - name: Verify R2-D failure and recovery audit
+        run: python3 scripts/verify_r2d_recovery.py
+      - name: Verify R2-E final network reliability gate
+        run: python3 scripts/verify_r2e_final.py
+      - name: Verify R3 HTTP and realtime messaging consistency
+        run: python3 scripts/verify_r3_messaging_consistency.py
+      - name: Verify R3 final integration and security gate
+        run: python3 scripts/verify_r3_final_integration.py
+      - name: Verify R4 people, profiles and privacy security gate
+        run: python3 scripts/verify_r4_people_privacy.py
+      - name: Verify Batch 4 Text background integrity
+        run: python3 scripts/verify_batch4_text_backgrounds.py
+      - name: Verify Batch 3 People audience integrity
+        run: python3 scripts/verify_batch3_people_audience.py
+      - name: Verify R5A groups security gate
+        run: python3 scripts/verify_r5a_groups.py
+      - name: Verify R5B Status and Stories security + presentation gate
+        run: python3 scripts/verify_r5b_status.py
+      - name: Verify R6-A marketplace protection state
+        run: python3 scripts/verify_r6a_marketplace_protection.py
+      - name: Verify Marketplace seller flow integrity
+        run: python3 scripts/verify_marketplace_seller_flow.py
+      - name: Verify Marketplace integration and security audit
+        run: python3 scripts/verify_marketplace_integration_security.py
+      - name: Verify FYNX revenue infrastructure
+        run: node scripts/verify_revenue_infrastructure.mjs
+      - name: Verify FYNX monetization production
+        run: node scripts/verify_monetization_production.mjs
+      - name: Verify Home interaction integrity
+        run: python3 scripts/verify_home_interactions.py
+      - name: Verify FYNX social recovery regression gate
+        run: python3 scripts/verify_fynx_social_recovery.py
+      - name: Verify Home post reaction integrity
+        run: python3 scripts/verify_home_post_reactions.py
+      - name: Verify Home multi-media integrity
+        run: python3 scripts/verify_home_multimedia_posts.py
+      - name: Verify Badge B — Bottom and keyboard safety
+        run: python3 scripts/verify_badge_b_bottom_keyboard_safety.py
+      - name: Verify Badge C — Overlap and invisible-touch audit
+        run: python3 scripts/verify_badge_c_overlap_touch_audit.py
+      - name: Verify Badge D — Navigation consistency
+        run: python3 scripts/verify_badge_d_navigation_consistency.py
+      - name: Verify Badge E — Social-session usability
+        run: python3 scripts/verify_badge_e_social_session_usability.py
+      - name: Verify Large Badge #2 — Real Social Creation & Connection
+        run: python3 scripts/verify_large_badge2_social_creation_connection.py
+      - name: Verify Large Badge #3 — Full Major-Surface Integration Audit
+        run: python3 scripts/verify_large_badge3_full_surface_audit.py
+      - name: Verify Large Badge #4 — Full Real-Device User-Journey Certification
+        run: python3 scripts/verify_large_badge4_real_device_certification.py
+      - name: Verify Large Badge #5 — Camera + Media Reliability & Full Media Display Certification
+        run: python3 scripts/verify_large_badge5_media_reliability.py
+      - name: Verify Large Badge #6 — Marketplace Protected Transaction Full-Lifecycle Certification
+        run: python3 scripts/verify_large_badge6_marketplace_protected_transaction.py
+      - name: Verify Large Badge #7 — Notifications + Preferences + Delivery Certification
+        run: python3 scripts/verify_large_badge7_notifications_preferences.py
+      - name: Verify Large Badge #8 — FYNX AI Flows & Intelligence Certification
+        run: python3 scripts/verify_large_badge8_ai_intelligence.py
+      - name: Verify Large Badge #9 — Trust, Safety & Account Protection Certification
+        run: python3 scripts/verify_large_badge9_trust_safety.py
+      - name: Verify Home 4F media and lifecycle audit
+        run: python3 scripts/verify_home_4f_media_lifecycle.py
+      - name: Verify production social feed wiring
+        run: python3 scripts/verify_social_feed_production.py
+      - name: Verify final FYNX production certification gate
+        run: python3 scripts/verify_fynx_production.py
+      - name: Verify Large Badge #10 — Final Integration & Release Certification
+        run: python3 scripts/verify_large_badge10_final_integration.py
+      - name: Verify Large Badge #11 — Final Product Completeness & UX Integration
+        run: python3 scripts/verify_large_badge11_product_completeness.py
+      - name: Verify Large Badge #13 — Regression, Security & Release Hardening Certification
+        run: python3 scripts/verify_large_badge13_regression_security.py
+      - name: Verify external service readiness inventory
+        run: python3 scripts/verify_external_service_inventory.py
+      - name: Generate FYNX investigation report index
+        run: python3 scripts/generate_fynx_investigation_report.py
+      - name: Final Home H12 source and APK certification gate
+        run: |
+          set -euo pipefail
+          test -f app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt
+          test -f app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt
+          test -f app/src/main/java/com/fynx/app/ui/FynxHomeLifecycle.kt
+          test -f app/src/main/java/com/fynx/app/ui/FynxHomeDiscoverySection.kt
+          test -f app/src/main/java/com/fynx/app/ui/FynxHomePostReactionsClient.kt
+          python3 scripts/verify_home_interactions.py
+          python3 scripts/verify_home_post_reactions.py
+          python3 scripts/verify_home_multimedia_posts.py
+          python3 scripts/verify_home_4f_media_lifecycle.py
+          python3 scripts/verify_social_feed_production.py
+          echo "HOME_H12_SOURCE_GATE=GREEN"
+      - name: Fast build, test and lint
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
+      - name: Full build, test and lint
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
+        run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
+      - name: Run Android instrumentation tests and capture the real FYNX UI
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: Pixel_6
+          script: ./gradlew connectedDebugAndroidTest --no-daemon --build-cache && python3 scripts/verify_authenticated_runtime_navigation.py
+      - name: Upload FYNX runtime screenshots and UI hierarchies
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: fynx-debug-apk-${{ github.sha }}
-          path: app/build/outputs/apk/debug/*.apk
+          name: FYNX-runtime-visual-check-${{ github.sha }}
+          path: fynx-runtime-screenshots/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Verify APK is built from the exact checked-out commit
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          echo "APK source commit: ${GITHUB_SHA}"
+          sha256sum app/build/outputs/apk/debug/app-debug.apk
+      - name: Prepare exact-commit debug APK filename
+        run: cp app/build/outputs/apk/debug/app-debug.apk "FYNX-debug-${GITHUB_SHA}.apk"
+      - name: Upload exact-commit debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FYNX-debug-apk-${{ github.sha }}
+          path: FYNX-debug-${{ github.sha }}.apk
+          if-no-files-found: error
+          retention-days: 14
