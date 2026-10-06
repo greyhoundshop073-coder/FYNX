@@ -15,8 +15,10 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Live Proof entry surface for a real Marketplace listing.
- * The request remains tied to the seller/listing identity and is intentionally
- * presentation-only until the existing CameraX/realtime verification path is wired.
+ *
+ * The request remains tied to the real listing and seller. Capture and realtime
+ * verification stay behind the existing shared CameraX/realtime infrastructure;
+ * this surface does not create a second camera or fabricate verification state.
  */
 @Composable
 internal fun FynxMarketplaceLiveProof(
@@ -30,15 +32,13 @@ internal fun FynxMarketplaceLiveProof(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text("Live Proof", style = MaterialTheme.typography.titleMedium)
-            Text("Ask the seller to verify this item with a live video proof.")
+            Text("Request a live product verification from the seller before you buy.")
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                Button(onClick = {
-                    onRequestProof(listing.id, listing.sellerUsername)
-                }) {
-                    Text("Request live proof")
+                Button(onClick = { onRequestProof(listing.id, listing.sellerUsername) }) {
+                    Text("Request Live Proof")
                 }
             }
         }
