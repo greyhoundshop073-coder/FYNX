@@ -51,7 +51,8 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
             title = title,
             message = body,
             stableKey = notificationId,
-            contentIntent = pendingIntent
+            contentIntent = pendingIntent,
+            notificationType = runCatching { FynxNotificationType.valueOf(type) }.getOrNull()
         )
     }
 }
