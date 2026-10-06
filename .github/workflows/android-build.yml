@@ -3,7 +3,6 @@ name: FYNX Android Build # APK + authenticated runtime certification
 
 on:
   push:
-    branches: ["main", "fynx-**"]
     paths:
       - "app/**"
       - "backend/**"
@@ -29,7 +28,7 @@ on:
       - "gradlew.bat"
       - "scripts/**"
       - "docs/**"
-      - "*.maestro/**"
+      - ".maestro/**"
       - "visual-baselines/**"
   workflow_dispatch:
     inputs:
