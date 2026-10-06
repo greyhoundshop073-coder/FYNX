@@ -408,47 +408,59 @@ fun SettingsPanel(
             contentPadding = PaddingValues(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            item { SettingsSectionTitle("ACCOUNT") }
-            if (matches("Account & Profile", "Username bio profile information")) {
-                item { SettingsActionCard("Account & Profile", "Username, bio and profile information", Icons.Default.Person, 0xFF2F8CFF) { detail = "Account & Profile" } }
-            }
-            if (matches("Privacy & Security", "Profile visibility and security")) {
-                item { SettingsActionCard("Privacy & Security", "Profile visibility and security", Icons.Default.Lock, 0xFF32B768) { detail = "Privacy & Security" } }
-            }
-
-            item { SettingsSectionTitle("COMMUNICATION") }
-            if (matches("Notifications", "Alerts sounds calls badges")) {
-                item { SettingsActionCard("Notifications", "Alerts, sounds, calls and badges", Icons.Default.Notifications, 0xFF8B5CF6) { detail = "Notifications" } }
-            }
-            if (matches("Chat", "Chat conversations messaging settings")) {
-                item { SettingsActionCard("Chat", "Chat and conversation settings", Icons.Default.ChatBubbleOutline, 0xFF22C7F2) { detail = "Chat" } }
-            }
-            if (matches("Stories & Status", "Stories status replies reactions")) {
-                item { SettingsActionCard("Stories & Status", "Stories, Status and related controls", Icons.Default.AutoAwesome, 0xFFF59E0B) { detail = "Stories & Status" } }
+            val accountMatches = matches("Account & Profile", "Username bio profile information") || matches("Privacy & Security", "Profile visibility and security")
+            if (accountMatches) {
+                item { SettingsSectionTitle("ACCOUNT") }
+                if (matches("Account & Profile", "Username bio profile information")) {
+                    item { SettingsActionCard("Account & Profile", "Username, bio and profile information", Icons.Default.Person, 0xFF2F8CFF) { detail = "Account & Profile" } }
+                }
+                if (matches("Privacy & Security", "Profile visibility and security")) {
+                    item { SettingsActionCard("Privacy & Security", "Profile visibility and security", Icons.Default.Lock, 0xFF32B768) { detail = "Privacy & Security" } }
+                }
             }
 
-            item { SettingsSectionTitle("PERSONALIZATION") }
+            val communicationMatches = matches("Notifications", "Alerts sounds calls badges") || matches("Chat", "Chat conversations messaging settings") || matches("Stories & Status", "Stories status replies reactions")
+            if (communicationMatches) {
+                item { SettingsSectionTitle("COMMUNICATION") }
+                if (matches("Notifications", "Alerts sounds calls badges")) {
+                    item { SettingsActionCard("Notifications", "Alerts, sounds, calls and badges", Icons.Default.Notifications, 0xFF8B5CF6) { detail = "Notifications" } }
+                }
+                if (matches("Chat", "Chat conversations messaging settings")) {
+                    item { SettingsActionCard("Chat", "Chat and conversation settings", Icons.Default.ChatBubbleOutline, 0xFF22C7F2) { detail = "Chat" } }
+                }
+                if (matches("Stories & Status", "Stories status replies reactions")) {
+                    item { SettingsActionCard("Stories & Status", "Stories, Status and related controls", Icons.Default.AutoAwesome, 0xFFF59E0B) { detail = "Stories & Status" } }
+                }
+            }
+
             if (matches("Appearance", "Theme light dark AMOLED colors accent")) {
+                item { SettingsSectionTitle("PERSONALIZATION") }
                 item { SettingsActionCard("Appearance", "Theme, colors and display style", Icons.Default.Settings, 0xFF7C5CFF) { showAppearancePanel = true } }
             }
 
-            item { SettingsSectionTitle("APP & DATA") }
-            if (matches("Media & Storage", "Media storage downloads")) {
-                item { SettingsActionCard("Media & Storage", "Media, storage and downloads", Icons.Default.Folder, 0xFF14B8A6) { detail = "Media & Storage" } }
-            }
-            if (matches("Data & Network", "Mobile data network connections")) {
-                item { SettingsActionCard("Data & Network", "Mobile data and network usage", Icons.Default.Public, 0xFF06B6D4) { detail = "Data & Network" } }
-            }
-            if (matches("Language & Accessibility", "Language accessibility")) {
-                item { SettingsActionCard("Language & Accessibility", "Language and accessibility options", Icons.Default.Language, 0xFFF59E0B) { detail = "Language & Accessibility" } }
+            val appDataMatches = matches("Media & Storage", "Media storage downloads") || matches("Data & Network", "Mobile data network connections") || matches("Language & Accessibility", "Language accessibility")
+            if (appDataMatches) {
+                item { SettingsSectionTitle("APP & DATA") }
+                if (matches("Media & Storage", "Media storage downloads")) {
+                    item { SettingsActionCard("Media & Storage", "Media, storage and downloads", Icons.Default.Folder, 0xFF14B8A6) { detail = "Media & Storage" } }
+                }
+                if (matches("Data & Network", "Mobile data network connections")) {
+                    item { SettingsActionCard("Data & Network", "Mobile data and network usage", Icons.Default.Public, 0xFF06B6D4) { detail = "Data & Network" } }
+                }
+                if (matches("Language & Accessibility", "Language accessibility")) {
+                    item { SettingsActionCard("Language & Accessibility", "Language and accessibility options", Icons.Default.Language, 0xFFF59E0B) { detail = "Language & Accessibility" } }
+                }
             }
 
-            item { SettingsSectionTitle("FYNX") }
-            if (matches("Help & Support", "Help support contact")) {
-                item { SettingsActionCard("Help & Support", "Get help and contact FYNX", Icons.Default.Help, 0xFF22C55E) { detail = "Help & Support" } }
-            }
-            if (matches("About FYNX", "Version about FYNX")) {
-                item { SettingsActionCard("About FYNX", "Version and information about FYNX", Icons.Default.Info, 0xFF2F8CFF) { detail = "About FYNX" } }
+            val fynxMatches = matches("Help & Support", "Help support contact") || matches("About FYNX", "Version about FYNX")
+            if (fynxMatches) {
+                item { SettingsSectionTitle("FYNX") }
+                if (matches("Help & Support", "Help support contact")) {
+                    item { SettingsActionCard("Help & Support", "Get help and contact FYNX", Icons.Default.Help, 0xFF22C55E) { detail = "Help & Support" } }
+                }
+                if (matches("About FYNX", "Version about FYNX")) {
+                    item { SettingsActionCard("About FYNX", "Version and information about FYNX", Icons.Default.Info, 0xFF2F8CFF) { detail = "About FYNX" } }
+                }
             }
         }
     }
