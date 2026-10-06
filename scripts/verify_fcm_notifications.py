@@ -59,6 +59,9 @@ check("backend aggregates repeated social notifications", "AGGREGATABLE_TYPES = 
 check("aggregation counts distinct related posts and actors", "new Set(group.rows.map(row => String(row.target_id)).filter(Boolean))" in read("backend/notificationPreferences.js") and "new Set(group.rows.map(row => String(row.source_username || '').trim()).filter(Boolean))" in read("backend/notificationPreferences.js") and "other" in read("backend/notificationPreferences.js"))
 check("aggregate read state marks underlying events", "id.match(/^aggregate-(REACTION|COMMENT)" in read("backend/notificationPreferences.js") and "created_at>=to_timestamp" in read("backend/notificationPreferences.js"))
 check("FOLLOW respects Friends notification preference", 'case "FOLLOW": return "friend_requests_enabled";' in push)
+check("Marketplace order events use the existing notification pipeline", "marketplaceCompletion.js" in bootstrap and "type:'MARKETPLACE_ORDER'" in bootstrap and "marketplace-fulfillment-" in bootstrap)
+check("Marketplace payment confirmation uses the existing notification pipeline", "marketplacePaystackWebhook.js" in bootstrap and "marketplace-payment-buyer-" in bootstrap and "marketplace-payment-seller-" in bootstrap)
+check("Marketplace notification routing uses the existing category preference", 'case "MARKETPLACE_ORDER": return "marketplace_enabled";' in push)
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:

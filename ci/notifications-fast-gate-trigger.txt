@@ -1,0 +1,1 @@
+Notification fast gate is intentionally triggered by pushes to fynx-notifications-completion-v2 and pull requests targeting main. Keep this gate isolated from the existing Chat workflows.

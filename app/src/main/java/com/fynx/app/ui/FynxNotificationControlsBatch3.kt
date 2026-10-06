@@ -8,6 +8,7 @@ data class FynxNotificationPreferences(
     val commentsEnabled: Boolean = true,
     val friendRequestsEnabled: Boolean = true,
     val messagesEnabled: Boolean = true,
+    val callsEnabled: Boolean = true,
     val storiesEnabled: Boolean = true,
     val remindersEnabled: Boolean = true,
     val groupEnabled: Boolean = true,
@@ -36,6 +37,7 @@ object FynxNotificationControlsBatch3 {
             FynxNotificationType.FRIEND_REQUEST -> preferences.friendRequestsEnabled
             FynxNotificationType.FOLLOW -> preferences.friendRequestsEnabled
             FynxNotificationType.MESSAGE -> preferences.messagesEnabled
+            FynxNotificationType.CALL -> preferences.callsEnabled
             FynxNotificationType.STORY -> preferences.storiesEnabled
             FynxNotificationType.REMINDER -> preferences.remindersEnabled
             FynxNotificationType.SAFETY -> true
