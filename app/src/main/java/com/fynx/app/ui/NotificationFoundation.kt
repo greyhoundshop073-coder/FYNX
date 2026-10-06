@@ -136,12 +136,13 @@ object FynxNotificationFoundation {
         title: String,
         message: String,
         stableKey: String = "$channelId:$id:$title:$message",
-        contentIntent: PendingIntent? = null
+        contentIntent: PendingIntent? = null,
+        notificationType: FynxNotificationType? = null
     ) {
         createChannels(context)
         val isCall = channelId == CALLS_CHANNEL || title.startsWith("Incoming Voice call") || title.startsWith("Incoming Video call")
         val effectiveChannelId = if (isCall) CALLS_CHANNEL else channelId
-        val type = typeForChannel(effectiveChannelId)
+        val type = notificationType ?: typeForChannel(effectiveChannelId)
         val preferences = FynxNotificationPreferencesClient.cached(context)
         if (!FynxNotificationControlsBatch3.shouldPush(preferences, type)) return
         if (!shouldShow(context, stableKey)) return
@@ -181,7 +182,8 @@ object FynxNotificationFoundation {
     }
 
     private fun typeForChannel(channelId: String): FynxNotificationType = when (channelId) {
-        MESSAGES_CHANNEL, CALLS_CHANNEL -> FynxNotificationType.MESSAGE
+        MESSAGES_CHANNEL -> FynxNotificationType.MESSAGE
+        CALLS_CHANNEL -> FynxNotificationType.CALL
         FRIENDS_CHANNEL -> FynxNotificationType.FRIEND_REQUEST
         GIFTS_CHANNEL -> FynxNotificationType.REACTION
         MONEY_CHANNEL -> FynxNotificationType.WALLET_ACTIVITY

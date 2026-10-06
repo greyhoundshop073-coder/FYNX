@@ -232,7 +232,6 @@ fun FynxRemoteProfileAvatar(
     val avatarRevisions by FynxAvatarIdentityStore.revisions().collectAsState()
     val revision = normalizedOwner?.let { avatarRevisions[it] }
     val resolvedMediaId = if (normalizedOwner != null) {
-        // Re-read the authoritative per-account cache whenever Profile publishes a change.
         FynxProfileRemoteClient.cachedProfilePhotoId(context, normalizedOwner)
     } else {
         mediaId?.takeIf { it.isNotBlank() }
@@ -243,7 +242,6 @@ fun FynxRemoteProfileAvatar(
         if (owner.isBlank()) hasActiveStatus = false
         else hasActiveStatus = runCatching { FynxStatusPresenceStore.activeOwners(context).contains(owner) }.getOrDefault(false)
     }
-    // Keep revision as an explicit composition key so a published avatar removal also clears the old media.
     key(normalizedOwner, revision, resolvedMediaId) {
         val avatar: @Composable () -> Unit = {
             if (resolvedMediaId.isNullOrBlank()) {
@@ -284,11 +282,11 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier, maxDuration
                 scope.launch {
                     try {
                         val cached = remoteMediaCacheFile(context, resolvedUrl, ".audio")
-                        val target = cached ?: File.createTempFile("fynx_audio_", ".audio", context.cacheDir)
-                        if (cached?.exists() != true) downloadRemoteMedia(context, resolvedUrl, target).getOrThrow()
+                        val finalFile = cached ?: File.createTempFile("fynx_audio_", ".audio", context.cacheDir)
+                        if (cached?.exists() != true) downloadRemoteMedia(context, resolvedUrl, finalFile).getOrThrow()
                         val next = MediaPlayer().apply {
                             setAudioAttributes(AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).setUsage(AudioAttributes.USAGE_MEDIA).build())
-                            setDataSource(target.absolutePath)
+                            setDataSource(finalFile.absolutePath)
                             setOnPreparedListener { durationMs = it.duration.toLong(); loading = false; player = it; it.start(); playing = true }
                             setOnCompletionListener { playing = false }
                             setOnErrorListener { _, _, _ -> loading = false; error = "Audio unavailable"; true }

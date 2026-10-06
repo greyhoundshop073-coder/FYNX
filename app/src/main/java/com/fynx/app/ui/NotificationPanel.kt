@@ -112,6 +112,7 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
                     NotificationPreferenceSwitch("Speak notifications", "Read new alerts aloud", speakNotifications) { speakNotifications = it; FynxNotificationFoundation.setSpeakNotificationsEnabled(context, it) }
                     Text("Notification types", style = MaterialTheme.typography.titleSmall)
                     NotificationPreferenceSwitch("Messages", "Direct messages", notificationPreferences.messagesEnabled) { savePreferences(notificationPreferences.copy(messagesEnabled = it)) }
+                    NotificationPreferenceSwitch("Calls", "Voice and video calls", notificationPreferences.callsEnabled) { savePreferences(notificationPreferences.copy(callsEnabled = it)) }
                     NotificationPreferenceSwitch("Friends", "Friend requests and new followers", notificationPreferences.friendRequestsEnabled) { savePreferences(notificationPreferences.copy(friendRequestsEnabled = it)) }
                     NotificationPreferenceSwitch("Stories", "Story activity", notificationPreferences.storiesEnabled) { savePreferences(notificationPreferences.copy(storiesEnabled = it)) }
                     NotificationPreferenceSwitch("Reactions", "Reactions to your posts", notificationPreferences.reactionsEnabled) { savePreferences(notificationPreferences.copy(reactionsEnabled = it)) }
@@ -227,6 +228,7 @@ private fun NotificationPreferenceSwitch(title: String, description: String, che
 
 private fun typeLabel(type: FynxNotificationType): String = when (type) {
     FynxNotificationType.MESSAGE -> "Messages"
+    FynxNotificationType.CALL -> "Calls"
     FynxNotificationType.FRIEND_REQUEST -> "Friends"
     FynxNotificationType.FOLLOW -> "Followers"
     FynxNotificationType.STORY -> "Stories"
@@ -241,6 +243,7 @@ private fun typeLabel(type: FynxNotificationType): String = when (type) {
 
 private fun notificationIcon(type: FynxNotificationType) = when (type) {
     FynxNotificationType.MESSAGE -> Icons.Default.Message
+    FynxNotificationType.CALL -> Icons.Default.Call
     FynxNotificationType.FRIEND_REQUEST -> Icons.Default.PersonAdd
     FynxNotificationType.FOLLOW -> Icons.Default.PersonAdd
     FynxNotificationType.STORY -> Icons.Default.AutoStories

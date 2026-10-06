@@ -70,6 +70,7 @@ async function ensureSchema(pool) {
       group_enabled BOOLEAN NOT NULL DEFAULT TRUE,
       marketplace_enabled BOOLEAN NOT NULL DEFAULT TRUE,
       wallet_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      calls_enabled BOOLEAN NOT NULL DEFAULT TRUE,
       quiet_mode BOOLEAN NOT NULL DEFAULT FALSE,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -100,13 +101,15 @@ async function ensureSchema(pool) {
     );
     CREATE INDEX IF NOT EXISTS fynx_notification_delivery_status_idx ON fynx_notification_delivery(status,updated_at);
     ALTER TABLE fynx_notifications ADD COLUMN IF NOT EXISTS route TEXT;
-  `).catch(error => { schemaPromise = undefined; throw error; });
+    ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS calls_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+    `).catch(error => { schemaPromise = undefined; throw error; });
   return schemaPromise;
 }
 
 function preferenceColumn(type) {
   switch (type) {
     case "MESSAGE": return "messages_enabled";
+    case "CALL": return "calls_enabled";
     case "FRIEND_REQUEST": return "friend_requests_enabled";
     case "FOLLOW": return "friend_requests_enabled";
     case "STORY": return "stories_enabled";
