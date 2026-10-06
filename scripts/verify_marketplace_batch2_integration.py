@@ -2,6 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
+app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
 details = panel.split("private fun MarketplaceDetails", 1)[1]
 files = {
     "trust": ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceTrustPassport.kt",
@@ -31,7 +32,7 @@ checks = [
     ("Buy Together keeps the canonical listing ID", "FynxShareActions.marketplacePayload(listing.id, listing.title)" in panel),
     ("Live Proof stays on the existing seller chat path", "onLiveProof = { contactSeller(listing.sellerUsername, listing.id) }" in panel),
     ("Price Watch persists the real listing ID", "price_watch_$listingId" in panel),
-    ("Buying Assistant opens the existing FYNX AI destination", 'onOpenAi = { onOpenAi() }' in panel),
+    ("Buying Assistant opens the existing FYNX AI destination", 'onOpenAssistant = { onOpenAi() }' in panel and 'onOpenAi = { selected = "AI" }' in app),
 ]
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
