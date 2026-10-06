@@ -60,7 +60,7 @@ object FynxNotificationPreferencesClient {
 
     private fun toJson(preferences: FynxNotificationPreferences) = JSONObject().apply {
         put("enabled", preferences.enabled); put("pushEnabled", preferences.pushEnabled); put("reactionsEnabled", preferences.reactionsEnabled)
-        put("commentsEnabled", preferences.commentsEnabled); put("friendRequestsEnabled", preferences.friendRequestsEnabled); put("messagesEnabled", preferences.messagesEnabled)
+        put("commentsEnabled", preferences.commentsEnabled); put("friendRequestsEnabled", preferences.friendRequestsEnabled); put("messagesEnabled", preferences.messagesEnabled); put("callsEnabled", preferences.callsEnabled)
         put("storiesEnabled", preferences.storiesEnabled); put("remindersEnabled", preferences.remindersEnabled); put("groupEnabled", preferences.groupEnabled)
         put("marketplaceEnabled", preferences.marketplaceEnabled); put("walletEnabled", preferences.walletEnabled); put("quietMode", preferences.quietMode)
     }
