@@ -1,0 +1,167 @@
+package com.fynx.app.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+
+/**
+ * Marketplace reference-board primitives.
+ *
+ * These components intentionally contain presentation only. They do not create
+ * Marketplace data, sellers, ratings, prices, or activity. The production
+ * Marketplace remains the source of truth for all real data and actions.
+ */
+internal object FynxMarketplaceReferenceStyle {
+    val background = Color(0xFF06142D)
+    val surface = Color(0xFF0B2144)
+    val surfaceRaised = Color(0xFF102A55)
+    val outline = Color(0xFF29466F)
+    val primary = Color(0xFF6957FF)
+    val primarySoft = Color(0xFF9A8CFF)
+    val text = Color(0xFFF4F7FF)
+    val textMuted = Color(0xFF9DAECC)
+    val radius = RoundedCornerShape(18.dp)
+}
+
+@Composable
+internal fun MarketplaceReferenceSearchBar(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onCart: () -> Unit,
+    cartCount: Int,
+    modifier: Modifier = Modifier
+) {
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(16.dp),
+            color = FynxMarketplaceReferenceStyle.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, FynxMarketplaceReferenceStyle.outline)
+        ) {
+            Row(Modifier.padding(horizontal = 13.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Search, null, tint = FynxMarketplaceReferenceStyle.textMuted, modifier = Modifier.size(19.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (value.isBlank()) "Search products, sellers or categories" else value,
+                    color = if (value.isBlank()) FynxMarketplaceReferenceStyle.textMuted else FynxMarketplaceReferenceStyle.text,
+                    maxLines = 1
+                )
+            }
+        }
+        IconButton(onClick = onCart) {
+            Icon(Icons.Default.ShoppingCart, "Cart", tint = FynxMarketplaceReferenceStyle.text)
+        }
+    }
+}
+
+@Composable
+internal fun MarketplaceReferenceCategoryRow(
+    categories: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit,
+    onNearby: () -> Unit,
+    nearbySelected: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        FilterChip(
+            selected = nearbySelected,
+            onClick = onNearby,
+            label = { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.LocationOn, null, Modifier.size(15.dp)); Spacer(Modifier.width(4.dp)); Text("Near me") } }
+        )
+        categories.forEach { category ->
+            FilterChip(selected = selected == category, onClick = { onSelect(category) }, label = { Text(category) })
+        }
+    }
+}
+
+@Composable
+internal fun MarketplaceReferenceSectionTitle(
+    title: String,
+    action: String? = null,
+    onAction: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, modifier = Modifier.weight(1f), color = FynxMarketplaceReferenceStyle.text, fontWeight = FontWeight.Bold)
+        if (action != null && onAction != null) {
+            androidx.compose.material3.TextButton(onClick = onAction, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                Text(action, color = FynxMarketplaceReferenceStyle.primarySoft)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun MarketplaceReferenceHeroPlaceholder(
+    title: String,
+    subtitle: String,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onOpen,
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = FynxMarketplaceReferenceStyle.surfaceRaised
+    ) {
+        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(title, color = FynxMarketplaceReferenceStyle.text, fontWeight = FontWeight.Bold)
+                Text(subtitle, color = FynxMarketplaceReferenceStyle.textMuted)
+            }
+            Icon(Icons.Default.Add, null, tint = FynxMarketplaceReferenceStyle.primarySoft, modifier = Modifier.size(34.dp))
+        }
+    }
+}
+
+@Composable
+internal fun MarketplaceReferenceEmptyState(
+    title: String,
+    message: String,
+    onSell: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(Modifier.size(72.dp).clip(RoundedCornerShape(22.dp)).background(FynxMarketplaceReferenceStyle.surfaceRaised), Alignment.Center) {
+            Icon(Icons.Default.Add, null, tint = FynxMarketplaceReferenceStyle.primarySoft, modifier = Modifier.size(34.dp))
+        }
+        Text(title, color = FynxMarketplaceReferenceStyle.text, fontWeight = FontWeight.Bold)
+        Text(message, color = FynxMarketplaceReferenceStyle.textMuted)
+        androidx.compose.material3.Button(onClick = onSell) {
+            Text("Sell something")
+        }
+    }
+}

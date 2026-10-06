@@ -56,7 +56,7 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 @Composable
-fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, initialListingId: String? = null) {
+fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: () -> Unit = {}, initialListingId: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var listings by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
@@ -215,7 +215,22 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     }
 
     if (showSell) MarketplaceSellDialog(context, onPublished = { showSell = false; reload() }, onCancel = { showSell = false })
-    selected?.let { listing -> MarketplaceDetails(l = listing, onProfile = { onOpenProfile(listing.sellerUsername); selected = null }, onContact = { contactSeller(listing.sellerUsername, listing.id) }, onBuyNow = { selected = null; checkoutListing = listing }, onAddToCart = { if (cart.none { it.id == listing.id }) cart = cart + listing; selected = null }, onClose = { selected = null }) }
+    selected?.let { listing ->
+        val sellerKey = listing.sellerUsername.removePrefix("@").trim().lowercase()
+        MarketplaceDetails(
+            l = listing,
+            sellerReputation = sellerReputations[sellerKey],
+            onProfile = { onOpenProfile(listing.sellerUsername); selected = null },
+            onContact = { contactSeller(listing.sellerUsername, listing.id) },
+            onBuyNow = { selected = null; checkoutListing = listing },
+            onAddToCart = { if (cart.none { it.id == listing.id }) cart = cart + listing; selected = null },
+            onBuyTogether = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(listing.id, listing.title)) },
+            onLiveProof = { contactSeller(listing.sellerUsername, listing.id) },
+            onWatchPrice = { listingId -> context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE).edit().putBoolean("price_watch_$listingId", true).apply() },
+            onOpenAssistant = { onOpenAi() },
+            onClose = { selected = null }
+        )
+    }
     checkoutListing?.let { listing -> FynxMarketplaceCheckoutDialog(context = context, listing = listing, onProtectedOrder = { order -> checkoutListing = null; orders = listOf(order) + orders.filterNot { it.id == order.id }; paymentOrder = order }, onClose = { checkoutListing = null }) }
     paymentOrder?.let { order -> MarketplacePaymentDialog(context = context, order = order, onPaid = { paymentOrder = null; protectedOrder = order; reload() }, onClose = { paymentOrder = null }) }
     protectedOrder?.let { order -> MarketplaceProtectedOrderDialog(order = order, onViewOrder = { protectedOrder = null; showOrders = true }, onContinue = { protectedOrder = null }) }
@@ -271,7 +286,19 @@ private fun MarketplaceSellerCard(listing: FynxRemoteSocialClient.MarketplaceLis
 private fun RemoteMarketMedia(context: android.content.Context, mediaId: String, modifier: Modifier) { val mediaUrl = remember(mediaId) { FynxMarketplaceClient.mediaUrl(context, mediaId) }; FynxRemoteMedia(mediaUrl, "auto", modifier) }
 
 @Composable
-private fun MarketplaceDetails(l: FynxRemoteSocialClient.MarketplaceListing, onProfile: () -> Unit, onContact: () -> Unit, onBuyNow: () -> Unit, onAddToCart: () -> Unit, onClose: () -> Unit) {
+private fun MarketplaceDetails(
+    l: FynxRemoteSocialClient.MarketplaceListing,
+    sellerReputation: FynxMarketplaceClient.SellerReputation?,
+    onProfile: () -> Unit,
+    onContact: () -> Unit,
+    onBuyNow: () -> Unit,
+    onAddToCart: () -> Unit,
+    onBuyTogether: () -> Unit,
+    onLiveProof: () -> Unit,
+    onWatchPrice: (String) -> Unit,
+    onOpenAssistant: () -> Unit,
+    onClose: () -> Unit
+) {
     val context = LocalContext.current
     AlertDialog(onDismissRequest = onClose, title = { Text(l.title, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, text = { Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding(), verticalArrangement = Arrangement.spacedBy(9.dp)) {
         if (l.mediaIds.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(l.mediaIds.take(12)) { mediaId -> RemoteMarketMedia(LocalContext.current, mediaId, Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(12.dp))) } }
@@ -284,6 +311,29 @@ private fun MarketplaceDetails(l: FynxRemoteSocialClient.MarketplaceListing, onP
         if (l.pickupAvailable) Text("Pickup available")
         Text("🛡 FYNX protected payment", fontWeight = FontWeight.SemiBold)
         Text("Payment stays protected through the existing FYNX order lifecycle until the appropriate completion state.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        sellerReputation?.let { reputation ->
+            FynxMarketplaceTrustPassport(
+                sellerUsername = l.sellerUsername,
+                reputation = reputation,
+                onOpenProfile = { _ -> onProfile() }
+            )
+        }
+        FynxMarketplaceBuyTogether(
+            listing = l,
+            onStart = { _ -> onBuyTogether() }
+        )
+        FynxMarketplaceLiveProof(
+            listing = l,
+            onRequestProof = { _, _ -> onLiveProof() }
+        )
+        FynxMarketplacePriceWatch(
+            listing = l,
+            onWatchPrice = { onWatchPrice(it) }
+        )
+        FynxMarketplaceBuyingAssistant(
+            listing = l,
+            onOpenAssistant = { _ -> onOpenAssistant() }
+        )
     } }, confirmButton = { Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title)) }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Share, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Share Marketplace listing") }
         OutlinedButton(onClick = onContact, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.ChatBubbleOutline, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Contact seller") }
