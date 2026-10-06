@@ -2,39 +2,15 @@ package com.fynx.app.ui
 
 import android.content.Context
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.Storefront
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,7 +20,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.util.Locale
 
-/** Reference-board Product Details presentation. Production callbacks/data stay external. */
 @Composable
 internal fun FynxMarketplaceReferenceProductDetails(
     context: Context,
@@ -64,7 +39,7 @@ internal fun FynxMarketplaceReferenceProductDetails(
         }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (listing.mediaIds.isNotEmpty()) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(end = 16.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(listing.mediaIds.take(12), key = { it }) { mediaId ->
                         val url = FynxMarketplaceClient.mediaUrl(context, mediaId)
                         FynxRemoteMedia(url, "auto", Modifier.width(300.dp).aspectRatio(4f / 3f).clip(RoundedCornerShape(20.dp)))
@@ -75,9 +50,9 @@ internal fun FynxMarketplaceReferenceProductDetails(
                     Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Storefront, null, tint = FynxMarketplaceReferenceStyle.primarySoft, modifier = Modifier.size(52.dp)) }
                 }
             }
-            Text(listing.title, color = FynxMarketplaceReferenceStyle.text, fontWeight = FontWeight.Bold, style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
-            Text("${listing.currency} ${String.format(Locale.US, "%,.2f", listing.price)}", color = FynxMarketplaceReferenceStyle.primarySoft, fontWeight = FontWeight.Bold, style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(listing.title, color = FynxMarketplaceReferenceStyle.text, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineSmall)
+            Text("${listing.currency} ${String.format(Locale.US, "%,.2f", listing.price)}", color = FynxMarketplaceReferenceStyle.primarySoft, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("${listing.quantity} available", color = FynxMarketplaceReferenceStyle.textMuted)
                 Text("• ${listing.condition}", color = FynxMarketplaceReferenceStyle.textMuted)
             }
@@ -111,7 +86,6 @@ internal fun FynxMarketplaceReferenceProductDetails(
     }
 }
 
-/** Reference-board Search presentation. Search results remain real Marketplace listings supplied by the caller. */
 @Composable
 internal fun FynxMarketplaceReferenceSearch(
     query: String,
@@ -147,7 +121,7 @@ internal fun FynxMarketplaceReferenceSearch(
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(categories.take(12)) { item -> Surface(onClick = { onCategory(item) }, shape = RoundedCornerShape(14.dp), color = FynxMarketplaceReferenceStyle.surfaceRaised) { Text(item, color = FynxMarketplaceReferenceStyle.text, modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp)) } } }
             if (query.isBlank()) {
                 MarketplaceReferenceSectionTitle("Trending searches")
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { trendingSearches.take(10).forEach { item -> TextButton(onClick = { onTrending(item) }, modifier = Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Search, null, tint = FynxMarketplaceReferenceStyle.primarySoft, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(item, color = FynxMarketplaceReferenceStyle.text) } } }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { trendingSearches.take(10).forEach { item -> TextButton(onClick = { onTrending(item) }, modifier = Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Search, null, tint = FynxMarketplaceReferenceStyle.primarySoft, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(item, color = FynxMarketplaceReferenceStyle.text) } } } }
             }
             if (results.isNotEmpty()) {
                 MarketplaceReferenceSectionTitle("Results")
