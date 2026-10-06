@@ -141,12 +141,15 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeContent)
             .imePadding(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 28.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text("Create Status", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                     Text("Share a moment that disappears after 24 hours", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -154,17 +157,23 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
             }
         }
         item {
-            Surface(shape = RoundedCornerShape(20.dp), tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    items(FynxStatusType.values().toList()) { option ->
-                        FilterChip(
-                            selected = type == option,
-                            onClick = { if (!recording) type = option },
-                            label = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() }) }
-                        )
+            Card(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+            ) {
+                Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Create with", modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    val options = FynxStatusType.values().toList()
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        options.take(2).forEach { option ->
+                            StatusTypeChoice(option, type == option, !recording) { type = option }
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        options.drop(2).forEach { option ->
+                            StatusTypeChoice(option, type == option, !recording) { type = option }
+                        }
                     }
                 }
             }
@@ -240,6 +249,24 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
             ) { Text(if (publishing) "Publishing…" else "Preview Status") }
         }
     }
+}
+
+@Composable
+private fun RowScope.StatusTypeChoice(type: FynxStatusType, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+        label = {
+            Text(
+                type.name.lowercase().replaceFirstChar { it.uppercase() },
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+            )
+        }
+    )
 }
 
 @Composable
