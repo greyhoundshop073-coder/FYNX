@@ -27,17 +27,10 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.AutoStories
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
-
-
-
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Info
-
-
-
-
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -46,7 +39,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -325,7 +317,15 @@ private fun FynxProfilePhotoViewer(mediaId: String?, localPhotoUri: String?, nam
         syncError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         HorizontalDivider()
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { FynxProfileImage(displayName, photoUri, Modifier.size(112.dp).clip(CircleShape)) }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) { OutlinedButton(enabled = !syncing, onClick = { picker.launch("image/*") }, shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.AddAPhoto, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text(if (photoUri == null) "Add photo" else "Change photo") }; if (@Composable
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) { OutlinedButton(enabled = !syncing, onClick = { picker.launch("image/*") }, shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.AddAPhoto, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text(if (photoUri == null) "Add photo" else "Change photo") }; if (photoUri != null) { Spacer(Modifier.width(6.dp)); TextButton(enabled = !syncing, onClick = { onPhotoChanged(null) }) { Text("Remove") } } }
+        OutlinedTextField(displayName, { displayName = it }, Modifier.fillMaxWidth(), label = { Text("Display name") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+        OutlinedTextField(username.removePrefix("@"), { username = it.removePrefix("@").replace(" ", "") }, Modifier.fillMaxWidth(), label = { Text("Username") }, prefix = { Text("@") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+        OutlinedTextField(bio, { bio = it }, Modifier.fillMaxWidth(), label = { Text("Bio") }, minLines = 3, shape = RoundedCornerShape(14.dp))
+        OutlinedTextField(about, { about = it }, Modifier.fillMaxWidth(), label = { Text("About / description") }, minLines = 3, maxLines = 6, shape = RoundedCornerShape(14.dp))
+    }
+}
+
+@Composable
 fun SettingsPanel(
     settings: FynxSettings,
     onSettingsChange: (FynxSettings) -> Unit,
@@ -344,59 +344,59 @@ fun SettingsPanel(
 
     if (detail != null) {
         when (detail) {
-            "account" -> SettingsDetailPanel("Account & Profile", "Profile, account and sign-in controls", "account", onBack = { detail = null }, onOpen = { onOpenAccountProfile(); detail = null })
-            "privacy" -> SettingsDetailPanel("Privacy & Security", "Control what other people can see", "privacy", onBack = { detail = null }, onOpen = { onOpenPrivacy(); detail = null })
-            "notifications" -> SettingsDetailPanel("Notifications", "Messages, calls, social activity and sounds", "notifications", onBack = { detail = null }, onOpen = { onOpenNotifications(); detail = null })
-            "chat" -> SettingsDetailPanel("Chat", "Chat settings stay inside Chat", "chat", onBack = { detail = null }, onOpen = { detail = null })
-            "stories" -> SettingsDetailPanel("Stories & Status", "Replies, reactions, mentions and archive", "stories", onBack = { detail = null }, onOpen = { detail = null })
-            "appearance" -> AppearanceSettingsDetail(appearance, accent, onBack = { detail = null }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it); onAppearanceChanged(it) }, onAccentChanged = { accent = it; FynxPreferencesStore.saveAccent(context, it); onAccentChanged(it) })
-            "media" -> SettingsDetailPanel("Media & Storage", "Downloads, storage and cache", "media", onBack = { detail = null }, onOpen = { detail = null })
-            "data" -> SettingsDetailPanel("Data & Network", "Data usage and upload/download preferences", "data", onBack = { detail = null }, onOpen = { detail = null })
-            "language" -> SettingsDetailPanel("Language & Accessibility", "Language, text size and accessible presentation", "language", onBack = { detail = null }, onOpen = { detail = null })
-            "help" -> SettingsDetailPanel("Help & Support", "Help center, reports and support", "help", onBack = { detail = null }, onOpen = { detail = null })
-            "about" -> SettingsDetailPanel("About FYNX", "Version, terms and privacy", "about", onBack = { detail = null }, onOpen = { detail = null })
+            "account" -> SettingsDetailPanel("Account & Profile", "Profile, account and sign-in controls", Icons.Default.Person, Color(0xFF2F8CFF), onBack) { onOpenAccountProfile(); detail = null }
+            "privacy" -> SettingsDetailPanel("Privacy & Security", "Privacy, blocking, security and sessions", Icons.Default.Security, Color(0xFF25B864), onBack) { onOpenPrivacy(); detail = null }
+            "notifications" -> SettingsDetailPanel("Notifications", "Messages, calls, social activity and sounds", Icons.Default.Notifications, Color(0xFF9B5CFF), onBack) { onOpenNotifications(); detail = null }
+            "chat" -> SettingsDetailPanel("Chat", "Chat settings remain inside Chat", Icons.Default.ChatBubbleOutline, Color(0xFF19A9F5), onBack) { detail = null }
+            "stories" -> SettingsInfoDetailPanel("Stories & Status", "Replies, reactions, mentions and archive", Icons.Default.AutoStories, Color(0xFFFF8A1F), onBack)
+            "appearance" -> AppearanceSettingsDetail(appearance, accent, onBack, { appearance = it; FynxPreferencesStore.saveAppearance(context, it); onAppearanceChanged(it) }, { accent = it; FynxPreferencesStore.saveAccent(context, it); onAccentChanged(it) })
+            "media" -> SettingsInfoDetailPanel("Media & Storage", "Media, downloads, storage and cache", Icons.Default.Image, Color(0xFF00AFA6), onBack)
+            "data" -> SettingsInfoDetailPanel("Data & Network", "Data usage and upload/download preferences", Icons.Default.Public, Color(0xFF0AA7D8), onBack)
+            "language" -> LanguageSelectionPanel(onBack = { detail = null })
+            "help" -> SettingsInfoDetailPanel("Help & Support", "Help, report a problem and support", Icons.Default.Info, Color(0xFF24B96B), onBack)
+            "about" -> SettingsInfoDetailPanel("About FYNX", "Version, terms and privacy", Icons.Default.Info, Color(0xFF2F8CFF), onBack)
         }
         return
     }
 
     val query = search.trim().lowercase()
     val categories = listOf(
-        SettingsCategory("account", "Account & Profile", "Profile, username, phone & email", Icons.Default.Person, Color(0xFF2F8CFF)),
-        SettingsCategory("privacy", "Privacy & Security", "Privacy, blocking, security & sessions", Icons.Default.Security, Color(0xFF25B864)),
-        SettingsCategory("notifications", "Notifications", "Messages, calls, social activity & sounds", Icons.Default.Notifications, Color(0xFF9B5CFF)),
-        SettingsCategory("chat", "Chat", "Chat settings remain inside Chat", Icons.Default.ChatBubbleOutline, Color(0xFF19A9F5)),
-        SettingsCategory("stories", "Stories & Status", "Stories, replies, reactions & archive", Icons.Default.AutoStories, Color(0xFFFF8A1F)),
-        SettingsCategory("appearance", "Appearance", "Theme, colors & app style", Icons.Default.Palette, Color(0xFF7C5CFF)),
-        SettingsCategory("media", "Media & Storage", "Downloads, storage & cache", Icons.Default.Image, Color(0xFF00AFA6)),
-        SettingsCategory("data", "Data & Network", "Data usage, upload/download & network", Icons.Default.Language, Color(0xFF0AA7D8)),
-        SettingsCategory("language", "Language & Accessibility", "Language, text size and accessible presentation", Icons.Default.Language, Color(0xFFFFB000)),
-        SettingsCategory("help", "Help & Support", "Help center, report a problem & support", Icons.Default.Info, Color(0xFF24B96B)),
-        SettingsCategory("about", "About FYNX", "Version, terms & privacy", Icons.Default.Info, Color(0xFF2F8CFF))
+        SettingsCategory("account", "Account & Profile", "Profile, account, login and personal information", Icons.Default.Person, Color(0xFF2F8CFF)),
+        SettingsCategory("privacy", "Privacy & Security", "Privacy, blocking, security and sessions", Icons.Default.Security, Color(0xFF25B864)),
+        SettingsCategory("notifications", "Notifications", "Messages, calls, social activity and sounds", Icons.Default.Notifications, Color(0xFF9B5CFF)),
+        SettingsCategory("chat", "Chat", "Open the existing Chat settings", Icons.Default.ChatBubbleOutline, Color(0xFF19A9F5)),
+        SettingsCategory("stories", "Stories & Status", "Replies, reactions, mentions and archive", Icons.Default.AutoStories, Color(0xFFFF8A1F)),
+        SettingsCategory("appearance", "Appearance", "Theme, colors and app appearance", Icons.Default.Palette, Color(0xFF7C5CFF)),
+        SettingsCategory("media", "Media & Storage", "Media, downloads, storage and cache", Icons.Default.Image, Color(0xFF00AFA6)),
+        SettingsCategory("data", "Data & Network", "Data usage and upload/download preferences", Icons.Default.Public, Color(0xFF0AA7D8)),
+        SettingsCategory("language", "Language & Accessibility", "Language, text size and accessible presentation", Icons.Default.Settings, Color(0xFFFFB000)),
+        SettingsCategory("help", "Help & Support", "Help, reports and support", Icons.Default.Info, Color(0xFF24B96B)),
+        SettingsCategory("about", "About FYNX", "Version, terms and privacy", Icons.Default.Info, Color(0xFF2F8CFF))
     )
-    val sections = listOf(
+    val groups = listOf(
         "ACCOUNT" to listOf("account", "privacy"),
         "COMMUNICATION" to listOf("notifications", "chat", "stories"),
         "PERSONALIZATION" to listOf("appearance"),
         "APP & DATA" to listOf("media", "data", "language"),
         "FYNX" to listOf("help", "about")
     )
+
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp).widthIn(max = 720.dp).statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("‹ Back") }
-            Spacer(Modifier.width(4.dp))
             Column(Modifier.weight(1f)) {
                 Text("Settings", style = MaterialTheme.typography.titleLarge)
-                Text("Manage your account, privacy and app preferences", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Text("Manage your FYNX preferences", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
         }
-        OutlinedTextField(value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, "Search settings") }, placeholder = { Text("Search settings...") }, shape = RoundedCornerShape(18.dp))
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            sections.forEach { (sectionTitle, ids) ->
+        OutlinedTextField(search, { search = it }, Modifier.fillMaxWidth().padding(bottom = 8.dp), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, "Search settings") }, placeholder = { Text("Search settings") }, shape = RoundedCornerShape(16.dp))
+        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(vertical = 8.dp, bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            groups.forEach { (group, ids) ->
                 val visible = ids.mapNotNull { id -> categories.find { it.id == id } }.filter { query.isBlank() || it.title.lowercase().contains(query) || it.subtitle.lowercase().contains(query) }
                 if (visible.isNotEmpty()) {
-                    item { Text(sectionTitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp, top = 4.dp)) }
+                    item { Text(group, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp)) }
                     item {
-                        Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface.copy(alpha = .98f)), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .32f))) {
+                        Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .30f))) {
                             Column {
                                 visible.forEachIndexed { index, category ->
                                     SettingsCategoryRow(category) { detail = category.id }
@@ -407,7 +407,9 @@ fun SettingsPanel(
                     }
                 }
             }
-            if (query.isNotBlank() && categories.none { it.title.lowercase().contains(query) || it.subtitle.lowercase().contains(query) }) item { Text("No matching settings", Modifier.fillMaxWidth().padding(32.dp), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (query.isNotBlank() && categories.none { it.title.lowercase().contains(query) || it.subtitle.lowercase().contains(query) }) {
+                item { Text("No matching settings", Modifier.fillMaxWidth().padding(24.dp), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
         }
     }
 }
@@ -417,77 +419,83 @@ private data class SettingsCategory(val id: String, val title: String, val subti
 @Composable
 private fun SettingsCategoryRow(category: SettingsCategory, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(category.color.copy(alpha = .13f)), contentAlignment = Alignment.Center) { Icon(category.icon, null, tint = category.color, modifier = Modifier.size(22.dp)) }
+        Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(category.color.copy(alpha = .13f)), contentAlignment = Alignment.Center) {
+            Icon(category.icon, null, tint = category.color, modifier = Modifier.size(22.dp))
+        }
         Spacer(Modifier.width(13.dp))
-        Column(Modifier.weight(1f)) { Text(category.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis); Text(category.subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        Column(Modifier.weight(1f)) {
+            Text(category.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(category.subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
         Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
-private fun SettingsDetailPanel(title: String, subtitle: String, kind: String, onBack: () -> Unit, onOpen: () -> Unit) {
+private fun SettingsDetailPanel(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color, onBack: () -> Unit, onOpen: () -> Unit) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp).statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onBack) { Text("‹ Back") }; Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f)) }
-        Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
-        Spacer(Modifier.height(8.dp))
-        when (kind) {
-            "account" -> SettingsDetailCard("Profile & Account", "Username, bio, profile photo and account information", Icons.Default.Person, Color(0xFF2F8CFF), onOpen)
-            "privacy" -> SettingsDetailCard("Privacy Settings", "Control profile, online status, posts, Status and photos", Icons.Default.Shield, Color(0xFF25B864), onOpen)
-            "notifications" -> SettingsDetailCard("Notification Preferences", "Open the existing notification settings and controls", Icons.Default.Notifications, Color(0xFF9B5CFF), onOpen)
-            "chat" -> SettingsDetailCard("Open Chat Settings", "Your existing chat settings remain in Chat and are not duplicated here", Icons.Default.ChatBubble, Color(0xFF19A9F5)) { onBack() }
-            "stories" -> { SettingsDetailCard("Stories & Status Preferences", "Replies, reactions, mentions and archive", Icons.Default.AutoStories, Color(0xFFFF8A1F)) { }; Spacer(Modifier.height(8.dp)); SettingsInfoCard("Feature-local controls", "Stories and Status controls remain with the existing feature so we do not create duplicate settings.") }
-            "media" -> SettingsInfoCard("Media & Storage", "Downloads, saved media, storage usage and cache controls will be grouped here without changing existing media behavior.")
-            "data" -> SettingsInfoCard("Data & Network", "Data usage and upload/download preferences will be grouped here without changing existing network behavior.")
-            "language" -> SettingsInfoCard("Language & Accessibility", "English is currently supported. Language, text size and accessible presentation controls are grouped here.")
-            "help" -> SettingsInfoCard("Help & Support", "Help center, report a problem and support entry points.")
-            "about" -> SettingsInfoCard("About FYNX", "Version information, terms and privacy information.")
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack) { Text("‹ Back") }
+            Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        }
+        Card(Modifier.fillMaxWidth().padding(top = 8.dp), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .30f))) {
+            Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = .13f)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = color) }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.titleMedium); Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+                Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
 
 @Composable
-private fun SettingsDetailCard(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color, onClick: () -> Unit) {
-    Card(onClick = onClick, Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .28f))) {
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = .13f)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = color) }
-            Spacer(Modifier.width(13.dp))
-            Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.titleMedium); Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-            Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun SettingsInfoDetailPanel(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color, onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp).statusBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onBack) { Text("‹ Back") }; Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f)) }
+        Card(Modifier.fillMaxWidth().padding(top = 8.dp), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .30f))) {
+            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = .13f)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = color) }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.titleMedium); Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+            }
         }
     }
-}
-
-@Composable
-private fun SettingsInfoCard(title: String, body: String) {
-    Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .72f))) { Column(Modifier.padding(16.dp)) { Text(title, style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(4.dp)); Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) } }
 }
 
 @Composable
 private fun AppearanceSettingsDetail(currentAppearance: String, currentAccent: FynxAccent, onBack: () -> Unit, onAppearanceChanged: (String) -> Unit, onAccentChanged: (FynxAccent) -> Unit) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp).statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onBack) { Text("‹ Back") }; Text("Appearance", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f)) }
-        Text("Theme, colors and app style", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 8.dp))
-        Spacer(Modifier.height(12.dp))
-        Text("Theme", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp))
-        Card(Modifier.fillMaxWidth().padding(top = 6.dp), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .28f))) {
-            listOf("System", "Light", "Charcoal Black", "Dark", "Black AMOLED").forEach { option ->
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onBack) { Text("‹ Back") }; Text("Appearance", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f)) }
+        Text("Theme, colors and app appearance", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 8.dp))
+        Spacer(Modifier.height(10.dp))
+        listOf("System", "Light", "Charcoal Black", "Dark", "Black AMOLED").forEach { option ->
+            Card(Modifier.fillMaxWidth().padding(bottom = 6.dp), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .25f))) {
                 Row(Modifier.fillMaxWidth().clickable { onAppearanceChanged(option) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(if (option == "Light") Icons.Default.Settings else if (option == "Dark") Icons.Default.Settings else if (option == "Black AMOLED") Icons.Default.Settings else Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(12.dp)); Text(option, Modifier.weight(1f)); RadioButton(selected = currentAppearance == option, onClick = { onAppearanceChanged(option) })
+                    Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(12.dp))
+                    Text(option, Modifier.weight(1f))
+                    RadioButton(currentAppearance == option, { onAppearanceChanged(option) })
                 }
             }
         }
-        Spacer(Modifier.height(14.dp))
-        Text("Accent Color", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp))
-        Card(Modifier.fillMaxWidth().padding(top = 6.dp), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .28f))) {
-            FynxAccent.entries.forEach { option ->
+        Spacer(Modifier.height(8.dp))
+        Text("Accent color", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp))
+        Spacer(Modifier.height(4.dp))
+        FynxAccent.entries.forEach { option ->
+            Card(Modifier.fillMaxWidth().padding(bottom = 6.dp), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .25f))) {
                 Row(Modifier.fillMaxWidth().clickable { onAccentChanged(option) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(24.dp).clip(CircleShape).background(option.primary)); Spacer(Modifier.width(12.dp)); Text(if (option == FynxAccent.Blue) "FYNX Blue" else if (option == FynxAccent.Purple) "FYNX Purple" else "Charcoal", Modifier.weight(1f)); RadioButton(selected = currentAccent == option, onClick = { onAccentChanged(option) })
+                    Box(Modifier.size(24.dp).clip(CircleShape).background(option.primary))
+                    Spacer(Modifier.width(12.dp))
+                    Text(if (option == FynxAccent.Blue) "FYNX Blue" else if (option == FynxAccent.Purple) "FYNX Purple" else "Charcoal", Modifier.weight(1f))
+                    RadioButton(currentAccent == option, { onAccentChanged(option) })
                 }
             }
         }
     }
 }
+
+@Composable private fun SettingsSectionTitle(title: String) { Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp)) }
 @Composable private fun SettingsActionCard(title: String, value: String, onClick: () -> Unit) { Card(onClick = onClick, modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis); Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis) }; Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) } } }
 @Composable private fun ProfileConnectionsDialog(type:String,users:List<FynxProfileRemoteClient.ConnectionUser>,loading:Boolean,error:String?,onRetry:()->Unit,onDismiss:()->Unit){AlertDialog(onDismissRequest={if(!loading)onDismiss()},title={Text(type)},text={Box(Modifier.fillMaxWidth().heightIn(min=80.dp,max=420.dp)){when{loading->Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){CircularProgressIndicator()};error!=null->Column(horizontalAlignment=Alignment.CenterHorizontally){Text(error,color=MaterialTheme.colorScheme.error,textAlign=TextAlign.Center);OutlinedButton(onClick=onRetry){Text("Retry")}};users.isEmpty()->Text("No ${type.lowercase()} yet.",color=MaterialTheme.colorScheme.onSurfaceVariant);else->LazyColumn(verticalArrangement=Arrangement.spacedBy(2.dp)){items(users){user->ListItem(headlineContent={Text(user.displayName.ifBlank{user.username})},supportingContent={Text("@${user.username.removePrefix("@").trim()}")})}}}}},confirmButton={TextButton(onClick=onDismiss,enabled=!loading){Text("Done")}})}
 
@@ -523,3 +531,6 @@ private fun LanguageSelectionPanel(onBack: () -> Unit) {
             }
             Spacer(Modifier.height(10.dp))
             Text("English is currently the supported FYNX app language.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
