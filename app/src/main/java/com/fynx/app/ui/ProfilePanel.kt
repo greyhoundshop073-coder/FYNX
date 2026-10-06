@@ -22,6 +22,21 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.AutoStories
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Accessibility
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Contrast
+import androidx.compose.material.icons.filled.SettingsBrightness
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -308,15 +324,7 @@ private fun FynxProfilePhotoViewer(mediaId: String?, localPhotoUri: String?, nam
         syncError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         HorizontalDivider()
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { FynxProfileImage(displayName, photoUri, Modifier.size(112.dp).clip(CircleShape)) }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) { OutlinedButton(enabled = !syncing, onClick = { picker.launch("image/*") }, shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.AddAPhoto, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text(if (photoUri == null) "Add photo" else "Change photo") }; if (photoUri != null) { Spacer(Modifier.width(6.dp)); TextButton(enabled = !syncing, onClick = { onPhotoChanged(null) }) { Text("Remove") } } }
-        OutlinedTextField(displayName, { displayName = it }, Modifier.fillMaxWidth(), label = { Text("Display name") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-        OutlinedTextField(username.removePrefix("@"), { username = it.removePrefix("@").replace(" ", "") }, Modifier.fillMaxWidth(), label = { Text("Username") }, prefix = { Text("@") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-        OutlinedTextField(bio, { bio = it }, Modifier.fillMaxWidth(), label = { Text("Bio") }, minLines = 3, shape = RoundedCornerShape(14.dp))
-        OutlinedTextField(about, { about = it }, Modifier.fillMaxWidth(), label = { Text("About / description") }, minLines = 3, maxLines = 6, shape = RoundedCornerShape(14.dp))
-    }
-}
-
-@Composable
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) { OutlinedButton(enabled = !syncing, onClick = { picker.launch("image/*") }, shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.AddAPhoto, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text(if (photoUri == null) "Add photo" else "Change photo") }; if (@Composable
 fun SettingsPanel(
     settings: FynxSettings,
     onSettingsChange: (FynxSettings) -> Unit,
@@ -330,109 +338,158 @@ fun SettingsPanel(
     val context = LocalContext.current
     var appearance by remember { mutableStateOf(FynxPreferencesStore.loadAppearance(context)) }
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
-    var showAppearance by remember { mutableStateOf(false) }
-    var showColors by remember { mutableStateOf(false) }
-    var showChatPersonalization by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
-    var showLanguage by remember { mutableStateOf(false) }
+    var detail by remember { mutableStateOf<String?>(null) }
 
-    val query = search.trim().lowercase()
-    if (showLanguage) {
-        LanguageSelectionPanel(onBack = { showLanguage = false })
+    if (detail != null) {
+        when (detail) {
+            "account" -> SettingsDetailPanel("Account & Profile", "Profile, account and sign-in controls", "account", onBack = { detail = null }, onOpen = { onOpenAccountProfile(); detail = null })
+            "privacy" -> SettingsDetailPanel("Privacy & Security", "Control what other people can see", "privacy", onBack = { detail = null }, onOpen = { onOpenPrivacy(); detail = null })
+            "notifications" -> SettingsDetailPanel("Notifications", "Messages, calls, social activity and sounds", "notifications", onBack = { detail = null }, onOpen = { onOpenNotifications(); detail = null })
+            "chat" -> SettingsDetailPanel("Chat", "Chat settings stay inside Chat", "chat", onBack = { detail = null }, onOpen = { detail = null })
+            "stories" -> SettingsDetailPanel("Stories & Status", "Replies, reactions, mentions and archive", "stories", onBack = { detail = null }, onOpen = { detail = null })
+            "appearance" -> AppearanceSettingsDetail(appearance, accent, onBack = { detail = null }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it); onAppearanceChanged(it) }, onAccentChanged = { accent = it; FynxPreferencesStore.saveAccent(context, it); onAccentChanged(it) })
+            "media" -> SettingsDetailPanel("Media & Storage", "Downloads, storage and cache", "media", onBack = { detail = null }, onOpen = { detail = null })
+            "data" -> SettingsDetailPanel("Data & Network", "Data usage and upload/download preferences", "data", onBack = { detail = null }, onOpen = { detail = null })
+            "language" -> LanguageSelectionPanel(onBack = { detail = null })
+            "accessibility" -> SettingsDetailPanel("Accessibility", "Text size and accessible presentation", "accessibility", onBack = { detail = null }, onOpen = { detail = null })
+            "help" -> SettingsDetailPanel("Help & Support", "Help center, reports and support", "help", onBack = { detail = null }, onOpen = { detail = null })
+            "about" -> SettingsDetailPanel("About FYNX", "Version, terms and privacy", "about", onBack = { detail = null }, onOpen = { detail = null })
+        }
         return
     }
-    fun visible(title: String, description: String): Boolean =
-        query.isBlank() || title.lowercase().contains(query) || description.lowercase().contains(query)
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 12.dp)
-            .widthIn(max = 720.dp)
-            .statusBarsPadding()
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+    val query = search.trim().lowercase()
+    val categories = listOf(
+        SettingsCategory("account", "Account & Profile", "Profile, username, phone & email", Icons.Default.Person, Color(0xFF2F8CFF)),
+        SettingsCategory("privacy", "Privacy & Security", "Privacy, blocking, security & sessions", Icons.Default.Shield, Color(0xFF25B864)),
+        SettingsCategory("notifications", "Notifications", "Messages, calls, social activity & sounds", Icons.Default.Notifications, Color(0xFF9B5CFF)),
+        SettingsCategory("chat", "Chat", "Chat settings remain inside Chat", Icons.Default.ChatBubble, Color(0xFF19A9F5)),
+        SettingsCategory("stories", "Stories & Status", "Stories, replies, reactions & archive", Icons.Default.AutoStories, Color(0xFFFF8A1F)),
+        SettingsCategory("appearance", "Appearance", "Theme, colors & app style", Icons.Default.Palette, Color(0xFF7C5CFF)),
+        SettingsCategory("media", "Media & Storage", "Downloads, storage & cache", Icons.Default.Image, Color(0xFF00AFA6)),
+        SettingsCategory("data", "Data & Network", "Data usage, upload/download & network", Icons.Default.Language, Color(0xFF0AA7D8)),
+        SettingsCategory("language", "Language", "App language", Icons.Default.Translate, Color(0xFFFFB000)),
+        SettingsCategory("accessibility", "Accessibility", "Text size and accessible presentation", Icons.Default.Accessibility, Color(0xFF5968D8)),
+        SettingsCategory("help", "Help & Support", "Help center, report a problem & support", Icons.Default.HelpOutline, Color(0xFF24B96B)),
+        SettingsCategory("about", "About FYNX", "Version, terms & privacy", Icons.Default.Info, Color(0xFF2F8CFF))
+    )
+    val sections = listOf(
+        "ACCOUNT" to listOf("account", "privacy"),
+        "COMMUNICATION" to listOf("notifications", "chat", "stories"),
+        "PERSONALIZATION" to listOf("appearance"),
+        "APP & DATA" to listOf("media", "data", "language", "accessibility"),
+        "FYNX" to listOf("help", "about")
+    )
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp).widthIn(max = 720.dp).statusBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("‹ Back") }
             Spacer(Modifier.width(4.dp))
-            Text(
-                "Settings & privacy",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Column(Modifier.weight(1f)) {
+                Text("Settings", style = MaterialTheme.typography.titleLarge)
+                Text("Manage your account, privacy and app preferences", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
         }
-        OutlinedTextField(
-            value = search,
-            onValueChange = { search = it },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-            singleLine = true,
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search settings") },
-            placeholder = { Text("Search settings") },
-            shape = RoundedCornerShape(16.dp)
-        )
-        HorizontalDivider()
-        LazyColumn(
-            Modifier.weight(1f),
-            contentPadding = PaddingValues(vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (visible("Account", "Username bio profile account")) {
-                item { SettingsSectionTitle("Account") }
-                item { SettingsActionCard("Account & profile", "Username, bio and profile information") { onOpenAccountProfile() } }
+        OutlinedTextField(value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, "Search settings") }, placeholder = { Text("Search settings...") }, shape = RoundedCornerShape(18.dp))
+        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            sections.forEach { (sectionTitle, ids) ->
+                val visible = ids.mapNotNull { id -> categories.find { it.id == id } }.filter { query.isBlank() || it.title.lowercase().contains(query) || it.subtitle.lowercase().contains(query) }
+                if (visible.isNotEmpty()) {
+                    item { Text(sectionTitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 8.dp, top = 4.dp)) }
+                    item {
+                        Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface.copy(alpha = .98f)), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .32f))) {
+                            Column {
+                                visible.forEachIndexed { index, category ->
+                                    SettingsCategoryRow(category) { detail = category.id }
+                                    if (index < visible.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .18f))
+                                }
+                            }
+                        }
+                    }
+                }
             }
-            if (visible("Privacy & Safety", "Profile online posts Status photo visibility")) {
-                item { SettingsSectionTitle("Privacy & Security") }
-                item { SettingsActionCard("Privacy & Safety", "Profile, online, posts, Status and photo visibility") { onOpenPrivacy() } }
+            if (query.isNotBlank() && categories.none { it.title.lowercase().contains(query) || it.subtitle.lowercase().contains(query) }) item { Text("No matching settings", Modifier.fillMaxWidth().padding(32.dp), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+    }
+}
+
+private data class SettingsCategory(val id: String, val title: String, val subtitle: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val color: Color)
+
+@Composable
+private fun SettingsCategoryRow(category: SettingsCategory, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(category.color.copy(alpha = .13f)), contentAlignment = Alignment.Center) { Icon(category.icon, null, tint = category.color, modifier = Modifier.size(22.dp)) }
+        Spacer(Modifier.width(13.dp))
+        Column(Modifier.weight(1f)) { Text(category.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis); Text(category.subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun SettingsDetailPanel(title: String, subtitle: String, kind: String, onBack: () -> Unit, onOpen: () -> Unit) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp).statusBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onBack) { Text("‹ Back") }; Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f)) }
+        Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+        Spacer(Modifier.height(8.dp))
+        when (kind) {
+            "account" -> SettingsDetailCard("Profile & Account", "Username, bio, profile photo and account information", Icons.Default.Person, Color(0xFF2F8CFF), onOpen)
+            "privacy" -> SettingsDetailCard("Privacy Settings", "Control profile, online status, posts, Status and photos", Icons.Default.Shield, Color(0xFF25B864), onOpen)
+            "notifications" -> SettingsDetailCard("Notification Preferences", "Open the existing notification settings and controls", Icons.Default.Notifications, Color(0xFF9B5CFF), onOpen)
+            "chat" -> SettingsDetailCard("Open Chat Settings", "Your existing chat settings remain in Chat and are not duplicated here", Icons.Default.ChatBubble, Color(0xFF19A9F5)) { onBack() }
+            "stories" -> { SettingsDetailCard("Stories & Status Preferences", "Replies, reactions, mentions and archive", Icons.Default.AutoStories, Color(0xFFFF8A1F)) { }; Spacer(Modifier.height(8.dp)); SettingsInfoCard("Feature-local controls", "Stories and Status controls remain with the existing feature so we do not create duplicate settings.") }
+            "media" -> SettingsInfoCard("Media & Storage", "Downloads, saved media, storage usage and cache controls will be grouped here without changing existing media behavior.")
+            "data" -> SettingsInfoCard("Data & Network", "Data usage and upload/download preferences will be grouped here without changing existing network behavior.")
+            "accessibility" -> SettingsInfoCard("Accessibility", "Text size, readable contrast and accessible presentation controls will be grouped here.")
+            "help" -> SettingsInfoCard("Help & Support", "Help center, report a problem and support entry points.")
+            "about" -> SettingsInfoCard("About FYNX", "Version information, terms and privacy information.")
+        }
+    }
+}
+
+@Composable
+private fun SettingsDetailCard(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, color: Color, onClick: () -> Unit) {
+    Card(onClick = onClick, Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .28f))) {
+        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = .13f)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = color) }
+            Spacer(Modifier.width(13.dp))
+            Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.titleMedium); Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+            Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun SettingsInfoCard(title: String, body: String) {
+    Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .72f))) { Column(Modifier.padding(16.dp)) { Text(title, style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(4.dp)); Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) } }
+}
+
+@Composable
+private fun AppearanceSettingsDetail(currentAppearance: String, currentAccent: FynxAccent, onBack: () -> Unit, onAppearanceChanged: (String) -> Unit, onAccentChanged: (FynxAccent) -> Unit) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp).statusBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = onBack) { Text("‹ Back") }; Text("Appearance", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f)) }
+        Text("Theme, colors and app style", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 8.dp))
+        Spacer(Modifier.height(12.dp))
+        Text("Theme", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp))
+        Card(Modifier.fillMaxWidth().padding(top = 6.dp), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .28f))) {
+            listOf("System", "Light", "Dark", "Black AMOLED").forEach { option ->
+                Row(Modifier.fillMaxWidth().clickable { onAppearanceChanged(option) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(if (option == "Light") Icons.Default.LightMode else if (option == "Dark") Icons.Default.DarkMode else if (option == "Black AMOLED") Icons.Default.Contrast else Icons.Default.SettingsBrightness, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(12.dp)); Text(option, Modifier.weight(1f)); RadioButton(selected = currentAppearance == option, onClick = { onAppearanceChanged(option) })
+                }
             }
-            if (visible("Notifications", "Sounds calls badges message alerts")) {
-                item { SettingsSectionTitle("Notifications") }
-                item { SettingsActionCard("Notifications", "Message alerts, sounds and notification controls") { onOpenNotifications() } }
-            }
-            if (visible("Chat & personalization", "Wallpapers night mode animations stickers emoji read receipts")) {
-                item { SettingsSectionTitle("Chat Settings") }
-                item { SettingsActionCard("Chat & personalization", "Wallpapers, night mode, animations, stickers and emoji") { showChatPersonalization = true } }
-                item { SettingsActionCard("Read receipts", if (settings.readReceipts) "On • managed in Chat settings" else "Off • managed in Chat settings") { showChatPersonalization = true } }
-                item { SettingsActionCard("Story replies", if (settings.storyReplies) "On • managed in Privacy & Safety" else "Off • managed in Privacy & Safety") { onOpenPrivacy() } }
-            }
-            if (visible("Appearance", "Light, Charcoal Black, Dark, Black AMOLED, System theme")) {
-                item { SettingsSectionTitle("Appearance") }
-                item { SettingsActionCard("Appearance", appearance) { showAppearance = true } }
-                item { SettingsActionCard("Colors & accent", accent.name) { showColors = true } }
-            }
-            if (visible("Language", "App language English")) {
-                item { SettingsSectionTitle("General") }
-                item { SettingsActionCard("Language", "English • current language") { showLanguage = true } }
-            }
-            if (query.isNotBlank() && !listOf(
-    "Account" to "Username bio profile account",
-    "Privacy & Safety" to "Profile online posts Status photo visibility",
-    "Notifications" to "Sounds calls badges message alerts",
-    "Chat & personalization" to "Wallpapers night mode animations stickers emoji read receipts",
-    "Appearance" to "Light, Charcoal Black, Dark, Black AMOLED, System theme",
-    "Language" to "App language English"
-).any { (title, description) -> visible(title, description) }) {
-                item {
-                    Text(
-                        "No matching settings",
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+        }
+        Spacer(Modifier.height(14.dp))
+        Text("Accent Color", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 8.dp))
+        Card(Modifier.fillMaxWidth().padding(top = 6.dp), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .28f))) {
+            FynxAccent.entries.forEach { option ->
+                Row(Modifier.fillMaxWidth().clickable { onAccentChanged(option) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(24.dp).clip(CircleShape).background(option.primary)); Spacer(Modifier.width(12.dp)); Text(if (option == FynxAccent.Blue) "FYNX Blue" else if (option == FynxAccent.Purple) "FYNX Purple" else "Charcoal", Modifier.weight(1f)); RadioButton(selected = currentAccent == option, onClick = { onAccentChanged(option) })
                 }
             }
         }
     }
-    if (showAppearance) AppearanceDialog(appearance, { appearance = it; FynxPreferencesStore.saveAppearance(context, it); onAppearanceChanged(it) }, { showAppearance = false })
-    if (showColors) AccentDialog(accent, { accent = it; FynxPreferencesStore.saveAccent(context, it); onAccentChanged(it) }, { showColors = false })
-    if (showChatPersonalization) ChatPersonalizationDialog(settings, onSettingsChange, { showChatPersonalization = false })
-    
 }
-
-@Composable private fun SettingsSectionTitle(title: String) { Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp)) }
+ Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp)) }
 @Composable private fun SettingsActionCard(title: String, value: String, onClick: () -> Unit) { Card(onClick = onClick, modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis); Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3, overflow = TextOverflow.Ellipsis) }; Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) } } }
 @Composable private fun ProfileConnectionsDialog(type:String,users:List<FynxProfileRemoteClient.ConnectionUser>,loading:Boolean,error:String?,onRetry:()->Unit,onDismiss:()->Unit){AlertDialog(onDismissRequest={if(!loading)onDismiss()},title={Text(type)},text={Box(Modifier.fillMaxWidth().heightIn(min=80.dp,max=420.dp)){when{loading->Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){CircularProgressIndicator()};error!=null->Column(horizontalAlignment=Alignment.CenterHorizontally){Text(error,color=MaterialTheme.colorScheme.error,textAlign=TextAlign.Center);OutlinedButton(onClick=onRetry){Text("Retry")}};users.isEmpty()->Text("No ${type.lowercase()} yet.",color=MaterialTheme.colorScheme.onSurfaceVariant);else->LazyColumn(verticalArrangement=Arrangement.spacedBy(2.dp)){items(users){user->ListItem(headlineContent={Text(user.displayName.ifBlank{user.username})},supportingContent={Text("@${user.username.removePrefix("@").trim()}")})}}}}},confirmButton={TextButton(onClick=onDismiss,enabled=!loading){Text("Done")}})}
 
