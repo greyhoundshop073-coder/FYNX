@@ -16,6 +16,8 @@ push = (ROOT / "backend/notificationPush.js").read_text(encoding="utf-8")
 bootstrap = (ROOT / "backend/notificationBootstrap.js").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 nav = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
+navigation = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxNavigationBar.kt").read_text(encoding="utf-8")
+chat_badge_state = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxChatUnreadBadgeState.kt").read_text(encoding="utf-8")
 badge = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxNotificationBadge.kt").read_text(encoding="utf-8")
 
 checks = [
@@ -41,8 +43,8 @@ checks = [
     ("real Android instrumentation remains in CI", "connectedDebugAndroidTest" in workflow and ("verify_runtime_navigation.py" in workflow or "verify_authenticated_runtime_navigation.py" in workflow)),
     ("no fake notification records are introduced", "mockNotification" not in backend and "fakeNotification" not in backend),
     ("bottom Chat navigation uses the existing navigation surface", "NavigationBar(" in nav and "mainNav.forEach" in nav and "NavigationBarItem(" in nav),
-    ("Chat unread badge derives from existing ChatStore state", "fynxChatUnreadCount" in nav and "FynxChatStore.loadPreviews" in nav and "fynxChatUnreadCount" in badge),
-    ("green unread badge is rendered only for positive counts", "if (count <= 0) return" in badge and "FynxGreenUnreadBadge" in nav),
+    ("Chat unread badge derives from existing ChatStore state", "rememberFynxChatUnreadBadgeCount" in chat_badge_state and "FynxChatStore.loadPreviews" in chat_badge_state and "FynxChatStore.load" in chat_badge_state and "rememberFynxChatUnreadBadgeCount" in navigation),
+    ("green unread badge is rendered only for positive counts", "if (count <= 0) return" in badge and "FynxGreenUnreadBadge" in navigation),
 ]
 failed=[]
 for name, ok in checks:
