@@ -41,7 +41,7 @@ checks = [
     ("real Android instrumentation remains in CI", "connectedDebugAndroidTest" in workflow and ("verify_runtime_navigation.py" in workflow or "verify_authenticated_runtime_navigation.py" in workflow)),
     ("no fake notification records are introduced", "mockNotification" not in backend and "fakeNotification" not in backend),
     ("bottom Chat navigation uses the existing navigation surface", "NavigationBar(" in nav and "mainNav.forEach" in nav and "NavigationBarItem(" in nav),
-    ("Chat unread badge derives from existing ChatStore state", "rememberFynxChatUnreadBadgeCount" in nav or "rememberFynxChatUnreadBadgeCount" in badge and "FynxChatStore.load" in nav or "FynxChatStore.load" in badge),
+    ("Chat unread badge derives from existing ChatStore state", "fynxChatUnreadCount" in nav and "FynxChatStore.loadPreviews" in nav and "fynxChatUnreadCount" in badge),
     ("green unread badge is rendered only for positive counts", "if (count <= 0) return" in badge and "FynxGreenUnreadBadge" in nav),
 ]
 failed=[]
