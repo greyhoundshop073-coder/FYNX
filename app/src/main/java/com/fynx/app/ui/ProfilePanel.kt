@@ -403,15 +403,22 @@ fun SettingsPanel(
             placeholder = { Text("Search settings") },
             shape = RoundedCornerShape(16.dp)
         )
-        fun LazyListScope.addSection(
-            title: String,
-            rows: List<Triple<String, String, @Composable () -> Unit>>
-        ) {
-            val visible = rows.filter { matches(it.first, it.second) }
+        data class SettingRow(
+            val title: String,
+            val description: String,
+            val icon: androidx.compose.ui.graphics.vector.ImageVector,
+            val color: Long,
+            val action: () -> Unit
+        )
+
+        fun LazyListScope.addSection(title: String, rows: List<SettingRow>) {
+            val visible = rows.filter { matches(it.title, it.description) }
             if (visible.isEmpty()) return
             item { SettingsSectionTitle(title) }
             visible.forEach { row ->
-                item { SettingsActionCard(row.first, row.second, Icons.Default.Settings, 0xFF2F8CFF, row.third) }
+                item {
+                    SettingsActionCard(row.title, row.description, row.icon, row.color, row.action)
+                }
             }
         }
 
@@ -421,25 +428,25 @@ fun SettingsPanel(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             addSection("ACCOUNT", listOf(
-                Triple("Account & Profile", "Username, bio and profile information") { detail = "Account & Profile" },
-                Triple("Privacy & Security", "Profile visibility and security") { detail = "Privacy & Security" }
+                SettingRow("Account & Profile", "Username, bio and profile information", Icons.Default.Person, 0xFF2F8CFF) { detail = "Account & Profile" },
+                SettingRow("Privacy & Security", "Profile visibility and security", Icons.Default.Lock, 0xFF32B768) { detail = "Privacy & Security" }
             ))
             addSection("COMMUNICATION", listOf(
-                Triple("Notifications", "Alerts, sounds, calls and badges") { detail = "Notifications" },
-                Triple("Chat", "Chat and conversation settings") { detail = "Chat" },
-                Triple("Stories & Status", "Stories, Status and related controls") { detail = "Stories & Status" }
+                SettingRow("Notifications", "Alerts, sounds, calls and badges", Icons.Default.Notifications, 0xFF8B5CF6) { detail = "Notifications" },
+                SettingRow("Chat", "Chat and conversation settings", Icons.Default.ChatBubbleOutline, 0xFF22C7F2) { detail = "Chat" },
+                SettingRow("Stories & Status", "Stories, Status and related controls", Icons.Default.AutoAwesome, 0xFFF59E0B) { detail = "Stories & Status" }
             ))
             addSection("PERSONALIZATION", listOf(
-                Triple("Appearance", "Theme, colors and display style") { showAppearancePanel = true }
+                SettingRow("Appearance", "Theme, colors and display style", Icons.Default.Settings, 0xFF7C5CFF) { showAppearancePanel = true }
             ))
             addSection("APP & DATA", listOf(
-                Triple("Media & Storage", "Media, storage and downloads") { detail = "Media & Storage" },
-                Triple("Data & Network", "Mobile data and network usage") { detail = "Data & Network" },
-                Triple("Language & Accessibility", "Language and accessibility options") { detail = "Language & Accessibility" }
+                SettingRow("Media & Storage", "Media, storage and downloads", Icons.Default.Folder, 0xFF14B8A6) { detail = "Media & Storage" },
+                SettingRow("Data & Network", "Mobile data and network usage", Icons.Default.Public, 0xFF06B6D4) { detail = "Data & Network" },
+                SettingRow("Language & Accessibility", "Language and accessibility options", Icons.Default.Language, 0xFFF59E0B) { detail = "Language & Accessibility" }
             ))
             addSection("FYNX", listOf(
-                Triple("Help & Support", "Get help and contact FYNX") { detail = "Help & Support" },
-                Triple("About FYNX", "Version and information about FYNX") { detail = "About FYNX" }
+                SettingRow("Help & Support", "Get help and contact FYNX", Icons.Default.Help, 0xFF22C55E) { detail = "Help & Support" },
+                SettingRow("About FYNX", "Version and information about FYNX", Icons.Default.Info, 0xFF2F8CFF) { detail = "About FYNX" }
             ))
         }
     }
