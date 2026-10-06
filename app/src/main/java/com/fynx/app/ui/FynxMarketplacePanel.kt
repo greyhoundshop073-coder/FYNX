@@ -315,12 +315,12 @@ private fun MarketplaceDetails(
             FynxMarketplaceTrustPassport(
                 sellerUsername = l.sellerUsername,
                 reputation = reputation,
-                onOpenProfile = { onProfile() }
+                onOpenProfile = { _ -> onProfile() }
             )
         }
         FynxMarketplaceBuyTogether(
             listing = l,
-            onStart = { onBuyTogether() }
+            onStart = { _ -> onBuyTogether() }
         )
         FynxMarketplaceLiveProof(
             listing = l,
@@ -332,7 +332,7 @@ private fun MarketplaceDetails(
         )
         FynxMarketplaceBuyingAssistant(
             listing = l,
-            onOpenAssistant = { onOpenAssistant() }
+            onOpenAssistant = { _ -> onOpenAssistant() }
         )
     } }, confirmButton = { Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title)) }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Share, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Share Marketplace listing") }
