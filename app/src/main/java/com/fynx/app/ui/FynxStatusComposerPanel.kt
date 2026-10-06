@@ -252,7 +252,7 @@ fun FynxStatusComposerPanel(onClose: () -> Unit = {}) {
 }
 
 @Composable
-private fun StatusTypeChoice(type: FynxStatusType, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun RowScope.StatusTypeChoice(type: FynxStatusType, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     FilterChip(
         selected = selected,
         onClick = onClick,
