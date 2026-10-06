@@ -396,45 +396,45 @@ fun SettingsPanel(
         ) {
             item { SettingsSectionTitle("ACCOUNT") }
             if (matches("Account & Profile", "Username bio profile information")) {
-                item { SettingsActionCard("Account & Profile", "Username, bio and profile information", androidx.compose.material.icons.filled.Person, 0xFF2F8CFF) { detail = "Account & Profile" } }
+                item { SettingsActionCard("Account & Profile", "Username, bio and profile information", androidx.compose.material.icons.filled.Edit, 0xFF2F8CFF) { detail = "Account & Profile" } }
             }
             if (matches("Privacy & Security", "Profile visibility and security")) {
-                item { SettingsActionCard("Privacy & Security", "Profile visibility and security", androidx.compose.material.icons.filled.Security, 0xFF32B768) { detail = "Privacy & Security" } }
+                item { SettingsActionCard("Privacy & Security", "Profile visibility and security", androidx.compose.material.icons.filled.Settings, 0xFF32B768) { detail = "Privacy & Security" } }
             }
 
             item { SettingsSectionTitle("COMMUNICATION") }
             if (matches("Notifications", "Alerts sounds calls badges")) {
-                item { SettingsActionCard("Notifications", "Alerts, sounds, calls and badges", androidx.compose.material.icons.filled.Notifications, 0xFF8B5CF6) { detail = "Notifications" } }
+                item { SettingsActionCard("Notifications", "Alerts, sounds, calls and badges", androidx.compose.material.icons.filled.Verified, 0xFF8B5CF6) { detail = "Notifications" } }
             }
             if (matches("Chat", "Chat conversations messaging settings")) {
-                item { SettingsActionCard("Chat", "Chat and conversation settings", androidx.compose.material.icons.filled.Chat, 0xFF22C7F2) { detail = "Chat" } }
+                item { SettingsActionCard("Chat", "Chat and conversation settings", androidx.compose.material.icons.filled.Search, 0xFF22C7F2) { detail = "Chat" } }
             }
             if (matches("Stories & Status", "Stories status replies reactions")) {
-                item { SettingsActionCard("Stories & Status", "Stories, Status and related controls", androidx.compose.material.icons.filled.AutoStories, 0xFFF59E0B) { detail = "Stories & Status" } }
+                item { SettingsActionCard("Stories & Status", "Stories, Status and related controls", androidx.compose.material.icons.filled.AddAPhoto, 0xFFF59E0B) { detail = "Stories & Status" } }
             }
 
             item { SettingsSectionTitle("PERSONALIZATION") }
             if (matches("Appearance", "Theme light dark AMOLED colors accent")) {
-                item { SettingsActionCard("Appearance", "Theme, colors and display style", androidx.compose.material.icons.filled.Palette, 0xFF7C5CFF) { showAppearance = true } }
+                item { SettingsActionCard("Appearance", "Theme, colors and display style", androidx.compose.material.icons.filled.Settings, 0xFF7C5CFF) { showAppearance = true } }
             }
 
             item { SettingsSectionTitle("APP & DATA") }
             if (matches("Media & Storage", "Media storage downloads")) {
-                item { SettingsActionCard("Media & Storage", "Media, storage and downloads", androidx.compose.material.icons.filled.Image, 0xFF14B8A6) { detail = "Media & Storage" } }
+                item { SettingsActionCard("Media & Storage", "Media, storage and downloads", androidx.compose.material.icons.filled.AddAPhoto, 0xFF14B8A6) { detail = "Media & Storage" } }
             }
             if (matches("Data & Network", "Mobile data network connections")) {
-                item { SettingsActionCard("Data & Network", "Mobile data and network usage", androidx.compose.material.icons.filled.Public, 0xFF06B6D4) { detail = "Data & Network" }
+                item { SettingsActionCard("Data & Network", "Mobile data and network usage", androidx.compose.material.icons.filled.Search, 0xFF06B6D4) { detail = "Data & Network" } }
             }
             if (matches("Language & Accessibility", "Language accessibility")) {
-                item { SettingsActionCard("Language & Accessibility", "Language and accessibility options", androidx.compose.material.icons.filled.Language, 0xFFF59E0B) { detail = "Language & Accessibility" } }
+                item { SettingsActionCard("Language & Accessibility", "Language and accessibility options", androidx.compose.material.icons.filled.Search, 0xFFF59E0B) { detail = "Language & Accessibility" } }
             }
 
             item { SettingsSectionTitle("FYNX") }
             if (matches("Help & Support", "Help support contact")) {
-                item { SettingsActionCard("Help & Support", "Get help and contact FYNX", androidx.compose.material.icons.filled.HelpOutline, 0xFF22C55E) { detail = "Help & Support" } }
+                item { SettingsActionCard("Help & Support", "Get help and contact FYNX", androidx.compose.material.icons.filled.Verified, 0xFF22C55E) { detail = "Help & Support" } }
             }
             if (matches("About FYNX", "Version about FYNX")) {
-                item { SettingsActionCard("About FYNX", "Version and information about FYNX", androidx.compose.material.icons.filled.Info, 0xFF2F8CFF) { detail = "About FYNX" } }
+                item { SettingsActionCard("About FYNX", "Version and information about FYNX", androidx.compose.material.icons.filled.Settings, 0xFF2F8CFF) { detail = "About FYNX" } }
             }
         }
     }
