@@ -75,4 +75,46 @@ await patchOnce("realtimeIsolationBootstrap.js", [
   }
 ]);
 
+await patchOnce("marketplaceCompletion.js", [
+  {
+    marker: "import { isMarketplaceDestinationCovered } from './marketplaceShipping.js';",
+    replacement: "import { isMarketplaceDestinationCovered } from './marketplaceShipping.js';\nimport { queueFynxNotification } from './notificationPush.js';"
+  },
+  {
+    marker: "      await client.query('COMMIT');\n      return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, fulfillmentMethod: updated.rows[0].fulfillment_method, fulfillmentStatus: updated.rows[0].fulfillment_status } });",
+    replacement: "      await client.query('COMMIT');\n      await queueFynxNotification(pool,{userId:order.seller_id,type:'MARKETPLACE_ORDER',title:'Marketplace order updated',message:'A buyer selected fulfillment for your order.',targetId:id,route:'fynx://marketplace/' + id,notificationId:'marketplace-fulfillment-' + id + '-' + order.seller_id});\n      return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, fulfillmentMethod: updated.rows[0].fulfillment_method, fulfillmentStatus: updated.rows[0].fulfillment_status } });"
+  },
+  {
+    marker: "      await client.query('COMMIT');\n      return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, fulfillmentStatus: updated.rows[0].fulfillment_status, fulfillmentStatusUpdatedAt: updated.rows[0].fulfillment_status_updated_at } });",
+    replacement: "      await client.query('COMMIT');\n      await queueFynxNotification(pool,{userId:order.buyer_id,type:'MARKETPLACE_ORDER',title:'Marketplace order updated',message:'The seller updated your order fulfillment status.',targetId:id,route:'fynx://marketplace/' + id,notificationId:'marketplace-fulfillment-' + id + '-' + requested + '-' + order.buyer_id});\n      return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, fulfillmentStatus: updated.rows[0].fulfillment_status, fulfillmentStatusUpdatedAt: updated.rows[0].fulfillment_status_updated_at } });"
+  },
+  {
+    marker: "      await client.query('COMMIT');\n      return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, fulfillmentStatus: updated.rows[0].fulfillment_status, trackingReference: updated.rows[0].tracking_reference, shippedAt: updated.rows[0].shipped_at } });",
+    replacement: "      await client.query('COMMIT');\n      await queueFynxNotification(pool,{userId:order.buyer_id,type:'MARKETPLACE_ORDER',title:'Your marketplace order shipped',message:'The seller has shipped your order.',targetId:id,route:'fynx://marketplace/' + id,notificationId:'marketplace-shipped-' + id + '-' + order.buyer_id});\n      return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, fulfillmentStatus: updated.rows[0].fulfillment_status, trackingReference: updated.rows[0].tracking_reference, shippedAt: updated.rows[0].shipped_at } });"
+  },
+  {
+    marker: "      await client.query('COMMIT');\n      return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, fulfillmentStatus: updated.rows[0].fulfillment_status, pickupHandoverAt: updated.rows[0].pickup_handover_at } });",
+    replacement: "      await client.query('COMMIT');\n      await queueFynxNotification(pool,{userId:order.buyer_id,type:'MARKETPLACE_ORDER',title:'Marketplace pickup ready',message:'The seller confirmed pickup handover for your order.',targetId:id,route:'fynx://marketplace/' + id,notificationId:'marketplace-pickup-' + id + '-' + order.buyer_id});\n      return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, fulfillmentStatus: updated.rows[0].fulfillment_status, pickupHandoverAt: updated.rows[0].pickup_handover_at } });"
+  },
+  {
+    marker: "      await client.query('COMMIT');\n      return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, fulfillmentStatus: updated.rows[0].fulfillment_status, inspectionDeadline: updated.rows[0].inspection_deadline } });",
+    replacement: "      await client.query('COMMIT');\n      await queueFynxNotification(pool,{userId:order.seller_id,type:'MARKETPLACE_ORDER',title:'Buyer received your marketplace order',message:'The buyer confirmed receipt and the order is now in inspection.',targetId:id,route:'fynx://marketplace/' + id,notificationId:'marketplace-received-' + id + '-' + order.seller_id});\n      return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, fulfillmentStatus: updated.rows[0].fulfillment_status, inspectionDeadline: updated.rows[0].inspection_deadline } });"
+  },
+  {
+    marker: "      await client.query('COMMIT');\n      return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, fulfillmentStatus: updated.rows[0].fulfillment_status, completedAt: updated.rows[0].completed_at }, payout: { status: 'eligible_for_release' } });",
+    replacement: "      await client.query('COMMIT');\n      await queueFynxNotification(pool,{userId:order.seller_id,type:'MARKETPLACE_ORDER',title:'Marketplace order completed',message:'The buyer completed your order. Payout is eligible for release.',targetId:id,route:'fynx://marketplace/' + id,notificationId:'marketplace-completed-' + id + '-' + order.seller_id});\n      return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, fulfillmentStatus: updated.rows[0].fulfillment_status, completedAt: updated.rows[0].completed_at }, payout: { status: 'eligible_for_release' } });"
+  }
+]);
+
+await patchOnce("marketplacePaystackWebhook.js", [
+  {
+    marker: "import { confirmMarketplacePayment } from './marketplacePaymentState.js';",
+    replacement: "import { confirmMarketplacePayment } from './marketplacePaymentState.js';\nimport { queueFynxNotification } from './notificationPush.js';"
+  },
+  {
+    marker: "      await client.query('COMMIT');\n      return res.status(200).json({ received: true, matched: true, status: result.status, idempotent: result.idempotent });",
+    replacement: "      await client.query('COMMIT');\n      const recipients = await pool.query('SELECT buyer_id,seller_id FROM marketplace_orders WHERE id=$1', [order.id]);\n      const paidOrder = recipients.rows[0];\n      if (paidOrder) {\n        await queueFynxNotification(pool,{userId:paidOrder.buyer_id,type:'MARKETPLACE_ORDER',title:'Marketplace payment confirmed',message:'Your marketplace payment was confirmed.',targetId:order.id,route:'fynx://marketplace/' + order.id,notificationId:'marketplace-payment-buyer-' + order.id});\n        await queueFynxNotification(pool,{userId:paidOrder.seller_id,type:'MARKETPLACE_ORDER',title:'Marketplace payment received',message:'Payment for your marketplace order was confirmed.',targetId:order.id,route:'fynx://marketplace/' + order.id,notificationId:'marketplace-payment-seller-' + order.id});\n      }\n      return res.status(200).json({ received: true, matched: true, status: result.status, idempotent: result.idempotent });"
+  }
+]);
+
 console.log("FYNX notification bootstrap: route wiring ready");
