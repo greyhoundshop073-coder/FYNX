@@ -101,7 +101,8 @@ async function ensureSchema(pool) {
     );
     CREATE INDEX IF NOT EXISTS fynx_notification_delivery_status_idx ON fynx_notification_delivery(status,updated_at);
     ALTER TABLE fynx_notifications ADD COLUMN IF NOT EXISTS route TEXT;
-  `).catch(error => { schemaPromise = undefined; throw error; });
+    ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS calls_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+    `).catch(error => { schemaPromise = undefined; throw error; });
   return schemaPromise;
 }
 
