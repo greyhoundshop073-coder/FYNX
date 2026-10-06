@@ -66,6 +66,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { val stored = FynxAuthStore.load(context); if (stored.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) stored else AuthSession() }) }
     var adminRole by remember { mutableStateOf<String?>(null) }
     var notifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
+    var chatUnreadCount by remember { mutableIntStateOf(fynxChatUnreadCount(FynxChatStore.loadPreviews(context))) }
     var remoteUnreadCount by remember { mutableIntStateOf(-1) }
     var inviteCode by remember { mutableStateOf<String?>(null) }
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
@@ -182,6 +183,11 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         }
     }
     LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context); notifications = FynxNotificationStore.load(context) }
+    LaunchedEffect(Unit) {
+        FynxChatStore.previewUpdates.collect {
+            chatUnreadCount = fynxChatUnreadCount(FynxChatStore.loadPreviews(context))
+        }
+    }
     LaunchedEffect(authSession.state, authSession.username) {
         if (authSession.state != AuthState.SIGNED_IN || !FynxBackendClient.hasAccessToken(context)) return@LaunchedEffect
         while (true) {
@@ -410,11 +416,19 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                                     selected = selected == item.key,
                                     onClick = { selected = item.key },
                                     icon = {
-                                        Icon(
-                                            item.icon,
-                                            contentDescription = item.label,
-                                            modifier = Modifier.size(20.dp)
-                                        )
+                                        Box(contentAlignment = Alignment.TopEnd) {
+                                            Icon(
+                                                item.icon,
+                                                contentDescription = item.label,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            if (item.key == "Chats") {
+                                                FynxGreenUnreadBadge(
+                                                    count = chatUnreadCount,
+                                                    modifier = Modifier.offset(x = 8.dp, y = (-5).dp)
+                                                )
+                                            }
+                                        }
                                     },
                                     label = {
                                         Text(
