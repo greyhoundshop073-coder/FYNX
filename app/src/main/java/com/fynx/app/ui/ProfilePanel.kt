@@ -326,6 +326,7 @@ fun SettingsPanel(
     var appearance by remember { mutableStateOf(FynxPreferencesStore.loadAppearance(context)) }
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
     var showAppearance by remember { mutableStateOf(false) }
+    var showAppearancePanel by remember { mutableStateOf(false) }
     var showColors by remember { mutableStateOf(false) }
     var showChatPersonalization by remember { mutableStateOf(false) }
     var showLanguage by remember { mutableStateOf(false) }
@@ -334,6 +335,24 @@ fun SettingsPanel(
 
     if (showLanguage) {
         LanguageSelectionPanel(onBack = { showLanguage = false })
+        return
+    }
+
+    if (showAppearancePanel) {
+        SettingsAppearancePanel(
+            currentAppearance = appearance,
+            currentAccent = accent,
+            onAppearanceSelected = { value -> appearance = value; FynxPreferencesStore.saveAppearance(context, value); onAppearanceChanged(value) },
+            onOpenAccent = { showColors = true },
+            onBack = { showAppearancePanel = false }
+        )
+        if (showColors) {
+            AccentDialog(
+                accent,
+                { value -> accent = value; FynxPreferencesStore.saveAccent(context, value); onAccentChanged(value); showColors = false },
+                { showColors = false }
+            )
+        }
         return
     }
 
@@ -346,7 +365,7 @@ fun SettingsPanel(
                     "Account & Profile" -> onOpenAccountProfile()
                     "Privacy & Security" -> onOpenPrivacy()
                     "Notifications" -> onOpenNotifications()
-                    "Appearance" -> showAppearance = true
+                    "Appearance" -> showAppearancePanel = true
                     "Chat" -> showChatPersonalization = true
                     "Language & Accessibility" -> showLanguage = true
                 }
@@ -410,7 +429,7 @@ fun SettingsPanel(
 
             item { SettingsSectionTitle("PERSONALIZATION") }
             if (matches("Appearance", "Theme light dark AMOLED colors accent")) {
-                item { SettingsActionCard("Appearance", "Theme, colors and display style", Icons.Default.Settings, 0xFF7C5CFF) { showAppearance = true } }
+                item { SettingsActionCard("Appearance", "Theme, colors and display style", Icons.Default.Settings, 0xFF7C5CFF) { showAppearancePanel = true } }
             }
 
             item { SettingsSectionTitle("APP & DATA") }
@@ -450,6 +469,106 @@ fun SettingsPanel(
     }
     if (showChatPersonalization) {
         ChatPersonalizationDialog(settings, onSettingsChange) { showChatPersonalization = false }
+    }
+}
+
+@Composable
+private fun SettingsAppearancePanel(
+    currentAppearance: String,
+    currentAccent: FynxAccent,
+    onAppearanceSelected: (String) -> Unit,
+    onOpenAccent: () -> Unit,
+    onBack: () -> Unit
+) {
+    val options = listOf(
+        "System" to "Follow your device appearance",
+        "Light" to "Soft light background with blue reflection",
+        "Dark" to "Deep navy surfaces with subtle blue depth",
+        "Charcoal Black" to "Dark charcoal with softer contrast",
+        "Black AMOLED" to "True black for AMOLED displays"
+    )
+    Column(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding().padding(horizontal = 12.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onBack) { Text("‹ Back") }
+            Text("Appearance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+        LazyColumn(
+            Modifier.weight(1f),
+            contentPadding = PaddingValues(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                SettingsSectionTitle("THEME")
+            }
+            items(options) { (title, description) ->
+                Card(
+                    onClick = { onAppearanceSelected(title) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .35f))
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                            Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        }
+                        RadioButton(selected = currentAppearance == title, onClick = { onAppearanceSelected(title) })
+                    }
+                }
+            }
+            item {
+                SettingsSectionTitle("COLORS")
+            }
+            item {
+                Card(
+                    onClick = onOpenAccent,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .35f))
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            Modifier.size(42.dp).clip(RoundedCornerShape(13.dp))
+                                .background(currentAccent.primary.copy(alpha = .12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                Modifier.size(20.dp).clip(CircleShape)
+                                    .background(currentAccent.primary)
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Accent color", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                            Text(
+                                when (currentAccent) {
+                                    FynxAccent.Blue -> "FYNX Blue"
+                                    FynxAccent.Purple -> "FYNX Purple"
+                                    FynxAccent.Charcoal -> "Charcoal Black"
+                                },
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
     }
 }
 
