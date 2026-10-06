@@ -330,11 +330,17 @@ fun SettingsPanel(
     var showColors by remember { mutableStateOf(false) }
     var showChatPersonalization by remember { mutableStateOf(false) }
     var showLanguage by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<String?>(null) }
     var search by remember { mutableStateOf("") }
 
     if (showLanguage) {
         LanguageSelectionPanel(onBack = { showLanguage = false })
+        return
+    }
+
+    if (showAbout) {
+        AboutFynxPanel(context = context, onBack = { showAbout = false })
         return
     }
 
@@ -368,6 +374,7 @@ fun SettingsPanel(
                     "Appearance" -> showAppearancePanel = true
                     "Chat" -> showChatPersonalization = true
                     "Language & Accessibility" -> showLanguage = true
+                    "About FYNX" -> showAbout = true
                 }
             }
         )
@@ -666,6 +673,66 @@ private fun SettingsDetailPanel(title: String, onBack: () -> Unit, onOpen: () ->
                 "This section is reserved for the related FYNX settings as they are added, keeping the main Settings page organized.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+@Composable
+private fun AboutFynxPanel(context: android.content.Context, onBack: () -> Unit) {
+    val versionName = remember {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull() ?: "Unknown"
+    }
+    Column(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding().padding(horizontal = 12.dp)
+    ) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack) { Text("‹ Back") }
+            Text("About FYNX", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+        LazyColumn(
+            Modifier.weight(1f),
+            contentPadding = PaddingValues(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .35f))
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            Modifier.size(64.dp).clip(RoundedCornerShape(18.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = .12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Text("FYNX", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("Version $versionName", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            item { SettingsSectionTitle("APP") }
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .35f))
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                        Text("FYNX", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(4.dp))
+                        Text("Your social space for conversations, stories, posts and more.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
         }
     }
 }
