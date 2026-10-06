@@ -28,7 +28,7 @@ object FynxNotificationPreferencesClient {
     suspend fun update(context: Context, preferences: FynxNotificationPreferences): Result<FynxNotificationPreferences> {
         val body = JSONObject().apply {
             put("enabled", preferences.enabled); put("pushEnabled", preferences.pushEnabled); put("reactionsEnabled", preferences.reactionsEnabled)
-            put("commentsEnabled", preferences.commentsEnabled); put("friendRequestsEnabled", preferences.friendRequestsEnabled); put("messagesEnabled", preferences.messagesEnabled)
+            put("commentsEnabled", preferences.commentsEnabled); put("friendRequestsEnabled", preferences.friendRequestsEnabled); put("messagesEnabled", preferences.messagesEnabled); put("callsEnabled", preferences.callsEnabled)
             put("storiesEnabled", preferences.storiesEnabled); put("remindersEnabled", preferences.remindersEnabled); put("groupEnabled", preferences.groupEnabled)
             put("marketplaceEnabled", preferences.marketplaceEnabled); put("walletEnabled", preferences.walletEnabled); put("quietMode", preferences.quietMode)
         }
@@ -67,7 +67,7 @@ object FynxNotificationPreferencesClient {
 
     private fun parse(json: JSONObject) = FynxNotificationPreferences(
         enabled = json.optBoolean("enabled", true), pushEnabled = json.optBoolean("pushEnabled", true),
-        reactionsEnabled = json.optBoolean("reactionsEnabled", true), commentsEnabled = json.optBoolean("commentsEnabled", true),
+        reactionsEnabled = json.optBoolean("reactionsEnabled", true), commentsEnabled = json.optBoolean("commentsEnabled", true), callsEnabled = json.optBoolean("callsEnabled", true),
         friendRequestsEnabled = json.optBoolean("friendRequestsEnabled", true), messagesEnabled = json.optBoolean("messagesEnabled", true),
         storiesEnabled = json.optBoolean("storiesEnabled", true), remindersEnabled = json.optBoolean("remindersEnabled", true),
         groupEnabled = json.optBoolean("groupEnabled", true), marketplaceEnabled = json.optBoolean("marketplaceEnabled", true),
