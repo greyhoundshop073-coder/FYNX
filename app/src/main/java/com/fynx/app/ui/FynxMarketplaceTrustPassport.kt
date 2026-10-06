@@ -1,9 +1,11 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,7 +43,10 @@ internal fun FynxMarketplaceTrustPassport(
                     Text("${reputation.tier} • ${reputation.completionRate.coerceIn(0.0, 100.0)}% completion")
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 TrustStat("Rating", String.format("%.1f", reputation.averageRating))
                 TrustStat("Reviews", reputation.reviewCount.toString())
                 TrustStat("Sales", reputation.successfulSales.toString())
@@ -51,19 +56,17 @@ internal fun FynxMarketplaceTrustPassport(
                 "View seller profile",
                 modifier = Modifier
                     .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                    .clickable { onOpenProfile(sellerUsername.removePrefix("@")) }
                     .padding(horizontal = 12.dp, vertical = 9.dp)
-                    .clickableWithoutImport { onOpenProfile(sellerUsername.removePrefix("@")) }
             )
         }
     }
 }
 
 @Composable
-private fun TrustStat(label: String, value: String) {
+private fun RowScope.TrustStat(label: String, value: String) {
     Column(modifier = Modifier.weight(1f)) {
         Text(value, style = MaterialTheme.typography.titleMedium)
         Text(label, style = MaterialTheme.typography.labelMedium)
     }
 }
-
-private fun Modifier.clickableWithoutImport(onClick: () -> Unit): Modifier = androidx.compose.foundation.clickable(onClick = onClick)
