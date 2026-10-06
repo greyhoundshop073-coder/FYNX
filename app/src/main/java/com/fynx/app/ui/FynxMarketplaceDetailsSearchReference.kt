@@ -133,7 +133,6 @@ internal fun FynxMarketplaceReferenceSearch(
                 Row(Modifier.padding(horizontal = 13.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Search, null, tint = FynxMarketplaceReferenceStyle.textMuted)
                     Spacer(Modifier.width(8.dp))
-                    androidx.compose.material3.BasicAlertDialog
                     Text(query.ifBlank { "Search Marketplace" }, color = if (query.isBlank()) FynxMarketplaceReferenceStyle.textMuted else FynxMarketplaceReferenceStyle.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
@@ -148,7 +147,7 @@ internal fun FynxMarketplaceReferenceSearch(
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(categories.take(12)) { item -> Surface(onClick = { onCategory(item) }, shape = RoundedCornerShape(14.dp), color = FynxMarketplaceReferenceStyle.surfaceRaised) { Text(item, color = FynxMarketplaceReferenceStyle.text, modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp)) } } }
             if (query.isBlank()) {
                 MarketplaceReferenceSectionTitle("Trending searches")
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { trendingSearches.take(10).forEach { item -> TextButton(onClick = { onTrending(item) }, modifier = Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Search, null, tint = FynxMarketplaceReferenceStyle.primarySoft, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(item, color = FynxMarketplaceReferenceStyle.text) } } } }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { trendingSearches.take(10).forEach { item -> TextButton(onClick = { onTrending(item) }, modifier = Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Search, null, tint = FynxMarketplaceReferenceStyle.primarySoft, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(item, color = FynxMarketplaceReferenceStyle.text) } } }
             }
             if (results.isNotEmpty()) {
                 MarketplaceReferenceSectionTitle("Results")
