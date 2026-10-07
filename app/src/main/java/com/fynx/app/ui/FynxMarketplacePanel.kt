@@ -362,7 +362,7 @@ private fun MarketplaceDetails(
         )
         FynxMarketplaceBuyingAssistant(
             listing = l,
-            onOpenAssistant = { listingId -> onOpenAi(listingId) }
+            onOpenAssistant = { listingId -> onOpenAssistant(listingId) }
         )
     } }, confirmButton = { Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title)) }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Share, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Share Marketplace listing") }
