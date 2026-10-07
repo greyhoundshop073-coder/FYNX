@@ -212,8 +212,13 @@ export function registerMarketplaceSettlementRoutes({ app }) {
   app.get('/api/marketplace/settlement/payout-account', auth, async (req, res) => {
     try {
       await ensureSchema();
-      const row = (await pool.query('SELECT * FROM marketplace_payout_accounts WHERE seller_id=$1', [req.user.sub])).rows[0];
-      return res.json({ payoutAccount: row ? publicPayoutAccount(row) : null });
+      const rows = (await pool.query('SELECT * FROM marketplace_payout_accounts WHERE seller_id=$1 AND active=TRUE ORDER BY UPPER(currency) ASC', [req.user.sub])).rows;
+      const payoutAccounts = rows.map(publicPayoutAccount);
+      return res.json({
+        payoutAccounts,
+        // Backward-compatible single-account field for older clients.
+        payoutAccount: payoutAccounts.find((account) => account.currency === 'NGN') || payoutAccounts[0] || null
+      });
     } catch (error) {
       console.error('marketplace payout account lookup', error);
       return res.status(error?.code === 'DATABASE_NOT_CONFIGURED' ? 503 : 500).json({ error: 'payout account unavailable' });

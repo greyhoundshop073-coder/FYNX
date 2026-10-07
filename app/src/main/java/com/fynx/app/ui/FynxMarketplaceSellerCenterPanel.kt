@@ -40,6 +40,7 @@ fun FynxMarketplaceSellerCenterPanel() {
     var error by remember { mutableStateOf<String?>(null) }
     var deletingId by remember { mutableStateOf<String?>(null) }
     var payoutAccount by remember { mutableStateOf<JSONObject?>(null) }
+    var payoutCurrency by rememberSaveable { mutableStateOf("NGN") }
     var accountLoading by remember { mutableStateOf(true) }
     var accountSaving by remember { mutableStateOf(false) }
     var accountMessage by remember { mutableStateOf<String?>(null) }
@@ -272,6 +273,11 @@ fun FynxMarketplaceSellerCenterPanel() {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("FYNX verifies the bank details with the payout provider before the account can receive protected Marketplace payouts.", style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("NGN", "USD").forEach { currency ->
+                            FilterChip(selected = payoutCurrency == currency, onClick = { payoutCurrency = currency }, label = { Text(currency) })
+                        }
+                    }
                     OutlinedTextField(bankCode, { bankCode = it.filter(Char::isDigit) }, label = { Text("Bank code") }, singleLine = true)
                     OutlinedTextField(accountNumber, { accountNumber = it.filter(Char::isDigit) }, label = { Text("Account number") }, singleLine = true)
                     OutlinedTextField(accountName, { accountName = it }, label = { Text("Account name") }, singleLine = true)
@@ -287,6 +293,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                             .put("bankCode", bankCode.trim())
                             .put("accountNumber", accountNumber.trim())
                             .put("accountName", accountName.trim())
+                            .put("currency", payoutCurrency)
                             .put("bankName", payoutAccount?.optString("bankName").orEmpty())
                             .toString()
                         FynxBackendClient.postJson(context, "/api/marketplace/settlement/payout-account", body)
