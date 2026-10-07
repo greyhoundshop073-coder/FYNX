@@ -92,6 +92,7 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
       if (safety.marketplace_safety) { const safetyResult = inspectTrustSafetyText([listing.title, listing.description, listing.location].filter(Boolean).join(' ')); if (safetyResult.shouldBlock) { await client.query('ROLLBACK'); return res.status(422).json({ error: 'listing blocked by marketplace safety protection', code: 'SAFETY_BLOCK' }); } }
       const currency = normalizeCurrency(listing.currency);
       if (!currency) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'listing currency is invalid or not configured', code: 'INVALID_CURRENCY' }); }
+      if (currency !== 'NGN') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'this Marketplace listing cannot be purchased until its currency matches the seller payout currency', code: 'UNSUPPORTED_SETTLEMENT_CURRENCY' }); }
       if (method === 'DELIVERY' && !listing.delivery_available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery is no longer available for this listing' }); }
       if (method === 'PICKUP' && !listing.pickup_available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'pickup is no longer available for this listing' }); }
       if (method === 'DELIVERY' && !(await isMarketplaceDestinationCovered(client, listing.id, address))) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'seller does not currently deliver to this destination', code: 'DESTINATION_NOT_COVERED' }); }

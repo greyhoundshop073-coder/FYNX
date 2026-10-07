@@ -172,6 +172,8 @@ jobs:
       - name: Run R6-B payment expiry verification
         working-directory: .
         run: python3 scripts/verify_r6b_payment_expiry.py
+      - name: Run Marketplace currency contract verification
+        run: node verify-marketplace-currency-contract.mjs
       - name: Run Batch 2 financial hardening verification
         run: node verify-marketplace-batch2.mjs
       - name: Verify backend package metadata

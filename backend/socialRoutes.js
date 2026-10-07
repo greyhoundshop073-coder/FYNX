@@ -160,7 +160,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const category = typeof req.query?.category === "string" ? req.query.category.trim().slice(0, 40) : "";
       const seller = typeof req.query?.seller === "string" ? req.query.seller.trim().toLowerCase().replace(/^@+/, "") : "";
       const params = [req.user.sub];
-      const where = ["l.active = TRUE", "l.quantity > 0", "l.seller_id <> $1"];
+      const where = ["l.active = TRUE", "l.quantity > 0", "l.seller_id <> $1", "UPPER(COALESCE(l.currency,'')) = 'NGN'"];
       if (q) { params.push(`%${q}%`); where.push(`(l.title ILIKE $${params.length} OR l.description ILIKE $${params.length} OR u.username ILIKE $${params.length} OR u.display_name ILIKE $${params.length})`); }
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category = $${params.length}`); }
       if (seller) { params.push(seller); where.push(`u.username = $${params.length}`); }
@@ -193,7 +193,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const pickupAvailable = req.body?.pickupAvailable == null ? true : Boolean(req.body.pickupAvailable);
       const deliveryFee = req.body?.deliveryFee == null || req.body.deliveryFee === "" ? null : Number(req.body.deliveryFee);
       const mediaIds = Array.isArray(req.body?.mediaIds) ? req.body.mediaIds.map(Number).filter((id) => Number.isInteger(id) && id > 0).slice(0, 12) : [];
-      if (title.length < 2 || description.length < 5 || !category || !currency || !Number.isFinite(price) || price <= 0 || !Number.isInteger(quantity) || quantity < 0 || !["NEW","USED","REFURBISHED"].includes(condition) || (deliveryFee != null && (!Number.isFinite(deliveryFee) || deliveryFee < 0)) || !mediaIds.length) return res.status(400).json({ error: "complete listing details and at least one product photo or video are required" });
+      if (title.length < 2 || description.length < 5 || !category || currency !== "NGN" || !Number.isFinite(price) || price <= 0 || !Number.isInteger(quantity) || quantity < 0 || !["NEW","USED","REFURBISHED"].includes(condition) || (deliveryFee != null && (!Number.isFinite(deliveryFee) || deliveryFee < 0)) || !mediaIds.length) return res.status(400).json({ error: "complete listing details and at least one product photo or video are required; Marketplace seller payouts currently settle in NGN" });
       const media = await pool.query("SELECT id FROM message_media WHERE id = ANY($1::bigint[]) AND owner_id = $2", [mediaIds, req.user.sub]);
       if (media.rowCount !== mediaIds.length) return res.status(403).json({ error: "one or more media files are not owned by this account" });
       const result = await pool.query(`INSERT INTO marketplace_listings (seller_id, store_name, title, description, price, currency, category, condition, quantity, location, delivery_available, pickup_available, delivery_fee, media_ids) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb) RETURNING id, created_at`, [req.user.sub, storeName, title, description, price, currency, category, condition, quantity, location, deliveryAvailable, pickupAvailable, deliveryFee, JSON.stringify(mediaIds)]);
@@ -246,8 +246,9 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       if (title.length < 2 || !Number.isFinite(price) || price <= 0 || !Number.isInteger(quantity) || quantity < 0) return res.status(400).json({ error: "valid product name, price and quantity are required" });
 
       await client.query("BEGIN");
-      const existing = (await client.query("SELECT id, seller_id, price FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE", [id, req.user.sub])).rows[0];
+      const existing = (await client.query("SELECT id, seller_id, price, currency FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE", [id, req.user.sub])).rows[0];
       if (!existing) { await client.query("ROLLBACK"); return res.status(404).json({ error: "listing not found" }); }
+      if (String(existing.currency || "").toUpperCase() !== "NGN") { await client.query("ROLLBACK"); return res.status(409).json({ error: "this listing uses an unsupported settlement currency; Marketplace seller payouts currently settle in NGN", code: "UNSUPPORTED_SETTLEMENT_CURRENCY" }); }
       const oldPrice = Number(existing.price);
       const updated = (await client.query("UPDATE marketplace_listings SET title = $1, price = $2, quantity = $3, updated_at = NOW() WHERE id = $4 AND seller_id = $5 RETURNING id, title, price, quantity", [title, price, quantity, id, req.user.sub])).rows[0];
       const priceChanged = oldPrice !== Number(updated.price);
