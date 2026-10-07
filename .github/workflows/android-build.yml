@@ -249,7 +249,7 @@ jobs:
           api-level: 35
           target: google_apis
           arch: x86_64
-          profile: Pixel_6
+          profile: pixel_7_pro
           script: ./gradlew connectedDebugAndroidTest --no-daemon --build-cache && python3 scripts/verify_authenticated_runtime_navigation.py
       - name: Upload FYNX runtime screenshots and UI hierarchies
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || github.ref == 'refs/heads/fynx-smart-marketplace-b2-buying-assistant-functional' }}
