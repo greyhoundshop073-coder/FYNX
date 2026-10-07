@@ -167,7 +167,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         }
     }
     LaunchedEffect(selected) {
-        if (selected != "Marketplace") marketplaceListingId = null
+        if (selected != "Marketplace" && selected != "AI") marketplaceListingId = null
 
         // Deep-link commands are one-shot navigation intents. Once the user leaves
         // the destination surface, discard any command that was not consumed so a
