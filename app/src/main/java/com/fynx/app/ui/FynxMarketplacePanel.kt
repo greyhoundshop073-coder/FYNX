@@ -253,7 +253,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     }
                 }
             },
-            onOpenAssistant = { onOpenAi() },
+            onOpenAssistant = { listingId -> onOpenAssistant(listingId) },
             onClose = { selected = null }
         )
     }
@@ -324,7 +324,7 @@ private fun MarketplaceDetails(
     watchedPrice: Boolean,
     priceWatchBusy: Boolean,
     onWatchPrice: (String) -> Unit,
-    onOpenAssistant: () -> Unit,
+    onOpenAssistant: (String) -> Unit,
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
