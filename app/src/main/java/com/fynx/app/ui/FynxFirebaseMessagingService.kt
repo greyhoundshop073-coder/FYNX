@@ -24,7 +24,7 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
             "MESSAGE" -> FynxNotificationFoundation.MESSAGES_CHANNEL
             "FRIEND_REQUEST", "FOLLOW", "STORY", "COMMENT", "REACTION" -> FynxNotificationFoundation.FRIENDS_CHANNEL
             "GROUP" -> FynxNotificationFoundation.MESSAGES_CHANNEL
-            "MARKETPLACE_ORDER", "WALLET_ACTIVITY" -> FynxNotificationFoundation.MONEY_CHANNEL
+            "MARKETPLACE_ORDER", "MARKETPLACE_PRICE", "WALLET_ACTIVITY" -> FynxNotificationFoundation.MONEY_CHANNEL
             "REMINDER" -> FynxNotificationFoundation.REMINDERS_CHANNEL
             else -> FynxNotificationFoundation.FRIENDS_CHANNEL
         }

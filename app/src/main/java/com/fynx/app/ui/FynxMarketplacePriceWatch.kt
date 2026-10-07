@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -16,6 +18,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun FynxMarketplacePriceWatch(
     listing: FynxRemoteSocialClient.MarketplaceListing,
+    watched: Boolean,
+    busy: Boolean = false,
     onWatchPrice: (listingId: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -25,9 +29,14 @@ internal fun FynxMarketplacePriceWatch(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text("Price Watch", style = MaterialTheme.typography.titleMedium)
-            Text("Watch this listing for future price changes.")
-            Button(onClick = { onWatchPrice(listing.id) }) {
-                Text("Watch price")
+            Text(if (watched) "You will be notified when this listing price changes." else "Get a FYNX notification when this listing price changes.")
+            if (watched) {
+                TextButton(enabled = !busy, onClick = { onWatchPrice(listing.id) }) { Text("Stop watching") }
+            } else {
+                Button(enabled = !busy, onClick = { onWatchPrice(listing.id) }) {
+                    if (busy) CircularProgressIndicator(Modifier.padding(end = 8.dp))
+                    Text("Watch price")
+                }
             }
         }
     }

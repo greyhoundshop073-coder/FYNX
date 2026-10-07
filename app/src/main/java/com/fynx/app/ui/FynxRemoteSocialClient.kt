@@ -109,6 +109,18 @@ object FynxRemoteSocialClient {
         return FynxBackendClient.postJson(context, "/api/social/posts", JSONObject().apply { put("text", text.take(4000)); put("visibility", "PUBLIC"); put("mediaId", mediaId ?: JSONObject.NULL); put("mediaType", if (mediaId != null) "image" else JSONObject.NULL) }.toString()).map { Unit }
     }
     suspend fun listings(context: Context, query: String = "", category: String = "All", seller: String = ""): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/listings?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&seller=${URLEncoder.encode(seller.removePrefix("@"), "UTF-8")}").mapCatching(::parseListings)
+    suspend fun marketplacePriceWatchState(context: Context, listingId: String): Result<Boolean> {
+        val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
+        return FynxBackendClient.get(context, "/api/marketplace/listings/$numericId/price-watch").mapCatching { JSONObject(it).optBoolean("watched") }
+    }
+    suspend fun watchMarketplacePrice(context: Context, listingId: String): Result<Boolean> {
+        val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
+        return FynxBackendClient.postJson(context, "/api/marketplace/listings/$numericId/price-watch", "{}").mapCatching { JSONObject(it).optBoolean("watched", true) }
+    }
+    suspend fun unwatchMarketplacePrice(context: Context, listingId: String): Result<Boolean> {
+        val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
+        return FynxBackendClient.delete(context, "/api/marketplace/listings/$numericId/price-watch").mapCatching { JSONObject(it).optBoolean("watched", false) }
+    }
     suspend fun nearbyMarketplaceListings(context: Context, query: String = "", category: String = "All", location: String): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/discovery?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&limit=60&location=${URLEncoder.encode(location.trim(), "UTF-8")}").mapCatching(::parseListings)
     suspend fun myListings(context: Context): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/my-listings").mapCatching(::parseListings)
     suspend fun createMarketplaceListing(context: Context, title: String, description: String, storeName: String, price: Double, currency: String, category: String, condition: String, quantity: Int, location: String, deliveryAvailable: Boolean, pickupAvailable: Boolean, deliveryFee: Double?, mediaUris: List<Uri>): Result<MarketplaceListing?> = runCatching {

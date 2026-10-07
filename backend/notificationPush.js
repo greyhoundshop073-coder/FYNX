@@ -114,6 +114,7 @@ function preferenceColumn(type) {
     case "COMMENT": return "comments_enabled";
     case "REACTION": return "reactions_enabled";
     case "MARKETPLACE_ORDER": return "marketplace_enabled";
+    case "MARKETPLACE_PRICE": return "marketplace_enabled";
     case "WALLET_ACTIVITY": return "wallet_enabled";
     case "REMINDER": return "reminders_enabled";
     default: return "push_enabled";
