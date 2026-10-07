@@ -1,11 +1,17 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import Spacer
+import Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.*
-import androidx.compose.ui.platform.LocalContext
 
 @Composable
 internal fun FynxMarketplaceLiveProof(
@@ -34,14 +40,14 @@ internal fun FynxMarketplaceLiveProof(
         return
     }
 
-    androidx.compose.material3.Surface(modifier = modifier.fillMaxSize()) {
+    Surface(modifier = modifier.fillMaxSize()) {
         androidx.compose.foundation.layout.Column(
             modifier = Modifier.fillMaxSize().padding(16.dp)
         ) {
-            androidx.compose.material3.Text("Live Proof", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
-            androidx.compose.material3.Text("Use the FYNX camera to prepare a live item demonstration with the seller.")
-            androidx.compose.material3.Button(onClick = { showCamera = true }) {
-                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.Videocam, null)
+            Text("Live Proof", style = MaterialTheme.typography.titleMedium)
+            Text("Use the FYNX camera to prepare a live item demonstration with the seller.")
+            Button(onClick = { showCamera = true }) {
+                Icon(Icons.Default.Videocam, null)
                 androidx.compose.foundation.layout.Spacer(Modifier.padding(4.dp))
                 androidx.compose.material3.Text("Open Live Proof Camera")
             }
