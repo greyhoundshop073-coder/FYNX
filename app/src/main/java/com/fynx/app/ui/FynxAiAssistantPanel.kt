@@ -50,7 +50,7 @@ import org.json.JSONObject
 
 /** User-facing FYNX Assistant assistant. Sensitive FYNX data is not exposed by this panel. */
 @Composable
-fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
+fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, marketplaceListingId: String? = null) {
     var messages by remember { mutableStateOf(emptyList<AiMessage>()) }
     var input by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
@@ -252,7 +252,7 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
         if (appendUser) messages = messages + AiMessage(prompt.ifBlank { "Analyze this image." }, true)
         input = ""; pendingMediaId = null; loading = true; errorMessage = null
         scope.launch {
-            val result = withContext(Dispatchers.IO) { FynxAiConversationClient.send(context, activeConversation, prompt, listOfNotNull(attachment)) }
+            val result = withContext(Dispatchers.IO) { FynxAiConversationClient.send(context, activeConversation, prompt, listOfNotNull(attachment), marketplaceListingId) }
             result.onSuccess { reply ->
                     messages = messages + AiMessage(reply.assistantMessage.text, false)
                     pendingMessageAction = reply.pendingAction
