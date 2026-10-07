@@ -1,4 +1,4 @@
-const fs = require("node:fs");
+import fs from "node:fs";
 
 const social = fs.readFileSync("socialRoutes.js", "utf8");
 const push = fs.readFileSync("notificationPush.js", "utf8");
