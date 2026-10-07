@@ -56,7 +56,7 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 @Composable
-fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: () -> Unit = {}, onLiveProof: (String) -> Unit = {}, initialListingId: String? = null) {
+fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, initialListingId: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var listings by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
@@ -253,7 +253,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     }
                 }
             },
-            onOpenAssistant = { onOpenAi() },
+            onOpenAssistant = { listingId -> onOpenAi(listingId) },
             onClose = { selected = null }
         )
     }
