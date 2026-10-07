@@ -8,7 +8,7 @@ export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
   const normalizeCurrency = (value) => { const currency = typeof value === 'string' ? value.trim().toUpperCase() : ''; return /^[A-Z]{3}$/.test(currency) ? currency : null; };
   const feeConfig = () => {
     const modeValue = String(process.env.FYNX_MARKETPLACE_FEE_MODE || 'SELLER').toUpperCase();
-    const mode = ['ZERO', 'BUYER', 'SELLER', 'SPLIT'].includes(modeValue) ? modeValue : 'ZERO';
+    const mode = ['ZERO', 'BUYER', 'SELLER', 'SPLIT'].includes(modeValue) ? modeValue : 'SELLER';
     const bps = Math.min(10000, Math.max(0, Number.parseInt(process.env.FYNX_MARKETPLACE_FEE_BPS || '500', 10) || 0));
     const fixed = Math.max(0, Number(process.env.FYNX_MARKETPLACE_FEE_FIXED || '0') || 0);
     const buyerShare = Math.min(10000, Math.max(0, Number.parseInt(process.env.FYNX_MARKETPLACE_FEE_BUYER_SHARE_BPS || '5000', 10) || 0));
@@ -47,7 +47,7 @@ export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
         if (safetyResult.shouldBlock) { await client.query('ROLLBACK'); return res.status(422).json({ error: 'listing blocked by marketplace safety protection', code: 'SAFETY_BLOCK' }); }
       }
       const currency = normalizeCurrency(listing.currency);
-      if (!currency) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'listing currency is invalid or not configured', code: 'INVALID_CURRENCY' }); }
+      if (!currency || !['NGN', 'USD'].includes(currency)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'listing currency is invalid or not active', code: 'INVALID_CURRENCY' }); }
       const available = Number(listing.quantity) - Number(listing.reserved_quantity || 0);
       if (quantity > available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'requested quantity is not available', availableQuantity: Math.max(0, available) }); }
       if (fulfillmentMethod === 'DELIVERY' && !Boolean(listing.delivery_available)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery is not available for this listing' }); }
