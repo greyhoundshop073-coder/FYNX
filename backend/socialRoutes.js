@@ -29,6 +29,13 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
         CREATE INDEX IF NOT EXISTS marketplace_listings_active_idx ON marketplace_listings (active, created_at DESC);
         CREATE INDEX IF NOT EXISTS marketplace_listings_seller_idx ON marketplace_listings (seller_id, active, created_at DESC);
         CREATE INDEX IF NOT EXISTS marketplace_listings_category_idx ON marketplace_listings (category, active, created_at DESC);
+        CREATE TABLE IF NOT EXISTS marketplace_price_watches (
+          user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          listing_id BIGINT NOT NULL REFERENCES marketplace_listings(id) ON DELETE CASCADE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (user_id, listing_id)
+        );
+        CREATE INDEX IF NOT EXISTS marketplace_price_watches_listing_idx ON marketplace_price_watches (listing_id, created_at DESC);
       `).catch((error) => {
         marketplaceSchemaPromise = undefined;
         throw error;
@@ -192,6 +199,81 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const result = await pool.query(`INSERT INTO marketplace_listings (seller_id, store_name, title, description, price, currency, category, condition, quantity, location, delivery_available, pickup_available, delivery_fee, media_ids) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb) RETURNING id, created_at`, [req.user.sub, storeName, title, description, price, currency, category, condition, quantity, location, deliveryAvailable, pickupAvailable, deliveryFee, JSON.stringify(mediaIds)]);
       return res.status(201).json({ listing: { id: String(result.rows[0].id), createdAt: result.rows[0].created_at } });
     } catch (error) { console.error("create marketplace listing", error); return res.status(500).json({ error: "listing creation failed" }); }
+  });
+
+  app.get("/api/marketplace/listings/:id/price-watch", auth, async (req, res) => {
+    try {
+      await ensureMarketplaceSchema();
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
+      const result = await pool.query("SELECT EXISTS (SELECT 1 FROM marketplace_price_watches WHERE user_id = $1 AND listing_id = $2) AS watched", [req.user.sub, id]);
+      return res.json({ watched: Boolean(result.rows[0]?.watched) });
+    } catch (error) { console.error("marketplace price watch state", error); return res.status(500).json({ error: "price watch state unavailable" }); }
+  });
+
+  app.post("/api/marketplace/listings/:id/price-watch", auth, async (req, res) => {
+    try {
+      await ensureMarketplaceSchema();
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
+      const listing = (await pool.query("SELECT id, seller_id, price FROM marketplace_listings WHERE id = $1 AND active = TRUE", [id])).rows[0];
+      if (!listing) return res.status(404).json({ error: "listing not found" });
+      if (String(listing.seller_id) === String(req.user.sub)) return res.status(400).json({ error: "you cannot price-watch your own listing" });
+      await pool.query("INSERT INTO marketplace_price_watches(user_id, listing_id) VALUES ($1,$2) ON CONFLICT(user_id,listing_id) DO NOTHING", [req.user.sub, id]);
+      return res.status(201).json({ watched: true, listingId: String(id), price: Number(listing.price) });
+    } catch (error) { console.error("marketplace price watch add", error); return res.status(500).json({ error: "price watch could not be saved" }); }
+  });
+
+  app.delete("/api/marketplace/listings/:id/price-watch", auth, async (req, res) => {
+    try {
+      await ensureMarketplaceSchema();
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
+      await pool.query("DELETE FROM marketplace_price_watches WHERE user_id = $1 AND listing_id = $2", [req.user.sub, id]);
+      return res.json({ watched: false, listingId: String(id) });
+    } catch (error) { console.error("marketplace price watch remove", error); return res.status(500).json({ error: "price watch could not be removed" }); }
+  });
+
+  app.post("/api/marketplace/listings/:id/update", auth, async (req, res) => {
+    const client = await pool.connect();
+    try {
+      await ensureMarketplaceSchema();
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
+      const title = typeof req.body?.title === "string" ? req.body.title.trim().slice(0, 160) : "";
+      const price = Number(req.body?.price);
+      const quantity = Number(req.body?.quantity);
+      if (title.length < 2 || !Number.isFinite(price) || price <= 0 || !Number.isInteger(quantity) || quantity < 0) return res.status(400).json({ error: "valid product name, price and quantity are required" });
+
+      await client.query("BEGIN");
+      const existing = (await client.query("SELECT id, seller_id, price FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE", [id, req.user.sub])).rows[0];
+      if (!existing) { await client.query("ROLLBACK"); return res.status(404).json({ error: "listing not found" }); }
+      const oldPrice = Number(existing.price);
+      const updated = (await client.query("UPDATE marketplace_listings SET title = $1, price = $2, quantity = $3, updated_at = NOW() WHERE id = $4 AND seller_id = $5 RETURNING id, title, price, quantity", [title, price, quantity, id, req.user.sub])).rows[0];
+      const priceChanged = oldPrice !== Number(updated.price);
+      const watchers = priceChanged ? (await client.query("SELECT w.user_id FROM marketplace_price_watches w WHERE w.listing_id = $1 AND w.user_id <> $2", [id, req.user.sub])).rows : [];
+      await client.query("COMMIT");
+
+      if (priceChanged) {
+        for (const watcher of watchers) {
+          const direction = Number(updated.price) < oldPrice ? "dropped" : "changed";
+          await queueFynxNotification(pool, {
+            userId: watcher.user_id,
+            type: "MARKETPLACE_PRICE",
+            title: `Price ${direction} 📉`,
+            message: `${updated.title} is now ${String(updated.price)}. Open FYNX Marketplace to see the new price.`,
+            targetId: String(id),
+            route: `fynx://marketplace/listing/${id}`,
+            notificationId: `marketplace-price-${id}-${watcher.user_id}-${Number(updated.price).toFixed(2)}`
+          });
+        }
+      }
+      return res.json({ listing: { id: String(updated.id), title: updated.title, price: Number(updated.price), quantity: Number(updated.quantity) }, priceChanged, notifiedWatchers: watchers.length });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      console.error("marketplace listing update", error);
+      return res.status(500).json({ error: "listing update failed" });
+    } finally { client.release(); }
   });
 
   app.delete("/api/marketplace/listings/:id", auth, async (req, res) => {

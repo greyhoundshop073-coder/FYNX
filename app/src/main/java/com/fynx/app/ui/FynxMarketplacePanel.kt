@@ -73,6 +73,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var showOrders by remember { mutableStateOf(false) }
     var cart by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
     var showCart by remember { mutableStateOf(false) }
+    var priceWatchListingId by remember { mutableStateOf<String?>(null) }
+    var priceWatchBusy by remember { mutableStateOf(false) }
     var nearbyMode by remember { mutableStateOf(false) }
     var nearbyLabel by remember { mutableStateOf("") }
     var nearbyLoading by remember { mutableStateOf(false) }
@@ -215,6 +217,14 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     }
 
     if (showSell) MarketplaceSellDialog(context, onPublished = { showSell = false; reload() }, onCancel = { showSell = false })
+    LaunchedEffect(selected?.id) {
+        priceWatchListingId = null
+        selected?.id?.let { listingId ->
+            FynxRemoteSocialClient.marketplacePriceWatchState(context, listingId)
+                .onSuccess { watched -> priceWatchListingId = if (watched) listingId else null }
+        }
+    }
+
     selected?.let { listing ->
         val sellerKey = listing.sellerUsername.removePrefix("@").trim().lowercase()
         MarketplaceDetails(
@@ -226,7 +236,23 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             onAddToCart = { if (cart.none { it.id == listing.id }) cart = cart + listing; selected = null },
             onBuyTogether = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(listing.id, listing.title)) },
             onLiveProof = { onLiveProof(listing.sellerUsername) },
-            onWatchPrice = { listingId -> context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE).edit().putBoolean("price_watch_$listingId", true).apply() },
+            watchedPrice = priceWatchListingId == listing.id,
+            priceWatchBusy = priceWatchBusy,
+            onWatchPrice = { listingId ->
+                if (!priceWatchBusy) {
+                    priceWatchBusy = true
+                    scope.launch {
+                        val result = if (priceWatchListingId == listingId) {
+                            FynxRemoteSocialClient.unwatchMarketplacePrice(context, listingId)
+                        } else {
+                            FynxRemoteSocialClient.watchMarketplacePrice(context, listingId)
+                        }
+                        result.onSuccess { watched -> priceWatchListingId = if (watched) listingId else null }
+                            .onFailure { error = it.message ?: "Price Watch could not be updated." }
+                        priceWatchBusy = false
+                    }
+                }
+            },
             onOpenAssistant = { onOpenAi() },
             onClose = { selected = null }
         )
@@ -295,6 +321,8 @@ private fun MarketplaceDetails(
     onAddToCart: () -> Unit,
     onBuyTogether: () -> Unit,
     onLiveProof: () -> Unit,
+    watchedPrice: Boolean,
+    priceWatchBusy: Boolean,
     onWatchPrice: (String) -> Unit,
     onOpenAssistant: () -> Unit,
     onClose: () -> Unit
@@ -328,6 +356,8 @@ private fun MarketplaceDetails(
         )
         FynxMarketplacePriceWatch(
             listing = l,
+            watched = watchedPrice,
+            busy = priceWatchBusy,
             onWatchPrice = { onWatchPrice(it) }
         )
         FynxMarketplaceBuyingAssistant(

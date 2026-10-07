@@ -37,6 +37,7 @@ jobs:
         run: |
           node --check server.js
           node --check socialRoutes.js
+          node --check verify-marketplace-price-watch.mjs
           node --check profileRoutes.js
           node --check marketplaceTransactions.js
           node --check marketplaceReputation.js
@@ -129,6 +130,8 @@ jobs:
         run: node verify-stage15g-regression.mjs
       - name: Run Stage 15H admin verification
         run: node verify-stage15h-admin.mjs
+      - name: Run Marketplace Price Watch verification
+        run: node verify-marketplace-price-watch.mjs
       - name: Run marketplace financial reconciliation guard
         run: node verify-marketplace-reconciliation.mjs
       - name: Run marketplace protection admin guard

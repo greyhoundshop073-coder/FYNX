@@ -34,7 +34,7 @@ checks = [
     ("Buy Together keeps the canonical listing ID", "FynxShareActions.marketplacePayload(listing.id, listing.title)" in panel),
     ("Live Proof uses the shared CameraX engine with a Marketplace-specific mode", "liveProofMode = true" in live_proof and "FynxCameraCapturePanel(" in live_proof and "onLiveProofStart" in live_proof),
     ("Live Proof routes the real seller into the existing video-call system", "onLiveProof = { onLiveProof(listing.sellerUsername) }" in panel and 'onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }' in app),
-    ("Price Watch persists the real listing ID", "price_watch_$listingId" in panel),
+    ("Price Watch uses the authenticated Marketplace backend", "marketplacePriceWatchState(context, listingId)" in panel and "watchMarketplacePrice(context, listingId)" in panel and "price_watch_$listingId" not in panel),
     ("Buying Assistant opens the existing FYNX AI destination", 'onOpenAssistant = { onOpenAi() }' in panel and 'onOpenAi = { selected = "AI" }' in app),
 ]
 failed = [name for name, ok in checks if not ok]

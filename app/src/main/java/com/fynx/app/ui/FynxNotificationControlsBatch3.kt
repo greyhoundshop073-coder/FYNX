@@ -40,7 +40,7 @@ object FynxNotificationControlsBatch3 {
             FynxNotificationType.REMINDER -> preferences.remindersEnabled
             FynxNotificationType.SAFETY -> true
             FynxNotificationType.GROUP -> preferences.groupEnabled
-            FynxNotificationType.MARKETPLACE_ORDER -> preferences.marketplaceEnabled
+            FynxNotificationType.MARKETPLACE_ORDER, FynxNotificationType.MARKETPLACE_PRICE -> preferences.marketplaceEnabled
             FynxNotificationType.WALLET_ACTIVITY -> preferences.walletEnabled
         }
 
