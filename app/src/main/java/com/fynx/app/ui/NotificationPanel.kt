@@ -235,7 +235,7 @@ private fun typeLabel(type: FynxNotificationType): String = when (type) {
     FynxNotificationType.GROUP -> "Groups"
     FynxNotificationType.REACTION -> "Reactions"
     FynxNotificationType.COMMENT -> "Comments"
-    FynxNotificationType.MARKETPLACE_ORDER -> "Marketplace"
+    FynxNotificationType.MARKETPLACE_ORDER, FynxNotificationType.MARKETPLACE_PRICE -> "Marketplace"
     FynxNotificationType.WALLET_ACTIVITY -> "Money"
 }
 
@@ -249,6 +249,6 @@ private fun notificationIcon(type: FynxNotificationType) = when (type) {
     FynxNotificationType.GROUP -> Icons.Default.Group
     FynxNotificationType.REACTION -> Icons.Default.Favorite
     FynxNotificationType.COMMENT -> Icons.Default.Comment
-    FynxNotificationType.MARKETPLACE_ORDER -> Icons.Default.ShoppingBag
+    FynxNotificationType.MARKETPLACE_ORDER, FynxNotificationType.MARKETPLACE_PRICE -> Icons.Default.ShoppingBag
     FynxNotificationType.WALLET_ACTIVITY -> Icons.Default.AccountBalanceWallet
 }
