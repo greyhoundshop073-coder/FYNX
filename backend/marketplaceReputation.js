@@ -200,23 +200,23 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        const group = (await client.query(\`
+        const group = (await client.query(`
           SELECT id,buyer_id,buyer_total,currency,status,payment_reference
           FROM marketplace_checkout_groups
           WHERE payment_reference=$1
           FOR UPDATE
-        \`, [reference])).rows[0];
+        `, [reference])).rows[0];
         if (!group) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'checkout payment not found' }); }
         if (String(group.buyer_id) !== String(req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'payment unavailable' }); }
 
-        const children = (await client.query(\`
+        const children = (await client.query(`
           SELECT o.id,o.buyer_id,o.seller_id,o.total_amount,o.currency,o.status,o.payment_provider_fee
           FROM marketplace_checkout_group_items gi
           JOIN marketplace_orders o ON o.id=gi.order_id
           WHERE gi.checkout_id=$1
           ORDER BY o.id ASC
           FOR UPDATE OF o
-        \`, [group.id])).rows;
+        `, [group.id])).rows;
         if (!children.length) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'checkout group has no orders' }); }
 
         const expectedAmount = amountSubunit(group.buyer_total, group.currency);
@@ -232,7 +232,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
           return res.json({ verified: true, idempotent: true, checkoutId: String(group.id), status: 'PAID', currency: String(group.currency).toUpperCase(), amountSubunit: expectedAmount });
         }
 
-        const data = await paystackRequest(\`/transaction/verify/\${encodeURIComponent(reference)}\`);
+        const data = await paystackRequest(`/transaction/verify/\${encodeURIComponent(reference)}`);
         const transaction = data.data || {};
         const paidAmount = Number(transaction.amount);
         const paidCurrency = String(transaction.currency || '').trim().toUpperCase();
@@ -265,16 +265,16 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
             : Math.floor((feeCents * childCents) / totalCents);
           allocatedFeeCents += feeShare;
           if (child.status === 'PAYMENT_PENDING') {
-            await client.query(\`
+            await client.query(`
               UPDATE marketplace_orders
               SET status='PAID',payment_provider_fee=$2,updated_at=NOW()
               WHERE id=$1 AND status='PAYMENT_PENDING'
-            \`, [child.id, feeShare / 100]);
-            await client.query(\`
+            `, [child.id, feeShare / 100]);
+            await client.query(`
               INSERT INTO marketplace_order_events
                 (order_id,actor_id,event_type,from_status,to_status,metadata)
               VALUES ($1,$2,'PAYMENT_CONFIRMED','PAYMENT_PENDING','PAID',$3::jsonb)
-            \`, [child.id, child.buyer_id, JSON.stringify({
+            `, [child.id, child.buyer_id, JSON.stringify({
               reference,
               provider: 'paystack',
               source: 'checkout-group-verification',
@@ -285,16 +285,16 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
             })]);
           } else if (child.status !== 'PAID') {
             await client.query('ROLLBACK');
-            return res.status(409).json({ error: \`checkout child order \${child.id} is in an incompatible payment state\` });
+            return res.status(409).json({ error: `checkout child order \${child.id} is in an incompatible payment state` });
           }
         }
 
-        const updatedGroup = (await client.query(\`
+        const updatedGroup = (await client.query(`
           UPDATE marketplace_checkout_groups
           SET status='PAID',updated_at=NOW()
           WHERE id=$1 AND status='PAYMENT_PENDING'
           RETURNING id
-        \`, [group.id])).rows[0];
+        `, [group.id])).rows[0];
 
         await client.query('COMMIT');
         return res.json({
