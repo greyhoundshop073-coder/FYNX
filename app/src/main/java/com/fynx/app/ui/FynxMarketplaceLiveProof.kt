@@ -2,8 +2,8 @@ package com.fynx.app.ui
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import Spacer
-import Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Videocam
@@ -30,6 +30,7 @@ internal fun FynxMarketplaceLiveProof(
                 liveProofMode = true,
                 liveProofListingTitle = listing.title,
                 liveProofSellerUsername = listing.sellerUsername,
+                onCaptured = { _, _ -> },
                 onLiveProofStart = {
                     showCamera = false
                     onRequestProof(listing.id, listing.sellerUsername)
