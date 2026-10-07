@@ -232,7 +232,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
           return res.json({ verified: true, idempotent: true, checkoutId: String(group.id), status: 'PAID', currency: String(group.currency).toUpperCase(), amountSubunit: expectedAmount });
         }
 
-        const data = await paystackRequest(`/transaction/verify/\${encodeURIComponent(reference)}`);
+        const data = await paystackRequest(`/transaction/verify/${encodeURIComponent(reference)}`);
         const transaction = data.data || {};
         const paidAmount = Number(transaction.amount);
         const paidCurrency = String(transaction.currency || '').trim().toUpperCase();
@@ -285,7 +285,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
             })]);
           } else if (child.status !== 'PAID') {
             await client.query('ROLLBACK');
-            return res.status(409).json({ error: `checkout child order \${child.id} is in an incompatible payment state` });
+            return res.status(409).json({ error: `checkout child order ${child.id} is in an incompatible payment state` });
           }
         }
 
