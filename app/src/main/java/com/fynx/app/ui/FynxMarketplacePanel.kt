@@ -554,7 +554,25 @@ private suspend fun requestMultiQuote(context: android.content.Context, lines: L
     return FynxBackendClient.postJson(context, "/api/marketplace/checkout/multi-quote", JSONObject().put("items",array).toString()).mapCatching { raw -> val q=JSONObject(raw).getJSONObject("quote"); FynxMarketplaceMultiQuote(q.optString("id"),q.optString("expiresAt"),q.optString("currency").uppercase(Locale.US),q.optDouble("subtotal"),q.optDouble("deliveryFee"),q.optDouble("marketplaceFeeBuyer"),q.optDouble("total")) }
 }
 private suspend fun createMultiOrder(context: android.content.Context, lines: List<FynxMarketplaceMultiLine>, checkoutId: String): Result<JSONObject> {
-    val array=JSONArray(); lines.forEach { line -> array.put(JSONObject().apply { put("listingId",line.listing.id.toLongOrNull() ?: throw IllegalArgumentException("Invalid product in cart.")); put("quantity",line.quantity); put("fulfillmentMethod",line.method); if(line.method=="DELIVERY"){val a=line.address ?: throw IllegalArgumentException("Delivery address is required."); require(a.name.isNotBlank()&&a.phone.isNotBlank()&&a.address.isNotBlank()){"Delivery address is required."}; put("name",a.name);put("phone",a.phone);put("address",a.address);put("city",a.city);put("state",a.state);put("country",a.country)}} })
+    val array = JSONArray()
+    lines.forEach { line ->
+        val item = JSONObject().apply {
+            put("listingId", line.listing.id.toLongOrNull() ?: throw IllegalArgumentException("Invalid product in cart."))
+            put("quantity", line.quantity)
+            put("fulfillmentMethod", line.method)
+            if (line.method == "DELIVERY") {
+                val address = line.address ?: throw IllegalArgumentException("Delivery address is required.")
+                require(address.name.isNotBlank() && address.phone.isNotBlank() && address.address.isNotBlank()) { "Delivery address is required." }
+                put("name", address.name)
+                put("phone", address.phone)
+                put("address", address.address)
+                put("city", address.city)
+                put("state", address.state)
+                put("country", address.country)
+            }
+        }
+        array.put(item)
+    }
     return FynxBackendClient.postJson(context,"/api/marketplace/checkout/multi-order",JSONObject().put("checkoutId",checkoutId).put("items",array).toString()).mapCatching { raw -> val o=JSONObject(raw); require(o.has("checkout")){"Protected multi-product checkout was not created."}; o }
 }
 @Composable
