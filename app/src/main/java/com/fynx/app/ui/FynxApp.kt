@@ -484,7 +484,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 }
             )
             "Contacts" -> FynxContactsPanel(onBack = { selected = "Chats" }, onVoiceCall = { callTarget = it; callVideo = false; selected = "Calls" }, onVideoCall = { callTarget = it; callVideo = true; selected = "Calls" })
-            "Marketplace" -> FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenAi = { selected = "AI" }, onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }, initialListingId = marketplaceListingId)
+            "Marketplace" -> FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenAi = { listingId -> marketplaceListingId = listingId; selected = "AI" }, onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }, initialListingId = marketplaceListingId)
             "Money Tools" -> MoneyCenterPanel()
             "Business Account" -> FynxBusinessAccountPanel(onBack = { selected = "Features" }, onOpenAdvertising = { selected = "Advertising" }, onOpenDashboard = { selected = "Advertising Dashboard" })
             "Features" -> FynxFeaturesPanel(isAdmin = adminRole != null, onSelect = { if (it != "Admin" || adminRole != null) selected = it })
@@ -539,7 +539,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Privacy" -> FynxPrivacySettingsPanel(onBack = { selected = "Profile" })
             "Saved Posts" -> FynxSavedPostsPanel(onOpenAuthorProfile = { profileUser = it })
             "Seller Center" -> FynxMarketplaceSellerCenterPanel()
-            "AI" -> FynxAiAssistantPanel(onOpenDestination = { destination -> selected = destination })
+            "AI" -> FynxAiAssistantPanel(onOpenDestination = { destination -> selected = destination }, marketplaceListingId = marketplaceListingId)
             "AI Creation" -> { selected = "AI" }
             "AI Photo Editor" -> { selected = "AI" }
             "Advertising" -> FynxAdvertisingCampaignPanel(currentUsername = authSession.username ?: "preview")
