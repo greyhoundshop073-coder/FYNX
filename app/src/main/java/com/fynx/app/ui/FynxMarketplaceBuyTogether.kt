@@ -149,7 +149,7 @@ private fun openExistingGroup(context: Context, groupId: String) {
         context.startActivity(
             Intent(
                 Intent.ACTION_VIEW,
-                FynxDeepLinkParser.groupAppLink(groupId)
+                android.net.Uri.parse(FynxDeepLinkParser.groupAppLink(groupId))
             )
         )
     }
