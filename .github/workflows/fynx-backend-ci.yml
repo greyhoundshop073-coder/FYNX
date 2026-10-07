@@ -134,6 +134,8 @@ jobs:
         run: node verify-marketplace-price-watch.mjs
       - name: Run marketplace financial reconciliation guard
         run: node verify-marketplace-reconciliation.mjs
+      - name: Run Marketplace NGN/USD currency contract verification
+        run: node verify-marketplace-currency-contract.mjs
       - name: Run marketplace protection admin guard
         run: node verify-marketplace-protection-admin.mjs
       - name: Run marketplace order lifecycle guard
