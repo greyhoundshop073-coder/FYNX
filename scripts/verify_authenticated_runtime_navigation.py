@@ -279,19 +279,6 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
         xml_text=dump_ui(f"authenticated-{name}-retry.xml")
         control=find_control(xml_text,labels)
     if not control:
-        # Preserve the exact UI hierarchy for diagnosis instead of guessing or
-        # changing working application controls when accessibility semantics differ.
-        diagnostic=xml_text or dump_ui(f"authenticated-{name}-missing.xml")
-        visible=[]
-        for node in nodes(diagnostic):
-            if node.attrib.get("visible-to-user","true").lower()=="false": continue
-            text=(node.attrib.get("text") or "").strip()
-            desc=(node.attrib.get("content-desc") or "").strip()
-            rid=(node.attrib.get("resource-id") or "").strip()
-            value=" | ".join(v for v in (text,desc,rid) if v)
-            if value and value not in visible: visible.append(value)
-        if visible:
-            report.append(f"- {name} missing-control UI semantics: " + " || ".join(visible[:120]))
         FAILURES.append(name); return ""
     _,x,y=control
     run("adb","logcat","-c")
@@ -426,7 +413,8 @@ def exercise_notification_route(route:str, name:str)->bool:
     return True
 
 def login():
-        run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE,timeout=30)
+    run("adb","shell","am","force-stop",PACKAGE)
+    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
     time.sleep(2.5)
     xml=dump_ui("authenticated-before-login.xml"); screenshot("authenticated-before-login.png")
     sign_in_gate=find_control(xml,["Sign In"])
@@ -474,7 +462,7 @@ def dismiss_runtime_permission_prompt()->str:
         time.sleep(.5)
     return dump_ui("authenticated-home-after-permission.xml")
 
-def wait_for_home_control(labels:list[str], name:str, timeout:float=30.0)->str:
+def wait_for_home_control(labels:list[str], name:str, timeout:float=12.0)->str:
     deadline=time.monotonic()+timeout
     latest=""
     while time.monotonic()<deadline:
@@ -525,7 +513,8 @@ if not FAILURES:
     # FynxHomeSocialHubPanel receives homeCameraRequest and opens the real post
     # composer. The composer then owns the camera action. Certify that actual
     # two-stage journey rather than expecting the header to bypass the composer.
-        run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE,timeout=30)
+    run("adb","shell","am","force-stop",PACKAGE)
+    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE,timeout=30)
     time.sleep(2.5)
     xml=wait_for_home_control(["Open FYNX camera"],"home-camera")
     composer_xml=tap_control(
@@ -551,14 +540,13 @@ if not FAILURES:
             FAILURES.append("post composer -> real FYNX camera")
     else:
         FAILURES.append("Home header camera -> real post composer")
-    run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE,timeout=30); time.sleep(2.5)
+    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE,timeout=30); time.sleep(2.5)
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-navigation-reset.xml") or xml
 
     # The Home bottom navigation is intentionally auto-hidden while the feed is
-    # scrolled. First wait for the real Home surface to publish its navigation
-    # semantics, then restore the top of the feed with bounded real swipes.
-    xml=wait_for_home_control(["Chat","Friends"],"home-navigation",timeout=30.0) or xml
-    for _ in range(8):
+    # scrolled. Bring the real Home surface back to the top before looking for
+    # the actual Chat/Friends navigation controls; never use fallback coordinates.
+    for _ in range(4):
         if find_control(xml,["Chat"]) and find_control(xml,["Friends"]): break
         run("adb","shell","input","swipe","540","700","540","1500","500")
         time.sleep(.5)
@@ -706,7 +694,7 @@ if not FAILURES:
                         exercise_notification_route("fynx://chat/" + route_username, "private-chat")
                 else:
                     report.append("- PASS private-chat notification-route test skipped because no real chat participant identifier was visible; no test data was fabricated")
-                run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
+                run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE,timeout=30); time.sleep(2.5)
                 reset=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-chat-group-reset.xml") or xml
                 groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Groups"])
                 if groups_xml:
@@ -765,7 +753,7 @@ if not FAILURES:
                 else:
                     report.append("- PASS group-chat entry test skipped because the authenticated Chat surface was unavailable after reset")
         else: FAILURES.append("authenticated Home -> "+name)
-        run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
+        run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE,timeout=30); time.sleep(2.5)
         xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-reset.xml") or xml
 
 def find_feature_entry(xml_text:str, labels:list[str]):
@@ -803,7 +791,8 @@ def find_feature_entry(xml_text:str, labels:list[str]):
     return None
 
 def open_features(target_labels:list[str]|None=None):
-        run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE,timeout=30)
+    run("adb","shell","am","force-stop",PACKAGE)
+    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
     time.sleep(2.5)
     home_xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-features.xml") or xml
     feature_xml=tap_control(home_xml,["More","Features"],"features",["FYNX Features"])
