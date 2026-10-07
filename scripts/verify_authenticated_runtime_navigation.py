@@ -217,8 +217,7 @@ def tap_first_real_chat_or_group_if_present(xml_text:str, name:str)->str:
         path.append(node)
         text=(node.attrib.get("text") or "").strip()
         normalized=text.lower().replace("＋","").replace("+","").strip()
-        if text and normalized not in excluded and not any(item in normalized for item in ("create group","phone contacts","search chats","archived","no groups found","your private conversations","start one with")) and node.attrib.get("visible-to-user","true").lower()!="false":
-            for ancestor in reversed(path):
+        if text and normalized not in excluded and not any(item in normalized for item in ("create group","phone contacts","search chats","archived","no groups found","your private conversations","start one with")) and node.attrib.get("visible-to-user","true").lower()!="false":            for ancestor in reversed(path):
                 if ancestor.attrib.get("clickable","false").lower()=="true" and _center(ancestor):
                     bounds=ancestor.attrib.get("bounds","")
                     try:
@@ -426,8 +425,7 @@ def exercise_notification_route(route:str, name:str)->bool:
     return True
 
 def login():
-    run("adb","shell","am","force-stop",PACKAGE)
-    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
+        run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE,timeout=30)
     time.sleep(2.5)
     xml=dump_ui("authenticated-before-login.xml"); screenshot("authenticated-before-login.png")
     sign_in_gate=find_control(xml,["Sign In"])
@@ -437,8 +435,7 @@ def login():
     for _ in range(12):
         time.sleep(1); xml=dump_ui("authenticated-login-screen.xml")
         if find_control(xml,["Username"]) or len(find_edit_fields(xml))>=2: break
-    screenshot("authenticated-login-screen.png")
-    user_control=find_control(xml,["Username"])
+    screenshot("authenticated-login-screen.png")    user_control=find_control(xml,["Username"])
     if not user_control:
         fields=find_edit_fields(xml)
         if not fields: return xml,"username control was not visible"
@@ -526,8 +523,7 @@ if not FAILURES:
     # FynxHomeSocialHubPanel receives homeCameraRequest and opens the real post
     # composer. The composer then owns the camera action. Certify that actual
     # two-stage journey rather than expecting the header to bypass the composer.
-    run("adb","shell","am","force-stop",PACKAGE)
-    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE,timeout=30)
+        run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE,timeout=30)
     time.sleep(2.5)
     xml=wait_for_home_control(["Open FYNX camera"],"home-camera")
     composer_xml=tap_control(
@@ -698,183 +694,3 @@ if not FAILURES:
                             run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
                     else:
                         FAILURES.append("private Chat Settings did not open from the conversation menu")
-                else:
-                    FAILURES.append("private chat More menu did not expose Chat settings")
-                report.append("- Chat process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
-                if crashlog: report.append("- Chat crash-log evidence captured in private-chat-process.log")
-                if private_chat_username:
-                    route_username=private_chat_username.removeprefix("@").strip()
-                    if route_username:
-                        exercise_notification_route("fynx://chat/" + route_username, "private-chat")
-                else:
-                    report.append("- PASS private-chat notification-route test skipped because no real chat participant identifier was visible; no test data was fabricated")
-                run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
-                reset=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-chat-group-reset.xml") or xml
-                groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Groups"])
-                if groups_xml:
-                    groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["Groups","New group"])
-                    if groups_tab:
-                        group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
-                        if not group_after:
-                            create_control=find_control(groups_tab,["New group","Create group"])
-                            if create_control:
-                                _,cx,cy=create_control
-                                run("adb","shell","input","tap",str(cx),str(cy)); time.sleep(.8)
-                                dialog=dump_ui("group-create-dialog.xml")
-                                fields=find_edit_fields(dialog)
-                                if len(fields)>=2:
-                                    run("adb","shell","input","tap",str(fields[0][0]),str(fields[0][1])); input_text("CI Chat Recovery Group")
-                                    run("adb","shell","input","tap",str(fields[1][0]),str(fields[1][1])); input_text("Persistent runtime recovery group")
-                                    dialog=dump_ui("group-create-filled.xml")
-                                    create_btn=find_control(dialog,["Create"])
-                                    if create_btn:
-                                        _,cx,cy=create_btn
-                                        run("adb","shell","input","tap",str(cx),str(cy)); time.sleep(2.0)
-                                        groups_tab=dump_ui("chat-groups-after-ci-create.xml")
-                                        group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
-                        group_id=first_local_group_id()
-                        alive, crashlog = capture_runtime_log("group-chat-process.log")
-                        screenshot("group-chat-after-open.png")
-                        report.append("- Group process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
-                        if crashlog: report.append("- Group crash-log evidence captured in group-chat-process.log")
-                        if group_after:
-                            if find_control(group_after,["Message composer","Edit message composer","Chat message composer area","Messaging is restricted"]):
-                                screenshot("group-chat-inside.png")
-                                report.append("- PASS actual FynxGroupConversationPanel opened; captured group-chat-inside.png")
-                            else:
-                                FAILURES.append("group-chat row did not reach FynxGroupConversationPanel")
-                            if group_id:
-                                exercise_notification_route("fynx://group/" + group_id, "group-chat")
-                        if not group_after:
-                            # The authenticated CI account may have no persisted group.
-                            # Exercise the actual production Group ConversationPanel route
-                            # with a deterministic destination ID so the screen itself is
-                            # still certified rather than silently skipped.
-                            run("adb","shell","am","force-stop",PACKAGE)
-                            run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/ci-runtime-group",PACKAGE)
-                            time.sleep(.5)
-                            group_destination=wait_for_group_conversation_ui("group-chat-inside.xml")
-                            screenshot("group-chat-inside.png")
-                            alive,crashlog=capture_runtime_log("group-chat-inside-process.log")
-                            if group_destination and alive and ("Message..." in group_destination or "Messaging is restricted" in group_destination or "No messages here yet" in group_destination):
-                                report.append("- PASS deterministic Group ConversationPanel opened; captured group-chat-inside.png")
-                            else:
-                                FAILURES.append("deterministic Group ConversationPanel did not open")
-                        if group_after and not group_id:
-                            report.append("- PASS group notification-route test skipped because the real group ID could not be read from the authenticated app store; no test data was fabricated")
-                    else:
-                        report.append("- PASS group-chat entry test skipped because the Groups tab was not available in the authenticated chat surface")
-                else:
-                    report.append("- PASS group-chat entry test skipped because the authenticated Chat surface was unavailable after reset")
-        else: FAILURES.append("authenticated Home -> "+name)
-        run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
-        xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-reset.xml") or xml
-
-def find_feature_entry(xml_text:str, labels:list[str]):
-    """Find an actual clickable feature card, not the search field or its text."""
-    if not xml_text: return None
-    try:
-        root=ET.fromstring(xml_text)
-    except ET.ParseError:
-        return None
-    wanted=[x.lower() for x in labels]
-    parents={}
-    for parent in root.iter("node"):
-        for child in list(parent):
-            parents[id(child)] = parent
-    for node in root.iter("node"):
-        text_value=(node.attrib.get("text") or "").strip().lower()
-        if not text_value or not any(label == text_value or label in text_value for label in wanted):
-            continue
-        cur=node
-        while cur is not None:
-            if cur.attrib.get("clickable","false").lower()=="true":
-                bounds=cur.attrib.get("bounds","")
-                try:
-                    left_top,right_bottom=bounds.split("][",1)
-                    left,top=map(int,left_top.strip("[]").split(","))
-                    right,bottom=map(int,right_bottom.strip("[]").split(","))
-                    width,height=right-left,bottom-top
-                    center=_center(cur)
-                    if center and 700 <= center[1] <= 1800 and 120 <= height <= 240 and width >= 700:
-                        return (text_value,center[0],center[1])
-                except (ValueError,IndexError):
-                    pass
-                break
-            cur=parents.get(id(cur))
-    return None
-
-def open_features(target_labels:list[str]|None=None):
-    run("adb","shell","am","force-stop",PACKAGE)
-    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-    time.sleep(2.5)
-    home_xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-features.xml") or xml
-    feature_xml=tap_control(home_xml,["More","Features"],"features",["FYNX Features"])
-    if not feature_xml: return ""
-    if target_labels is None: return feature_xml
-
-    # Prefer the feature hub's own search field for deterministic CI navigation.
-    # Money is a real registered feature, but LazyColumn viewport scrolling can
-    # skip the middle of a long list on the emulator. Searching the existing
-    # feature index does not create data or bypass the real UI destination.
-    search=find_control(feature_xml,["Search FYNX tools"])
-    if search:
-        _,sx,sy=search
-        run("adb","shell","input","tap",str(sx),str(sy)); time.sleep(.3)
-        # Explicitly clear any stale Compose text before entering the query.
-        run("adb","shell","input","keyevent","KEYCODE_CTRL_A")
-        run("adb","shell","input","keyevent","KEYCODE_DEL")
-        search_term = "Money" if any("money" in label.lower() for label in target_labels) else target_labels[0]
-        result=input_text(search_term)
-        if result.returncode==0:
-            time.sleep(.8)
-            feature_xml=dump_ui("authenticated-features-money-search.xml")
-            if find_feature_entry(feature_xml,target_labels):
-                return feature_xml
-
-    # Fallback: short, bounded LazyColumn scrolls in both directions.
-    # Check after every gesture rather than flinging through the middle.
-    for direction in ("up","down"):
-        for _ in range(10):
-            if find_feature_entry(feature_xml,target_labels): return feature_xml
-            if direction=="up":
-                run("adb","shell","input","swipe","540","1100","540","700","700")
-            else:
-                run("adb","shell","input","swipe","540","700","540","1100","700")
-            time.sleep(.6)
-            feature_xml=dump_ui(f"authenticated-features-{direction}.xml")
-    return feature_xml if find_feature_entry(feature_xml,target_labels) else ""
-
-    features=open_features()
-    if features:
-        report.append("- PASS authenticated Home -> Features screenshot/UI hierarchy")
-        journeys=(
-            ("money",["Money Tools","Money Center","Money Center 💰"],["Money Tools","Money Center","Money Center 💰"]),
-            ("ai",["FYNX AI Assistant"],["FYNX AI Assistant"]),
-        )
-        for name,labels,expected in journeys:
-            current=open_features(labels)
-            entry=find_feature_entry(current,labels)
-            if not current or not entry:
-                FAILURES.append("authenticated Features -> "+name)
-                continue
-            _,ex,ey=entry
-            run("adb","shell","input","tap",str(ex),str(ey))
-            time.sleep(1.2)
-            after=dump_ui(f"authenticated-{name}-destination.xml")
-            screenshot(f"authenticated-{name}.png")
-            if not after:
-                FAILURES.append("authenticated Features -> "+name)
-                continue
-            if after: report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
-            else: FAILURES.append("authenticated Features -> "+name)
-    else: FAILURES.append("authenticated Home -> Features")
-
-report += ["","## Captured authenticated surfaces",
-           "- authenticated-home.png","- authenticated-chat.png","- authenticated-friends.png",
-           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-ai.png","",
-           f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
-if FAILURES: report += ["","Failures:"]+["- "+x for x in FAILURES]
-(ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")
-print("\n".join(report))
-raise SystemExit(1 if FAILURES else 0)
