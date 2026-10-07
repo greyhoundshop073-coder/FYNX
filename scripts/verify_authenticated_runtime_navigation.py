@@ -279,6 +279,19 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
         xml_text=dump_ui(f"authenticated-{name}-retry.xml")
         control=find_control(xml_text,labels)
     if not control:
+        # Preserve the exact UI hierarchy for diagnosis instead of guessing or
+        # changing working application controls when accessibility semantics differ.
+        diagnostic=xml_text or dump_ui(f"authenticated-{name}-missing.xml")
+        visible=[]
+        for node in nodes(diagnostic):
+            if node.attrib.get("visible-to-user","true").lower()=="false": continue
+            text=(node.attrib.get("text") or "").strip()
+            desc=(node.attrib.get("content-desc") or "").strip()
+            rid=(node.attrib.get("resource-id") or "").strip()
+            value=" | ".join(v for v in (text,desc,rid) if v)
+            if value and value not in visible: visible.append(value)
+        if visible:
+            report.append(f"- {name} missing-control UI semantics: " + " || ".join(visible[:120]))
         FAILURES.append(name); return ""
     _,x,y=control
     run("adb","logcat","-c")
@@ -462,7 +475,7 @@ def dismiss_runtime_permission_prompt()->str:
         time.sleep(.5)
     return dump_ui("authenticated-home-after-permission.xml")
 
-def wait_for_home_control(labels:list[str], name:str, timeout:float=12.0)->str:
+def wait_for_home_control(labels:list[str], name:str, timeout:float=30.0)->str:
     deadline=time.monotonic()+timeout
     latest=""
     while time.monotonic()<deadline:
@@ -544,9 +557,10 @@ if not FAILURES:
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-navigation-reset.xml") or xml
 
     # The Home bottom navigation is intentionally auto-hidden while the feed is
-    # scrolled. Bring the real Home surface back to the top before looking for
-    # the actual Chat/Friends navigation controls; never use fallback coordinates.
-    for _ in range(4):
+    # scrolled. First wait for the real Home surface to publish its navigation
+    # semantics, then restore the top of the feed with bounded real swipes.
+    xml=wait_for_home_control(["Chat","Friends"],"home-navigation",timeout=30.0) or xml
+    for _ in range(8):
         if find_control(xml,["Chat"]) and find_control(xml,["Friends"]): break
         run("adb","shell","input","swipe","540","700","540","1500","500")
         time.sleep(.5)
