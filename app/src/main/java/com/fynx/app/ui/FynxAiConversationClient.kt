@@ -34,8 +34,9 @@ object FynxAiConversationClient {
     suspend fun delete(context: Context, conversationId: String): Result<Unit> =
         FynxBackendClient.delete(context, "/api/assistant/conversations/${encode(conversationId)}").map { Unit }
 
-    suspend fun send(context: Context, conversationId: String, message: String, mediaIds: List<String> = emptyList()): Result<FynxAiConversationReply> {
+    suspend fun send(context: Context, conversationId: String, message: String, mediaIds: List<String> = emptyList(), marketplaceListingId: String? = null): Result<FynxAiConversationReply> {
         val body = JSONObject().put("message", message.trim()).put("mediaIds", JSONArray(mediaIds.distinct().take(4)))
+        marketplaceListingId?.toLongOrNull()?.let { body.put("marketplaceListingId", it) }
         return FynxBackendClient.postJson(context, "/api/assistant/conversations/${encode(conversationId)}/message", body.toString()).mapCatching { raw ->
             val json = JSONObject(raw)
             val reply = json.getJSONObject("assistantMessage")
