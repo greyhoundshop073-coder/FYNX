@@ -242,6 +242,13 @@ jobs:
       - name: Full build, test and lint
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || github.ref == 'refs/heads/fynx-smart-marketplace-b2-buying-assistant-functional' }}
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
+      - name: Install Android emulator host dependencies
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || github.ref == 'refs/heads/fynx-smart-marketplace-b2-buying-assistant-functional' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpulse0
+          ldconfig -p | grep 'libpulse.so.0'
+
       - name: Enable KVM for Android emulator
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || github.ref == 'refs/heads/fynx-smart-marketplace-b2-buying-assistant-functional' }}
         run: |
