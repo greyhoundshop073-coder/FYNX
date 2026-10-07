@@ -253,10 +253,10 @@ export function registerMarketplaceSettlementRoutes({ app }) {
       const id = crypto.randomUUID();
       const result = await pool.query(`
         INSERT INTO marketplace_payout_accounts (id,seller_id,provider,recipient_code,bank_code,bank_name,account_name,account_last4,currency,verified,active,updated_at)
-        VALUES ($1,$2,'paystack',$3,$4,$5,$6,$7,currency,TRUE,TRUE,NOW())
+        VALUES ($1,$2,'paystack',$3,$4,$5,$6,$7,$8,TRUE,TRUE,NOW())
         ON CONFLICT (seller_id, UPPER(currency)) DO UPDATE SET recipient_code=EXCLUDED.recipient_code,bank_code=EXCLUDED.bank_code,bank_name=EXCLUDED.bank_name,account_name=EXCLUDED.account_name,account_last4=EXCLUDED.account_last4,currency=EXCLUDED.currency,verified=TRUE,active=TRUE,updated_at=NOW()
         RETURNING *
-      `, [id, req.user.sub, recipientCode, bankCode, bankName || String(recipient.data.details?.bank_name || ''), verifiedName, last4]);
+      `, [id, req.user.sub, recipientCode, bankCode, bankName || String(recipient.data.details?.bank_name || ''), verifiedName, last4, currency]);
       return res.status(200).json({ payoutAccount: publicPayoutAccount(result.rows[0]) });
     } catch (error) {
       console.error('marketplace payout account setup', error);
