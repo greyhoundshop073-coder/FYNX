@@ -63,7 +63,7 @@ async function ensureSchema() {
       ALTER TABLE marketplace_orders ALTER COLUMN provider_fee_payer SET NOT NULL;
       CREATE TABLE IF NOT EXISTS marketplace_payout_accounts (
         id UUID PRIMARY KEY,
-        seller_id BIGINT NOT NULL UNIQUE REFERENCES users(id) ON DELETE RESTRICT,
+        seller_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
         provider TEXT NOT NULL DEFAULT 'paystack',
         recipient_code TEXT NOT NULL UNIQUE,
         bank_code TEXT NOT NULL,
@@ -77,6 +77,8 @@ async function ensureSchema() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS marketplace_payout_accounts_seller_idx ON marketplace_payout_accounts (seller_id, active);
+      CREATE UNIQUE INDEX IF NOT EXISTS marketplace_payout_accounts_seller_currency_idx ON marketplace_payout_accounts (seller_id, UPPER(currency));
+      ALTER TABLE marketplace_payout_accounts DROP CONSTRAINT IF EXISTS marketplace_payout_accounts_seller_id_key;
 
       CREATE TABLE IF NOT EXISTS marketplace_escrows (
         id UUID PRIMARY KEY,
@@ -222,6 +224,8 @@ export function registerMarketplaceSettlementRoutes({ app }) {
     const bankCode = typeof req.body?.bankCode === 'string' ? req.body.bankCode.trim() : '';
     const accountNumber = typeof req.body?.accountNumber === 'string' ? req.body.accountNumber.replace(/\D/g, '') : '';
     const accountName = typeof req.body?.accountName === 'string' ? req.body.accountName.trim().slice(0, 160) : '';
+    const currency = typeof req.body?.currency === 'string' ? req.body.currency.trim().toUpperCase() : 'NGN';
+    if (!['NGN','USD'].includes(currency)) return res.status(400).json({ error: 'Marketplace payout currency must be NGN or USD', code: 'UNSUPPORTED_MARKETPLACE_CURRENCY' });
     const bankName = typeof req.body?.bankName === 'string' ? req.body.bankName.trim().slice(0, 120) : '';
     if (!/^[0-9]{3,10}$/.test(bankCode) || !/^[0-9]{6,20}$/.test(accountNumber) || accountName.length < 2) return res.status(400).json({ error: 'valid bank code, account number and account name are required' });
     try {
@@ -235,7 +239,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
       const recipientResponse = await fetch('https://api.paystack.co/transferrecipient', {
         method: 'POST',
         headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'nuban', name: verifiedName, account_number: accountNumber, bank_code: bankCode, currency: 'NGN', description: `FYNX seller ${req.user.sub}` })
+        body: JSON.stringify({ type: 'nuban', name: verifiedName, account_number: accountNumber, bank_code: bankCode, currency, description: `FYNX seller ${req.user.sub}` })
       });
       const recipient = await recipientResponse.json().catch(() => ({}));
       if (!recipientResponse.ok || recipient?.status !== true || !recipient?.data?.recipient_code) return res.status(502).json({ error: 'payout recipient creation failed' });
@@ -244,8 +248,8 @@ export function registerMarketplaceSettlementRoutes({ app }) {
       const id = crypto.randomUUID();
       const result = await pool.query(`
         INSERT INTO marketplace_payout_accounts (id,seller_id,provider,recipient_code,bank_code,bank_name,account_name,account_last4,currency,verified,active,updated_at)
-        VALUES ($1,$2,'paystack',$3,$4,$5,$6,$7,'NGN',TRUE,TRUE,NOW())
-        ON CONFLICT (seller_id) DO UPDATE SET recipient_code=EXCLUDED.recipient_code,bank_code=EXCLUDED.bank_code,bank_name=EXCLUDED.bank_name,account_name=EXCLUDED.account_name,account_last4=EXCLUDED.account_last4,currency=EXCLUDED.currency,verified=TRUE,active=TRUE,updated_at=NOW()
+        VALUES ($1,$2,'paystack',$3,$4,$5,$6,$7,currency,TRUE,TRUE,NOW())
+        ON CONFLICT (seller_id, UPPER(currency)) DO UPDATE SET recipient_code=EXCLUDED.recipient_code,bank_code=EXCLUDED.bank_code,bank_name=EXCLUDED.bank_name,account_name=EXCLUDED.account_name,account_last4=EXCLUDED.account_last4,currency=EXCLUDED.currency,verified=TRUE,active=TRUE,updated_at=NOW()
         RETURNING *
       `, [id, req.user.sub, recipientCode, bankCode, bankName || String(recipient.data.details?.bank_name || ''), verifiedName, last4]);
       return res.status(200).json({ payoutAccount: publicPayoutAccount(result.rows[0]) });
@@ -270,7 +274,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
         if (!escrow) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'escrow has not been initialized' }); }
         if (order.status === 'DISPUTED' || escrow.status === 'DISPUTED') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'payout is blocked while the order is disputed' }); }
         if (order.status !== 'COMPLETED' || escrow.status !== 'RELEASE_ELIGIBLE') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'payout is not yet eligible; buyer completion is required' }); }
-        const payoutAccount = (await client.query('SELECT * FROM marketplace_payout_accounts WHERE seller_id=$1 AND active=TRUE AND verified=TRUE', [order.seller_id])).rows[0];
+        const payoutAccount = (await client.query('SELECT * FROM marketplace_payout_accounts WHERE seller_id=$1 AND active=TRUE AND verified=TRUE AND UPPER(currency)=UPPER($2)', [order.seller_id, order.currency])).rows[0];
         if (!payoutAccount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'verified seller payout account is required' }); }
         const sellerNetAmount = Number(order.seller_net_amount ?? order.total_amount), protectedAmount = Number(escrow.amount), marketplaceFee = Number(order.marketplace_fee ?? 0);
         if (!Number.isFinite(sellerNetAmount) || sellerNetAmount <= 0 || !Number.isFinite(protectedAmount) || !Number.isFinite(marketplaceFee) || Math.round((sellerNetAmount + marketplaceFee) * 100) / 100 !== protectedAmount || String(order.currency).toUpperCase() !== String(escrow.currency).toUpperCase()) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order accounting does not reconcile with the protected escrow' }); }
