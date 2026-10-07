@@ -368,8 +368,15 @@ def first_username_in_xml(xml_text:str)->str:
     if not xml_text: return ""
     try: root=ET.fromstring(xml_text)
     except ET.ParseError: return ""
+    excluded={
+        "chat","chats","messages","groups","friends","stories","more","features",
+        "search","settings","back","send","notifications","marketplace","home",
+        "profile","contacts","calls","money","ai","status","see all","new group",
+        "phone contacts","all chats","archived"
+    }
     for node in root.iter("node"):
         value=(node.attrib.get("text") or "").strip()
+        if value.lower() in excluded: continue
         if re.fullmatch(r"@?[A-Za-z0-9_.-]{2,80}", value):
             return value
     return ""
@@ -560,6 +567,7 @@ if not FAILURES:
                 private_chat_username=first_username_in_xml(after)
                 real_chat_target=backend_real_chat_target()
                 conversation_after=""
+                fallback=""
                 if real_chat_target:
                     run("adb","shell","am","force-stop",PACKAGE)
                     started=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+real_chat_target,PACKAGE,timeout=30)
@@ -630,9 +638,15 @@ if not FAILURES:
                             FAILURES.append("no authenticated username was available for ConversationPanel UI smoke test")
                 alive, crashlog = capture_runtime_log("private-chat-process.log")
                 screenshot("private-chat-after-open.png")
-                # Capture the real Chat Settings screen from the same opened conversation.
-                # This is read-only: do not toggle or reset the account preferences.
-                settings_menu = tap_control(dump_ui("private-chat-before-settings.xml"), ["More"], "private-chat-menu", ["Chat settings"])
+                conversation_ready = bool(conversation_after or fallback)
+                # Capture Chat Settings only after ConversationPanel itself has been
+                # proven visible. This prevents a failed entry path from producing
+                # misleading secondary "menu" failures.
+                if conversation_ready:
+                    settings_menu = tap_control(dump_ui("private-chat-before-settings.xml"), ["More"], "private-chat-menu", ["Chat settings"])
+                else:
+                    settings_menu = ""
+                    FAILURES.append("private chat ConversationPanel was not ready for Chat Settings")
                 if settings_menu:
                     settings_screen = tap_control(settings_menu, ["Chat settings"], "private-chat-settings", ["Chat Settings", "Notifications", "Appearance"])
                     if settings_screen:
