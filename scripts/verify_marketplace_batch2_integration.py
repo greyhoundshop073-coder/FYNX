@@ -35,7 +35,7 @@ checks = [
     ("Live Proof uses the shared CameraX engine with a Marketplace-specific mode", "liveProofMode = true" in live_proof and "FynxCameraCapturePanel(" in live_proof and "onLiveProofStart" in live_proof),
     ("Live Proof routes the real seller into the existing video-call system", "onLiveProof = { onLiveProof(listing.sellerUsername) }" in panel and 'onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }' in app),
     ("Price Watch uses the authenticated Marketplace backend", "marketplacePriceWatchState(context, listingId)" in panel and "watchMarketplacePrice(context, listingId)" in panel and "price_watch_$listingId" not in panel),
-    ("Buying Assistant opens the existing FYNX AI destination", 'onOpenAssistant = { onOpenAi() }' in panel and 'onOpenAi = { selected = "AI" }' in app),
+    ("Buying Assistant opens the existing FYNX AI destination with listing context", 'onOpenAssistant = { listingId -> onOpenAi(listingId) }' in panel and 'onOpenAi = { listingId -> marketplaceListingId = listingId; selected = "AI" }' in app and 'FynxAiAssistantPanel(onOpenDestination = { destination -> selected = destination }, marketplaceListingId = marketplaceListingId)' in app and 'if (selected != "Marketplace" && selected != "AI") marketplaceListingId = null' in app),
 ]
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
