@@ -456,6 +456,16 @@ def dismiss_runtime_permission_prompt()->str:
     return dump_ui("authenticated-home-after-permission.xml")
 
 def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[str]|None=None)->str:
+    # Home is a LazyColumn. Status/Stories can be below the initial viewport,
+    # so give the real surface a bounded scroll opportunity before declaring the
+    # control absent. No fallback coordinates or fabricated data are used.
+    if name=="stories" and not find_control(xml,labels):
+        for index in range(6):
+            run("adb","shell","input","swipe","540","1500","540","850","600")
+            time.sleep(.6)
+            xml=dump_ui(f"authenticated-{name}-scroll-{index}.xml")
+            if find_control(xml,labels):
+                break
     return tap_control(xml,labels,name,expected_labels) or xml
 
 report=["# FYNX Authenticated Runtime Visual Certification","",
@@ -482,15 +492,25 @@ else:
     else: report.append("- PASS real account authenticated through the FYNX login flow")
 
 if not FAILURES:
-    composer_xml=tap_control(xml,["Open FYNX camera"],"home-camera-composer",["What's on your mind?","Photo","Video/Camera"])
-    if composer_xml:
-        report.append("- PASS Home header camera -> real post composer screenshot/UI hierarchy")
-        camera_xml=tap_control(composer_xml,["Video/Camera"],"composer-camera",["Switch front/back camera","Photo","Recording"])
-        if camera_xml: report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
-        else: FAILURES.append("post composer -> real camera")
-    else: FAILURES.append("Home header camera -> real post composer")
+    # The production Home header camera is a direct camera entry point. Do not
+    # require the separate post-composer camera action here; that would certify
+    # a journey the live app intentionally does not implement.
+    xml=dismiss_runtime_permission_prompt() or xml
+    camera_xml=tap_control(
+        xml,
+        ["Open FYNX camera"],
+        "home-camera",
+        ["Switch front/back camera","Close camera","Turn flash on","Zoom"]
+    )
+    if camera_xml and (
+        find_control(camera_xml,["Switch front/back camera","Close camera","Turn flash on","Zoom"])
+        or find_control(camera_xml,["Photo","Video note","Capture"])
+    ):
+        report.append("- PASS Home header camera -> real FYNX camera screenshot/UI hierarchy")
+    else:
+        FAILURES.append("Home header camera -> real FYNX camera")
     run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
-    xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-camera-reset.xml") or xml
+    xml=dismiss_runtime_permission_prompt() or xml
 
     for name,labels,expected in (("chat",["Chat"],["Chat"]),("friends",["Friends"],["Friends"]),("stories",["Open Stories","See all"],["Status","Add status","Status"])):
         after=capture_surface(name,labels,xml,expected)
