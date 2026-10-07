@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -289,13 +290,13 @@ fun FynxMarketplaceSellerCenterPanel() {
                     accountSaving = true
                     accountMessage = null
                     scope.launch {
-                        val body = JSONObject()
+                        val bodyJson = JSONObject()
                             .put("bankCode", bankCode.trim())
                             .put("accountNumber", accountNumber.trim())
                             .put("accountName", accountName.trim())
                             .put("currency", payoutCurrency)
                             .put("bankName", payoutAccount?.optString("bankName").orEmpty())
-                            .toString()
+                        val body = bodyJson.toString()
                         FynxBackendClient.postJson(context, "/api/marketplace/settlement/payout-account", body)
                             .onSuccess { raw ->
                                 payoutAccount = JSONObject(raw).optJSONObject("payoutAccount")
