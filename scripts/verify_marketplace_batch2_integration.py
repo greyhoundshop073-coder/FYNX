@@ -4,7 +4,6 @@ ROOT = Path(__file__).resolve().parents[1]
 panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
 app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
 details = panel.split("private fun MarketplaceDetails", 1)[1]
-live_proof = files["live_proof"].read_text(encoding="utf-8") if (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceLiveProof.kt").is_file() else ""
 files = {
     "trust": ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceTrustPassport.kt",
     "buy_together": ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceBuyTogether.kt",
@@ -12,6 +11,8 @@ files = {
     "price_watch": ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePriceWatch.kt",
     "assistant": ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceBuyingAssistant.kt",
 }
+
+live_proof = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceLiveProof.kt").read_text(encoding="utf-8")
 
 required_surfaces = {
     "trust": "FynxMarketplaceTrustPassport(",
