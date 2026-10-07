@@ -509,28 +509,48 @@ else:
     else: report.append("- PASS real account authenticated through the FYNX login flow")
 
 if not FAILURES:
-    # The production Home header camera is a direct camera entry point. Do not
-    # require the separate post-composer camera action here; that would certify
-    # a journey the live app intentionally does not implement.
+    # The live Home header camera is intentionally the social-creation entry point:
+    # FynxHomeSocialHubPanel receives homeCameraRequest and opens the real post
+    # composer. The composer then owns the camera action. Certify that actual
+    # two-stage journey rather than expecting the header to bypass the composer.
     run("adb","shell","am","force-stop",PACKAGE)
     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE,timeout=30)
     time.sleep(2.5)
     xml=wait_for_home_control(["Open FYNX camera"],"home-camera")
-    camera_xml=tap_control(
+    composer_xml=tap_control(
         xml,
         ["Open FYNX camera"],
-        "home-camera",
-        ["Switch front/back camera","Close camera","Turn flash on","Zoom"]
+        "home-camera-composer",
+        ["What's on your mind?","Photo","Video/Camera"]
     )
-    if camera_xml and (
-        find_control(camera_xml,["Switch front/back camera","Close camera","Turn flash on","Zoom"])
-        or find_control(camera_xml,["Photo","Video note","Capture"])
-    ):
-        report.append("- PASS Home header camera -> real FYNX camera screenshot/UI hierarchy")
+    if composer_xml:
+        report.append("- PASS Home header camera -> real post composer screenshot/UI hierarchy")
+        camera_xml=tap_control(
+            composer_xml,
+            ["Video/Camera"],
+            "composer-camera",
+            ["Switch front/back camera","Photo","Recording","Capture"]
+        )
+        if camera_xml and (
+            find_control(camera_xml,["Switch front/back camera","Close camera","Turn flash on","Zoom"])
+            or find_control(camera_xml,["Photo","Recording","Capture"])
+        ):
+            report.append("- PASS post composer -> real FYNX camera screenshot/UI hierarchy")
+        else:
+            FAILURES.append("post composer -> real FYNX camera")
     else:
-        FAILURES.append("Home header camera -> real FYNX camera")
-    run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
-    xml=dismiss_runtime_permission_prompt() or xml
+        FAILURES.append("Home header camera -> real post composer")
+    run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE,timeout=30); time.sleep(2.5)
+    xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-navigation-reset.xml") or xml
+
+    # The Home bottom navigation is intentionally auto-hidden while the feed is
+    # scrolled. Bring the real Home surface back to the top before looking for
+    # the actual Chat/Friends navigation controls; never use fallback coordinates.
+    for _ in range(4):
+        if find_control(xml,["Chat"]) and find_control(xml,["Friends"]): break
+        run("adb","shell","input","swipe","540","700","540","1500","500")
+        time.sleep(.5)
+        xml=dump_ui("authenticated-home-navigation-restore.xml") or xml
 
     for name,labels,expected in (("chat",["Chat"],["Chat"]),("friends",["Friends"],["Friends"]),("stories",["Open Stories","See all"],["Status","Add status","Status"])):
         if name in ("chat","friends"):
