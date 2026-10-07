@@ -144,6 +144,7 @@ export function registerFynxAiConversationRoutes({ app }) {
     const userId=authenticate(req); if(!userId) return res.status(401).json({error:"authentication required"});
     const message=ensureMessageText(req.body?.message);
     const mediaIds=Array.isArray(req.body?.mediaIds)?req.body.mediaIds:[];
+    const marketplaceListingId = typeof req.body?.marketplaceListingId === "number" && Number.isInteger(req.body.marketplaceListingId) ? String(req.body.marketplaceListingId) : "";
     if(!message && !mediaIds.length) return res.status(400).json({error:"message or attachment is required"});
     if(message.length>4000 || mediaIds.length>4) return res.status(413).json({error:"message or attachment limit exceeded"});
     try {
@@ -151,6 +152,13 @@ export function registerFynxAiConversationRoutes({ app }) {
       const conversation=await ownedConversation(db,req.params.id,userId);
       if(!conversation) return res.status(404).json({error:"conversation not found"});
       const images=await loadImageInputs(db,mediaIds,userId);
+      let marketplaceContext = {};
+      if (marketplaceListingId) {
+        const listing = await db.query(`SELECT l.id,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,l.location,l.delivery_available,l.pickup_available,u.username AS seller_username,u.display_name AS seller_display_name FROM marketplace_listings l JOIN users u ON u.id=l.seller_id WHERE l.id=$1 AND l.active=TRUE AND l.quantity>0 AND l.seller_id<>$2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=l.seller_id) OR (b.blocker_id=l.seller_id AND b.blocked_id=$2)) LIMIT 1`, [marketplaceListingId,userId]);
+        if (!listing.rows[0]) return res.status(404).json({error:"marketplace listing not found"});
+        const row=listing.rows[0];
+        marketplaceContext = { summary: `Verified FYNX Marketplace listing: "${row.title}" by @${row.seller_username}. Price ${row.currency} ${Number(row.price).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}. Category ${row.category}; condition ${row.condition}; quantity ${row.quantity}; location ${row.location || "not specified"}; delivery ${row.delivery_available ? "available" : "not available"}; pickup ${row.pickup_available ? "available" : "not available"}. Description: ${String(row.description || "").slice(0,500)}.`, currentTask: "Help the buyer evaluate this verified Marketplace listing using only the supplied listing facts and general buying guidance." };
+      }
       const prior=await db.query("SELECT role,text FROM ai_messages WHERE conversation_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 12",[conversation.id,userId]);
       const history=prior.rows.reverse().map(row=>({role:row.role,text:row.text})).filter(row=>row.text);
       await db.query("BEGIN");
@@ -163,7 +171,7 @@ export function registerFynxAiConversationRoutes({ app }) {
         message: message || "Analyze the attached image.",
         userId,
         history,
-        context: {},
+        context: marketplaceContext,
         imageInputs: images
       });
         const reply = agentResult.reply;
