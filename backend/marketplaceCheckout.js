@@ -7,9 +7,9 @@ export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
   const normalizeMethod = (value) => { const method = typeof value === 'string' ? value.trim().toUpperCase() : ''; return method === 'DELIVERY' || method === 'PICKUP' ? method : null; };
   const normalizeCurrency = (value) => { const currency = typeof value === 'string' ? value.trim().toUpperCase() : ''; return /^[A-Z]{3}$/.test(currency) ? currency : null; };
   const feeConfig = () => {
-    const modeValue = String(process.env.FYNX_MARKETPLACE_FEE_MODE || 'ZERO').toUpperCase();
+    const modeValue = String(process.env.FYNX_MARKETPLACE_FEE_MODE || 'SELLER').toUpperCase();
     const mode = ['ZERO', 'BUYER', 'SELLER', 'SPLIT'].includes(modeValue) ? modeValue : 'ZERO';
-    const bps = Math.min(10000, Math.max(0, Number.parseInt(process.env.FYNX_MARKETPLACE_FEE_BPS || '0', 10) || 0));
+    const bps = Math.min(10000, Math.max(0, Number.parseInt(process.env.FYNX_MARKETPLACE_FEE_BPS || '500', 10) || 0));
     const fixed = Math.max(0, Number(process.env.FYNX_MARKETPLACE_FEE_FIXED || '0') || 0);
     const buyerShare = Math.min(10000, Math.max(0, Number.parseInt(process.env.FYNX_MARKETPLACE_FEE_BUYER_SHARE_BPS || '5000', 10) || 0));
     const version = String(process.env.FYNX_MARKETPLACE_FEE_POLICY_VERSION || '1').trim().slice(0, 64) || '1';
