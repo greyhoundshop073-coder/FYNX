@@ -56,7 +56,7 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 @Composable
-fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: () -> Unit = {}, initialListingId: String? = null) {
+fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: () -> Unit = {}, onLiveProof: (String) -> Unit = {}, initialListingId: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var listings by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
@@ -225,7 +225,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             onBuyNow = { selected = null; checkoutListing = listing },
             onAddToCart = { if (cart.none { it.id == listing.id }) cart = cart + listing; selected = null },
             onBuyTogether = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(listing.id, listing.title)) },
-            onLiveProof = { contactSeller(listing.sellerUsername, listing.id) },
+            onLiveProof = { onLiveProof(listing.sellerUsername) },
             onWatchPrice = { listingId -> context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE).edit().putBoolean("price_watch_$listingId", true).apply() },
             onOpenAssistant = { onOpenAi() },
             onClose = { selected = null }

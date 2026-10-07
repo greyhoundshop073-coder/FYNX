@@ -30,7 +30,7 @@ checks = [
     ("listing identity reaches every Batch 2 surface", "listing = l" in details),
     ("Trust Passport uses existing seller reputation", "sellerReputation = sellerReputations[sellerKey]" in panel and "sellerReputation:" in details),
     ("Buy Together keeps the canonical listing ID", "FynxShareActions.marketplacePayload(listing.id, listing.title)" in panel),
-    ("Live Proof stays on the existing seller chat path", "onLiveProof = { contactSeller(listing.sellerUsername, listing.id) }" in panel),
+    ("Live Proof routes the real seller into the existing video-call system", "onLiveProof = { onLiveProof(listing.sellerUsername) }" in panel and 'onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }' in app),
     ("Price Watch persists the real listing ID", "price_watch_$listingId" in panel),
     ("Buying Assistant opens the existing FYNX AI destination", 'onOpenAssistant = { onOpenAi() }' in panel and 'onOpenAi = { selected = "AI" }' in app),
 ]
