@@ -455,6 +455,16 @@ def dismiss_runtime_permission_prompt()->str:
         time.sleep(.5)
     return dump_ui("authenticated-home-after-permission.xml")
 
+def wait_for_home_control(labels:list[str], name:str, timeout:float=12.0)->str:
+    deadline=time.monotonic()+timeout
+    latest=""
+    while time.monotonic()<deadline:
+        latest=dismiss_runtime_permission_prompt() or dump_ui(f"{name}-wait.xml")
+        if latest and find_control(latest,labels):
+            return latest
+        time.sleep(.5)
+    return latest
+
 def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[str]|None=None)->str:
     # Home is a LazyColumn. Status/Stories can be below the initial viewport,
     # so give the real surface a bounded scroll opportunity before declaring the
@@ -466,7 +476,7 @@ def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[st
             xml=dump_ui(f"authenticated-{name}-scroll-{index}.xml")
             if find_control(xml,labels):
                 break
-    return tap_control(xml,labels,name,expected_labels) or xml
+    return tap_control(xml,labels,name,expected_labels)
 
 report=["# FYNX Authenticated Runtime Visual Certification","",
         f"- Commit: {os.environ.get('GITHUB_SHA','local')}",
@@ -495,7 +505,10 @@ if not FAILURES:
     # The production Home header camera is a direct camera entry point. Do not
     # require the separate post-composer camera action here; that would certify
     # a journey the live app intentionally does not implement.
-    xml=dismiss_runtime_permission_prompt() or xml
+    run("adb","shell","am","force-stop",PACKAGE)
+    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE,timeout=30)
+    time.sleep(2.5)
+    xml=wait_for_home_control(["Open FYNX camera"],"home-camera")
     camera_xml=tap_control(
         xml,
         ["Open FYNX camera"],
@@ -513,6 +526,10 @@ if not FAILURES:
     xml=dismiss_runtime_permission_prompt() or xml
 
     for name,labels,expected in (("chat",["Chat"],["Chat"]),("friends",["Friends"],["Friends"]),("stories",["Open Stories","See all"],["Status","Add status","Status"])):
+        if name in ("chat","friends"):
+            xml=wait_for_home_control(labels,f"home-{name}")
+        elif name=="stories" and not find_control(xml,labels):
+            xml=wait_for_home_control(["Chat","Friends"],"home-stories-reset")
         after=capture_surface(name,labels,xml,expected)
         if after:
             report.append(f"- PASS authenticated Home -> {name} screenshot/UI hierarchy")
@@ -560,33 +577,28 @@ if not FAILURES:
                         screenshot("private-chat-inside.png")
                         report.append("- PASS real private chat destination opened for an existing FYNX user")
                 else:
-                    # Use the production Friends discovery UI as the fallback. This
-                    # exercises the same real-user search and Chat action a user uses.
-                    run("adb","shell","am","force-stop",PACKAGE)
-                    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-                    time.sleep(2.5)
-                    home_for_chat=dismiss_runtime_permission_prompt() or dump_ui("private-chat-fallback-home.xml")
-                    friends_surface=tap_control(home_for_chat,["Friends"],"private-chat-fallback-friends",["Friends"])
-                    fallback_fields=find_edit_fields(friends_surface)
-                    fallback=""
-                    if fallback_fields:
-                        fx,fy=fallback_fields[0]
-                        run("adb","shell","input","tap",str(fx),str(fy))
-                        input_text("a")
-                        time.sleep(2.0)
-                        fallback=dump_ui("private-chat-search-results.xml")
-                    chat_control=find_control(fallback,["Open chat"])
-                    if chat_control:
-                        _,fx,fy=chat_control
-                        run("adb","shell","input","tap",str(fx),str(fy))
-                        time.sleep(.5)
-                        fallback=wait_for_conversation_ui("private-chat-inside.xml")
+                    # Backend discovery can be unavailable in CI. Prefer an actual
+                    # participant already exposed by the authenticated Chat surface;
+                    # this keeps the test real and avoids depending on a second-user
+                    # search or creating any test data.
+                    fallback_target=private_chat_username or ""
+                    if fallback_target:
+                        run("adb","shell","am","force-stop",PACKAGE)
+                        run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+urllib.parse.quote(fallback_target.removeprefix("@")),PACKAGE,timeout=30)
+                        fallback=""
+                        for _ in range(20):
+                            time.sleep(.5)
+                            candidate=dismiss_runtime_permission_prompt() or dump_ui("private-chat-inside.xml")
+                            if candidate and (find_control(candidate,["Message composer","Edit message composer","Chat message composer area","Message..."])
+                                               or find_control(candidate,["No messages here yet"])):
+                                fallback=candidate
+                                break
                         alive,crashlog=capture_runtime_log("private-chat-inside-process.log")
-                        if fallback and alive and find_control(fallback,["Message composer","Edit message composer","Chat message composer area"]):
+                        if fallback and alive:
                             screenshot("private-chat-inside.png")
-                            report.append("- PASS actual private ConversationPanel opened from real Friends discovery; captured private-chat-inside.png")
+                            report.append("- PASS existing authenticated Chat participant opened ConversationPanel")
                         else:
-                            FAILURES.append("Friends discovery Chat action did not reach ConversationPanel")
+                            FAILURES.append("existing authenticated Chat participant did not reach ConversationPanel")
                     else:
                         # No second production account is available in this CI tenant.
                         # Exercise the actual ConversationPanel with the authenticated
