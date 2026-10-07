@@ -69,4 +69,177 @@ export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
     } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace checkout quote', error); return res.status(500).json({ error: 'checkout quote could not be prepared' }); }
     finally { client.release(); }
   });
+
+  // Multi-product quote foundation. This deliberately stops before reservation/payment:
+  // every cart line is validated and priced independently, while the buyer still gets
+  // one authoritative aggregate quote. The later order stage will create protected
+  // child orders from this same contract.
+  app.post('/api/marketplace/checkout/multi-quote', auth, async (req, res) => {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!items.length) return res.status(400).json({ error: 'at least one cart item is required' });
+    if (items.length > 20) return res.status(400).json({ error: 'a multi-product checkout can contain at most 20 different products' });
+
+    const normalizedItems = items.map((item) => {
+      const listingId = parsePositiveInt(item?.listingId);
+      const quantity = parsePositiveInt(item?.quantity);
+      const fulfillmentMethod = normalizeMethod(item?.fulfillmentMethod);
+      const shippingAddress = fulfillmentMethod === 'DELIVERY' ? normalizeAddress(item?.shippingAddress) : null;
+      return { listingId, quantity, fulfillmentMethod, shippingAddress };
+    });
+    if (normalizedItems.some((item) => !item.listingId || !item.quantity || !item.fulfillmentMethod)) {
+      return res.status(400).json({ error: 'every cart item requires listing, quantity and fulfillment method' });
+    }
+    if (new Set(normalizedItems.map((item) => item.listingId)).size !== normalizedItems.length) {
+      return res.status(400).json({ error: 'a listing may appear only once in a multi-product checkout' });
+    }
+    if (normalizedItems.some((item) => item.fulfillmentMethod === 'DELIVERY' && !item.shippingAddress)) {
+      return res.status(400).json({ error: 'delivery items require name, phone and address' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await ensureMarketplaceShippingSchema(pool);
+      const safety = (await client.query('SELECT marketplace_safety,account_status FROM fynx_account_safety WHERE user_id=$1 LIMIT 1', [req.user.sub])).rows[0] || { marketplace_safety: true, account_status: 'ACTIVE' };
+      if (String(safety.account_status) === 'LOCKED') return res.status(403).json({ error: 'account is locked', code: 'ACCOUNT_LOCKED' });
+      if (String(safety.account_status) === 'LIMITED') return res.status(403).json({ error: 'account is temporarily limited from marketplace purchases', code: 'ACCOUNT_LIMITED' });
+
+      await client.query('BEGIN');
+      const quotedItems = [];
+      let checkoutCurrency = null;
+      let subtotal = 0;
+      let deliveryFee = 0;
+      let marketplaceFee = 0;
+      let marketplaceFeeBuyer = 0;
+      let marketplaceFeeSeller = 0;
+      const config = feeConfig();
+
+      for (const item of normalizedItems) {
+        const listing = (await client.query(
+          'SELECT l.*,u.username AS seller_username,u.display_name AS seller_display_name FROM marketplace_listings l JOIN users u ON u.id=l.seller_id WHERE l.id=$1 AND l.active=TRUE FOR UPDATE',
+          [item.listingId]
+        )).rows[0];
+        if (!listing) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'one or more listings are no longer available' }); }
+        if (String(listing.seller_id) === String(req.user.sub)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'you cannot purchase your own listing' }); }
+
+        const blocked = await client.query(
+          'SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1) LIMIT 1',
+          [req.user.sub, listing.seller_id]
+        );
+        if (blocked.rowCount) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'one or more listings are unavailable' }); }
+
+        if (Boolean(safety.marketplace_safety)) {
+          const safetyResult = inspectTrustSafetyText([listing.title, listing.description, listing.location].filter(Boolean).join(' '));
+          if (safetyResult.shouldBlock) { await client.query('ROLLBACK'); return res.status(422).json({ error: 'one or more listings are blocked by marketplace safety protection', code: 'SAFETY_BLOCK' }); }
+        }
+
+        const currency = normalizeCurrency(listing.currency);
+        if (!currency || !['NGN', 'USD'].includes(currency)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'all Marketplace checkout items must use an active NGN or USD currency', code: 'INVALID_CURRENCY' });
+        }
+        if (checkoutCurrency && checkoutCurrency !== currency) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'a multi-product checkout cannot mix NGN and USD', code: 'MIXED_CURRENCIES' });
+        }
+        checkoutCurrency = currency;
+
+        const available = Number(listing.quantity) - Number(listing.reserved_quantity || 0);
+        if (item.quantity > available) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'requested quantity is not available for one or more listings', code: 'INSUFFICIENT_STOCK', availableQuantity: Math.max(0, available), listingId: String(listing.id) });
+        }
+        if (item.fulfillmentMethod === 'DELIVERY' && !Boolean(listing.delivery_available)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'delivery is not available for one or more listings', listingId: String(listing.id) });
+        }
+        if (item.fulfillmentMethod === 'PICKUP' && !Boolean(listing.pickup_available)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'pickup is not available for one or more listings', listingId: String(listing.id) });
+        }
+        if (item.fulfillmentMethod === 'DELIVERY' && !(await isMarketplaceDestinationCovered(client, listing.id, item.shippingAddress))) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'one or more sellers do not currently deliver to the requested destination', code: 'DESTINATION_NOT_COVERED', listingId: String(listing.id) });
+        }
+
+        const unitPrice = Number(listing.price);
+        const productSubtotal = Math.round(unitPrice * item.quantity * 100) / 100;
+        const shipping = calculateMarketplaceShipping(listing, item.quantity, item.fulfillmentMethod);
+        const lineDeliveryFee = shipping.fee;
+        const rawFee = Math.round((productSubtotal * (config.bps / 10000) + config.fixed) * 100) / 100;
+        const lineMarketplaceFee = Math.max(0, rawFee);
+        const buyerShare = config.mode === 'BUYER' ? 1 : config.mode === 'SELLER' ? 0 : config.mode === 'SPLIT' ? config.buyerShare / 10000 : 0;
+        const lineFeeBuyer = Math.round(lineMarketplaceFee * buyerShare * 100) / 100;
+        const lineFeeSeller = Math.round((lineMarketplaceFee - lineFeeBuyer) * 100) / 100;
+        const lineBuyerTotal = Math.round((productSubtotal + lineDeliveryFee + lineFeeBuyer) * 100) / 100;
+        const lineSellerNet = Math.round((productSubtotal + lineDeliveryFee - lineFeeSeller) * 100) / 100;
+        if (!(lineBuyerTotal > 0) || lineSellerNet < 0) {
+          await client.query('ROLLBACK');
+          return res.status(500).json({ error: 'multi-product checkout total calculation failed', listingId: String(listing.id) });
+        }
+
+        subtotal += productSubtotal;
+        deliveryFee += lineDeliveryFee;
+        marketplaceFee += lineMarketplaceFee;
+        marketplaceFeeBuyer += lineFeeBuyer;
+        marketplaceFeeSeller += lineFeeSeller;
+        quotedItems.push({
+          listingId: String(listing.id),
+          sellerId: String(listing.seller_id),
+          sellerUsername: listing.seller_username,
+          sellerDisplayName: listing.seller_display_name,
+          productTitle: listing.title,
+          quantity: item.quantity,
+          unitPrice,
+          currency,
+          fulfillmentMethod: item.fulfillmentMethod,
+          shippingAddress: item.shippingAddress,
+          shippingProvider: shipping.provider,
+          shippingFeePolicy: shipping.feePolicy,
+          shippingNote: shipping.note,
+          subtotal: productSubtotal,
+          deliveryFee: lineDeliveryFee,
+          marketplaceFee: lineMarketplaceFee,
+          marketplaceFeeBuyer: lineFeeBuyer,
+          marketplaceFeeSeller: lineFeeSeller,
+          total: lineBuyerTotal,
+          sellerNetAmount: lineSellerNet
+        });
+      }
+
+      const total = Math.round((subtotal + deliveryFee + marketplaceFeeBuyer) * 100) / 100;
+      if (!(total > 0)) {
+        await client.query('ROLLBACK');
+        return res.status(500).json({ error: 'multi-product checkout total calculation failed' });
+      }
+      const quoteId = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+      await client.query('COMMIT');
+      return res.json({
+        quote: {
+          id: quoteId,
+          expiresAt,
+          itemCount: quotedItems.length,
+          currency: checkoutCurrency,
+          items: quotedItems,
+          subtotal: Math.round(subtotal * 100) / 100,
+          deliveryFee: Math.round(deliveryFee * 100) / 100,
+          marketplaceFee: Math.round(marketplaceFee * 100) / 100,
+          marketplaceFeeBuyer: Math.round(marketplaceFeeBuyer * 100) / 100,
+          marketplaceFeeSeller: Math.round(marketplaceFeeSeller * 100) / 100,
+          discountAmount: 0,
+          total,
+          feePolicy: config.mode,
+          feePolicyVersion: config.version,
+          providerFeePayer: config.providerFeePayer,
+          protection: { payment: 'PROTECTED', payout: 'RELEASED_AFTER_BUYER_CONFIRMATION' }
+        }
+      });
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch {}
+      console.error('marketplace multi-product checkout quote', error);
+      return res.status(500).json({ error: 'multi-product checkout quote could not be prepared' });
+    } finally {
+      client.release();
+    }
+  });
 }
