@@ -244,7 +244,7 @@ jobs:
       - name: Fast build, test and lint
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
       - name: Full build, test and lint
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && github.head_ref == 'fix/home-lifecycle-certification') }}
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
       - name: Run Android instrumentation tests and capture the real FYNX UI
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
