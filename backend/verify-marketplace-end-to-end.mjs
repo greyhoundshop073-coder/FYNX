@@ -4,7 +4,7 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 
 const checkout = read('./marketplaceCheckout.js');
 const checkoutOrder = read('./marketplaceCheckoutOrder.js');
-const payment = read('./marketplacePaymentState.js');
+const payment = read('./marketplaceReputation.js');
 const webhook = read('./marketplacePaystackWebhook.js');
 const completion = read('./marketplaceCompletion.js');
 const protection = read('./marketplaceProtection.js');
@@ -34,8 +34,8 @@ const checks = [
   ['settlement release is completion-gated', settlement.includes("/api/marketplace/settlement/release/:id") && settlement.includes("order.status !== 'COMPLETED'")],
   ['payout worker verifies provider result', worker.includes("/transfer/verify/") && worker.includes("markPayoutSucceeded")],
   ['payout worker keeps operation idempotent', worker.includes("status !== 'PENDING'") && worker.includes("FOR UPDATE")],
-  ['buyer UI performs server quote before multi-order creation', panel.includes("multiQuote") && panel.includes("createMultiOrder")],
-  ['buyer UI verifies the payment before treating checkout as paid', panel.includes("verifyMultiCheckoutPayment") && panel.includes("PAYMENT_CONFIRMED")],
+  ['buyer UI performs server quote before multi-order creation', panel.includes("requestMultiQuote") && panel.includes("createMultiOrder")],
+  ['buyer UI verifies the payment before treating checkout as paid', panel.includes("initializeMarketplaceCheckoutGroupPayment") && panel.includes("verifyMarketplaceCheckoutGroupPayment") && panel.includes("onPaid()")],
   ['buyer lifecycle remains server-authoritative', lifecycle.includes("FynxRemoteSocialClient") && !/UPDATE\s+marketplace_orders|INSERT\s+INTO\s+marketplace_orders/i.test(lifecycle)],
   ['seller lifecycle remains server-authoritative', seller.includes("FynxBackendClient") && !/UPDATE\s+marketplace_orders|INSERT\s+INTO\s+marketplace_orders/i.test(seller)]
 ];
