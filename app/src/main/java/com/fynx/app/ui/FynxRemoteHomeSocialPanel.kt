@@ -73,6 +73,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var loading by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
     var hasMore by remember { mutableStateOf(false) }
+    var feedNextCursor by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var feedRequestInFlight by remember { mutableStateOf(false) }
     var lastFeedRequestAt by remember { mutableLongStateOf(0L) }
@@ -318,13 +319,13 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             val hadFreshCache = !forceRefresh && FynxRemoteSocialClient.hasCachedFeed(context)
             FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
                 .onSuccess { page ->
-                    posts = page.posts; hasMore = page.hasMore; error = null
+                    posts = page.posts; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null
                     interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null
                     resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); hydratePostMedia(page.posts)
                     discoveryOffset = 0; discoveryHasMore = false
                     if (hadFreshCache) scope.launch {
                         FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false)
-                            .onSuccess { fresh -> posts = fresh.posts; hasMore = fresh.hasMore; error = null; resolveAuthorPhotos(fresh.posts); hydrateInteractionStates(fresh.posts); hydrateReactionStates(fresh.posts); hydratePostMedia(fresh.posts) }
+                            .onSuccess { fresh -> posts = fresh.posts; hasMore = fresh.hasMore; feedNextCursor = fresh.nextCursor; error = null; resolveAuthorPhotos(fresh.posts); hydrateInteractionStates(fresh.posts); hydrateReactionStates(fresh.posts); hydratePostMedia(fresh.posts) }
                             .onFailure { /* Keep the valid cached snapshot visible. */ }
                     }
                 }
@@ -346,7 +347,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     fun loadMore() {
         if (loading || loadingMore || (!hasMore && !discoveryHasMore) || feedRequestInFlight) return
         feedRequestInFlight = true
-        scope.launch { loadingMore = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = posts.count { !it.isDiscovery }, useCache = false).onSuccess { page -> val existing = posts.map { it.id }.toSet(); val additions = page.posts.filterNot { it.id in existing }; posts = posts + additions; hasMore = page.hasMore; error = null; resolveAuthorPhotos(additions); hydrateInteractionStates(additions); hydrateReactionStates(additions); hydratePostMedia(additions); if (!page.hasMore && discoveryHasMore) hydrateDiscovery(discoveryOffset) }.onFailure { error = it.message ?: "Unable to load more posts." }; loadingMore = false; feedRequestInFlight = false }
+        scope.launch { loadingMore = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false, beforeCursor = feedNextCursor).onSuccess { page -> val existing = posts.map { it.id }.toSet(); val additions = page.posts.filterNot { it.id in existing }; posts = posts + additions; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; resolveAuthorPhotos(additions); hydrateInteractionStates(additions); hydrateReactionStates(additions); hydratePostMedia(additions); if (!page.hasMore && discoveryHasMore) hydrateDiscovery(discoveryOffset) }.onFailure { error = it.message ?: "Unable to load more posts." }; loadingMore = false; feedRequestInFlight = false }
     }
     fun runInteraction(id: String, desired: Boolean, isActive: (FynxRemoteSocialClient.SocialInteractionState) -> Boolean, count: (FynxRemoteSocialClient.SocialInteractionState) -> Int, action: suspend () -> Result<Pair<Boolean, Int>>, update: (FynxRemoteSocialClient.SocialInteractionState, Boolean, Int) -> FynxRemoteSocialClient.SocialInteractionState) {
         if (id in interactionBusy) return
@@ -358,7 +359,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     fun runLike(id: String) {
         if (id in interactionBusy) return; val previous = posts.firstOrNull { it.id == id } ?: return; val optimisticLiked = !previous.likedByCurrentUser; val optimisticCount = (previous.likeCount + if (optimisticLiked) 1 else -1).coerceAtLeast(0)
         posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = optimisticLiked, likeCount = optimisticCount) else it }; interactionBusy = interactionBusy + id
-        scope.launch { FynxRemoteSocialClient.like(context, id).onSuccess { result -> val (liked, count) = result; posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = liked, likeCount = count.coerceAtLeast(0)) else it } }.onFailure { posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = previous.likedByCurrentUser, likeCount = previous.likeCount) else it }; error = it.message ?: "Unable to update this like." }; interactionBusy = interactionBusy - id }
+        scope.launch { FynxRemoteSocialClient.like(context, id, desired = optimisticLiked).onSuccess { result -> val (liked, count) = result; posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = liked, likeCount = count.coerceAtLeast(0)) else it } }.onFailure { posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = previous.likedByCurrentUser, likeCount = previous.likeCount) else it }; error = it.message ?: "Unable to update this like." }; interactionBusy = interactionBusy - id }
     }
     fun runReaction(id: String, reaction: String) {
         if (id in interactionBusy) return; val previous = reactionStates[id] ?: FynxHomePostReactionsClient.ReactionState(); val same = previous.currentReaction == reaction; val optimisticCounts = previous.counts.toMutableMap(); previous.currentReaction?.let { current -> optimisticCounts[current] = ((optimisticCounts[current] ?: 0) - 1).coerceAtLeast(0) }; if (!same) optimisticCounts[reaction] = (optimisticCounts[reaction] ?: 0) + 1

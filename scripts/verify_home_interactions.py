@@ -19,6 +19,7 @@ def require_normalized(text: str, needle: str, label: str) -> None:
         raise SystemExit(f"HOME INTERACTIONS RED: missing {label}: {needle}")
 
 discovery = read("backend/discoveryRoutes.js")
+social_routes = read("backend/socialRoutes.js")
 home = read("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt")
 home_shell = read("app/src/main/java/com/fynx/app/ui/HomePanel.kt")
 visible_updates = read("app/src/main/java/com/fynx/app/ui/FynxVisibleUpdatesPanel.kt")
@@ -41,7 +42,7 @@ for needle in ("suspend fun comments(context: Context, id: String)","suspend fun
     require_normalized(client, needle, f"existing social client API {needle}")
 for needle in ('Icons.Default.Favorite','Icons.Default.ChatBubbleOutline','Icons.Default.Bookmark','Icons.Default.BookmarkBorder','Icons.Default.Repeat','Icons.Default.MoreHoriz','interactionBusy','feedRequestInFlight','lastFeedRequestAt','FEED_REFRESH_DEBOUNCE_MS','posts = posts.filterNot { it.id == id }','deletePost = null','AlertDialog(','sharePost(context, post)'):
     require(home, needle, f"Home reliability surface {needle}")
-for needle in ('feedPage(context, limit = 20, offset = 0','feedPage(context, limit = 20, offset = posts.count { !it.isDiscovery }','discoveryFeed(context, 3, offset)','discoveryOffset','discoveryHasMore','val existing = posts.map { it.id }.toSet()','filterNot { it.id in existing }','lastVisibleIndex >= totalItems - 6','!loadingMore && !discoveryLoadingMore && !feedRequestInFlight','if (hasMore) loadMore() else if (discoveryHasMore) hydrateDiscovery(discoveryOffset)'):
+for needle in ('feedPage(context, limit = 20, offset = 0','beforeCursor = feedNextCursor','discoveryFeed(context, 3, offset)','discoveryOffset','discoveryHasMore','val existing = posts.map { it.id }.toSet()','filterNot { it.id in existing }','lastVisibleIndex >= totalItems - 6','!loadingMore && !discoveryLoadingMore && !feedRequestInFlight','if (hasMore) loadMore() else if (discoveryHasMore) hydrateDiscovery(discoveryOffset)'):
     require(home, needle, f"feed recovery/pagination {needle}")
 for needle in ('FEED_CACHE_TTL_MS','readCachedFeed(context)','readStaleCachedFeed(context)','if (safeOffset == 0 && remote.isFailure)'):
     require(client, needle, f"offline feed recovery {needle}")
@@ -71,6 +72,9 @@ require(home, 'text = { Text(if (interactionState.saved) "Remove from saved" els
 require(home, 'Text(if (interactionState.reposted) "Undo repost" else "Repost")', "Home 4F repost state label")
 if 'contentDescription = null' not in home and 'Icon(Icons.Default.ShoppingBag, null)' not in home:
     raise SystemExit("HOME INTERACTIONS RED: missing Home 4F decorative-icon accessibility handling")
+for source, needles in ((client, ('desired: Boolean? = null',)), (home, ('desired = optimisticLiked',)), (social_routes, ("const desired=typeof req.body?.liked==='boolean'", 'ON CONFLICT DO NOTHING', 'SELECT EXISTS(SELECT 1 FROM social_post_likes'))):
+    for needle in needles:
+        require(source, needle, f"explicit like intent {needle}")
 for needle in ('FynxRemoteProfileAvatar(','profilePhotoMediaId','post.authorDisplayName.ifBlank { post.authorUsername }','post.mediaUrl?.let'):
     require(home, needle, f"real Home identity/media surface {needle}")
 
