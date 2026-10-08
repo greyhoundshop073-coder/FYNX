@@ -18,7 +18,7 @@ export async function installSocialPostReactions() {
       CREATE TABLE IF NOT EXISTS social_post_reactions (
         post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE,
         user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        reaction_type TEXT NOT NULL CHECK (reaction_type IN ('LIKE','LOVE','LAUGH','WOW','SAD','ANGRY','ANGRY')),
+        reaction_type TEXT NOT NULL CHECK (reaction_type IN ('LIKE','LOVE','LAUGH','WOW','SAD','ANGRY')),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (post_id, user_id)
@@ -60,13 +60,13 @@ export async function installSocialPostReactions() {
       const where = ['r.post_id=$1'];
       if (type) { params.push(type); where.push('r.reaction_type=$2'); }
       const result = await pool.query(
-        `SELECT u.id,u.username,u.display_name,r.reaction,r.created_at
+        `SELECT u.id,u.username,u.display_name,r.reaction_type,r.created_at
            FROM social_post_reactions r JOIN users u ON u.id=r.user_id
           WHERE ${where.join(' AND ')}
           ORDER BY r.created_at DESC LIMIT 200`,
         params
       );
-      return res.json({ users: result.rows.map(x => ({ id: String(x.id), username: x.username, displayName: x.display_name, reaction: x.reaction })) });
+      return res.json({ users: result.rows.map(x => ({ id: String(x.id), username: x.username, displayName: x.display_name, reaction: x.reaction_type })) });
     } catch (error) {
       console.error('reaction users', error);
       return res.status(500).json({ error: 'reaction users lookup failed' });
