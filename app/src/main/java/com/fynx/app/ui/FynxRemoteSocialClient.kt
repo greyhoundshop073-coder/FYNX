@@ -9,7 +9,7 @@ import java.util.Locale
 
 object FynxRemoteSocialClient {
     data class RemotePost(val id: String, val authorId: String, val authorUsername: String, val authorDisplayName: String, val text: String, val visibility: String, val mediaId: String?, val mediaType: String?, val mediaUrl: String?, val timestamp: Long, val likeCount: Int, val commentCount: Int, val likedByCurrentUser: Boolean, val followedByCurrentUser: Boolean, val isDiscovery: Boolean = false, val discoveryScore: Double = 0.0, val textBackground: String? = null, val textBackgroundColor: Long? = null, val textForegroundColor: Long? = null, val location: String? = null, val musicMediaId: String? = null, val musicTitle: String? = null, val musicArtist: String? = null, val musicDurationMs: Long = 0L, val feelingActivityType: String? = null, val feelingActivity: String? = null)
-    data class FeedPage(val posts: List<RemotePost>, val hasMore: Boolean)
+    data class FeedPage(val posts: List<RemotePost>, val hasMore: Boolean, val nextCursor: String? = null)
     data class RemoteComment(val id: String, val text: String, val timestamp: Long, val authorId: String, val authorUsername: String, val authorDisplayName: String, val parentCommentId: String? = null)
     data class CommentPage(val comments: List<RemoteComment>, val nextCursor: String?)
     data class RemoteUser(val id: String, val username: String, val displayName: String)
@@ -29,10 +29,11 @@ object FynxRemoteSocialClient {
     suspend fun feedPage(context: Context, limit: Int = FEED_PAGE_SIZE, offset: Int = 0, useCache: Boolean = false): Result<FeedPage> {
         val safeLimit = limit.coerceIn(1, FEED_PAGE_SIZE)
         val safeOffset = offset.coerceAtLeast(0)
-        if (useCache && safeOffset == 0) readCachedFeed(context)?.let { return Result.success(it) }
-        val remote = FynxBackendClient.get(context, "/api/social/feed?limit=$safeLimit&offset=$safeOffset").mapCatching { raw ->
+        if (useCache && safeOffset == 0 && beforeCursor.isNullOrBlank()) readCachedFeed(context)?.let { return Result.success(it) }
+        val cursorQuery = beforeCursor?.takeIf { it.isNotBlank() }?.let { "&before=${URLEncoder.encode(it, \"UTF-8\")}" }.orEmpty()
+        val remote = FynxBackendClient.get(context, "/api/social/feed?limit=$safeLimit&offset=$safeOffset$cursorQuery").mapCatching { raw ->
             val page = parseFeedPage(raw)
-            if (safeOffset == 0) writeCachedFeed(context, raw)
+            if (safeOffset == 0 && beforeCursor.isNullOrBlank()) writeCachedFeed(context, raw)
             page
         }
         if (safeOffset == 0 && remote.isFailure) readStaleCachedFeed(context)?.let { return Result.success(it) }
@@ -47,7 +48,7 @@ object FynxRemoteSocialClient {
                 add(RemotePost(o.optString("id"), o.optString("authorId"), o.optString("authorUsername"), o.optString("authorDisplayName"), o.optString("text"), o.optString("visibility"), o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaUrl").takeIf { it.isNotBlank() }, o.optDouble("timestamp", 0.0).toLong(), o.optInt("likeCount"), o.optInt("commentCount"), o.optBoolean("likedByCurrentUser"), o.optBoolean("followedByCurrentUser"), o.optBoolean("isDiscovery", false), o.optDouble("discoveryScore", 0.0), o.optString("textBackground").takeIf { it.isNotBlank() }, if (o.has("textBackgroundColor") && !o.isNull("textBackgroundColor")) o.optLong("textBackgroundColor") else null, if (o.has("textForegroundColor") && !o.isNull("textForegroundColor")) o.optLong("textForegroundColor") else null, o.optString("location").takeIf { it.isNotBlank() && it != "null" }, o.optString("musicMediaId").takeIf { it.isNotBlank() && it != "null" }, o.optString("musicTitle").takeIf { it.isNotBlank() && it != "null" }, o.optString("musicArtist").takeIf { it.isNotBlank() && it != "null" }, o.optLong("musicDurationMs", 0L), o.optString("feelingActivityType").takeIf { it.isNotBlank() && it != "null" }, o.optString("feelingActivity").takeIf { it.isNotBlank() && it != "null" }))
             }
         }
-        return FeedPage(posts, root.optBoolean("hasMore", posts.size >= FEED_PAGE_SIZE))
+        return FeedPage(posts, root.optBoolean("hasMore", posts.size >= FEED_PAGE_SIZE), root.optString("nextCursor").takeIf { it.isNotBlank() && it != "null" })
     }
     fun hasCachedFeed(context: Context): Boolean = runCatching { val k = feedCacheKey(context) ?: return false; val t = feedCacheTimeKey(context) ?: return false; val p = context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE); val raw = p.getString(k, null) ?: return false; val saved = p.getLong(t, 0L); raw.isNotBlank() && saved > 0L && System.currentTimeMillis() - saved <= FEED_CACHE_TTL_MS }.getOrDefault(false)
 
