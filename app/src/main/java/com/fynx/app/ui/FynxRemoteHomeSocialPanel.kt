@@ -153,11 +153,9 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             val resolved = missing.map { username ->
                 async(Dispatchers.IO) {
                     val key = username.lowercase()
-                    val photoId = FynxSocialClient.searchUsers(context, username)
+                    val photoId = FynxProfileRemoteClient.get(context, username)
                         .getOrNull()
-                        ?.firstOrNull { it.username.removePrefix("@").equals(username, true) }
                         ?.profilePhotoMediaId
-                        ?: FynxProfileRemoteClient.get(context, username).getOrNull()?.profilePhotoMediaId
                     key to photoId
                 }
             }.awaitAll().toMap()
@@ -205,12 +203,17 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                     peopleRecommendations = (existing + clean).distinctBy { it.username.lowercase() }
                     peopleRecommendationsOffset = offset + parsed.size
                     peopleRecommendationsHasMore = parsed.size >= 30
-                    parsed.forEach { person ->
+                    val missingPeople = parsed.filter { it.photoId.isNullOrBlank() }
+                    if (missingPeople.isNotEmpty()) {
                         scope.launch {
-                            FynxProfileRemoteClient.get(context, person.username).onSuccess { profile ->
-                                peopleRecommendations = peopleRecommendations.map {
-                                    if (it.username.equals(person.username, true)) it.copy(photoId = profile.profilePhotoMediaId) else it
+                            val resolved = missingPeople.map { person ->
+                                async(Dispatchers.IO) {
+                                    person.username to FynxProfileRemoteClient.get(context, person.username)
+                                        .getOrNull()?.profilePhotoMediaId
                                 }
+                            }.awaitAll().toMap()
+                            peopleRecommendations = peopleRecommendations.map { person ->
+                                resolved[person.username]?.let { photo -> person.copy(photoId = photo) } ?: person
                             }
                         }
                     }
