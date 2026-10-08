@@ -313,7 +313,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     fun reload(forceRefresh: Boolean = false) {
         val now = System.currentTimeMillis(); if (feedRequestInFlight) return; if (forceRefresh && now - lastFeedRequestAt < FEED_REFRESH_DEBOUNCE_MS) return
         feedRequestInFlight = true; lastFeedRequestAt = now
-        scope.launch { loading = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh).onSuccess { page -> posts = page.posts; hasMore = page.hasMore; error = null; interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null; resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); hydratePostMedia(page.posts); discoveryOffset = 0; discoveryHasMore = false; hydrateDiscovery(0, true) }.onFailure { error = if (it.message?.contains("HTTP 404", true) == true) "Your FYNX feed service is temporarily unavailable." else it.message ?: "Unable to load your feed." }; loading = false; feedRequestInFlight = false }
+        scope.launch { loading = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh).onSuccess { page -> posts = page.posts; hasMore = page.hasMore; error = null; interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null; resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); hydratePostMedia(page.posts); discoveryOffset = 0; discoveryHasMore = false }.onFailure { error = if (it.message?.contains("HTTP 404", true) == true) "Your FYNX feed service is temporarily unavailable." else it.message ?: "Unable to load your feed." }; loading = false; feedRequestInFlight = false }
     }
 
     LaunchedEffect(publishRefreshKey) {
@@ -371,6 +371,9 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         hydratePeopleRecommendations(0, true)
         loadHomeMarketplace(true)
         loadDiscoveryVideos(true)
+        // Secondary Discovery-feed enrichment starts independently after the authoritative feed reload.
+        // It must never be part of the feed request success path.
+        hydrateDiscovery(0, true)
     }
 
     LaunchedEffect(feedListState, posts.size, hasMore, discoveryHasMore, loading, loadingMore, discoveryLoadingMore, feedRequestInFlight) {
