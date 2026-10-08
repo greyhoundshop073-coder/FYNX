@@ -169,5 +169,6 @@ if 'TextToSpeech' in ai_panel or 'android.speech.tts' in ai_panel:
 print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions including Save/Saved Posts continuity, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, clean-startup privacy boundaries, FYNX AI single-scroll/typing/security integration, and direct Create status -> existing composer wiring are present without duplicate vertical feed surfaces or client API secrets.")
 
 require(push, "notifyCommentMentions", "comment mention backend notification helper")
-require(realtime_bootstrap, "notifyCommentMentions" in realtime_bootstrap, "reply mention backend notification helper")
-require(comments_panel, "ClickableText" in comments and "onOpenAuthorProfile" in comments, "comment mentions are tappable in Home")
+require(realtime_bootstrap, "notifyCommentMentions", "reply mention backend notification helper")
+require(comments_panel, "ClickableText", "comment mentions are tappable in Home")
+require(comments_panel, "onOpenAuthorProfile", "comment mention profile navigation")
