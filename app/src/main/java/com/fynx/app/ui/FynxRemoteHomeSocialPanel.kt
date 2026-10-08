@@ -385,10 +385,21 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         scope.launch { runCatching { FynxDiscoveryClient.recordView(context, postId) } }
     }
     LaunchedEffect(publishRefreshKey) {
+        val network = FynxNetworkQuality.current(context)
+        if (network == FynxNetworkQuality.Level.OFFLINE) return@LaunchedEffect
+
+        // Keep usable secondary Home data steady on weak links. A GOOD connection
+        // is required before replacing existing secondary snapshots with fresh data.
+        val hasExistingSecondaryData = activeStatusOwners.isNotEmpty() ||
+            peopleRecommendations.isNotEmpty() ||
+            marketplaceListings.isNotEmpty() ||
+            discoveryVideos.isNotEmpty()
         hydrateActiveStatuses()
-        hydratePeopleRecommendations(0, true)
-        loadHomeMarketplace(true)
-        loadDiscoveryVideos(true)
+        if (network == FynxNetworkQuality.Level.GOOD || !hasExistingSecondaryData) {
+            hydratePeopleRecommendations(0, true)
+            loadHomeMarketplace(true)
+            loadDiscoveryVideos(true)
+        }
     }
 
     LaunchedEffect(feedListState, posts.size, hasMore, discoveryHasMore, loading, loadingMore, discoveryLoadingMore, feedRequestInFlight) {
