@@ -245,7 +245,9 @@ private fun MentionText(text: String, onOpenAuthorProfile: (String) -> Unit) {
         val username = match.groupValues[1]
         val start = builder.length
         builder.pushStringAnnotation("username", username)
-        builder.pushStyle(SpanStyle(color = MaterialTheme.colorScheme.primary))\n        builder.append(match.value)\n        builder.pop()
+        builder.pushStyle(SpanStyle(color = MaterialTheme.colorScheme.primary))
+        builder.append(match.value)
+        builder.pop()
         builder.pop()
         cursor = match.range.last + 1
     }
