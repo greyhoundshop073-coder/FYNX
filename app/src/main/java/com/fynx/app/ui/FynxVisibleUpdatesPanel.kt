@@ -67,6 +67,7 @@ fun FynxVisibleUpdatesPanel(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val homeRefreshKey = FynxHomeLifecycleRefreshBus.currentVersion()
     var statuses by remember { mutableStateOf<List<FynxStatus>>(emptyList()) }
     var followingUsernames by remember { mutableStateOf<Set<String>>(emptySet()) }
     var ownerPhotoIds by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
@@ -100,7 +101,7 @@ fun FynxVisibleUpdatesPanel(
         }
     }
 
-    LaunchedEffect(currentUsername) { refreshStatuses() }
+    LaunchedEffect(currentUsername, homeRefreshKey) { refreshStatuses() }
 
     val current = currentUsername.removePrefix("@").trim().lowercase()
     val activeStatuses = statuses
