@@ -43,3 +43,6 @@ require("ANGRY" in client, "client supports Angry reaction")
 require("ANGRY" in backend, "backend supports Angry reaction")
 
 require("r.reaction_type=$2" in backend, "reaction users use the durable reaction_type column")
+require("ReactionChoice(\"😡\", \"ANGRY\"" in home, "Home reaction picker exposes Angry")
+require("reactionFeedback()" in home, "reaction taps provide sound and haptic feedback")
+require("animateFloatAsState" in home, "reaction selection animates smoothly")
