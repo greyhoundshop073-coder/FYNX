@@ -384,8 +384,8 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         videoDiscoveryOpen = true
         scope.launch { runCatching { FynxDiscoveryClient.recordView(context, postId) } }
     }
-    LaunchedEffect(Unit) { hydrateActiveStatuses() }
     LaunchedEffect(publishRefreshKey) {
+        hydrateActiveStatuses()
         hydratePeopleRecommendations(0, true)
         loadHomeMarketplace(true)
         loadDiscoveryVideos(true)
