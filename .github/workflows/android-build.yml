@@ -260,7 +260,7 @@ jobs:
           disable-linux-hw-accel: true
           disable-animations: false
           script: |
-            set -euo pipefail
+            set -e
             adb kill-server || true
             adb start-server
             adb wait-for-device
