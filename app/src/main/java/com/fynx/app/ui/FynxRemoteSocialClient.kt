@@ -26,7 +26,7 @@ object FynxRemoteSocialClient {
     private fun feedCacheTimeKey(context: Context): String? = feedCacheAccountKey(context)?.let { FEED_CACHE_TIME_KEY_PREFIX + it }
 
     suspend fun feed(context: Context): Result<List<RemotePost>> = feedPage(context, FEED_PAGE_SIZE, 0, true).map { it.posts }
-    suspend fun feedPage(context: Context, limit: Int = FEED_PAGE_SIZE, offset: Int = 0, useCache: Boolean = false): Result<FeedPage> {
+    suspend fun feedPage(context: Context, limit: Int = FEED_PAGE_SIZE, offset: Int = 0, useCache: Boolean = false, beforeCursor: String? = null): Result<FeedPage> {
         val safeLimit = limit.coerceIn(1, FEED_PAGE_SIZE)
         val safeOffset = offset.coerceAtLeast(0)
         if (useCache && safeOffset == 0 && beforeCursor.isNullOrBlank()) readCachedFeed(context)?.let { return Result.success(it) }
