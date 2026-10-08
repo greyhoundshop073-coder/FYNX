@@ -49,6 +49,8 @@ object FynxRemoteSocialClient {
         }
         return FeedPage(posts, root.optBoolean("hasMore", posts.size >= FEED_PAGE_SIZE))
     }
+    fun hasCachedFeed(context: Context): Boolean = runCatching { val k = feedCacheKey(context) ?: return false; val t = feedCacheTimeKey(context) ?: return false; val p = context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE); val raw = p.getString(k, null) ?: return false; val saved = p.getLong(t, 0L); raw.isNotBlank() && saved > 0L && System.currentTimeMillis() - saved <= FEED_CACHE_TTL_MS }.getOrDefault(false)
+
     private fun readCachedFeed(context: Context): FeedPage? = runCatching {
         val k = feedCacheKey(context) ?: return null
         val t = feedCacheTimeKey(context) ?: return null

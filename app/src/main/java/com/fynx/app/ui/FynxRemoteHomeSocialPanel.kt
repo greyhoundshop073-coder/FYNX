@@ -313,7 +313,24 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     fun reload(forceRefresh: Boolean = false) {
         val now = System.currentTimeMillis(); if (feedRequestInFlight) return; if (forceRefresh && now - lastFeedRequestAt < FEED_REFRESH_DEBOUNCE_MS) return
         feedRequestInFlight = true; lastFeedRequestAt = now
-        scope.launch { loading = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh).onSuccess { page -> posts = page.posts; hasMore = page.hasMore; error = null; interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null; resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); hydratePostMedia(page.posts); discoveryOffset = 0; discoveryHasMore = false; hydrateDiscovery(0, true) }.onFailure { error = if (it.message?.contains("HTTP 404", true) == true) "Your FYNX feed service is temporarily unavailable." else it.message ?: "Unable to load your feed." }; loading = false; feedRequestInFlight = false }
+        scope.launch {
+            loading = true
+            val hadFreshCache = !forceRefresh && FynxRemoteSocialClient.hasCachedFeed(context)
+            FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
+                .onSuccess { page ->
+                    posts = page.posts; hasMore = page.hasMore; error = null
+                    interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null
+                    resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); hydratePostMedia(page.posts)
+                    discoveryOffset = 0; discoveryHasMore = false
+                    if (hadFreshCache) scope.launch {
+                        FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false)
+                            .onSuccess { fresh -> posts = fresh.posts; hasMore = fresh.hasMore; error = null; resolveAuthorPhotos(fresh.posts); hydrateInteractionStates(fresh.posts); hydrateReactionStates(fresh.posts); hydratePostMedia(fresh.posts) }
+                            .onFailure { /* Keep the valid cached snapshot visible. */ }
+                    }
+                }
+                .onFailure { error = if (it.message?.contains("HTTP 404", true) == true) "Your FYNX feed service is temporarily unavailable." else it.message ?: "Unable to load your feed." }
+            loading = false; feedRequestInFlight = false
+        }
     }
 
     LaunchedEffect(publishRefreshKey) {
