@@ -30,6 +30,7 @@ checks = {
     "offline cached-media recovery": "cacheTarget?.exists() == true",
     "offline guard": "FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE",
     "video lifecycle cleanup": "videoView?.stopPlayback()",
+    "Home music media cache path": "path.startsWith(\"/api/social/music/media/\")",
 }
 
 sources = {
@@ -44,6 +45,7 @@ sources = {
     "offline cached-media recovery": media,
     "offline guard": media,
     "video lifecycle cleanup": media,
+    "Home music media cache path": (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMediaCache.kt").read_text(encoding="utf-8"),
 }
 
 missing = [f"{label}: {needle}" for label, needle in checks.items() if needle not in sources[label]]
