@@ -225,3 +225,61 @@ export function registerFynxPushRoutes({ app, pool, auth }) {
     }
   });
 }
+
+
+let commentMentionSchemaPromise;
+
+async function ensureCommentMentionSchema(pool) {
+  if (!commentMentionSchemaPromise) {
+    commentMentionSchemaPromise = pool.query(`
+      CREATE TABLE IF NOT EXISTS social_comment_mentions (
+        comment_id BIGINT NOT NULL REFERENCES social_post_comments(id) ON DELETE CASCADE,
+        mentioned_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (comment_id, mentioned_user_id)
+      );
+      CREATE INDEX IF NOT EXISTS social_comment_mentions_user_idx
+        ON social_comment_mentions(mentioned_user_id, created_at DESC);
+    `).catch(error => {
+      commentMentionSchemaPromise = undefined;
+      throw error;
+    });
+  }
+  return commentMentionSchemaPromise;
+}
+
+export async function notifyCommentMentions(pool, { commentId, postId, authorId, text }) {
+  await ensureCommentMentionSchema(pool);
+  const usernames = [...String(text || "").matchAll(/@([A-Za-z0-9_]{2,32})\\b/g)]
+    .map(match => match[1].toLowerCase());
+  const uniqueUsernames = [...new Set(usernames)];
+  if (!uniqueUsernames.length) return;
+  const mentioned = await pool.query(
+    `SELECT id,username FROM users WHERE lower(username)=ANY($1::text[]) AND id<>$2`,
+    [uniqueUsernames, authorId]
+  );
+  const actor = (await pool.query("SELECT username FROM users WHERE id=$1", [authorId])).rows[0]?.username || "A FYNX user";
+  for (const user of mentioned.rows) {
+    const blocked = await pool.query(
+      `SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1) LIMIT 1`,
+      [authorId, user.id]
+    );
+    if (blocked.rowCount) continue;
+    const inserted = await pool.query(
+      `INSERT INTO social_comment_mentions(comment_id,mentioned_user_id) VALUES($1,$2)
+       ON CONFLICT DO NOTHING RETURNING comment_id`,
+      [commentId, user.id]
+    );
+    if (!inserted.rowCount) continue;
+    await queueFynxNotification(pool, {
+      userId: user.id,
+      type: "MENTION",
+      title: `@${actor} mentioned you`,
+      message: "You were mentioned in a post comment.",
+      targetId: String(postId),
+      sourceUsername: actor,
+      route: `fynx://post/${encodeURIComponent(postId)}?comment=${encodeURIComponent(commentId)}`,
+      notificationId: `comment-mention-${commentId}-${user.id}`
+    });
+  }
+}
