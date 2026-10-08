@@ -248,7 +248,7 @@ jobs:
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
       - name: Run Android instrumentation tests and capture the real FYNX UI
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 35
           target: google_apis
