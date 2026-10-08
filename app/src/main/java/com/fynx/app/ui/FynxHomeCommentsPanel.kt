@@ -245,7 +245,7 @@ private fun MentionText(text: String, onOpenAuthorProfile: (String) -> Unit) {
         val username = match.groupValues[1]
         val start = builder.length
         builder.pushStringAnnotation("username", username)
-        builder.withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append(match.value) }
+        builder.pushStyle(SpanStyle(color = MaterialTheme.colorScheme.primary))\n        builder.append(match.value)\n        builder.pop()
         builder.pop()
         cursor = match.range.last + 1
     }
@@ -253,7 +253,7 @@ private fun MentionText(text: String, onOpenAuthorProfile: (String) -> Unit) {
     val annotated = builder.toAnnotatedString()
     ClickableText(
         text = annotated,
-        style = MaterialTheme.typography.bodyMedium.toSpanStyle(),
+        style = MaterialTheme.typography.bodyMedium,
         onClick = { offset ->
             annotated.getStringAnnotations("username", offset, offset).firstOrNull()?.let { onOpenAuthorProfile(it.item) }
         }
