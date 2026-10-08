@@ -128,7 +128,10 @@ else:
     require(home, 'FynxHomeMarketplaceCarousel(', "Marketplace remains in the shared Home scroll surface")
     require(home, 'HomePeopleRecommendationsCard(', "People recommendations remain in the shared Home scroll surface")
     require(home, 'FynxHomeDiscoverySection(', "Discovery remains in the shared Home scroll surface")
-require(home, 'LaunchedEffect(publishRefreshKey) {\n        hydrateActiveStatuses()', "Home Status ownership follows lifecycle refresh")
+require(home, 'LaunchedEffect(publishRefreshKey) {\n        val network = FynxNetworkQuality.current(context)', "Home secondary refresh observes network quality")
+require(home, 'if (network == FynxNetworkQuality.Level.OFFLINE) return@LaunchedEffect', "Home secondary refresh preserves offline data")
+require(home, 'if (network == FynxNetworkQuality.Level.GOOD || !hasExistingSecondaryData)', "Home secondary refresh avoids replacing usable data on weak links")
+require(home, 'LaunchedEffect(publishRefreshKey) {\n        val network = FynxNetworkQuality.current(context)\n        if (network == FynxNetworkQuality.Level.OFFLINE) return@LaunchedEffect', "Home Status ownership follows lifecycle refresh")
 require(visible_updates, 'onOpenAi', "Home AI entry callback")
 require(visible_updates, 'Open FYNX AI', "Home AI centralized entry action")
 if 'AiAssistantClient.' in visible_updates or 'aiInput' in visible_updates or 'AiAssistantClient.sendMessage' in visible_updates:
