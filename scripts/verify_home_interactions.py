@@ -128,7 +128,7 @@ else:
     require(home, 'FynxHomeMarketplaceCarousel(', "Marketplace remains in the shared Home scroll surface")
     require(home, 'HomePeopleRecommendationsCard(', "People recommendations remain in the shared Home scroll surface")
     require(home, 'FynxHomeDiscoverySection(', "Discovery remains in the shared Home scroll surface")
-require(home, 'Text("What's on your mind?"', "Home keeps a persistent create-post entry above the feed")
+require(home, "Text(\"What's on your mind?\"", "Home keeps a persistent create-post entry above the feed")
 require(home, 'contentDescription = "Create post"', "Home create-post action remains accessible")
 require(home, 'LaunchedEffect(publishRefreshKey) {\n        val network = FynxNetworkQuality.current(context)', "Home secondary refresh observes network quality")
 require(home, 'if (network == FynxNetworkQuality.Level.OFFLINE) return@LaunchedEffect', "Home secondary refresh preserves offline data")
