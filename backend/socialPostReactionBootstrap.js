@@ -18,7 +18,7 @@ export async function installSocialPostReactions() {
       CREATE TABLE IF NOT EXISTS social_post_reactions (
         post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE,
         user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        reaction_type TEXT NOT NULL CHECK (reaction_type IN ('LIKE','LOVE','LAUGH','WOW','SAD','ANGRY')),
+        reaction_type TEXT NOT NULL CHECK (reaction_type IN ('LIKE','LOVE','LAUGH','WOW','SAD','ANGRY','ANGRY')),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (post_id, user_id)
@@ -54,7 +54,7 @@ export async function installSocialPostReactions() {
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || !(await visibleSocialPost(id, req.user.sub))) return res.status(404).json({ error: 'post not found' });
       const type = typeof req.query?.type === 'string' ? req.query.type.trim().toUpperCase() : '';
-      const allowed = new Set(['LIKE','LOVE','LAUGH','WOW','SAD']);
+      const allowed = new Set(['LIKE','LOVE','LAUGH','WOW','SAD','ANGRY']);
       if (type && !allowed.has(type)) return res.status(400).json({ error: 'invalid reaction type' });
       const params = [id];
       const where = ['r.post_id=$1'];
