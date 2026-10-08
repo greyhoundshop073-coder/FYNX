@@ -244,17 +244,44 @@ jobs:
       - name: Fast build, test and lint
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
       - name: Full build, test and lint
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && github.head_ref == 'fix/home-lifecycle-certification') }}
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
       - name: Run Android instrumentation tests and capture the real FYNX UI
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && github.head_ref == 'fix/home-lifecycle-certification') }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 29
           target: google_apis
           arch: x86_64
-          profile: Pixel_6
-          script: ./gradlew connectedDebugAndroidTest --no-daemon --build-cache && python3 scripts/verify_authenticated_runtime_navigation.py
+          profile: pixel_2
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-snapshot-load -no-window -gpu swiftshader_indirect -memory 4096 -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-boot-timeout: 1200
+          disable-linux-hw-accel: true
+          disable-animations: false
+          script: |
+            set -e
+            adb kill-server || true
+            adb start-server
+            adb wait-for-device
+            for attempt in $(seq 1 30); do
+              state="$(adb -s emulator-5554 get-state 2>/dev/null || true)"
+              boot="$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+              sdk="$(adb -s emulator-5554 shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r' || true)"
+              echo "ADB health attempt=${attempt} state=${state} boot=${boot} sdk=${sdk}"
+              if [ "$state" = "device" ] && [ "$boot" = "1" ] && [ "$sdk" = "29" ]; then
+                break
+              fi
+              sleep 5
+            done
+            test "$(adb -s emulator-5554 get-state)" = "device"
+            test "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" = "1"
+            test "$(adb -s emulator-5554 shell getprop ro.build.version.sdk | tr -d '\r')" = "29"
+            ./gradlew connectedDebugAndroidTest --no-daemon --build-cache
+            python3 scripts/verify_authenticated_runtime_navigation.py
+      - name: Verify Home lifecycle certification evidence matrix
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && github.head_ref == 'fix/home-lifecycle-certification') }}
+        run: python3 scripts/verify_home_lifecycle_certification.py
       - name: Upload FYNX runtime screenshots and UI hierarchies
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
         uses: actions/upload-artifact@v4
