@@ -5,7 +5,7 @@ on:
     branches: [ "main" ]
     paths: ["backend/**", "scripts/**", ".github/workflows/fynx-backend-ci.yml"]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "fix/marketplace-ngn-usd-revenue-contract" ]
     paths: ["backend/**", "scripts/**", ".github/workflows/fynx-backend-ci.yml"]
   workflow_dispatch:
 
