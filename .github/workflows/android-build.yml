@@ -255,6 +255,9 @@ jobs:
           arch: x86_64
           profile: Pixel_6
           script: ./gradlew connectedDebugAndroidTest --no-daemon --build-cache && python3 scripts/verify_authenticated_runtime_navigation.py
+      - name: Verify Home lifecycle certification evidence matrix
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && github.head_ref == 'fix/home-lifecycle-certification') }}
+        run: python3 scripts/verify_home_lifecycle_certification.py
       - name: Upload FYNX runtime screenshots and UI hierarchies
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true' }}
         uses: actions/upload-artifact@v4
