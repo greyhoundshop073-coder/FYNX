@@ -143,6 +143,8 @@ jobs:
         run: node verify-marketplace-order-lifecycle.mjs
       - name: Run Marketplace multi-product lifecycle guard
         run: node verify-marketplace-multi-checkout-lifecycle.mjs
+      - name: Run Marketplace refund dispute isolation guard
+        run: node --check verify-marketplace-refund-dispute-isolation.mjs && node verify-marketplace-refund-dispute-isolation.mjs
       - name: Run Batch 4 canonical shipping verification
         run: node verify-marketplace-batch4-shipping.mjs
       - name: Run Batch 4 shipping timeline and fulfillment verification
