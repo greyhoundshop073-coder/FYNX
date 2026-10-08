@@ -111,6 +111,8 @@ require_normalized(home_shell, 'header = { FynxVisibleUpdatesPanel(', "Home AI/S
 require_normalized(home_shell, 'onCreateStatus = { showMatureStatusComposer = true }', "Home Create status -> existing composer wiring")
 require(visible_updates, 'onCreateStatus: () -> Unit', "Status create callback")
 require(visible_updates, 'IconButton(onClick = onCreateStatus', "Status create control action")
+require(visible_updates, 'FynxHomeLifecycleRefreshBus.currentVersion()', "Status strip follows Home lifecycle refresh")
+require(visible_updates, 'LaunchedEffect(currentUsername, homeRefreshKey)', "Status refresh reacts to Home lifecycle signal")
 require(home, 'LazyColumn(', "Home single vertical scroll surface")
 require_normalized(home, 'header?.let { content -> item(key = "home_ai_status") { content() } }', "AI/Status feed header item")
 # Home itself owns one feed LazyColumn. Video discovery is a separate fullscreen Dialog surface,
