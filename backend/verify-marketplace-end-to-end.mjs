@@ -4,7 +4,7 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 
 const checkout = read('./marketplaceCheckout.js');
 const checkoutOrder = read('./marketplaceCheckoutOrder.js');
-const payment = read('./marketplaceCheckoutPayment.js');
+const payment = read('./marketplacePaymentState.js');
 const webhook = read('./marketplacePaystackWebhook.js');
 const completion = read('./marketplaceCompletion.js');
 const protection = read('./marketplaceProtection.js');
