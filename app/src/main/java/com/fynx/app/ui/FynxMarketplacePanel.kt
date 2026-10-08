@@ -54,6 +54,7 @@ import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
+import java.time.Instant
 import org.json.JSONObject
 import java.util.Locale
 
@@ -546,12 +547,87 @@ private fun OrderActions(context: android.content.Context, order: FynxRemoteSoci
     if (showLifecycle) FynxMarketplaceOrderLifecycle(context, order, onChanged = { showLifecycle = false; onChanged() }, onClose = { showLifecycle = false })
 }
 private data class FynxMarketplaceMultiLine(val listing: FynxRemoteSocialClient.MarketplaceListing, val quantity: Int, val method: String, val address: FynxMarketplaceCheckoutAddress?)
-private data class FynxMarketplaceMultiQuote(val id: String, val expiresAt: String, val currency: String, val subtotal: Double, val deliveryFee: Double, val fee: Double, val total: Double)
+private data class FynxMarketplaceMultiQuoteItem(
+    val listingId: String,
+    val sellerUsername: String,
+    val productTitle: String,
+    val quantity: Int,
+    val unitPrice: Double,
+    val currency: String,
+    val fulfillmentMethod: String,
+    val shippingAddress: JSONObject?,
+    val subtotal: Double,
+    val deliveryFee: Double,
+    val marketplaceFeeBuyer: Double,
+    val total: Double
+)
+private data class FynxMarketplaceMultiQuote(
+    val id: String,
+    val expiresAt: String,
+    val currency: String,
+    val items: List<FynxMarketplaceMultiQuoteItem>,
+    val subtotal: Double,
+    val deliveryFee: Double,
+    val fee: Double,
+    val total: Double
+)
 
 private suspend fun requestMultiQuote(context: android.content.Context, lines: List<FynxMarketplaceMultiLine>): Result<FynxMarketplaceMultiQuote> {
     if (lines.isEmpty() || lines.size > 20) return Result.failure(IllegalArgumentException("Select between 1 and 20 products."))
-    val array = JSONArray(); lines.forEach { line -> array.put(JSONObject().apply { put("listingId", line.listing.id.toLongOrNull() ?: throw IllegalArgumentException("Invalid product in cart.")); put("quantity", line.quantity); put("fulfillmentMethod", line.method); line.address?.let { a -> put("shippingAddress", JSONObject().apply { put("name",a.name); put("phone",a.phone); put("address",a.address); put("city",a.city); put("state",a.state); put("country",a.country) }) } }) }
-    return FynxBackendClient.postJson(context, "/api/marketplace/checkout/multi-quote", JSONObject().put("items",array).toString()).mapCatching { raw -> val q=JSONObject(raw).getJSONObject("quote"); FynxMarketplaceMultiQuote(q.optString("id"),q.optString("expiresAt"),q.optString("currency").uppercase(Locale.US),q.optDouble("subtotal"),q.optDouble("deliveryFee"),q.optDouble("marketplaceFeeBuyer"),q.optDouble("total")) }
+    val array = JSONArray()
+    lines.forEach { line ->
+        array.put(JSONObject().apply {
+            put("listingId", line.listing.id.toLongOrNull() ?: throw IllegalArgumentException("Invalid product in cart."))
+            put("quantity", line.quantity)
+            put("fulfillmentMethod", line.method)
+            line.address?.let { a ->
+                put("shippingAddress", JSONObject().apply {
+                    put("name", a.name.trim())
+                    put("phone", a.phone.trim())
+                    put("address", a.address.trim())
+                    put("city", a.city.trim())
+                    put("state", a.state.trim())
+                    put("country", a.country.trim())
+                })
+            }
+        })
+    }
+    return FynxBackendClient.postJson(context, "/api/marketplace/checkout/multi-quote", JSONObject().put("items", array).toString()).mapCatching { raw ->
+        val q = JSONObject(raw).getJSONObject("quote")
+        val quotedItems = q.optJSONArray("items") ?: JSONArray()
+        val items = buildList {
+            for (i in 0 until quotedItems.length()) {
+                val item = quotedItems.getJSONObject(i)
+                add(
+                    FynxMarketplaceMultiQuoteItem(
+                        listingId = item.optString("listingId"),
+                        sellerUsername = item.optString("sellerUsername"),
+                        productTitle = item.optString("productTitle"),
+                        quantity = item.optInt("quantity"),
+                        unitPrice = item.optDouble("unitPrice"),
+                        currency = item.optString("currency", q.optString("currency")).uppercase(Locale.US),
+                        fulfillmentMethod = item.optString("fulfillmentMethod"),
+                        shippingAddress = item.optJSONObject("shippingAddress"),
+                        subtotal = item.optDouble("subtotal"),
+                        deliveryFee = item.optDouble("deliveryFee"),
+                        marketplaceFeeBuyer = item.optDouble("marketplaceFeeBuyer"),
+                        total = item.optDouble("total")
+                    )
+                )
+            }
+        }
+        require(items.size == lines.size) { "The server returned an incomplete checkout quote." }
+        FynxMarketplaceMultiQuote(
+            id = q.optString("id"),
+            expiresAt = q.optString("expiresAt"),
+            currency = q.optString("currency").uppercase(Locale.US),
+            items = items,
+            subtotal = q.optDouble("subtotal"),
+            deliveryFee = q.optDouble("deliveryFee"),
+            fee = q.optDouble("marketplaceFeeBuyer"),
+            total = q.optDouble("total")
+        )
+    }
 }
 private suspend fun createMultiOrder(context: android.content.Context, lines: List<FynxMarketplaceMultiLine>, checkoutId: String): Result<JSONObject> {
     val array = JSONArray()
@@ -583,15 +659,32 @@ private fun FynxMarketplaceMultiCheckoutDialog(context: android.content.Context,
     AlertDialog(onDismissRequest={if(!busy)onClose()},title={Text("Checkout "+items.size+" products")},text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)){items.forEach{item->val m=methods[item.id]?:"DELIVERY";Card(Modifier.fillMaxWidth()){Column(Modifier.padding(8.dp)){Text(item.title,style=MaterialTheme.typography.titleMedium);Text(item.currency+" × "+(quantities[item.id]?:1));Row{if(item.deliveryAvailable)FilterChip(m=="DELIVERY",{methods=methods+(item.id to "DELIVERY");quote=null},label={Text("Delivery")});if(item.pickupAvailable)FilterChip(m=="PICKUP",{methods=methods+(item.id to "PICKUP");quote=null},label={Text("Pickup")})}}}};if(methods.values.any{it=="DELIVERY"}){OutlinedTextField(name,{name=it;quote=null},label={Text("Full name")},singleLine=true,modifier=Modifier.fillMaxWidth());OutlinedTextField(phone,{phone=it;quote=null},label={Text("Phone")},singleLine=true,modifier=Modifier.fillMaxWidth());OutlinedTextField(address,{address=it;quote=null},label={Text("Delivery address")},modifier=Modifier.fillMaxWidth());Row{OutlinedTextField(city,{city=it;quote=null},label={Text("City")},singleLine=true,modifier=Modifier.weight(1f));OutlinedTextField(state,{state=it;quote=null},label={Text("State")},singleLine=true,modifier=Modifier.weight(1f))}};Button(onClick={review()},enabled=!busy,modifier=Modifier.fillMaxWidth()){if(busy)CircularProgressIndicator(Modifier.height(18.dp))else Text("Review exact total")};quote?.let{q->
     Text("Review your exact Marketplace total",style=MaterialTheme.typography.titleSmall)
     Text("Quote valid for 5 minutes. The protected checkout is recalculated and confirmed by FYNX before payment.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-    items.forEach { item ->
-        val quantity = quantities[item.id] ?: 1
-        val method = methods[item.id] ?: "DELIVERY"
+    Text("Quote expires: "+runCatching { Instant.parse(q.expiresAt).toString().replace("T", " ").removeSuffix("Z") }.getOrElse { q.expiresAt }, style=MaterialTheme.typography.bodySmall, color=MaterialTheme.colorScheme.onSurfaceVariant)
+    q.items.forEach { quoted ->
+        val listing = items.firstOrNull { it.id == quoted.listingId }
         Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(10.dp),verticalArrangement=Arrangement.spacedBy(3.dp)) {
-                Text(item.title,style=MaterialTheme.typography.bodyLarge,fontWeight=FontWeight.SemiBold)
-                Text("Seller: "+item.sellerUsername.removePrefix("@"))
-                Text("Quantity: "+quantity+" • "+method.lowercase().replaceFirstChar { it.uppercase() })
-                Text("Line price: "+item.currency+" "+String.format(Locale.US,"%,.2f",item.price*quantity))
+            Column(Modifier.padding(10.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                if (listing?.mediaIds?.isNotEmpty() == true) {
+                    RemoteMarketMedia(context, listing.mediaIds.first(), Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(12.dp)))
+                } else {
+                    Box(Modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) {
+                        Icon(Icons.Default.ShoppingBag, "Product", Modifier.size(36.dp), tint=MaterialTheme.colorScheme.primary)
+                    }
+                }
+                Text(quoted.productTitle.ifBlank { listing?.title.orEmpty() },style=MaterialTheme.typography.bodyLarge,fontWeight=FontWeight.SemiBold)
+                Text("Seller: "+quoted.sellerUsername.removePrefix("@"))
+                Text("Quantity: "+quoted.quantity+" • "+quoted.fulfillmentMethod.lowercase().replaceFirstChar { it.uppercase() })
+                Text("Unit price: "+quoted.currency+" "+String.format(Locale.US,"%,.2f",quoted.unitPrice))
+                Text("Line subtotal: "+quoted.currency+" "+String.format(Locale.US,"%,.2f",quoted.subtotal))
+                Text("Delivery: "+quoted.currency+" "+String.format(Locale.US,"%,.2f",quoted.deliveryFee))
+                Text("FYNX fee: "+quoted.currency+" "+String.format(Locale.US,"%,.2f",quoted.marketplaceFeeBuyer))
+                if (quoted.fulfillmentMethod == "DELIVERY") {
+                    quoted.shippingAddress?.let { a ->
+                        Text("Deliver to: "+a.optString("name")+" • "+a.optString("phone"))
+                        Text(a.optString("address")+", "+a.optString("city")+", "+a.optString("state"))
+                    }
+                }
+                Text("Line total: "+quoted.currency+" "+String.format(Locale.US,"%,.2f",quoted.total),style=MaterialTheme.typography.titleSmall)
             }
         }
     }
@@ -599,6 +692,7 @@ private fun FynxMarketplaceMultiCheckoutDialog(context: android.content.Context,
     Text("Delivery: "+q.currency+" "+String.format(Locale.US,"%,.2f",q.deliveryFee))
     Text("FYNX fee: "+q.currency+" "+String.format(Locale.US,"%,.2f",q.fee))
     Text("Total: "+q.currency+" "+String.format(Locale.US,"%,.2f",q.total),style=MaterialTheme.typography.titleLarge)
+    Text("The amount above is the server-authoritative quote. FYNX will revalidate inventory and totals before creating the protected checkout.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
 };message?.let{Text(it,color=MaterialTheme.colorScheme.error)}}},confirmButton={Button(enabled=quote!=null&&!busy,onClick={val q=quote?:return@Button;if(marketplaceQuoteExpired(q.expiresAt)){quote=null;message="This quote has expired. Review the exact total again.";return@Button};busy=true;scope.launch{createMultiOrder(context,lines(),q.id).onSuccess{created->val c=created.getJSONObject("checkout");val serverId=c.optString("id").ifBlank{q.id};val serverTotal=c.optDouble("buyer_total",q.total);val serverCurrency=c.optString("currency",q.currency).uppercase(Locale.US);onPaymentReady(serverId,serverTotal,serverCurrency);busy=false}.onFailure{message=it.message?:"Protected checkout could not be created.";busy=false}}}){Text("Place order & pay")}},dismissButton={TextButton(onClick=onClose,enabled=!busy){Text("Cancel")}})
 }
 @Composable
