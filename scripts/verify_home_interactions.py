@@ -166,3 +166,10 @@ if 'TextToSpeech' in ai_panel or 'android.speech.tts' in ai_panel:
     raise SystemExit("HOME INTERACTIONS RED: Google Android TTS must not be reintroduced into FYNX AI")
 
 print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions including Save/Saved Posts continuity, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, clean-startup privacy boundaries, FYNX AI single-scroll/typing/security integration, and direct Create status -> existing composer wiring are present without duplicate vertical feed surfaces or client API secrets.")
+
+require(social_routes, "COMMENT_RATE_LIMIT", "comment anti-spam rate limit")
+require(realtime_bootstrap, "COMMENT_WRITE_RATE_LIMIT", "reply anti-spam rate limit")
+require(realtime_bootstrap, "nextCursor", "paginated reply response")
+require(client, "suspend fun replies(context: Context, postId: String, parentCommentId: String, before: String? = null", "paginated reply client API")
+require(comments_panel, "replyNextCursors", "reply pagination state")
+require(comments_panel, "Load more replies", "reply pagination UI")
