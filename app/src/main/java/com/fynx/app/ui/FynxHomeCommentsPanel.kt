@@ -208,7 +208,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                     replyNextCursors[comment.id]?.let { cursor ->
                                         TextButton(onClick = { loadReplies(comment.id, cursor) }, enabled = replyLoadingId == null && !sending) { Text(if (replyLoadingId == comment.id) "Loading more replies…" else "Load more replies") }
                                     }
-                                    $needle
+                                    if (replyLoadingId == comment.id) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(start = 48.dp, top = 4.dp))
                                     if (replyErrorId == comment.id && replyLoadingId == null) Row(Modifier.fillMaxWidth().padding(start = 48.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) { Text("Replies couldn't be loaded.", Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall); TextButton(onClick = { toggleReplies(comment) }, enabled = !sending) { Text("Retry") }
                                     }
                                 }
