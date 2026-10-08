@@ -45,6 +45,7 @@ jobs:
           node --check marketplaceSettlementWorker.js
           node --check verify-marketplace-multi-checkout-lifecycle.mjs
           node --check verify-marketplace-multi-payout-isolation.mjs
+          node --check verify-marketplace-end-to-end.mjs
           node --check marketplacePaymentExpiry.js
           node --check marketplaceInspectionExpiry.js
           node --check marketplaceProtection.js
@@ -146,6 +147,8 @@ jobs:
         run: node verify-marketplace-multi-checkout-lifecycle.mjs
       - name: Run Marketplace multi-product payout isolation guard
         run: node verify-marketplace-multi-payout-isolation.mjs
+      - name: Run Marketplace end-to-end verification
+        run: node verify-marketplace-end-to-end.mjs
       - name: Run Marketplace refund dispute isolation guard
         run: node --check verify-marketplace-refund-dispute-isolation.mjs && node verify-marketplace-refund-dispute-isolation.mjs
       - name: Run Batch 4 canonical shipping verification
