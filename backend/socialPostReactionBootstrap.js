@@ -18,7 +18,7 @@ export async function installSocialPostReactions() {
       CREATE TABLE IF NOT EXISTS social_post_reactions (
         post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE,
         user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        reaction_type TEXT NOT NULL CHECK (reaction_type IN ('LIKE','LOVE','LAUGH','WOW','SAD')),
+        reaction_type TEXT NOT NULL CHECK (reaction_type IN ('LIKE','LOVE','LAUGH','WOW','SAD','ANGRY')),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (post_id, user_id)
@@ -27,7 +27,7 @@ export async function installSocialPostReactions() {
       CREATE INDEX IF NOT EXISTS social_post_reactions_user_idx ON social_post_reactions(user_id, updated_at DESC);
     \`);
   };
-  const validHomeReaction = (value) => ['LIKE','LOVE','LAUGH','WOW','SAD'].includes(String(value || '').trim().toUpperCase()) ? String(value).trim().toUpperCase() : null;
+  const validHomeReaction = (value) => ['LIKE','LOVE','LAUGH','WOW','SAD','ANGRY'].includes(String(value || '').trim().toUpperCase()) ? String(value).trim().toUpperCase() : null;
 
   app.get('/api/social/posts/:id/reactions', auth, async (req, res) => {
     try {
@@ -58,7 +58,7 @@ export async function installSocialPostReactions() {
       if (type && !allowed.has(type)) return res.status(400).json({ error: 'invalid reaction type' });
       const params = [id];
       const where = ['r.post_id=$1'];
-      if (type) { params.push(type); where.push('r.reaction=$2'); }
+      if (type) { params.push(type); where.push('r.reaction_type=$2'); }
       const result = await pool.query(
         `SELECT u.id,u.username,u.display_name,r.reaction,r.created_at
            FROM social_post_reactions r JOIN users u ON u.id=r.user_id
