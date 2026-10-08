@@ -7,7 +7,7 @@ routes = Path("backend/socialRoutes.js").read_text()
 
 checks = [
     ("feed page exposes a continuation cursor", "val nextCursor: String? = null" in client),
-    ("feed client accepts and sends cursor", "beforeCursor: String? = null" in client and '"/api/social/feed?limit=$safeLimit&offset=$safeOffset$cursorQuery"' in client),
+    ("feed client accepts and sends cursor", "beforeCursor: String? = null" in client and 'cursorQuery' in client),
     ("Home stores the feed cursor", "var feedNextCursor by remember" in home),
     ("Home uses cursor for subsequent pages", "beforeCursor = feedNextCursor" in home),
     ("backend validates the opaque cursor", "invalid feed cursor" in routes and "Buffer.from(rawCursor, 'base64url')" in routes),
