@@ -258,7 +258,27 @@ jobs:
           emulator-options: -no-snapshot-save -no-snapshot-load -no-window -gpu swiftshader_indirect -memory 4096 -noaudio -no-boot-anim -camera-back none -camera-front none
           emulator-boot-timeout: 1200
           disable-linux-hw-accel: true
-          script: ./gradlew connectedDebugAndroidTest --no-daemon --build-cache && python3 scripts/verify_authenticated_runtime_navigation.py
+          disable-animations: false
+          script: |
+            set -euo pipefail
+            adb kill-server || true
+            adb start-server
+            adb wait-for-device
+            for attempt in $(seq 1 30); do
+              state="$(adb -s emulator-5554 get-state 2>/dev/null || true)"
+              boot="$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+              sdk="$(adb -s emulator-5554 shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r' || true)"
+              echo "ADB health attempt=${attempt} state=${state} boot=${boot} sdk=${sdk}"
+              if [ "$state" = "device" ] && [ "$boot" = "1" ] && [ "$sdk" = "29" ]; then
+                break
+              fi
+              sleep 5
+            done
+            test "$(adb -s emulator-5554 get-state)" = "device"
+            test "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" = "1"
+            test "$(adb -s emulator-5554 shell getprop ro.build.version.sdk | tr -d '\r')" = "29"
+            ./gradlew connectedDebugAndroidTest --no-daemon --build-cache
+            python3 scripts/verify_authenticated_runtime_navigation.py
       - name: Verify Home lifecycle certification evidence matrix
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && github.head_ref == 'fix/home-lifecycle-certification') }}
         run: python3 scripts/verify_home_lifecycle_certification.py
