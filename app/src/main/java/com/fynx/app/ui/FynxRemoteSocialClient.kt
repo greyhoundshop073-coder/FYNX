@@ -30,7 +30,7 @@ object FynxRemoteSocialClient {
         val safeLimit = limit.coerceIn(1, FEED_PAGE_SIZE)
         val safeOffset = offset.coerceAtLeast(0)
         if (useCache && safeOffset == 0 && beforeCursor.isNullOrBlank()) readCachedFeed(context)?.let { return Result.success(it) }
-        val cursorQuery = beforeCursor?.takeIf { it.isNotBlank() }?.let { "&before=${URLEncoder.encode(it, \"UTF-8\")}" }.orEmpty()
+        val cursorQuery = beforeCursor?.takeIf { it.isNotBlank() }?.let { cursor -> "&before=${URLEncoder.encode(cursor, "UTF-8")}" }.orEmpty()
         val remote = FynxBackendClient.get(context, "/api/social/feed?limit=$safeLimit&offset=$safeOffset$cursorQuery").mapCatching { raw ->
             val page = parseFeedPage(raw)
             if (safeOffset == 0 && beforeCursor.isNullOrBlank()) writeCachedFeed(context, raw)
