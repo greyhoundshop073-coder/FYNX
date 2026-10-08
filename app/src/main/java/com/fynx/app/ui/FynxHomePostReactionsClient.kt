@@ -35,7 +35,7 @@ object FynxHomePostReactionsClient {
 
     suspend fun set(context: Context, postId: String, reaction: String): Result<ReactionState> {
         val id = postId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
-        val safe = reaction.trim().uppercase().takeIf { it in setOf("LIKE", "LOVE", "LAUGH", "WOW", "SAD") }
+        val safe = reaction.trim().uppercase().takeIf { it in setOf("LIKE", "LOVE", "LAUGH", "WOW", "SAD", "ANGRY") }
             ?: return Result.failure(IllegalArgumentException("invalid reaction"))
         return FynxBackendClient.postJson(context, "/api/social/posts/$id/reaction", JSONObject().put("reaction", safe).toString())
             .mapCatching(::parse)
