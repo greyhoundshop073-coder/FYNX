@@ -246,12 +246,6 @@ jobs:
       - name: Full build, test and lint
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && github.head_ref == 'fix/home-lifecycle-certification') }}
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
-      - name: Prepare Android emulator runner
-        run: |
-          echo "Android emulator certification will run without requiring host KVM."
-          test -d "$ANDROID_HOME"
-          adb version
-
       - name: Run Android instrumentation tests and capture the real FYNX UI
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && github.head_ref == 'fix/home-lifecycle-certification') }}
         uses: reactivecircus/android-emulator-runner@v2
