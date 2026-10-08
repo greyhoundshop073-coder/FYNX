@@ -37,3 +37,9 @@ require("/api/social/posts/$id/reactions" in client, "client uses real backend s
 require("/api/social/posts/$id/reaction" in client, "client uses real backend mutation endpoint")
 require("putJson" not in client, "client does not rely on an unavailable HTTP helper")
 print("GREEN: Home post reaction integrity gate passed")
+
+require("ANGRY" in client, "client supports Angry reaction")
+
+require("ANGRY" in backend, "backend supports Angry reaction")
+
+require("r.reaction_type=$2" in backend, "reaction users use the durable reaction_type column")
