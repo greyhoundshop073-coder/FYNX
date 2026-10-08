@@ -175,6 +175,8 @@ jobs:
         run: node scripts/verify_revenue_infrastructure.mjs
       - name: Verify FYNX monetization production
         run: node scripts/verify_monetization_production.mjs
+      - name: Verify Home request efficiency
+        run: python3 scripts/verify_home_request_efficiency.py
       - name: Verify Home interaction integrity
         run: python3 scripts/verify_home_interactions.py
       - name: Verify FYNX social recovery regression gate
