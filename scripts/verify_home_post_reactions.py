@@ -17,7 +17,7 @@ startup = read("backend/realtimeIsolationBootstrap.js")
 
 require("social_post_reactions" in backend, "durable reaction table exists")
 require("PRIMARY KEY (post_id, user_id)" in backend, "one reaction per user per post is enforced")
-require("reaction_type TEXT NOT NULL CHECK (reaction_type IN ('LIKE','LOVE','LAUGH','WOW','SAD'))" in backend, "supported reaction types are constrained")
+require("reaction_type TEXT NOT NULL CHECK (reaction_type IN ('LIKE','LOVE','LAUGH','WOW','SAD','ANGRY'))" in backend, "supported reaction types are constrained")
 require("visibleSocialPost(postId, req.user.sub)" in backend, "reaction routes use post visibility/block authorization")
 require("app.get('/api/social/posts/:id/reactions'" in backend, "reaction state route exists")
 require("app.post('/api/social/posts/:id/reaction'" in backend, "reaction set/change route exists")
@@ -25,7 +25,7 @@ require("app.delete('/api/social/posts/:id/reaction'" in backend, "reaction remo
 require("installSocialPostReactions()" in startup, "reaction backend is wired into production startup")
 require("FynxHomePostReactionsClient.state" in home, "Home hydrates real reaction state")
 require("FynxHomePostReactionsClient.set" in home and "FynxHomePostReactionsClient.clear" in home, "Home writes and removes real reactions")
-for emoji in ["👍", "❤️", "😂", "😮", "😢"]:
+for emoji in ["👍", "❤️", "😂", "😮", "😢", "😡"]:
     require(emoji in home, f"Home reaction picker contains {emoji}")
 require("onLongClick = onOpenReactionPicker" in home, "Like supports long-press reaction picker")
 require("onLongClickLabel = longClickLabel" in home, "reaction picker action has accessibility semantics")
