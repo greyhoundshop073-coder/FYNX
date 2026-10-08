@@ -71,6 +71,8 @@ require(home, 'text = { Text(if (interactionState.saved) "Remove from saved" els
 require(home, 'Text(if (interactionState.reposted) "Undo repost" else "Repost")', "Home 4F repost state label")
 if 'contentDescription = null' not in home and 'Icon(Icons.Default.ShoppingBag, null)' not in home:
     raise SystemExit("HOME INTERACTIONS RED: missing Home 4F decorative-icon accessibility handling")
+for needle in ('desired: Boolean? = null','desired = optimisticLiked','typeof req.body?.liked===\'boolean\'','ON CONFLICT DO NOTHING','SELECT EXISTS(SELECT 1 FROM social_post_likes'):
+    require(home if 'desired: Boolean? = null' in needle else (client if 'desired: Boolean? = null' in needle else discovery), needle, f"explicit like intent {needle}")
 for needle in ('FynxRemoteProfileAvatar(','profilePhotoMediaId','post.authorDisplayName.ifBlank { post.authorUsername }','post.mediaUrl?.let'):
     require(home, needle, f"real Home identity/media surface {needle}")
 
