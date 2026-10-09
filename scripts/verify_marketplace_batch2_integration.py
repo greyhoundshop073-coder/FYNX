@@ -13,6 +13,7 @@ files = {
 }
 
 live_proof = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceLiveProof.kt").read_text(encoding="utf-8")
+assistant = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceBuyingAssistant.kt").read_text(encoding="utf-8")
 
 required_surfaces = {
     "trust": "FynxMarketplaceTrustPassport(",
@@ -35,7 +36,14 @@ checks = [
     ("Live Proof uses the shared CameraX engine with a Marketplace-specific mode", "liveProofMode = true" in live_proof and "FynxCameraCapturePanel(" in live_proof and "onLiveProofStart" in live_proof),
     ("Live Proof routes the real seller into the existing video-call system", "onLiveProof = { onLiveProof(listing.sellerUsername) }" in panel and 'onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }' in app),
     ("Price Watch uses the authenticated Marketplace backend", "marketplacePriceWatchState(context, listingId)" in panel and "watchMarketplacePrice(context, listingId)" in panel and "price_watch_$listingId" not in panel),
-    ("Buying Assistant opens the existing FYNX AI destination", 'onOpenAssistant = { onOpenAi() }' in panel and 'onOpenAi = { selected = "AI" }' in app),
+    (
+        "Buying Assistant opens the existing FYNX AI destination",
+        "onOpenAssistant = { listingId -> onOpenAi(listingId) }" in panel
+        and "onOpenAssistant: (listingId: String) -> Unit" in assistant
+        and "Button(onClick = { onOpenAssistant(listing.id) })" in assistant
+        and "onOpenAi = { listingId -> marketplaceAiListingId = listingId; selected = \"AI\" }" in app
+        and 'initialMarketplaceListingId = marketplaceAiListingId' in app
+    ),
 ]
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
