@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -73,11 +74,18 @@ internal fun MarketplaceReferenceSearchBar(
             Row(Modifier.padding(horizontal = 13.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Search, null, tint = FynxMarketplaceReferenceStyle.textMuted, modifier = Modifier.size(19.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    if (value.isBlank()) "Search products, sellers or categories" else value,
-                    color = if (value.isBlank()) FynxMarketplaceReferenceStyle.textMuted else FynxMarketplaceReferenceStyle.text,
-                    maxLines = 1
-                )
+                Box(Modifier.weight(1f)) {
+                    if (value.isBlank()) {
+                        Text("Search products, sellers or categories", color = FynxMarketplaceReferenceStyle.textMuted, maxLines = 1)
+                    }
+                    BasicTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = FynxMarketplaceReferenceStyle.text),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         }
         IconButton(onClick = onCart) {
