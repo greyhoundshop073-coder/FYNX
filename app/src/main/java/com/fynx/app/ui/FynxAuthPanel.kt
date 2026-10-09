@@ -18,7 +18,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
-import com.fynx.app.BuildConfig
 import kotlinx.coroutines.launch
 
 enum class FynxAuthPage { WELCOME, REGISTER, VERIFY, LOGIN }
@@ -243,7 +242,8 @@ private fun FynxAuthField(value: String, onValueChange: (String) -> Unit, label:
  * a previously saved local account solely for offline UI testing.
  */
 private fun localDebugAccountForLogin(context: android.content.Context, requestedUsername: String): String? {
-    if (!BuildConfig.DEBUG || requestedUsername.isBlank()) return null
+    val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    if (!isDebuggable || requestedUsername.isBlank()) return null
     val saved = FynxAuthStore.storedUsername(context)?.trim()?.takeIf { it.isNotBlank() } ?: return null
     return saved.takeIf { it.equals(requestedUsername.trim().removePrefix("@"), ignoreCase = true) }
 }
