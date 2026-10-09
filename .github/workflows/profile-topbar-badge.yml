@@ -1,0 +1,53 @@
+name: FYNX Profile Topbar Badge
+
+on:
+  push:
+    branches:
+      - profile-topbar-badge
+
+permissions:
+  contents: write
+
+jobs:
+  apply-profile-topbar-badge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout isolated profile-badge branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply isolated topbar badge change
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          path = Path('app/src/main/java/com/fynx/app/ui/FynxApp.kt')
+          text = path.read_text()
+          pattern = re.compile(r'''(?ms)^\s*IconButton\(onClick = \{ selected = "Profile"; openProfileSettings = false \}, modifier = Modifier\.semantics\(mergeDescendants = true\) \{ contentDescription = "Open FYNX profile" \}\) \{\s*if \(remoteMyPhotoId != null\) FynxRemoteProfileAvatar\(remoteMyPhotoId, myProfile\.displayName, Modifier\.size\(40\.dp\)\)\s*else FynxProfileImage\(myProfile\.displayName, myPhoto, Modifier\.size\(40\.dp\)\)\s*\}''')
+          new = '''                        FynxProfileButton(
+                            onClick = { selected = "Profile"; openProfileSettings = false },
+                            avatar = {
+                                if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(40.dp))
+                                else FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp))
+                            }
+                        )'''
+          text, count = pattern.subn(new, text, count=1)
+          if count != 1:
+              raise SystemExit('PROFILE BADGE RED: expected exactly one Home topbar profile button block was not found')
+          path.write_text(text)
+          PY
+
+      - name: Verify only the intended Home topbar call changed
+        run: |
+          grep -n -A8 -B2 'FynxProfileButton(' app/src/main/java/com/fynx/app/ui/FynxApp.kt
+          test "$(grep -c 'FynxProfileButton(' app/src/main/java/com/fynx/app/ui/FynxApp.kt)" -eq 1
+
+      - name: Commit isolated profile badge change and remove one-time workflow
+        run: |
+          git config user.name 'FYNX Profile Badge Bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/fynx/app/ui/FynxApp.kt .github/workflows/profile-topbar-badge.yml
+          git commit -m 'Add small profile topbar button badge'
+          git push origin HEAD:profile-topbar-badge
