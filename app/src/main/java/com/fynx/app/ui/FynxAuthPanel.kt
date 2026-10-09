@@ -203,7 +203,13 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                             // the debug APK while they are trying to test the app UI. Give
                                             // real server sign-in a short chance first; only network timeout
                                             // falls back to local UI entry, and only in debuggable builds.
-                                            val result = withTimeoutOrNull(DEBUG_LOGIN_TIMEOUT_MS) {
+                                            val isDebuggable =
+                                                (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+                                            val result = if (isDebuggable) {
+                                                withTimeoutOrNull(DEBUG_LOGIN_TIMEOUT_MS) {
+                                                    FynxRemoteAuthClient.login(context, requestedUsername, password)
+                                                }
+                                            } else {
                                                 FynxRemoteAuthClient.login(context, requestedUsername, password)
                                             }
                                             val failure = result?.exceptionOrNull()
