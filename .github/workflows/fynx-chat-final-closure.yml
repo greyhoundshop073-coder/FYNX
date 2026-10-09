@@ -1,5 +1,6 @@
 name: FYNX Chat Final Closure
 
+# Final closure certification must run on main pushes and PRs so the merged mainline is independently certified.
 on:
   push:
     branches:
