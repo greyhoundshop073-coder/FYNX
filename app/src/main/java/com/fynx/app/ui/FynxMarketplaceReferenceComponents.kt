@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -41,14 +43,17 @@ import androidx.compose.ui.unit.dp
  * Marketplace remains the source of truth for all real data and actions.
  */
 internal object FynxMarketplaceReferenceStyle {
-    val background = Color(0xFF06142D)
-    val surface = Color(0xFF0B2144)
-    val surfaceRaised = Color(0xFF102A55)
-    val outline = Color(0xFF29466F)
-    val primary = Color(0xFF6957FF)
-    val primarySoft = Color(0xFF9A8CFF)
-    val text = Color(0xFFF4F7FF)
-    val textMuted = Color(0xFF9DAECC)
+    // Keep reference components on the app-wide design tokens instead of a
+    // second, hard-coded palette. Theme-specific runtime colors are handled by
+    // FynxTheme; these tokens preserve the established FYNX visual language.
+    val background = FynxDesign.Background
+    val surface = FynxDesign.Surface
+    val surfaceRaised = FynxDesign.SurfaceRaised
+    val outline = FynxDesign.Outline
+    val primary = FynxAccent.Purple.primary
+    val primarySoft = FynxAccent.Purple.secondary
+    val text = FynxDesign.TextPrimary
+    val textMuted = FynxDesign.TextSecondary
     val radius = RoundedCornerShape(18.dp)
 }
 
@@ -70,15 +75,31 @@ internal fun MarketplaceReferenceSearchBar(
             Row(Modifier.padding(horizontal = 13.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Search, null, tint = FynxMarketplaceReferenceStyle.textMuted, modifier = Modifier.size(19.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    if (value.isBlank()) "Search products, sellers or categories" else value,
-                    color = if (value.isBlank()) FynxMarketplaceReferenceStyle.textMuted else FynxMarketplaceReferenceStyle.text,
-                    maxLines = 1
-                )
+                Box(Modifier.weight(1f)) {
+                    if (value.isBlank()) {
+                        Text("Search products, sellers or categories", color = FynxMarketplaceReferenceStyle.textMuted, maxLines = 1)
+                    }
+                    BasicTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = FynxMarketplaceReferenceStyle.text),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (value.isNotBlank()) {
+                    IconButton(onClick = { onValueChange("") }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear Marketplace search", tint = FynxMarketplaceReferenceStyle.textMuted)
+                    }
+                }
             }
         }
-        IconButton(onClick = onCart) {
-            Icon(Icons.Default.ShoppingCart, "Cart", tint = FynxMarketplaceReferenceStyle.text)
+        androidx.compose.material3.BadgedBox(badge = {
+            if (cartCount > 0) androidx.compose.material3.Badge { Text(cartCount.toString()) }
+        }) {
+            IconButton(onClick = onCart) {
+                Icon(Icons.Default.ShoppingCart, "Cart", tint = FynxMarketplaceReferenceStyle.text)
+            }
         }
     }
 }
@@ -90,6 +111,8 @@ internal fun MarketplaceReferenceCategoryRow(
     onSelect: (String) -> Unit,
     onNearby: () -> Unit,
     nearbySelected: Boolean,
+    nearbyLabel: String = "Near me",
+    nearbyLoading: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -99,7 +122,17 @@ internal fun MarketplaceReferenceCategoryRow(
         FilterChip(
             selected = nearbySelected,
             onClick = onNearby,
-            label = { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.LocationOn, null, Modifier.size(15.dp)); Spacer(Modifier.width(4.dp)); Text("Near me") } }
+            label = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (nearbyLoading) {
+                        androidx.compose.material3.CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.LocationOn, null, Modifier.size(15.dp))
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    Text(nearbyLabel)
+                }
+            }
         )
         categories.forEach { category ->
             FilterChip(selected = selected == category, onClick = { onSelect(category) }, label = { Text(category) })

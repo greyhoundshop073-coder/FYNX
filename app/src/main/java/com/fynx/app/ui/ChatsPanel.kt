@@ -3,11 +3,14 @@ package com.fynx.app.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
@@ -32,9 +35,11 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     var groups by remember { mutableStateOf(FynxGroupsStore.load(context)) }
     var selfUsername by remember { mutableStateOf("") }
     var listView by remember { mutableStateOf(FynxPreferencesStore.loadChatListView(context)) }
-    var showArchived by remember { mutableStateOf(false) }
+    var chatFilter by remember { mutableStateOf("All") }
+    val showArchived = chatFilter == "Archived"
     var openMenuFor by remember { mutableStateOf<String?>(null) }
     var chatSearch by remember { mutableStateOf("") }
+    var groupSearch by remember { mutableStateOf("") }
 
     fun refreshChats() {
         chats = FynxChatStore.loadPreviews(context).map { preview ->
@@ -69,12 +74,25 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     val rowSpacing = when (listView) { "Compact" -> 2.dp; "Large" -> 14.dp; else -> 8.dp }
     val avatarSize = when (listView) { "Compact" -> 38.dp; "Large" -> 54.dp; else -> 42.dp }
     val normalizedChatSearch = chatSearch.trim()
+    val visibleGroups = if (chatFilter == "All" && !showArchived) {
+        groups.filter { group ->
+            normalizedChatSearch.isBlank() ||
+                group.name.contains(normalizedChatSearch, ignoreCase = true) ||
+                group.description.contains(normalizedChatSearch, ignoreCase = true)
+        }
+    } else emptyList()
     val visibleChats = chats.filterNot { chat ->
         val candidate = chat.username.removePrefix("@").trim().lowercase()
         selfUsername.isNotBlank() && candidate == selfUsername
     }.filter { chat ->
         val archived = FynxPreferencesStore.isChatArchived(context, chat.username)
         archived == showArchived
+    }.filter { chat ->
+        when (chatFilter) {
+            "Unread" -> chat.unreadCount > 0 || FynxChatStore.load(context, chat.username).any { !it.fromMe && !it.read }
+            "Pinned" -> FynxPreferencesStore.isChatPinned(context, chat.username)
+            else -> true
+        }
     }.filter { chat ->
         normalizedChatSearch.isBlank() ||
             chat.name.contains(normalizedChatSearch, ignoreCase = true) ||
@@ -95,8 +113,17 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         }
         Spacer(Modifier.height(12.dp))
         if (section == "Chats") {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { showArchived = !showArchived }) { Text(if (showArchived) "All chats" else "Archived") }
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf("All", "Unread", "Pinned", "Archived").forEach { filter ->
+                    FilterChip(
+                        selected = chatFilter == filter,
+                        onClick = { chatFilter = filter },
+                        label = { Text(filter) }
+                    )
+                }
             }
             Spacer(Modifier.height(10.dp))
             OutlinedTextField(
@@ -108,14 +135,39 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 singleLine = true,
                 shape = FynxDesign.ControlShape,
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search chats") },
+                trailingIcon = {
+                    if (chatSearch.isNotBlank()) {
+                        IconButton(onClick = { chatSearch = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear chat search")
+                        }
+                    }
+                },
                 placeholder = { Text("Search chats") },
             )
             Spacer(Modifier.height(14.dp))
-            if (visibleChats.isEmpty()) {
+            if (visibleChats.isEmpty() && visibleGroups.isEmpty()) {
                 Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(if (showArchived) "No archived chats" else if (normalizedChatSearch.isNotBlank()) "No matching chats" else "Messages", style = MaterialTheme.typography.titleLarge)
-                        Text(if (showArchived) "Chats you archive will stay here until you restore them." else if (normalizedChatSearch.isNotBlank()) "Try another name, username or message." else "Your private conversations will appear here. Start one with a real FYNX user.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            when {
+                                showArchived -> "No archived chats"
+                                normalizedChatSearch.isNotBlank() -> "No matching chats"
+                                chatFilter == "Unread" -> "No unread chats"
+                                chatFilter == "Pinned" -> "No pinned chats"
+                                else -> "Messages"
+                            },
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        Text(
+                            when {
+                                showArchived -> "Chats you archive will stay here until you restore them."
+                                normalizedChatSearch.isNotBlank() -> "Try another name, username or message."
+                                chatFilter == "Unread" -> "You're all caught up. New unread conversations will appear here."
+                                chatFilter == "Pinned" -> "Pin a conversation from its options to keep it easy to find."
+                                else -> "Your private conversations will appear here. Start one with a real FYNX user."
+                            },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             } else {
@@ -254,7 +306,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                         }
                     }
 
-                    if (!showArchived && normalizedChatSearch.isBlank() && groups.isNotEmpty()) {
+                    if (visibleGroups.isNotEmpty()) {
                         item {
                             Spacer(Modifier.height(6.dp))
                             Text(
@@ -264,7 +316,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                                 modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
                             )
                         }
-                        items(groups, key = { "group:" + it.id }) { group ->
+                        items(visibleGroups, key = { "group:" + it.id }) { group ->
                             Card(
                                 onClick = { onOpenGroup(group.id) },
                                 modifier = Modifier.fillMaxWidth(),
@@ -296,14 +348,42 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             Spacer(Modifier.height(10.dp))
             OutlinedButton(onClick = onCreateGroup, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Create group" }) { Text("＋ Create group") }
         } else {
+            OutlinedTextField(
+                value = groupSearch,
+                onValueChange = { groupSearch = it },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                singleLine = true,
+                shape = FynxDesign.ControlShape,
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search groups") },
+                trailingIcon = {
+                    if (groupSearch.isNotBlank()) {
+                        IconButton(onClick = { groupSearch = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear group search")
+                        }
+                    }
+                },
+                placeholder = { Text("Search groups") },
+            )
+            Spacer(Modifier.height(10.dp))
             Button(onClick = onCreateGroup) { Text("＋ New group") }
             Spacer(Modifier.height(10.dp))
-            if (groups.isEmpty()) {
-                Text("No groups yet", style = MaterialTheme.typography.titleMedium)
-                Text("Create a group to start a shared conversation.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val visibleGroupList = groups.filter { group ->
+                groupSearch.isBlank() ||
+                    group.name.contains(groupSearch.trim(), ignoreCase = true) ||
+                    group.description.contains(groupSearch.trim(), ignoreCase = true)
+            }
+            if (visibleGroupList.isEmpty()) {
+                Text(
+                    if (groups.isEmpty()) "No groups yet" else "No matching groups",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    if (groups.isEmpty()) "Create a group to start a shared conversation." else "Try another group name or description.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(rowSpacing), contentPadding = PaddingValues(bottom = 12.dp)) {
-                    items(groups, key = { it.id }) { group ->
+                    items(visibleGroupList, key = { it.id }) { group ->
                         Card(onClick = { onOpenGroup(group.id) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                             ListItem(
                                 headlineContent = { Text(group.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
