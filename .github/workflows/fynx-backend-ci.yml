@@ -5,7 +5,7 @@ on:
     branches: [ "main" ]
     paths: ["backend/**", "scripts/**", ".github/workflows/fynx-backend-ci.yml"]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "fix/marketplace-ngn-usd-revenue-contract" ]
     paths: ["backend/**", "scripts/**", ".github/workflows/fynx-backend-ci.yml"]
   workflow_dispatch:
 
@@ -43,6 +43,9 @@ jobs:
           node --check marketplaceReputation.js
           node --check marketplaceSettlement.js
           node --check marketplaceSettlementWorker.js
+          node --check verify-marketplace-multi-checkout-lifecycle.mjs
+          node --check verify-marketplace-multi-payout-isolation.mjs
+          node --check verify-marketplace-end-to-end.mjs
           node --check marketplacePaymentExpiry.js
           node --check marketplaceInspectionExpiry.js
           node --check marketplaceProtection.js
@@ -134,10 +137,20 @@ jobs:
         run: node verify-marketplace-price-watch.mjs
       - name: Run marketplace financial reconciliation guard
         run: node verify-marketplace-reconciliation.mjs
+      - name: Run Marketplace NGN/USD currency contract verification
+        run: node verify-marketplace-currency-contract.mjs
       - name: Run marketplace protection admin guard
         run: node verify-marketplace-protection-admin.mjs
       - name: Run marketplace order lifecycle guard
         run: node verify-marketplace-order-lifecycle.mjs
+      - name: Run Marketplace multi-product lifecycle guard
+        run: node verify-marketplace-multi-checkout-lifecycle.mjs
+      - name: Run Marketplace multi-product payout isolation guard
+        run: node verify-marketplace-multi-payout-isolation.mjs
+      - name: Run Marketplace end-to-end verification
+        run: node verify-marketplace-end-to-end.mjs
+      - name: Run Marketplace refund dispute isolation guard
+        run: node --check verify-marketplace-refund-dispute-isolation.mjs && node verify-marketplace-refund-dispute-isolation.mjs
       - name: Run Batch 4 canonical shipping verification
         run: node verify-marketplace-batch4-shipping.mjs
       - name: Run Batch 4 shipping timeline and fulfillment verification
