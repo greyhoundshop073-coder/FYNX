@@ -215,6 +215,27 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                     }
                                 }
                             }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Signing in…" else "Sign In") }
+                            if ((context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedButton(
+                                    onClick = {
+                                        // Dedicated debug-only path for offline UI testing. Keep server
+                                        // sign-in intact above; this must never be exposed in release APKs.
+                                        val testUsername = username.trim().removePrefix("@").ifBlank {
+                                            FynxAuthStore.storedUsername(context) ?: "fynx_tester"
+                                        }
+                                        FynxAuthStore.save(context, testUsername)
+                                        error = null
+                                        busy = false
+                                        onAuthenticated(testUsername)
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                                    enabled = !busy,
+                                    shape = RoundedCornerShape(26.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF6A4CFF))
+                                ) { Text("Continue to FYNX for testing (offline)") }
+                            }
                             TextButton(onClick = { error = null; page = FynxAuthPage.REGISTER }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = .8f))) { Text("Create a new account") }
                         }
                     }
