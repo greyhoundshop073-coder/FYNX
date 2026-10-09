@@ -6,6 +6,7 @@ import path from "node:path";
 import { installSocialFeed } from "./socialFeedBootstrap.js";
 import { installHomeCommentPrivacy } from "./homeCommentsPrivacyBootstrap.js";
 import { installSocialPostReactions } from "./socialPostReactionBootstrap.js";
+import { notifyCommentMentions } from "./notificationPush.js";
 
 // R3 connection isolation layer. server.js is intentionally kept intact; this
 // wrapper makes the existing WebSocket connection handler reject stale/replaced
@@ -183,6 +184,7 @@ async function installHomeCommentBackend() {
       const inserted = await client.query(\`INSERT INTO social_post_comments(post_id,author_id,parent_comment_id,text) VALUES($1,$2,$3,$4) RETURNING id,post_id,parent_comment_id,text,EXTRACT(EPOCH FROM created_at)*1000 AS timestamp\`, [postId, req.user.sub, rootId, text]);
       await client.query('COMMIT');
       const row = inserted.rows[0];
+      await notifyCommentMentions(pool,{commentId:row.id,postId,authorId:req.user.sub,text});
       return res.status(201).json({ comment: { id: String(row.id), postId: String(row.post_id), parentCommentId: String(row.parent_comment_id), text: row.text, timestamp: Number(row.timestamp), authorId: String(req.user.sub), authorUsername: author.rows[0].username || '', authorDisplayName: author.rows[0].display_name || '' } });
     } catch (error) {
       try { await client.query('ROLLBACK'); } catch {}

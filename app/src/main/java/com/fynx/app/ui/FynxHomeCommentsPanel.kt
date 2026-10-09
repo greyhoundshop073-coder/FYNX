@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -22,6 +23,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -33,7 +36,7 @@ private const val MAX_COMMENT_LENGTH = 1000
 private const val COMMENT_PAGE_SIZE = 50
 
 @Composable
-fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommentId: String? = null, onClose: () -> Unit, onCommentCountChanged: (Int) -> Unit = {}) {
+fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommentId: String? = null, onClose: () -> Unit, onCommentCountChanged: (Int) -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -173,7 +176,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                         FynxRemoteProfileAvatar(photo, comment.authorDisplayName.ifBlank { comment.authorUsername }, Modifier.size(38.dp).clip(CircleShape), ownerUsername = comment.authorUsername); Spacer(Modifier.width(10.dp))
                                         Column(Modifier.weight(1f)) {
                                             Text(comment.authorDisplayName.ifBlank { comment.authorUsername }, style = MaterialTheme.typography.labelLarge)
-                                            Text(comment.text, style = MaterialTheme.typography.bodyMedium)
+                                            MentionText(comment.text, onOpenAuthorProfile = onOpenAuthorProfile)
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Text(relative(comment.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 TextButton(onClick = { if (!sending) replyingToId = comment.id }) { Text("Reply") }
@@ -184,7 +187,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                     expandedReplies[comment.id].orEmpty().forEach { reply ->
                                         Row(Modifier.fillMaxWidth().padding(start = 48.dp, top = 8.dp), verticalAlignment = Alignment.Top) {
                                             val photo = authorPhotos[reply.authorUsername.removePrefix("@").trim().lowercase()]
-                                            FynxRemoteProfileAvatar(photo, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium); Text(reply.text, style = MaterialTheme.typography.bodyMedium); Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                            FynxRemoteProfileAvatar(photo, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium); MentionText(reply.text, onOpenAuthorProfile = onOpenAuthorProfile); Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                         }
                                     }
                                     if (replyLoadingId == comment.id) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(start = 48.dp, top = 4.dp))
@@ -230,4 +233,31 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
 private fun relative(timestamp: Long): String {
     val minutes = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L))
     return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" }
+}
+
+@Composable
+private fun MentionText(text: String, onOpenAuthorProfile: (String) -> Unit) {
+    val regex = Regex("@([A-Za-z0-9_]{2,32})\\b")
+    val builder = AnnotatedString.Builder()
+    var cursor = 0
+    regex.findAll(text).forEach { match ->
+        if (match.range.first > cursor) builder.append(text.substring(cursor, match.range.first))
+        val username = match.groupValues[1]
+        val start = builder.length
+        builder.pushStringAnnotation("username", username)
+        builder.pushStyle(SpanStyle(color = MaterialTheme.colorScheme.primary))
+        builder.append(match.value)
+        builder.pop()
+        builder.pop()
+        cursor = match.range.last + 1
+    }
+    if (cursor < text.length) builder.append(text.substring(cursor))
+    val annotated = builder.toAnnotatedString()
+    ClickableText(
+        text = annotated,
+        style = MaterialTheme.typography.bodyMedium,
+        onClick = { offset ->
+            annotated.getStringAnnotations("username", offset, offset).firstOrNull()?.let { onOpenAuthorProfile(it.item) }
+        }
+    )
 }
