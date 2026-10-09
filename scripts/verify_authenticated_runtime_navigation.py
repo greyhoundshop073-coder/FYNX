@@ -329,7 +329,7 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
             run("adb","shell","input","tap",str(px),str(py))
             time.sleep(1)
             continue
-        if not expected_labels or any(find_control(next_xml,[wanted]) for wanted in expected_labels):
+        if expected_labels and any(find_control(next_xml,[wanted]) for wanted in expected_labels):
             break
     screenshot(f"authenticated-{name}.png")
     if expected_labels and not any(find_control(next_xml,[wanted]) for wanted in expected_labels):
@@ -550,7 +550,12 @@ if not FAILURES:
                 friend_chat_control=find_control(after,["Open chat"])
                 friend_username=find_username_near_control(after,["Open chat"])
                 if friend_chat_control:
-                    friend_chat=tap_control(after,["Open chat"],"friend-chat-entry")
+                    friend_chat=tap_control(
+                        after,
+                        ["Open chat"],
+                        "friend-chat-entry",
+                        ["Message composer","Edit message composer","Chat message composer area","No messages here yet"],
+                    )
                     alive, crashlog = capture_runtime_log("friend-chat-process.log")
                     screenshot("friend-chat-after-open.png")
                     report.append("- Friend -> Chat process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
@@ -597,7 +602,12 @@ if not FAILURES:
                     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
                     time.sleep(2.5)
                     home_for_chat=dismiss_runtime_permission_prompt() or dump_ui("private-chat-fallback-home.xml")
-                    friends_surface=tap_control(home_for_chat,["Friends"],"private-chat-fallback-friends",["Friends"])
+                    friends_surface=tap_control(
+                        home_for_chat,
+                        ["Friends"],
+                        "private-chat-fallback-friends",
+                        ["Find People","Search username or name","Your Friends"],
+                    )
                     fallback=""
                     search_control=find_control(friends_surface,["Search username or name"])
                     if search_control:
