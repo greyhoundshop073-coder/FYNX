@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -85,6 +86,11 @@ internal fun MarketplaceReferenceSearchBar(
                         textStyle = androidx.compose.ui.text.TextStyle(color = FynxMarketplaceReferenceStyle.text),
                         modifier = Modifier.fillMaxWidth()
                     )
+                }
+                if (value.isNotBlank()) {
+                    IconButton(onClick = { onValueChange("") }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear Marketplace search", tint = FynxMarketplaceReferenceStyle.textMuted)
+                    }
                 }
             }
         }
