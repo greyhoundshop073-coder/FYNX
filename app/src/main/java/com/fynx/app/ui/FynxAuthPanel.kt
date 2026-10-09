@@ -163,6 +163,14 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                             } else {
                                 FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
                                 Spacer(Modifier.height(10.dp))
+                                if ((context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+                                    Text(
+                                        "Debug APK only: enter your password for server sign-in, or leave it empty to enter offline UI testing.",
+                                        color = Color.White.copy(alpha = .72f),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                }
                             }
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                             Spacer(Modifier.height(14.dp))
@@ -177,6 +185,13 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                         FynxAuthStore.save(context, savedLocalUsername)
                                         error = null
                                         onAuthenticated(savedLocalUsername)
+                                    }
+                                    password.isBlank() && (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 -> {
+                                        // Preserve passwordless offline UI entry in debug builds without
+                                        // hiding the real password field on a fresh installation.
+                                        FynxAuthStore.save(context, requestedUsername)
+                                        error = null
+                                        onAuthenticated(requestedUsername)
                                     }
                                     password.isBlank() -> error = "Enter your username and password."
                                     else -> {
