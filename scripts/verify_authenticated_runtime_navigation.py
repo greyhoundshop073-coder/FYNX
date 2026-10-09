@@ -561,7 +561,7 @@ def login():
                 return last_xml, f"{reason}; debug-only offline UI entry also failed; visible markers: {last_markers}"
             else:
                 reason="the login form returned without opening authenticated Home"
-            return last_xml, f"{reason}; visible markers: {last_markers}
+            return last_xml, f"{reason}; visible markers: {last_markers}"
     screenshot("authenticated-home-timeout.png")
     return last_xml, "login did not reach authenticated Home within 65 seconds; last visible markers: " + (last_markers or visible_marker_summary(last_xml))
 
