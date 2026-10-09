@@ -41,6 +41,8 @@ class FynxRealtimeClient(
     private val reconnectHandler = Handler(Looper.getMainLooper())
     private val pendingLock = Any()
     private val pendingPayloads = ArrayDeque<String>()
+    private data class PendingCallPayload(val payload: String, val expiresAtMs: Long)
+    private val pendingCallPayloads = ArrayDeque<PendingCallPayload>()
     private var pendingAccountKey: String? = null
     private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -128,7 +130,10 @@ class FynxRealtimeClient(
     private fun isSocketStillAuthorized(expectedAccountKey: String? = socketAccountKey): Boolean = !expectedAccountKey.isNullOrBlank() && expectedAccountKey == currentAccountKey() && FynxBackendClient.hasAccessToken(context)
     private fun bindPendingQueueToAccount(accountKey: String) {
         synchronized(pendingLock) {
-            if (pendingAccountKey != null && pendingAccountKey != accountKey) pendingPayloads.clear()
+            if (pendingAccountKey != null && pendingAccountKey != accountKey) {
+                pendingPayloads.clear()
+                pendingCallPayloads.clear()
+            }
             pendingAccountKey = accountKey
         }
     }
@@ -175,7 +180,7 @@ class FynxRealtimeClient(
                         if (socketBeingCreated === webSocket) socketBeingCreated = null
                     }
                     if (manuallyClosed || !belongsToCurrentAccount(webSocket)) { webSocket.close(1000, "FYNX socket replaced"); return }
-                    reconnectAttempt = 0; emitState(State.CONNECTED); flushPending(webSocket)
+                    reconnectAttempt = 0; emitState(State.CONNECTED); flushPending(webSocket); flushPendingCallSignals(webSocket)
                 }
                 override fun onMessage(webSocket: WebSocket, text: String) {
                     if (!belongsToCurrentAccount(webSocket)) { webSocket.close(1000, "FYNX socket replaced"); return }
@@ -193,7 +198,7 @@ class FynxRealtimeClient(
                             if (callEvent.signalType == "invite") {
                                 val caller = callEvent.fromUsername?.removePrefix("@").orEmpty().ifBlank { callEvent.fromUserId }
                                 val kind = if (callEvent.callType == "video") "Video call" else "Voice call"
-                                FynxNotificationFoundation.show(context, FynxNotificationFoundation.MESSAGES_CHANNEL, callEvent.callId.hashCode(), "Incoming $kind 📞", "@$caller is calling you.", stableKey = "incoming-call:${callEvent.callId}")
+                                FynxNotificationFoundation.show(context, FynxNotificationFoundation.MESSAGES_CHANNEL, callEvent.callId.hashCode(), "Incoming $kind 📞", "@$caller is calling you.", stableKey = "incoming-call:${callEvent.callId}", incomingCall = FynxIncomingCall(callEvent.callId, callEvent.fromUserId, caller, callEvent.callType == "video"))
                             }
                             emitEvent(callEvent)
                         }
@@ -291,6 +296,20 @@ class FynxRealtimeClient(
             if (activeSocket == null || socketAccountKey != accountKey || !FynxBackendClient.hasAccessToken(context)) false else activeSocket.send(value)
         }
         if (sent) return
+        if (type == "call") {
+            val signalType = payload.optString("signalType")
+            val ttlMs = if (signalType == "invite" || signalType == "accept" || signalType == "reject" || signalType == "end") 60_000L else 15_000L
+            synchronized(pendingLock) {
+                if (pendingAccountKey != null && pendingAccountKey != accountKey) {
+                    pendingPayloads.clear()
+                    pendingCallPayloads.clear()
+                }
+                pendingAccountKey = accountKey
+                if (pendingCallPayloads.size >= 32) pendingCallPayloads.removeFirst()
+                pendingCallPayloads.addLast(PendingCallPayload(value, System.currentTimeMillis() + ttlMs))
+            }
+            return
+        }
         if (type != "read" && type != "message_ack") return
         synchronized(pendingLock) {
             if (pendingAccountKey != null && pendingAccountKey != accountKey) pendingPayloads.clear()
@@ -319,9 +338,31 @@ class FynxRealtimeClient(
             }
         }
     }
+    private fun flushPendingCallSignals(webSocket: WebSocket) {
+        val accountKey = currentAccountKey() ?: return
+        if (!isSocketStillAuthorized(accountKey)) return
+        while (true) {
+            val next = synchronized(pendingLock) {
+                if (pendingAccountKey != accountKey) {
+                    pendingCallPayloads.clear()
+                    return@synchronized null
+                }
+                while (pendingCallPayloads.firstOrNull()?.expiresAtMs?.let { it <= System.currentTimeMillis() } == true) pendingCallPayloads.removeFirst()
+                pendingCallPayloads.firstOrNull()
+            } ?: return
+            val sent = synchronized(socketCreationLock) {
+                socket === webSocket && socketAccountKey == accountKey && currentAccountKey() == accountKey && FynxBackendClient.hasAccessToken(context) && hasUsableNetwork() && webSocket.send(next.payload)
+            }
+            if (!sent) return
+            synchronized(pendingLock) {
+                if (pendingAccountKey == accountKey && pendingCallPayloads.firstOrNull() == next) pendingCallPayloads.removeFirst()
+            }
+        }
+    }
+
     fun close() {
         manuallyClosed = true; reconnectHandler.removeCallbacksAndMessages(null); unregisterNetworkCallback()
-        synchronized(pendingLock) { pendingPayloads.clear(); pendingAccountKey = null }
+        synchronized(pendingLock) { pendingPayloads.clear(); pendingCallPayloads.clear(); pendingAccountKey = null }
         synchronized(socketCreationLock) {
             socketCreationInProgress = false
             socketBeingCreated?.cancel()

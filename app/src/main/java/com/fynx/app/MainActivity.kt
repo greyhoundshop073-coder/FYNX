@@ -22,6 +22,7 @@ import androidx.core.content.ContextCompat
 import com.fynx.app.ui.AuthState
 import com.fynx.app.ui.FynxApp
 import com.fynx.app.ui.FynxAuthStore
+import com.fynx.app.ui.FynxIncomingCall
 import com.fynx.app.ui.FynxDeepLinkDestination
 import com.fynx.app.ui.FynxDeepLinkParser
 import com.fynx.app.ui.FynxNotificationDeviceManager
@@ -37,6 +38,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val deepLinkDestinationState = mutableStateOf<FynxDeepLinkDestination?>(null)
+    private val incomingCallState = mutableStateOf<FynxIncomingCall?>(null)
     private var lastHandledDeepLink: String? = null
     private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) registerNotificationTokenIfSignedIn()
@@ -46,6 +48,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         updateDeepLink(intent?.data?.toString())
+        updateIncomingCall(intent)
         FynxNotificationFoundation.createChannels(this)
         registerNotificationTokenIfSignedIn()
 
@@ -59,7 +62,7 @@ class MainActivity : ComponentActivity() {
                 FynxLaunchScreen()
             } else {
                 FynxTheme {
-                    FynxApp(deepLinkDestination = deepLinkDestinationState.value)
+                    FynxApp(deepLinkDestination = deepLinkDestinationState.value, incomingCall = incomingCallState.value)
                 }
             }
         }
@@ -69,6 +72,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         updateDeepLink(intent.data?.toString())
+        updateIncomingCall(intent)
     }
 
     private fun updateDeepLink(rawUri: String?) {
@@ -76,6 +80,21 @@ class MainActivity : ComponentActivity() {
         if (normalized == lastHandledDeepLink) return
         lastHandledDeepLink = normalized
         deepLinkDestinationState.value = FynxDeepLinkParser.parse(normalized?.let(android.net.Uri::parse))
+    }
+
+    private fun updateIncomingCall(intent: Intent?) {
+        if (intent?.action != "com.fynx.app.action.INCOMING_CALL") return
+        val callId = intent.getStringExtra("fynx_call_id")?.trim().orEmpty()
+        val fromUserId = intent.getStringExtra("fynx_call_from_user_id")?.trim().orEmpty()
+        val fromUsername = intent.getStringExtra("fynx_call_from_username")?.trim().orEmpty()
+        if (callId.isBlank() || fromUserId.isBlank() || fromUsername.isBlank()) return
+        incomingCallState.value = FynxIncomingCall(
+            callId = callId,
+            fromUserId = fromUserId,
+            fromUsername = fromUsername,
+            video = intent.getBooleanExtra("fynx_call_video", false),
+            action = intent.getStringExtra("fynx_call_action")?.trim().orEmpty().ifBlank { "VIEW" }
+        )
     }
 
     override fun onDestroy() {

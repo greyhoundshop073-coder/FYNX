@@ -7,6 +7,9 @@ import android.app.PendingIntent
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.content.Context
+import android.content.Intent
+import androidx.core.app.Person
+import com.fynx.app.MainActivity
 import android.content.pm.PackageManager
 import android.os.Build
 import android.speech.tts.TextToSpeech
@@ -136,7 +139,8 @@ object FynxNotificationFoundation {
         title: String,
         message: String,
         stableKey: String = "$channelId:$id:$title:$message",
-        contentIntent: PendingIntent? = null
+        contentIntent: PendingIntent? = null,
+        incomingCall: FynxIncomingCall? = null
     ) {
         createChannels(context)
         val isCall = channelId == CALLS_CHANNEL || title.startsWith("Incoming Voice call") || title.startsWith("Incoming Video call")
@@ -169,11 +173,52 @@ object FynxNotificationFoundation {
             .setCategory(if (isCall) NotificationCompat.CATEGORY_CALL else NotificationCompat.CATEGORY_MESSAGE)
             .setDefaults(if (isCall) NotificationCompat.DEFAULT_ALL else NotificationCompat.DEFAULT_VIBRATE)
 
-        if (contentIntent != null) builder.setContentIntent(contentIntent)
-        if (isCall) builder.setTimeoutAfter(60_000L)
+        if (incomingCall != null && isCall) {
+            val caller = Person.Builder()
+                .setName("@${incomingCall.fromUsername.removePrefix("@").ifBlank { incomingCall.fromUserId }}")
+                .setImportant(true)
+                .build()
+            val viewIntent = callIntent(context, incomingCall, "VIEW")
+            val answerIntent = callIntent(context, incomingCall, "ANSWER")
+            val declineIntent = callIntent(context, incomingCall, "DECLINE")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                builder.setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, declineIntent, answerIntent))
+                    .addPerson(caller)
+                    .setOngoing(true)
+                    .setFullScreenIntent(viewIntent, true)
+            } else {
+                builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Decline", declineIntent)
+                    .addAction(android.R.drawable.ic_menu_call, "Answer", answerIntent)
+                    .setFullScreenIntent(viewIntent, true)
+            }
+            builder.setContentIntent(viewIntent)
+            builder.setTimeoutAfter(60_000L)
+        } else {
+            if (contentIntent != null) builder.setContentIntent(contentIntent)
+            if (isCall) builder.setTimeoutAfter(60_000L)
+        }
 
         NotificationManagerCompat.from(context).notify(id, builder.build())
         speak(context, title, message)
+    }
+
+    private fun callIntent(context: Context, call: FynxIncomingCall, action: String): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            this.action = "com.fynx.app.action.INCOMING_CALL"
+            putExtra("fynx_call_action", action)
+            putExtra("fynx_call_id", call.callId)
+            putExtra("fynx_call_from_user_id", call.fromUserId)
+            putExtra("fynx_call_from_username", call.fromUsername)
+            putExtra("fynx_call_video", call.video)
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        val requestCode = (call.callId.hashCode() * 31 + action.hashCode()).and(0x7fffffff)
+        return PendingIntent.getActivity(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     fun cancel(context: Context, id: Int) {
