@@ -197,7 +197,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 value = query,
                 onValueChange = { query = it.take(80) },
                 onCart = { showCart = true },
-                cartCount = cart.size,
+                cartCount = cartQuantities.values.sum().coerceAtLeast(0),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
             )
             MarketplaceReferenceCategoryRow(
