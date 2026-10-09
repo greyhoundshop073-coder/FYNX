@@ -533,10 +533,10 @@ else:
     else: report.append("- PASS real account authenticated through the FYNX login flow")
 
 if not FAILURES:
-    composer_xml=tap_control(xml,["Open FYNX camera"],"home-camera-composer",["What's on your mind?","Photo","Video/Camera"])
+    composer_xml=tap_control(xml,["Open FYNX camera"],"home-camera-composer",["What's on your mind?"])
     if composer_xml:
         report.append("- PASS Home header camera -> real post composer screenshot/UI hierarchy")
-        camera_xml=tap_control(composer_xml,["Video/Camera"],"composer-camera",["Switch front/back camera","Photo","Recording"])
+        camera_xml=tap_control(composer_xml,["Video/Camera"],"composer-camera",["Switch front/back camera"])
         if camera_xml: report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
         else: FAILURES.append("post composer -> real camera")
     else: FAILURES.append("Home header camera -> real post composer")
@@ -544,8 +544,8 @@ if not FAILURES:
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-camera-reset.xml") or xml
 
     for name,labels,expected in (
-        ("chat",["Chat"],["Messages and groups in one place","Search chats","Your private conversations"]),
-        ("friends",["Friends"],["Find People","Search username or name","Your Friends"]),
+        ("chat",["Chat"],["Messages and groups in one place"]),
+        ("friends",["Friends"],["Search username or name"]),
         ("stories",["Open Stories","See all"],["Recent updates"]),
     ):
         after=capture_surface(name,labels,xml,expected)
@@ -560,7 +560,7 @@ if not FAILURES:
                         after,
                         ["Open chat"],
                         "friend-chat-entry",
-                        ["Message composer","Edit message composer","Chat message composer area","No messages here yet"],
+                        ["Chat message composer area","No messages here yet"],
                     )
                     alive, crashlog = capture_runtime_log("friend-chat-process.log")
                     screenshot("friend-chat-after-open.png")
@@ -612,7 +612,7 @@ if not FAILURES:
                         home_for_chat,
                         ["Friends"],
                         "private-chat-fallback-friends",
-                        ["Find People","Search username or name","Your Friends"],
+                        ["Search username or name"],
                     )
                     fallback=""
                     search_control=find_control(friends_surface,["Search username or name"])
@@ -684,7 +684,7 @@ if not FAILURES:
                     # This is read-only: do not toggle or reset the account preferences.
                     settings_menu = tap_control(dump_ui("private-chat-before-settings.xml"), ["More"], "private-chat-menu", ["Chat settings"])
                     if settings_menu:
-                        settings_screen = tap_control(settings_menu, ["Chat settings"], "private-chat-settings", ["Chat Settings", "Notifications", "Appearance"])
+                        settings_screen = tap_control(settings_menu, ["Chat settings"], "private-chat-settings", ["Chat notifications"])
                         if settings_screen:
                             required_settings = ["Chat Settings", "Notifications", "Appearance", "Chat notifications", "Message sound", "Vibration", "Message text size"]
                             missing_settings = [label for label in required_settings if not find_control(settings_screen, [label])]
@@ -715,9 +715,9 @@ if not FAILURES:
                     report.append("- PASS private-chat notification-route test skipped because no real chat participant identifier was visible; no test data was fabricated")
                 run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
                 reset=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-chat-group-reset.xml") or xml
-                groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Groups"])
+                groups_xml=tap_control(reset,["Chat"],"chat-for-group",["New group","No groups yet","Create group"])
                 if groups_xml:
-                    groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["Groups","New group"])
+                    groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["New group","No groups yet","Create group"])
                     if groups_tab:
                         group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
                         if not group_after:
