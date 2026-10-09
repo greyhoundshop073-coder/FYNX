@@ -7,12 +7,15 @@ import android.media.MediaPlayer
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.view.ViewGroup
+import android.view.HapticFeedbackConstants
+import android.view.SoundEffectConstants
 import android.view.Surface
 import android.view.TextureView
 import android.widget.VideoView
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -39,9 +42,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -67,7 +72,12 @@ private data class HomePeopleRecommendation(val username: String, val displayNam
 @Composable
 fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, initialPostId: String? = null, initialCommentId: String? = null, onInitialPostConsumed: () -> Unit = {}, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onOpenMarketplaceListing: (String) -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}, header: (@Composable () -> Unit)? = null) {
     val context = LocalContext.current
+    val interactionView = LocalView.current
     val scope = rememberCoroutineScope()
+    fun reactionFeedback() {
+        interactionView.playSoundEffect(SoundEffectConstants.CLICK)
+        interactionView.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+    }
     val publishRefreshKey = FynxHomeLifecycleRefreshBus.currentVersion()
     var posts by remember { mutableStateOf<List<FynxRemoteSocialClient.RemotePost>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -357,12 +367,12 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         scope.launch { action().onSuccess { result -> interactionStates = interactionStates + (id to update(previous, result.first, result.second.coerceAtLeast(0))) }.onFailure { interactionStates = interactionStates + (id to previous); error = it.message ?: "Unable to update this post." }; interactionBusy = interactionBusy - id }
     }
     fun runLike(id: String) {
-        if (id in interactionBusy) return; val previous = posts.firstOrNull { it.id == id } ?: return; val optimisticLiked = !previous.likedByCurrentUser; val optimisticCount = (previous.likeCount + if (optimisticLiked) 1 else -1).coerceAtLeast(0)
+        if (id in interactionBusy) return; reactionFeedback(); val previous = posts.firstOrNull { it.id == id } ?: return; val optimisticLiked = !previous.likedByCurrentUser; val optimisticCount = (previous.likeCount + if (optimisticLiked) 1 else -1).coerceAtLeast(0)
         posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = optimisticLiked, likeCount = optimisticCount) else it }; interactionBusy = interactionBusy + id
         scope.launch { FynxRemoteSocialClient.like(context, id, desired = optimisticLiked).onSuccess { result -> val (liked, count) = result; posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = liked, likeCount = count.coerceAtLeast(0)) else it } }.onFailure { posts = posts.map { if (it.id == id) it.copy(likedByCurrentUser = previous.likedByCurrentUser, likeCount = previous.likeCount) else it }; error = it.message ?: "Unable to update this like." }; interactionBusy = interactionBusy - id }
     }
     fun runReaction(id: String, reaction: String) {
-        if (id in interactionBusy) return; val previous = reactionStates[id] ?: FynxHomePostReactionsClient.ReactionState(); val same = previous.currentReaction == reaction; val optimisticCounts = previous.counts.toMutableMap(); previous.currentReaction?.let { current -> optimisticCounts[current] = ((optimisticCounts[current] ?: 0) - 1).coerceAtLeast(0) }; if (!same) optimisticCounts[reaction] = (optimisticCounts[reaction] ?: 0) + 1
+        if (id in interactionBusy) return; reactionFeedback(); val previous = reactionStates[id] ?: FynxHomePostReactionsClient.ReactionState(); val same = previous.currentReaction == reaction; val optimisticCounts = previous.counts.toMutableMap(); previous.currentReaction?.let { current -> optimisticCounts[current] = ((optimisticCounts[current] ?: 0) - 1).coerceAtLeast(0) }; if (!same) optimisticCounts[reaction] = (optimisticCounts[reaction] ?: 0) + 1
         reactionStates = reactionStates + (id to FynxHomePostReactionsClient.ReactionState(optimisticCounts.filterValues { it > 0 }, if (same) null else reaction)); interactionBusy = interactionBusy + id; reactionPickerPostId = null
         scope.launch { val result = if (same) FynxHomePostReactionsClient.clear(context, id) else FynxHomePostReactionsClient.set(context, id, reaction); result.onSuccess { reactionStates = reactionStates + (id to it) }.onFailure { reactionStates = reactionStates + (id to previous); error = it.message ?: "Unable to update this reaction." }; interactionBusy = interactionBusy - id }
     }
@@ -762,7 +772,7 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
         }
         if (!post.musicMediaId.isNullOrBlank()) MusicPostPlayer(post.musicMediaId!!, post.musicTitle.orEmpty(), post.musicArtist.orEmpty(), post.musicDurationMs)
         if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = { openMarketplaceTarget?.invoke() ?: onOpenMarketplace() }) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
-        if (reactionPickerOpen) Surface(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), shape = MaterialTheme.shapes.large, tonalElevation = 2.dp) { Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) { ReactionChoice("👍", "LIKE", reactionState.currentReaction == "LIKE", onReact = { onReact(post.id, it) }); ReactionChoice("❤️", "LOVE", reactionState.currentReaction == "LOVE", onReact = { onReact(post.id, it) }); ReactionChoice("😂", "LAUGH", reactionState.currentReaction == "LAUGH", onReact = { onReact(post.id, it) }); ReactionChoice("😮", "WOW", reactionState.currentReaction == "WOW", onReact = { onReact(post.id, it) }); ReactionChoice("😢", "SAD", reactionState.currentReaction == "SAD", onReact = { onReact(post.id, it) }) } }
+        if (reactionPickerOpen) Surface(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), shape = MaterialTheme.shapes.large, tonalElevation = 2.dp) { Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) { ReactionChoice("👍", "LIKE", reactionState.currentReaction == "LIKE", onReact = { onReact(post.id, it) }); ReactionChoice("❤️", "LOVE", reactionState.currentReaction == "LOVE", onReact = { onReact(post.id, it) }); ReactionChoice("😂", "LAUGH", reactionState.currentReaction == "LAUGH", onReact = { onReact(post.id, it) }); ReactionChoice("😮", "WOW", reactionState.currentReaction == "WOW", onReact = { onReact(post.id, it) }); ReactionChoice("😢", "SAD", reactionState.currentReaction == "SAD", onReact = { onReact(post.id, it) }); ReactionChoice("😡", "ANGRY", reactionState.currentReaction == "ANGRY", onReact = { onReact(post.id, it) }) } }
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly) {
             FeedActionButton(onClick = { onLike(post.id) }, onLongClick = onOpenReactionPicker, enabled = !interactionBusy, icon = if (post.likedByCurrentUser) Icons.Default.Favorite else Icons.Default.FavoriteBorder, label = "Like", longClickLabel = "Open post reactions", count = reactionState.total.coerceAtLeast(post.likeCount), active = post.likedByCurrentUser)
             FeedActionButton(onClick = onComment, enabled = !interactionBusy, icon = Icons.Default.ChatBubbleOutline, label = "Comment", count = post.commentCount)
@@ -792,8 +802,17 @@ private fun PostMediaGrid(items: List<FynxHomePostMediaClient.PostMediaItem>, pl
 }
 
 @Composable
-private fun ReactionChoice(emoji: String, reaction: String, active: Boolean, onReact: (String) -> Unit) { TextButton(onClick = { onReact(reaction) }, modifier = Modifier.heightIn(min = 48.dp), colors = ButtonDefaults.textButtonColors(contentColor = if (active) MaterialTheme.colorScheme.primary else FynxDesign.TextPrimary)) { Text(emoji, style = MaterialTheme.typography.titleLarge) } }
-private fun reactionSummary(state: FynxHomePostReactionsClient.ReactionState): String { val order = listOf("LIKE" to "👍", "LOVE" to "❤️", "LAUGH" to "😂", "WOW" to "😮", "SAD" to "😢"); val visible = order.filter { (key, _) -> (state.counts[key] ?: 0) > 0 }.take(5); return "${visible.joinToString(" ") { it.second }}  ${state.total} reaction${if (state.total == 1) "" else "s"}" }
+private fun ReactionChoice(emoji: String, reaction: String, active: Boolean, onReact: (String) -> Unit) {
+    val scale by animateFloatAsState(if (active) 1.18f else 1f, animationSpec = tween(140), label = "reaction-scale")
+    TextButton(
+        onClick = { onReact(reaction) },
+        modifier = Modifier.heightIn(min = 48.dp),
+        colors = ButtonDefaults.textButtonColors(contentColor = if (active) MaterialTheme.colorScheme.primary else FynxDesign.TextPrimary)
+    ) {
+        Text(emoji, style = MaterialTheme.typography.titleLarge, modifier = Modifier.graphicsLayer(scaleX = scale, scaleY = scale))
+    }
+}
+private fun reactionSummary(state: FynxHomePostReactionsClient.ReactionState): String { val order = listOf("LIKE" to "👍", "LOVE" to "❤️", "LAUGH" to "😂", "WOW" to "😮", "SAD" to "😢", "ANGRY" to "😡"); val visible = order.filter { (key, _) -> (state.counts[key] ?: 0) > 0 }.take(6); return "${visible.joinToString(" ") { it.second }}  ${state.total} reaction${if (state.total == 1) "" else "s"}" }
 
 @Composable
 private fun RowScope.FeedActionButton(onClick: () -> Unit, onLongClick: (() -> Unit)? = null, enabled: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, longClickLabel: String? = null, count: Int? = null, active: Boolean = false) {
