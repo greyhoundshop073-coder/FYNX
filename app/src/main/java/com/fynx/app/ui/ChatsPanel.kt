@@ -129,11 +129,29 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 placeholder = { Text("Search chats") },
             )
             Spacer(Modifier.height(14.dp))
-            if (visibleChats.isEmpty()) {
+            if (visibleChats.isEmpty() && !(chatFilter == "All" && normalizedChatSearch.isBlank() && groups.isNotEmpty())) {
                 Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(if (showArchived) "No archived chats" else if (normalizedChatSearch.isNotBlank()) "No matching chats" else "Messages", style = MaterialTheme.typography.titleLarge)
-                        Text(if (showArchived) "Chats you archive will stay here until you restore them." else if (normalizedChatSearch.isNotBlank()) "Try another name, username or message." else "Your private conversations will appear here. Start one with a real FYNX user.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            when {
+                                showArchived -> "No archived chats"
+                                normalizedChatSearch.isNotBlank() -> "No matching chats"
+                                chatFilter == "Unread" -> "No unread chats"
+                                chatFilter == "Pinned" -> "No pinned chats"
+                                else -> "Messages"
+                            },
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        Text(
+                            when {
+                                showArchived -> "Chats you archive will stay here until you restore them."
+                                normalizedChatSearch.isNotBlank() -> "Try another name, username or message."
+                                chatFilter == "Unread" -> "You're all caught up. New unread conversations will appear here."
+                                chatFilter == "Pinned" -> "Pin a conversation from its options to keep it easy to find."
+                                else -> "Your private conversations will appear here. Start one with a real FYNX user."
+                            },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             } else {
@@ -272,7 +290,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                         }
                     }
 
-                    if (!showArchived && normalizedChatSearch.isBlank() && groups.isNotEmpty()) {
+                    if (chatFilter == "All" && !showArchived && normalizedChatSearch.isBlank() && groups.isNotEmpty()) {
                         item {
                             Spacer(Modifier.height(6.dp))
                             Text(
