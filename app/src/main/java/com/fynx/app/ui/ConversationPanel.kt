@@ -571,7 +571,14 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 IconButton(onClick = onVoiceCall, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Call, "Voice call", tint = glassPalette.messageText, modifier = Modifier.size(23.dp)) }
                 IconButton(onClick = onVideoCall, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Videocam, "Video call", tint = glassPalette.messageText, modifier = Modifier.size(23.dp)) }
                 Box {
-                    IconButton(onClick = { showChatMenu = true }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.MoreVert, "More", tint = glassPalette.messageText, modifier = Modifier.size(23.dp)) }
+                    IconButton(
+                        onClick = { showChatMenu = true },
+                        modifier = Modifier.size(48.dp).semantics(mergeDescendants = true) {
+                            contentDescription = "More"
+                        }
+                    ) {
+                        Icon(Icons.Default.MoreVert, contentDescription = null, tint = glassPalette.messageText, modifier = Modifier.size(23.dp))
+                    }
                     DropdownMenu(expanded = showChatMenu, onDismissRequest = { showChatMenu = false }) {
                         DropdownMenuItem(text = { Text("Catch Me Up") }, onClick = { showChatMenu = false; showCatchMeUp = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })
                         DropdownMenuItem(text = { Text("Conversation Moments") }, onClick = { showChatMenu = false; showConversationMoments = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })

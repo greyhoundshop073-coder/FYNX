@@ -52,17 +52,26 @@ def wait_for_conversation_ui(name:str, timeout:float=12.0)->str:
     return latest
 
 def capture_runtime_log(name:str):
-    """Capture Android process/crash evidence immediately after a navigation action."""
+    """Save app log context but report a crash only when logcat confirms one."""
     log_path=ROOT/name
     result=run("adb","logcat","-d","-v","time","-t","500")
     log_text=result.stdout or ""
     keywords=("FATAL EXCEPTION","AndroidRuntime","com.fynx.app","Process com.fynx.app")
-    relevant="\n".join(line for line in log_text.splitlines() if any(k in line for k in keywords))
+    relevant_lines=[line for line in log_text.splitlines() if any(k in line for k in keywords)]
+    relevant="\n".join(relevant_lines)
     log_path.write_text(relevant + ("\n" if relevant else ""),encoding="utf-8")
+    crash_lines=[
+        line for line in relevant_lines
+        if "FATAL EXCEPTION" in line
+        or "Fatal signal" in line
+        or "FATAL SIGNAL" in line
+        or ("Process com.fynx.app" in line and "died" in line.lower())
+        or ("ANR in com.fynx.app" in line)
+    ]
     alive=run("adb","shell","pidof",PACKAGE)
-    if "FATAL EXCEPTION" in relevant or ("Process com.fynx.app" in relevant and "died" in relevant.lower()):
-        FAILURES.append(f"{name} captured a FYNX process crash in logcat")
-    return bool((alive.stdout or "").strip()), relevant
+    if crash_lines:
+        FAILURES.append(f"{name} captured a confirmed FYNX crash in logcat")
+    return bool((alive.stdout or "").strip()), "\n".join(crash_lines)
 
 def screenshot(name:str):
     with (ROOT/name).open("wb") as out:
@@ -81,6 +90,32 @@ def nodes(xml_text:str):
     if not xml_text: return []
     try: return list(ET.fromstring(xml_text).iter("node"))
     except ET.ParseError: return []
+
+# Only recognized, non-sensitive UI markers are included in the public CI log.
+DIAGNOSTIC_MARKERS = (
+    "Open FYNX camera", "FYNX", "Chat", "Chats", "Friends", "More", "Stories",
+    "Status", "Find People", "Search username or name", "Search chats",
+    "Messages and groups in one place", "Your private conversations",
+    "New post", "What's on your mind?", "Photo", "Video/Camera",
+    "Chat settings", "Chat Settings", "Message composer",
+    "Chat message composer area", "No messages here yet", "Recent updates",
+    "FYNX Features", "Search FYNX tools", "Switch front/back camera", "Recording"
+)
+
+def visible_marker_summary(xml_text:str)->str:
+    if not xml_text:
+        return "empty accessibility hierarchy"
+    values=[]
+    for node in nodes(xml_text):
+        if node.attrib.get("visible-to-user","true").lower()=="false":
+            continue
+        values.extend(((node.attrib.get("text") or "").strip(),
+                       (node.attrib.get("content-desc") or "").strip(),
+                       (node.attrib.get("resource-id") or "").strip()))
+    hay=" | ".join(values).casefold()
+    found=[marker for marker in DIAGNOSTIC_MARKERS if marker.casefold() in hay]
+    return ", ".join(found) if found else "no recognized Home/Chat UI markers"
+
 
 def _center(node):
     bounds=node.attrib.get("bounds","")
@@ -268,9 +303,7 @@ def find_edit_fields(xml_text:str):
     return fields
 
 def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[str]|None=None)->str:
-    # Compose/Home surfaces can take a moment to publish their accessibility tree
-    # after an Activity reset. Retry the same real control lookup before declaring
-    # a runtime navigation failure; never invent a fallback coordinate.
+    # Retry the same real accessibility selector; never use guessed coordinates.
     control=find_control(xml_text,labels)
     for _ in range(8):
         if control:
@@ -279,7 +312,10 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
         xml_text=dump_ui(f"authenticated-{name}-retry.xml")
         control=find_control(xml_text,labels)
     if not control:
-        FAILURES.append(name); return ""
+        screenshot(f"authenticated-{name}-control-missing.png")
+        requested=", ".join(labels)
+        FAILURES.append(f"{name}: control not found [{requested}]; visible markers: {visible_marker_summary(xml_text)}")
+        return ""
     _,x,y=control
     run("adb","logcat","-c")
     run("adb","shell","input","tap",str(x),str(y))
@@ -289,9 +325,17 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
         next_xml=dump_ui(f"authenticated-{name}.xml")
         permission=find_control(next_xml,["While using the app","Only this time"])
         if permission:
-            _,px,py=permission; run("adb","shell","input","tap",str(px),str(py)); time.sleep(1); continue
-        if expected_labels and any(find_control(next_xml,[wanted]) for wanted in expected_labels): break
+            _,px,py=permission
+            run("adb","shell","input","tap",str(px),str(py))
+            time.sleep(1)
+            continue
+        if not expected_labels or any(find_control(next_xml,[wanted]) for wanted in expected_labels):
+            break
     screenshot(f"authenticated-{name}.png")
+    if expected_labels and not any(find_control(next_xml,[wanted]) for wanted in expected_labels):
+        expected=", ".join(expected_labels)
+        FAILURES.append(f"{name}: destination marker not found [{expected}]; visible markers: {visible_marker_summary(next_xml)}")
+        return ""
     return next_xml
 
 def backend_real_chat_target()->str:
@@ -456,7 +500,8 @@ def dismiss_runtime_permission_prompt()->str:
     return dump_ui("authenticated-home-after-permission.xml")
 
 def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[str]|None=None)->str:
-    return tap_control(xml,labels,name,expected_labels) or xml
+    # A failed tap must remain failed; returning the previous screen caused false GREEN results.
+    return tap_control(xml,labels,name,expected_labels)
 
 report=["# FYNX Authenticated Runtime Visual Certification","",
         f"- Commit: {os.environ.get('GITHUB_SHA','local')}",
@@ -492,7 +537,11 @@ if not FAILURES:
     run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-camera-reset.xml") or xml
 
-    for name,labels,expected in (("chat",["Chat"],["Chat"]),("friends",["Friends"],["Friends"]),("stories",["Open Stories","See all"],["Status","Add status","Status"])):
+    for name,labels,expected in (
+        ("chat",["Chat"],["Messages and groups in one place","Search chats","Your private conversations"]),
+        ("friends",["Friends"],["Find People","Search username or name","Your Friends"]),
+        ("stories",["Open Stories","See all"],["Recent updates"]),
+    ):
         after=capture_surface(name,labels,xml,expected)
         if after:
             report.append(f"- PASS authenticated Home -> {name} screenshot/UI hierarchy")
@@ -523,6 +572,7 @@ if not FAILURES:
                 private_chat_username=first_username_in_xml(after)
                 real_chat_target=backend_real_chat_target()
                 conversation_after=""
+                conversation_ui_opened=False
                 if real_chat_target:
                     run("adb","shell","am","force-stop",PACKAGE)
                     started=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+real_chat_target,PACKAGE,timeout=30)
@@ -539,6 +589,7 @@ if not FAILURES:
                     else:
                         screenshot("private-chat-inside.png")
                         report.append("- PASS real private chat destination opened for an existing FYNX user")
+                        conversation_ui_opened=True
                 else:
                     # Use the production Friends discovery UI as the fallback. This
                     # exercises the same real-user search and Chat action a user uses.
@@ -547,14 +598,20 @@ if not FAILURES:
                     time.sleep(2.5)
                     home_for_chat=dismiss_runtime_permission_prompt() or dump_ui("private-chat-fallback-home.xml")
                     friends_surface=tap_control(home_for_chat,["Friends"],"private-chat-fallback-friends",["Friends"])
-                    fallback_fields=find_edit_fields(friends_surface)
                     fallback=""
-                    if fallback_fields:
-                        fx,fy=fallback_fields[0]
+                    search_control=find_control(friends_surface,["Search username or name"])
+                    if search_control:
+                        _,fx,fy=search_control
                         run("adb","shell","input","tap",str(fx),str(fy))
-                        input_text("a")
-                        time.sleep(2.0)
-                        fallback=dump_ui("private-chat-search-results.xml")
+                        search_prefix=USERNAME.removeprefix("@").strip()[:2]
+                        if len(search_prefix)<2:
+                            search_prefix="fn"
+                        input_text(search_prefix)
+                        for _ in range(16):
+                            time.sleep(.5)
+                            fallback=dump_ui("private-chat-search-results.xml")
+                            if find_control(fallback,["Open chat"]):
+                                break
                     chat_control=find_control(fallback,["Open chat"])
                     if chat_control:
                         _,fx,fy=chat_control
@@ -565,6 +622,7 @@ if not FAILURES:
                         if fallback and alive and find_control(fallback,["Message composer","Edit message composer","Chat message composer area"]):
                             screenshot("private-chat-inside.png")
                             report.append("- PASS actual private ConversationPanel opened from real Friends discovery; captured private-chat-inside.png")
+                            conversation_ui_opened=True
                         else:
                             FAILURES.append("Friends discovery Chat action did not reach ConversationPanel")
                     else:
@@ -583,7 +641,13 @@ if not FAILURES:
                             # present instead of treating the transition frame as failure.
                             for _ in range(16):
                                 time.sleep(.5)
-                                candidate=dismiss_runtime_permission_prompt() or dump_ui("private-chat-inside.xml")
+                                candidate=dump_ui("private-chat-inside.xml")
+                                permission=find_control(candidate,["While using the app","Only this time"])
+                                if permission:
+                                    _,px,py=permission
+                                    run("adb","shell","input","tap",str(px),str(py))
+                                    time.sleep(.7)
+                                    continue
                                 if candidate and (find_control(candidate,["Message composer","Edit message composer","Chat message composer area","Message..."])
                                                    or find_control(candidate,["No messages here yet"])):
                                     fallback=candidate
@@ -592,34 +656,39 @@ if not FAILURES:
                             if fallback and alive:
                                 screenshot("private-chat-inside.png")
                                 report.append("- PASS authenticated ConversationPanel UI smoke test opened; captured private-chat-inside.png")
+                                conversation_ui_opened=True
                             else:
                                 FAILURES.append("authenticated ConversationPanel UI smoke test did not open")
                         else:
                             FAILURES.append("no authenticated username was available for ConversationPanel UI smoke test")
                 alive, crashlog = capture_runtime_log("private-chat-process.log")
                 screenshot("private-chat-after-open.png")
-                # Capture the real Chat Settings screen from the same opened conversation.
-                # This is read-only: do not toggle or reset the account preferences.
-                settings_menu = tap_control(dump_ui("private-chat-before-settings.xml"), ["More"], "private-chat-menu", ["Chat settings"])
-                if settings_menu:
-                    settings_screen = tap_control(settings_menu, ["Chat settings"], "private-chat-settings", ["Chat Settings", "Notifications", "Appearance"])
-                    if settings_screen:
-                        required_settings = ["Chat Settings", "Notifications", "Appearance", "Chat notifications", "Message sound", "Vibration", "Message text size"]
-                        missing_settings = [label for label in required_settings if not find_control(settings_screen, [label])]
-                        if missing_settings:
-                            FAILURES.append("Chat Settings screen is missing visible controls: " + ", ".join(missing_settings))
+                if conversation_ui_opened:
+                    # Capture the real Chat Settings screen from the same opened conversation.
+                    # This is read-only: do not toggle or reset the account preferences.
+                    settings_menu = tap_control(dump_ui("private-chat-before-settings.xml"), ["More"], "private-chat-menu", ["Chat settings"])
+                    if settings_menu:
+                        settings_screen = tap_control(settings_menu, ["Chat settings"], "private-chat-settings", ["Chat Settings", "Notifications", "Appearance"])
+                        if settings_screen:
+                            required_settings = ["Chat Settings", "Notifications", "Appearance", "Chat notifications", "Message sound", "Vibration", "Message text size"]
+                            missing_settings = [label for label in required_settings if not find_control(settings_screen, [label])]
+                            if missing_settings:
+                                FAILURES.append("Chat Settings screen is missing visible controls: " + ", ".join(missing_settings))
+                            else:
+                                report.append("- PASS private Chat Settings opened; notification and appearance controls verified")
+                                run("adb", "shell", "input", "swipe", "540", "1600", "540", "650", "550")
+                                settings_lower = dump_ui("authenticated-private-chat-settings-lower.xml")
+                                screenshot("authenticated-private-chat-settings-lower.png")
+                                if settings_lower and find_control(settings_lower, ["Chat Management"]):
+                                    report.append("- PASS Chat Settings lower section captured, including Chat Management")
+                                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
                         else:
-                            report.append("- PASS private Chat Settings opened; notification and appearance controls verified")
-                            run("adb", "shell", "input", "swipe", "540", "1600", "540", "650", "550")
-                            settings_lower = dump_ui("authenticated-private-chat-settings-lower.xml")
-                            screenshot("authenticated-private-chat-settings-lower.png")
-                            if settings_lower and find_control(settings_lower, ["Chat Management"]):
-                                report.append("- PASS Chat Settings lower section captured, including Chat Management")
-                            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                            FAILURES.append("private Chat Settings did not open from the conversation menu")
                     else:
-                        FAILURES.append("private Chat Settings did not open from the conversation menu")
+                        FAILURES.append("private chat More menu did not expose Chat settings")
+
                 else:
-                    FAILURES.append("private chat More menu did not expose Chat settings")
+                    report.append("- Chat Settings assertion blocked: ConversationPanel did not open; the primary navigation failure is reported above.")
                 report.append("- Chat process after open: " + ("ALIVE" if alive else "NOT RUNNING"))
                 if crashlog: report.append("- Chat crash-log evidence captured in private-chat-process.log")
                 if private_chat_username:
@@ -685,7 +754,7 @@ if not FAILURES:
                     else:
                         report.append("- PASS group-chat entry test skipped because the Groups tab was not available in the authenticated chat surface")
                 else:
-                    report.append("- PASS group-chat entry test skipped because the authenticated Chat surface was unavailable after reset")
+                    FAILURES.append("group-chat entry certification blocked because the authenticated Chat surface was unavailable after Home reset")
         else: FAILURES.append("authenticated Home -> "+name)
         run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
         xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-reset.xml") or xml

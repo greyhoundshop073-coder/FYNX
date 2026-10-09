@@ -311,8 +311,13 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { homeCameraRequest++ }) {
-                            Icon(Icons.Default.CameraAlt, "Open FYNX camera")
+                        IconButton(
+                            onClick = { homeCameraRequest++ },
+                            modifier = Modifier.size(48.dp).semantics(mergeDescendants = true) {
+                                contentDescription = "Open FYNX camera"
+                            }
+                        ) {
+                            Icon(Icons.Default.CameraAlt, contentDescription = null)
                         }
                         BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
                             IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
@@ -406,13 +411,15 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         ) {
                             mainNav.forEach { item ->
                                 NavigationBarItem(
-                                    modifier = Modifier.height(64.dp).semantics { contentDescription = item.label },
+                                    modifier = Modifier.height(64.dp).semantics(mergeDescendants = true) {
+                                        contentDescription = item.label
+                                    },
                                     selected = selected == item.key,
                                     onClick = { selected = item.key },
                                     icon = {
                                         Icon(
                                             item.icon,
-                                            contentDescription = item.label,
+                                            contentDescription = null,
                                             modifier = Modifier.size(20.dp)
                                         )
                                     },

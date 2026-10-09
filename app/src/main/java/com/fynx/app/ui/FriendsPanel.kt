@@ -105,7 +105,9 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
             }
             item {
                 Box {
-                    OutlinedTextField(value = query, onValueChange = { query = it.take(80) }, modifier = Modifier.fillMaxWidth().padding(end = 54.dp), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, "Search") }, placeholder = { Text(if (searchMethod == FynxPeopleSearchMethod.USERNAME) "Search username or name" else "Search phone number") }, shape = RoundedCornerShape(28.dp))
+                    OutlinedTextField(value = query, onValueChange = { query = it.take(80) }, modifier = Modifier.fillMaxWidth().padding(end = 54.dp).semantics(mergeDescendants = true) {
+                        contentDescription = if (searchMethod == FynxPeopleSearchMethod.USERNAME) "Search username or name" else "Search phone number"
+                    }, singleLine = true, leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }, placeholder = { Text(if (searchMethod == FynxPeopleSearchMethod.USERNAME) "Search username or name" else "Search phone number") }, shape = RoundedCornerShape(28.dp))
                     IconButton(onClick = { filterOpen = true }, modifier = Modifier.align(Alignment.CenterEnd).size(52.dp).semantics { contentDescription = "Search filters" }) { Icon(Icons.Default.Tune, "Search filters") }
                     DropdownMenu(expanded = filterOpen, onDismissRequest = { filterOpen = false }) {
                         DropdownMenuItem(text = { Text("Username or name") }, onClick = { searchMethod = FynxPeopleSearchMethod.USERNAME; query = ""; filterOpen = false })
