@@ -250,8 +250,19 @@ private fun FynxAuthField(value: String, onValueChange: (String) -> Unit, label:
 private fun localDebugAccountForLogin(context: android.content.Context, requestedUsername: String): String? {
     val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
     if (!isDebuggable || requestedUsername.isBlank()) return null
-    val saved = FynxAuthStore.storedUsername(context)?.trim()?.takeIf { it.isNotBlank() } ?: return null
-    return saved.takeIf { it.equals(requestedUsername.trim().removePrefix("@"), ignoreCase = true) }
+
+    val normalizedUsername = requestedUsername.trim().removePrefix("@")
+    val saved = FynxAuthStore.storedUsername(context)?.trim()?.takeIf { it.isNotBlank() }
+
+    // Keep the saved-account path when available. If session cleanup already
+    // removed the saved username, let a developer enter the local UI using the
+    // username they provide so offline feature testing is not blocked by backend
+    // timeouts. This fallback is unavailable in non-debug/release builds.
+    return when {
+        saved == null -> normalizedUsername
+        saved.equals(normalizedUsername, ignoreCase = true) -> saved
+        else -> null
+    }
 }
 
 private fun isLoginNetworkFailure(error: Throwable): Boolean =
