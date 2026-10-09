@@ -99,7 +99,8 @@ DIAGNOSTIC_MARKERS = (
     "New post", "What's on your mind?", "Photo", "Video/Camera",
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
-    "FYNX Features", "Search FYNX tools", "Switch front/back camera", "Recording"
+    "FYNX Features", "Search FYNX tools", "Switch front/back camera", "Recording",
+    "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password"
 )
 
 def visible_marker_summary(xml_text:str)->str:
@@ -489,9 +490,42 @@ def login():
     xml=dump_ui("authenticated-login-filled.xml"); screenshot("authenticated-login-filled.png")
     sign_in=find_control(xml,["Sign In"])
     if not sign_in: return xml,"Sign In control disappeared after credentials were entered"
-    _,x,y=sign_in; run("adb","shell","input","tap",str(x),str(y)); time.sleep(4.5)
-    xml=dump_ui("authenticated-home.xml"); screenshot("authenticated-home.png")
-    return xml,""
+    _,x,y=sign_in
+    run("adb","shell","input","tap",str(x),str(y))
+
+    # A tapped Sign In button is not proof of authentication. The backend request
+    # is asynchronous and can take several seconds; wait until the actual Home
+    # controls appear, or return a specific authentication failure without running
+    # Home navigation checks on top of the login form.
+    deadline=time.monotonic()+65.0
+    last_xml=xml
+    last_markers=""
+    while time.monotonic()<deadline:
+        time.sleep(1.0)
+        last_xml=dump_ui("authenticated-login-wait.xml")
+        if not last_xml:
+            continue
+        if (find_control(last_xml,["Open FYNX camera"])
+                and find_control(last_xml,["Chat"])
+                and find_control(last_xml,["Friends"])):
+            (ROOT/"authenticated-home.xml").write_text(last_xml,encoding="utf-8")
+            screenshot("authenticated-home.png")
+            return last_xml,""
+        last_markers=visible_marker_summary(last_xml)
+        combined=" ".join((node.attrib.get("text") or "")+" "+(node.attrib.get("content-desc") or "") for node in nodes(last_xml)).casefold()
+        login_form_visible=bool(find_control(last_xml,["Username"]) and find_control(last_xml,["Password"]))
+        sign_in_visible=bool(find_control(last_xml,["Sign In"]))
+        if time.monotonic() > deadline-60.0 and login_form_visible and sign_in_visible and "signing in" not in combined:
+            screenshot("authenticated-login-rejected.png")
+            if any(marker in combined for marker in ("invalid username","invalid password","incorrect password","invalid credentials")):
+                reason="the server rejected the supplied credentials"
+            elif any(marker in combined for marker in ("timeout","timed out","network","connection failed","fetch failed","unable to connect")):
+                reason="the login form returned a network/backend error"
+            else:
+                reason="the login form returned without opening authenticated Home"
+            return last_xml, f"{reason}; visible markers: {last_markers}"
+    screenshot("authenticated-home-timeout.png")
+    return last_xml, "login did not reach authenticated Home within 65 seconds; last visible markers: " + (last_markers or visible_marker_summary(last_xml))
 
 def dismiss_runtime_permission_prompt()->str:
     for _ in range(6):
