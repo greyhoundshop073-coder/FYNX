@@ -35,24 +35,24 @@ object FynxDesign {
     val TextSecondary = Color(0xFFB9C6D8)
     val Outline = Color(0xFF31445F)
     val SelectedContainer = Color(0xFF132B49)
-    val LightBackground = Color(0xFFF5F7FB)
+    val LightBackground = Color(0xFFF5F9FF)
     val LightSurface = Color(0xFFFFFFFF)
-    val LightSurfaceRaised = Color(0xFFEAF0F7)
+    val LightSurfaceRaised = Color(0xFFEAF3FC)
     val LightTextPrimary = Color(0xFF17202A)
     val LightTextSecondary = Color(0xFF5E6B78)
     val LightOutline = Color(0xFFD2DAE5)
-    val LightSelectedContainer = Color(0xFFE4EFFC)
+    val LightSelectedContainer = Color(0xFFE7F2FF)
     // Subtle neutral/reflective tones: deliberately restrained so light mode stays white.
-    val BlueLightCompanionContainer = Color(0xFFF2EBDD)
-    val BlueDarkCompanionContainer = Color(0xFF3A3324)
+    val BlueLightCompanionContainer = Color(0xFFEAF4FF)
+    val BlueDarkCompanionContainer = Color(0xFF102A47)
     val PurpleLightCompanionContainer = Color(0xFFF3E7EC)
     val PurpleDarkCompanionContainer = Color(0xFF3A2B32)
     val CharcoalLightCompanionContainer = Color(0xFFE7EBED)
     val CharcoalDarkCompanionContainer = Color(0xFF2C3235)
-    val BlueLightOutlineVariant = Color(0xFFE1EAF6)
+    val BlueLightOutlineVariant = Color(0xFFDCEBFA)
     val PurpleLightOutlineVariant = Color(0xFFECE3E8)
     val CharcoalLightOutlineVariant = Color(0xFFDCE1E3)
-    val BlueDarkOutlineVariant = Color(0xFF3A4A5D)
+    val BlueDarkOutlineVariant = Color(0xFF31506F)
     val PurpleDarkOutlineVariant = Color(0xFF4A3F4A)
     val CharcoalDarkOutlineVariant = Color(0xFF394146)
     val CharcoalBackground = Color(0xFF1F2428)
@@ -168,19 +168,19 @@ fun FynxTheme(
                 FynxAccent.Charcoal -> FynxDesign.CharcoalLightCompanionContainer
             },
             onTertiaryContainer = Color(0xFF20252A),
-            background = Color(0xFFF8F9FB),
+            background = FynxDesign.LightBackground,
             onBackground = Color(0xFF11161B),
             surface = Color.White,
             onSurface = Color(0xFF11161B),
-            surfaceVariant = Color(0xFFF0F2F5),
+            surfaceVariant = Color(0xFFF0F5FA),
             onSurfaceVariant = Color(0xFF59636D),
             outline = Color(0xFFD5DBE1),
             surfaceContainerLowest = Color.White,
             surfaceContainerLow = Color.White,
             surfaceContainer = Color.White,
-            surfaceContainerHigh = Color(0xFFF0F2F5),
-            surfaceContainerHighest = Color(0xFFE7EBEF),
-            surfaceDim = Color(0xFFE1E5E9),
+            surfaceContainerHigh = Color(0xFFEFF5FB),
+            surfaceContainerHighest = Color(0xFFE7F0F8),
+            surfaceDim = Color(0xFFE1EAF2),
             surfaceBright = Color.White,
             surfaceTint = effectiveAccent.primary,
             outlineVariant = when (effectiveAccent) {
