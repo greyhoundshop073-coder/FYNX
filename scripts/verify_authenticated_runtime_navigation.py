@@ -849,6 +849,37 @@ if not FAILURES:
         run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
         xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-reset.xml") or xml
 
+
+# Marketplace is a required APK surface. Capture the actual screen and hierarchy;
+# accept legitimate empty/network states, but do not silently skip navigation.
+def verify_marketplace_surface():
+    run("adb","shell","am","force-stop",PACKAGE)
+    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
+    time.sleep(2.5)
+    home=dismiss_runtime_permission_prompt() or dump_ui("marketplace-home-before.xml")
+    if not home:
+        FAILURES.append("Marketplace runtime check could not reach authenticated Home")
+        return
+    marketplace=tap_control(
+        home, ["Marketplace"], "marketplace",
+        ["Search products", "Search products, sellers or categories", "Great Deals",
+         "Recommended for you", "Explore categories", "Sell", "Marketplace"]
+    )
+    if not marketplace:
+        FAILURES.append("Marketplace tab did not open a recognizable Marketplace surface")
+        return
+    screenshot("authenticated-marketplace.png")
+    dump_ui("authenticated-marketplace.xml")
+    markers=visible_marker_summary(marketplace)
+    report.append("- PASS authenticated Home -> Marketplace navigation; captured authenticated-marketplace.png and authenticated-marketplace.xml")
+    report.append("- Marketplace visible UI markers: " + markers)
+    # Search must be present even when the backend has no listings; product content
+    # availability is reported separately from whether the screen itself opened.
+    if not find_control(marketplace, ["Search products", "Search products, sellers or categories"]):
+        report.append("- Marketplace search field not exposed in accessibility tree; listing/search interaction remains unverified")
+    else:
+        report.append("- PASS Marketplace search field is exposed in the real APK accessibility tree")
+
 def find_feature_entry(xml_text:str, labels:list[str]):
     """Find an actual clickable feature card, not the search field or its text."""
     if not xml_text: return None
@@ -948,6 +979,8 @@ def open_features(target_labels:list[str]|None=None):
             if after: report.append(f"- PASS authenticated Features -> {name} screenshot/UI hierarchy")
             else: FAILURES.append("authenticated Features -> "+name)
     else: FAILURES.append("authenticated Home -> Features")
+
+verify_marketplace_surface()
 
 runtime_result = "RED" if FAILURES else ("GREEN — OFFLINE DEBUG UI ONLY; REMOTE AUTH NOT VERIFIED" if OFFLINE_DEBUG_LOGIN_USED else "GREEN")
 report += ["","## Captured authenticated surfaces",
