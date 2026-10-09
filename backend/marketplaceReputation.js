@@ -156,6 +156,168 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
     }
   });
 
+  app.post('/api/marketplace/checkout-groups/:id/payment', auth, async (req, res) => {
+    const checkoutId = parseOrderId(req.params.id);
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (!checkoutId || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'valid checkout id and customer email are required' });
+    try {
+      await ensureSchema();
+      await pool.query(`ALTER TABLE marketplace_checkout_groups ADD COLUMN IF NOT EXISTS payment_reference TEXT, ADD COLUMN IF NOT EXISTS payment_authorization_url TEXT, ADD COLUMN IF NOT EXISTS payment_access_code TEXT`);
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const group = (await client.query(`SELECT id,buyer_id,buyer_total,currency,status,payment_reference,payment_authorization_url,payment_access_code FROM marketplace_checkout_groups WHERE id=$1 AND buyer_id=$2 FOR UPDATE`, [checkoutId, req.user.sub])).rows[0];
+        if (!group) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'checkout group not found' }); }
+        if (group.status !== 'PAYMENT_PENDING') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'checkout group is not awaiting payment' }); }
+        if (group.payment_reference && group.payment_authorization_url) { await client.query('COMMIT'); return res.status(200).json({ checkoutId: String(group.id), reference: group.payment_reference, authorizationUrl: group.payment_authorization_url, accessCode: group.payment_access_code || null, idempotent: true, amountSubunit: amountSubunit(group.buyer_total, group.currency), currency: String(group.currency).toUpperCase() }); }
+        const amount = amountSubunit(group.buyer_total, group.currency);
+        if (!amount) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'unsupported marketplace payment currency or amount' }); }
+        const reference = `FYNX-CHECKOUT-${group.id}`;
+        const payload = { email, amount: String(amount), currency: String(group.currency).toUpperCase(), reference, metadata: { checkoutGroupId: String(group.id), buyerId: String(group.buyer_id), purpose: 'FYNX_MARKETPLACE_CHECKOUT_GROUP' } };
+        if (process.env.PAYSTACK_CALLBACK_URL) payload.callback_url = process.env.PAYSTACK_CALLBACK_URL;
+        const data = await paystackRequest('/transaction/initialize', { method: 'POST', body: JSON.stringify(payload) });
+        const providerReference = String(data.data?.reference || '').trim(), providerAmount = Number(data.data?.amount), providerCurrency = String(data.data?.currency || '').trim().toUpperCase();
+        const authorizationUrl = data.data?.authorization_url || '', accessCode = data.data?.access_code || null;
+        if (!authorizationUrl || providerReference !== reference || providerAmount !== amount || providerCurrency !== String(group.currency).toUpperCase()) { await client.query('ROLLBACK'); return res.status(502).json({ error: 'payment provider returned data that does not match the checkout group' }); }
+        const updated = await client.query(`UPDATE marketplace_checkout_groups SET payment_reference=$1,payment_authorization_url=$2,payment_access_code=$3,updated_at=NOW() WHERE id=$4 AND buyer_id=$5 AND status='PAYMENT_PENDING' AND payment_reference IS NULL RETURNING id`, [reference, authorizationUrl, accessCode, checkoutId, req.user.sub]);
+        if (!updated.rows[0]) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'checkout group payment initialization could not be committed; retry' }); }
+        await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) SELECT order_id,$1,'PAYMENT_INITIALIZED','PAYMENT_PENDING','PAYMENT_PENDING',$2::jsonb FROM marketplace_checkout_group_items WHERE checkout_id=$3`, [req.user.sub, JSON.stringify({ reference, provider: 'paystack', amount, currency: String(group.currency).toUpperCase(), checkoutGroupId: String(group.id) }), checkoutId]);
+        await client.query('COMMIT');
+        return res.status(201).json({ checkoutId: String(group.id), reference, authorizationUrl, accessCode, amountSubunit: amount, currency: String(group.currency).toUpperCase() });
+      } catch (error) { try { await client.query('ROLLBACK'); } catch {} throw error; } finally { client.release(); }
+    } catch (error) {
+      if (error?.code === 'PAYSTACK_NOT_CONFIGURED') return res.status(503).json({ error: 'marketplace payments are not configured yet' });
+      if (error?.code === '23505') return res.status(409).json({ error: 'checkout group payment initialization already exists; retry the payment request' });
+      console.error('marketplace checkout group payment initialize', error); return res.status(502).json({ error: 'checkout group payment initialization failed' });
+    }
+  });
+
+  app.get('/api/marketplace/checkout-groups/verify/:reference', auth, async (req, res) => {
+    const reference = typeof req.params.reference === 'string' ? req.params.reference.trim() : '';
+    if (!/^FYNX-CHECKOUT-[0-9a-f-]{36}$/i.test(reference)) return res.status(400).json({ error: 'invalid checkout payment reference' });
+    try {
+      await ensureSchema();
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const group = (await client.query(`
+          SELECT id,buyer_id,buyer_total,currency,status,payment_reference
+          FROM marketplace_checkout_groups
+          WHERE payment_reference=$1
+          FOR UPDATE
+        `, [reference])).rows[0];
+        if (!group) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'checkout payment not found' }); }
+        if (String(group.buyer_id) !== String(req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'payment unavailable' }); }
+
+        const children = (await client.query(`
+          SELECT o.id,o.buyer_id,o.seller_id,o.total_amount,o.currency,o.status,o.payment_provider_fee
+          FROM marketplace_checkout_group_items gi
+          JOIN marketplace_orders o ON o.id=gi.order_id
+          WHERE gi.checkout_id=$1
+          ORDER BY o.id ASC
+          FOR UPDATE OF o
+        `, [group.id])).rows;
+        if (!children.length) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'checkout group has no orders' }); }
+
+        const expectedAmount = amountSubunit(group.buyer_total, group.currency);
+        const childTotal = children.reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
+        const childCurrencyValid = children.every((row) => String(row.currency || '').toUpperCase() === String(group.currency || '').toUpperCase());
+        if (!expectedAmount || Math.round(childTotal * 100) / 100 !== Number(group.buyer_total) || !childCurrencyValid) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'checkout group accounting does not reconcile' });
+        }
+
+        if (group.status === 'PAID' && children.every((row) => row.status === 'PAID')) {
+          await client.query('COMMIT');
+          return res.json({ verified: true, idempotent: true, checkoutId: String(group.id), status: 'PAID', currency: String(group.currency).toUpperCase(), amountSubunit: expectedAmount });
+        }
+
+        const data = await paystackRequest(`/transaction/verify/${encodeURIComponent(reference)}`);
+        const transaction = data.data || {};
+        const paidAmount = Number(transaction.amount);
+        const paidCurrency = String(transaction.currency || '').trim().toUpperCase();
+        const providerReference = String(transaction.reference || '').trim();
+        const metadataCheckoutId = String(transaction.metadata?.checkoutGroupId || transaction.metadata?.checkout_group_id || '');
+        const metadataBuyerId = String(transaction.metadata?.buyerId || transaction.metadata?.buyer_id || '');
+        const providerFeeSubunit = Number(transaction.fees);
+        const validProviderFee = Number.isFinite(providerFeeSubunit) && providerFeeSubunit >= 0 ? Math.round((providerFeeSubunit / 100) * 100) / 100 : null;
+        const valid = transaction.status === 'success'
+          && providerReference === reference
+          && expectedAmount === paidAmount
+          && paidCurrency === String(group.currency).toUpperCase()
+          && metadataCheckoutId === String(group.id)
+          && metadataBuyerId === String(group.buyer_id)
+          && validProviderFee !== null;
+        if (!valid) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'checkout payment could not be verified', status: transaction.status || 'unknown' });
+        }
+
+        const feeCents = Math.round(validProviderFee * 100);
+        const totalCents = expectedAmount;
+        let allocatedFeeCents = 0;
+        for (let index = 0; index < children.length; index += 1) {
+          const child = children[index];
+          const childCents = amountSubunit(child.total_amount, child.currency);
+          if (!childCents) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'child order has invalid payment amount' }); }
+          const feeShare = index === children.length - 1
+            ? feeCents - allocatedFeeCents
+            : Math.floor((feeCents * childCents) / totalCents);
+          allocatedFeeCents += feeShare;
+          if (child.status === 'PAYMENT_PENDING') {
+            await client.query(`
+              UPDATE marketplace_orders
+              SET status='PAID',payment_provider_fee=$2,updated_at=NOW()
+              WHERE id=$1 AND status='PAYMENT_PENDING'
+            `, [child.id, feeShare / 100]);
+            await client.query(`
+              INSERT INTO marketplace_order_events
+                (order_id,actor_id,event_type,from_status,to_status,metadata)
+              VALUES ($1,$2,'PAYMENT_CONFIRMED','PAYMENT_PENDING','PAID',$3::jsonb)
+            `, [child.id, child.buyer_id, JSON.stringify({
+              reference,
+              provider: 'paystack',
+              source: 'checkout-group-verification',
+              checkoutGroupId: String(group.id),
+              amount: childCents,
+              currency: String(child.currency).toUpperCase(),
+              providerFee: feeShare / 100
+            })]);
+          } else if (child.status !== 'PAID') {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ error: `checkout child order ${child.id} is in an incompatible payment state` });
+          }
+        }
+
+        const updatedGroup = (await client.query(`
+          UPDATE marketplace_checkout_groups
+          SET status='PAID',updated_at=NOW()
+          WHERE id=$1 AND status='PAYMENT_PENDING'
+          RETURNING id
+        `, [group.id])).rows[0];
+
+        await client.query('COMMIT');
+        return res.json({
+          verified: true,
+          idempotent: !updatedGroup,
+          checkoutId: String(group.id),
+          status: 'PAID',
+          currency: String(group.currency).toUpperCase(),
+          amountSubunit: expectedAmount,
+          childOrderCount: children.length,
+          providerFee: validProviderFee
+        });
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch {}
+        throw error;
+      } finally { client.release(); }
+    } catch (error) {
+      if (error?.code === 'PAYSTACK_NOT_CONFIGURED') return res.status(503).json({ error: 'marketplace payments are not configured yet' });
+      console.error('marketplace checkout group payment verify', error);
+      return res.status(502).json({ error: 'checkout group payment verification failed' });
+    }
+  });
+
   app.get('/api/marketplace/payments/verify/:reference', auth, async (req, res) => {
     const reference = typeof req.params.reference === 'string' ? req.params.reference.trim() : '';
     if (!/^[A-Za-z0-9_.=-]{8,100}$/.test(reference)) return res.status(400).json({ error: 'invalid payment reference' });

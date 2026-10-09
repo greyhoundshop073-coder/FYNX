@@ -23,6 +23,9 @@ object FynxMarketplaceBatch2 {
     fun createOrder(id: String, items: List<FynxCartItem>, deliveryFee: Double, currency: String): FynxMarketplaceOrder? {
         if (id.isBlank() || items.isEmpty() || deliveryFee < 0.0 || currency.isBlank()) return null
         if (items.any { it.quantity <= 0 || it.unitPrice < 0.0 || it.currency.isBlank() }) return null
+        val normalizedCurrency = currency.trim().uppercase()
+        if (!FynxMarketplaceSellerFlowSupport.isSupportedCurrency(normalizedCurrency)) return null
+        if (items.any { it.currency.trim().uppercase() != normalizedCurrency }) return null
         val subtotal = cartTotal(items)
         return FynxMarketplaceOrder(id, items.toList(), subtotal, deliveryFee, subtotal + deliveryFee, currency)
     }
