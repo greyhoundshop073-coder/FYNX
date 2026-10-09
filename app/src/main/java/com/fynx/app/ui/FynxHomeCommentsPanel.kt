@@ -52,6 +52,8 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     var replyLoadingId by remember(post.id) { mutableStateOf<String?>(null) }
     var replyErrorId by remember(post.id) { mutableStateOf<String?>(null) }
     var expandedReplies by remember(post.id) { mutableStateOf<Map<String, List<FynxRemoteSocialClient.RemoteComment>>>(emptyMap()) }
+    var replyNextCursors by remember(post.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
+    val consumedReplyCursors = remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
     var authorPhotos by remember(post.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var highlightedCommentId by remember(post.id, initialCommentId) { mutableStateOf(initialCommentId) }
     val consumedCursors = remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
@@ -87,7 +89,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     fun resetPagingState() { nextCursor = null; consumedCursors.value = emptySet(); loadingMore = false }
     fun loadComments() {
         if (sending || loading) return
-        loading = true; error = null; replyLoadingId = null; replyErrorId = null; expandedReplies = emptyMap(); resetPagingState()
+        loading = true; error = null; replyLoadingId = null; replyErrorId = null; expandedReplies = emptyMap(); replyNextCursors = emptyMap(); consumedReplyCursors.value = emptySet(); resetPagingState()
         scope.launch {
             FynxRemoteSocialClient.commentsPage(context, post.id, null, COMMENT_PAGE_SIZE)
                 .onSuccess { page -> comments = page.comments.distinctBy { it.id }; resolveCommenterPhotos(comments); nextCursor = page.nextCursor }
@@ -139,18 +141,34 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
             sending = false
         }
     }
-    fun toggleReplies(comment: FynxRemoteSocialClient.RemoteComment) {
+    fun loadReplies(commentId: String, cursor: String? = null) {
         if (replyLoadingId != null || sending) return
-        if (expandedReplies.containsKey(comment.id)) { expandedReplies = expandedReplies - comment.id; replyErrorId = null; return }
-        replyLoadingId = comment.id; replyErrorId = null; error = null
+        val key = commentId + ":" + (cursor ?: "initial")
+        if (cursor != null && consumedReplyCursors.value.contains(key)) return
+        if (cursor != null) consumedReplyCursors.value = consumedReplyCursors.value + key
+        replyLoadingId = commentId; replyErrorId = null; error = null
         scope.launch {
-            FynxRemoteSocialClient.replies(context, post.id, comment.id)
-                .onSuccess { loaded -> val unique = loaded.distinctBy { it.id }; expandedReplies = expandedReplies + mapOf(comment.id to unique); resolveCommenterPhotos(unique) }
-                .onFailure { failure -> replyErrorId = comment.id; error = failure.message ?: "Unable to load replies." }
+            FynxRemoteSocialClient.replies(context, post.id, commentId, cursor)
+                .onSuccess { page ->
+                    val existing = expandedReplies[commentId].orEmpty()
+                    val merged = (existing + page.comments).distinctBy { it.id }
+                    expandedReplies = expandedReplies + (commentId to merged)
+                    replyNextCursors = replyNextCursors + (commentId to page.nextCursor)
+                    resolveCommenterPhotos(page.comments)
+                }
+                .onFailure { failure ->
+                    if (cursor != null) consumedReplyCursors.value = consumedReplyCursors.value - key
+                    replyErrorId = commentId; error = failure.message ?: "Unable to load replies."
+                }
             replyLoadingId = null
         }
     }
-    LaunchedEffect(post.id) { comments = emptyList(); text = ""; commentCount = post.commentCount; replyingToId = null; authorPhotos = emptyMap(); resetPagingState(); loadComments() }
+    fun toggleReplies(comment: FynxRemoteSocialClient.RemoteComment) {
+        if (replyLoadingId != null || sending) return
+        if (expandedReplies.containsKey(comment.id)) { expandedReplies = expandedReplies - comment.id; replyNextCursors = replyNextCursors - comment.id; replyErrorId = null; return }
+        loadReplies(comment.id)
+    }
+    LaunchedEffect(post.id) { comments = emptyList(); text = ""; commentCount = post.commentCount; replyingToId = null; authorPhotos = emptyMap(); expandedReplies = emptyMap(); replyNextCursors = emptyMap(); consumedReplyCursors.value = emptySet(); resetPagingState(); loadComments() }
 
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         BackHandler(onBack = onClose)
@@ -189,6 +207,9 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                             val photo = authorPhotos[reply.authorUsername.removePrefix("@").trim().lowercase()]
                                             FynxRemoteProfileAvatar(photo, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium); MentionText(reply.text, onOpenAuthorProfile = onOpenAuthorProfile); Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                         }
+                                    }
+                                    replyNextCursors[comment.id]?.let { cursor ->
+                                        TextButton(onClick = { loadReplies(comment.id, cursor) }, enabled = replyLoadingId == null && !sending) { Text(if (replyLoadingId == comment.id) "Loading more replies…" else "Load more replies") }
                                     }
                                     if (replyLoadingId == comment.id) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(start = 48.dp, top = 4.dp))
                                     if (replyErrorId == comment.id && replyLoadingId == null) Row(Modifier.fillMaxWidth().padding(start = 48.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) { Text("Replies couldn't be loaded.", Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall); TextButton(onClick = { toggleReplies(comment) }, enabled = !sending) { Text("Retry") }

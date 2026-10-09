@@ -178,3 +178,14 @@ require(push, "notifyCommentMentions", "comment mention backend notification hel
 require(realtime_bootstrap, "notifyCommentMentions", "reply mention backend notification helper")
 require(comments_panel, "ClickableText", "comment mentions are tappable in Home")
 require(comments_panel, "onOpenAuthorProfile", "comment mention profile navigation")
+
+# Home conversation pagination, anti-spam and normal-feed composer.
+
+require(social_routes, "COMMENT_RATE_LIMIT", "comment anti-spam rate limit")
+require(realtime_bootstrap, "COMMENT_WRITE_RATE_LIMIT", "reply anti-spam rate limit")
+require(realtime_bootstrap, "nextCursor", "paginated reply response")
+require(client, "suspend fun replies(context: Context, postId: String, parentCommentId: String, before: String? = null", "paginated reply client API")
+require(comments_panel, "replyNextCursors", "reply pagination state")
+require(comments_panel, "Load more replies", "reply pagination UI")
+require_normalized(home, "Text(\"What's on your mind?\",", "Home keeps a persistent create-post entry above the feed")
+require(home, 'contentDescription = "Create post"', "Home create-post action remains accessible")
