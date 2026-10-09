@@ -166,3 +166,7 @@ if 'TextToSpeech' in ai_panel or 'android.speech.tts' in ai_panel:
     raise SystemExit("HOME INTERACTIONS RED: Google Android TTS must not be reintroduced into FYNX AI")
 
 print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions including Save/Saved Posts continuity, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, clean-startup privacy boundaries, FYNX AI single-scroll/typing/security integration, and direct Create status -> existing composer wiring are present without duplicate vertical feed surfaces or client API secrets.")
+
+# Home public conversation foundation: guard the existing comment privacy predicates.
+require(realtime_bootstrap, "OR (b.blocker_id=c.author_id AND b.blocked_id=$2))` + cursorClause + `", "comment page closes the block predicate before applying its cursor")
+require(realtime_bootstrap, "OR (b.blocker_id=c.author_id AND b.blocked_id=$3))`", "reply parent lookup closes the block predicate")
