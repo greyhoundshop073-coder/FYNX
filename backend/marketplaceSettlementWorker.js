@@ -122,8 +122,8 @@ async function initiatePayout(payload) {
       await client.query('COMMIT');
       return;
     }
-    if (String(operation.currency || '').toUpperCase() !== 'NGN') {
-      await markPayoutFailed(client, operation, 'Paystack seller payouts currently support NGN only');
+    if (!['NGN','USD'].includes(String(operation.currency || '').toUpperCase())) {
+      await markPayoutFailed(client, operation, 'Marketplace payout currency is not active');
       await client.query('COMMIT');
       return;
     }
@@ -144,7 +144,7 @@ async function initiatePayout(payload) {
       ({ response, data } = await paystackJson('https://api.paystack.co/transfer', {
         method: 'POST',
         headers: providerHeaders(),
-        body: JSON.stringify({ source: 'balance', amount: Math.round(operationAmount * 100), recipient: recipientCode, currency: 'NGN', reason: `FYNX marketplace payout ${operation.order_id}`, reference })
+        body: JSON.stringify({ source: 'balance', amount: Math.round(operationAmount * 100), recipient: recipientCode, currency: String(operation.currency).toUpperCase(), reason: `FYNX marketplace payout ${operation.order_id}`, reference })
       }));
     }
 
