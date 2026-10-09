@@ -126,13 +126,30 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 val normalized = destination.username.removePrefix("@").trim()
                 if (normalized.isNotBlank()) {
                     val local = FynxChatStore.loadPreviews(context).firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
-                    val remote = if (local == null) FynxSocialClient.searchUsers(context, normalized).getOrNull()?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) } else null
+                    val selfUsername = authSession.username?.removePrefix("@")?.trim()
+                    val isSelfTarget = authSession.state == AuthState.SIGNED_IN &&
+                        !selfUsername.isNullOrBlank() && selfUsername.equals(normalized, true)
+                    // A self-chat smoke/deep link must not wait for remote user discovery:
+                    // the signed-in account identity is already authoritative locally.
+                    // In particular, an unavailable backend must not prevent the chat
+                    // screen from opening for the current user.
+                    val remote = if (local == null && !isSelfTarget) {
+                        FynxSocialClient.searchUsers(context, normalized).getOrNull()
+                            ?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) }
+                    } else null
                     openGroup = null
                     profileUser = null
-                    openChat = local ?: remote?.let { user -> ChatPreview(name = user.displayName.ifBlank { normalized }, username = user.username.removePrefix("@").let { "@$it" }, lastMessage = "Start a conversation", time = "Now", avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }) }
-                        ?: authSession.username?.takeIf { it.removePrefix("@").equals(normalized, true) }?.let {
-                            ChatPreview(name = it.removePrefix("@"), username = "@${it.removePrefix("@")}", lastMessage = "Start a conversation", time = "Now")
-                        }
+                    openChat = local ?: remote?.let { user ->
+                        ChatPreview(
+                            name = user.displayName.ifBlank { normalized },
+                            username = user.username.removePrefix("@").let { "@$it" },
+                            lastMessage = "Start a conversation",
+                            time = "Now",
+                            avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
+                        )
+                    } ?: selfUsername?.takeIf { isSelfTarget }?.let {
+                        ChatPreview(name = it, username = "@$it", lastMessage = "Start a conversation", time = "Now")
+                    }
                     if (openChat != null) FynxChatStore.savePreview(context, openChat!!)
                 }
             }
