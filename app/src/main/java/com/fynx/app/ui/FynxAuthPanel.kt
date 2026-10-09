@@ -19,6 +19,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 enum class FynxAuthPage { WELCOME, REGISTER, VERIFY, LOGIN }
 
@@ -198,9 +199,18 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                         busy = true
                                         error = null
                                         scope.launch {
-                                            val result = FynxRemoteAuthClient.login(context, requestedUsername, password)
-                                            val failure = result.exceptionOrNull()
-                                            val offlineAccount = if (failure != null && isLoginNetworkFailure(failure)) {
+                                            // A sleeping/unreachable backend must not trap developers outside
+                                            // the debug APK while they are trying to test the app UI. Give
+                                            // real server sign-in a short chance first; only network timeout
+                                            // falls back to local UI entry, and only in debuggable builds.
+                                            val result = withTimeoutOrNull(DEBUG_LOGIN_TIMEOUT_MS) {
+                                                FynxRemoteAuthClient.login(context, requestedUsername, password)
+                                            }
+                                            val failure = result?.exceptionOrNull()
+                                            val offlineAccount = if (
+                                                result == null ||
+                                                (failure != null && isLoginNetworkFailure(failure))
+                                            ) {
                                                 localDebugAccountForLogin(context, requestedUsername)
                                             } else null
                                             if (offlineAccount != null) {
@@ -208,8 +218,11 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                                 busy = false
                                                 error = null
                                                 onAuthenticated(offlineAccount)
-                                            } else {
+                                            } else if (result != null) {
                                                 finish(result)
+                                            } else {
+                                                busy = false
+                                                error = "FYNX server sign-in timed out. Please try again."
                                             }
                                         }
                                     }
@@ -283,6 +296,8 @@ private fun FynxAuthField(value: String, onValueChange: (String) -> Unit, label:
  * Release builds always authenticate with the server. Debug builds can restore
  * a previously saved local account solely for offline UI testing.
  */
+private const val DEBUG_LOGIN_TIMEOUT_MS = 4_000L
+
 private fun localDebugAccountForLogin(context: android.content.Context, requestedUsername: String): String? {
     val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
     if (!isDebuggable || requestedUsername.isBlank()) return null
