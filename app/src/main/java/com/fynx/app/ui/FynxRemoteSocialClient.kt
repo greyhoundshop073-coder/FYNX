@@ -194,11 +194,17 @@ object FynxRemoteSocialClient {
         val safe = text.trim().takeIf { it.isNotBlank() && it.length <= 1000 } ?: return Result.failure(IllegalArgumentException("Reply must be 1-1000 characters."))
         return FynxBackendClient.postJson(context, "/api/social/posts/$post/comments/$parent/replies", JSONObject().put("text", safe).toString()).mapCatching { parseRemoteComment(JSONObject(it).getJSONObject("comment")) }
     }
-    suspend fun replies(context: Context, postId: String, parentCommentId: String, limit: Int = 50): Result<List<RemoteComment>> {
+    suspend fun replies(context: Context, postId: String, parentCommentId: String, before: String? = null, limit: Int = 50): Result<CommentPage> {
         val post = postId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
         val parent = parentCommentId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid parent comment id"))
         val safe = limit.coerceIn(1, 100)
-        return FynxBackendClient.get(context, "/api/social/posts/$post/comments/$parent/replies?limit=$safe").mapCatching { raw -> val a = JSONObject(raw).optJSONArray("comments") ?: JSONArray(); buildList { for (i in 0 until a.length()) add(parseRemoteComment(a.getJSONObject(i))) } }
+        val query = "?limit=$safe" + (if (before.isNullOrBlank()) "" else "&before=${URLEncoder.encode(before, "UTF-8")}")
+        return FynxBackendClient.get(context, "/api/social/posts/$post/comments/$parent/replies$query").mapCatching { raw ->
+            val root = JSONObject(raw)
+            val array = root.optJSONArray("comments") ?: JSONArray()
+            val page = buildList { for (index in 0 until array.length()) add(parseRemoteComment(array.getJSONObject(index))) }
+            CommentPage(page, root.optString("nextCursor").takeIf { it.isNotBlank() && it != "null" })
+        }
     }
     private fun parseRemoteComment(o: JSONObject) = RemoteComment(o.optString("id"), o.optString("text"), o.optDouble("timestamp").toLong(), o.optString("authorId"), o.optString("authorUsername"), o.optString("authorDisplayName"), o.optString("parentCommentId").takeIf { it.isNotBlank() && it != "null" })
     suspend fun likes(context: Context, id: String): Result<List<RemoteUser>> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); return FynxBackendClient.get(context, "/api/social/posts/$numericId/likes").mapCatching { raw -> val a = JSONObject(raw).optJSONArray("users") ?: JSONArray(); buildList { for (i in 0 until a.length()) { val o = a.getJSONObject(i); add(RemoteUser(o.optString("id"), o.optString("username"), o.optString("displayName"))) } } } }

@@ -31,6 +31,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
     var username by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    val localDebugLoginAvailable = localDebugAccountForLogin(context, username) != null
     var confirmPassword by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -157,15 +158,46 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                             Spacer(Modifier.height(18.dp))
                             FynxAuthField(username, { username = it.replace(" ", "").removePrefix("@") }, "Username", "@")
                             Spacer(Modifier.height(10.dp))
-                            FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
+                            if (localDebugLoginAvailable) {
+                                Text("Saved-device login for this debug APK", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
+                            } else {
+                                FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
+                                Spacer(Modifier.height(10.dp))
+                            }
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                             Spacer(Modifier.height(14.dp))
                             Button(onClick = {
-                                if (username.isBlank() || password.isBlank()) error = "Enter your username and password."
-                                else {
-                                    busy = true
-                                    error = null
-                                    scope.launch { finish(FynxRemoteAuthClient.login(context, username.trim(), password)) }
+                                val requestedUsername = username.trim().removePrefix("@")
+                                val savedLocalUsername = localDebugAccountForLogin(context, requestedUsername)
+                                when {
+                                    requestedUsername.isBlank() -> error = "Enter your username."
+                                    savedLocalUsername != null -> {
+                                        // Match the prior login behavior for an account already saved
+                                        // on this device: open the local UI without a password or server call.
+                                        FynxAuthStore.save(context, savedLocalUsername)
+                                        error = null
+                                        onAuthenticated(savedLocalUsername)
+                                    }
+                                    password.isBlank() -> error = "Enter your username and password."
+                                    else -> {
+                                        busy = true
+                                        error = null
+                                        scope.launch {
+                                            val result = FynxRemoteAuthClient.login(context, requestedUsername, password)
+                                            val failure = result.exceptionOrNull()
+                                            val offlineAccount = if (failure != null && isLoginNetworkFailure(failure)) {
+                                                localDebugAccountForLogin(context, requestedUsername)
+                                            } else null
+                                            if (offlineAccount != null) {
+                                                FynxAuthStore.save(context, offlineAccount)
+                                                busy = false
+                                                error = null
+                                                onAuthenticated(offlineAccount)
+                                            } else {
+                                                finish(result)
+                                            }
+                                        }
+                                    }
                                 }
                             }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Signing in…" else "Sign In") }
                             TextButton(onClick = { error = null; page = FynxAuthPage.REGISTER }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = .8f))) { Text("Create a new account") }
@@ -209,3 +241,35 @@ private fun FynxAuthField(value: String, onValueChange: (String) -> Unit, label:
         )
     )
 }
+
+
+/**
+ * Release builds always authenticate with the server. Debug builds can restore
+ * a previously saved local account solely for offline UI testing.
+ */
+private fun localDebugAccountForLogin(context: android.content.Context, requestedUsername: String): String? {
+    val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    if (!isDebuggable || requestedUsername.isBlank()) return null
+
+    val normalizedUsername = requestedUsername.trim().removePrefix("@")
+    val saved = FynxAuthStore.storedUsername(context)?.trim()?.takeIf { it.isNotBlank() }
+
+    // Keep the saved-account path when available. If session cleanup already
+    // removed the saved username, let a developer enter the local UI using the
+    // username they provide so offline feature testing is not blocked by backend
+    // timeouts. This fallback is unavailable in non-debug/release builds.
+    return when {
+        saved == null -> normalizedUsername
+        saved.equals(normalizedUsername, ignoreCase = true) -> saved
+        else -> null
+    }
+}
+
+private fun isLoginNetworkFailure(error: Throwable): Boolean =
+    generateSequence(error) { it.cause }.any { cause ->
+        cause is java.net.SocketTimeoutException ||
+            cause is java.net.UnknownHostException ||
+            cause is java.net.ConnectException ||
+            (cause is java.io.IOException &&
+                cause.message?.contains("network connection is unavailable", ignoreCase = true) == true)
+    }
