@@ -132,6 +132,50 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
     if (eventName !== 'charge.success') return res.status(200).json({ received: true, ignored: true });
     const transaction = event.data || {}, reference = typeof transaction.reference === 'string' ? transaction.reference.trim() : '';
     if (!reference || !/^[A-Za-z0-9_.=-]{8,100}$/.test(reference)) return res.status(400).json({ error: 'invalid payment reference' });
+    if (reference.startsWith('FYNX-CHECKOUT-')) {
+      if (!/^FYNX-CHECKOUT-[0-9a-f-]{36}$/i.test(reference)) return res.status(400).json({ error: 'invalid checkout payment reference' });
+      const metadataCheckoutId = String(transaction.metadata?.checkoutGroupId || transaction.metadata?.checkout_group_id || '');
+      const metadataBuyerId = String(transaction.metadata?.buyerId || transaction.metadata?.buyer_id || '');
+      const paidAmount = Number(transaction.amount);
+      const paidCurrency = String(transaction.currency || '').trim().toUpperCase();
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const group = (await client.query(`SELECT id,buyer_id,buyer_total,currency,status,payment_reference FROM marketplace_checkout_groups WHERE payment_reference=$1 FOR UPDATE`, [reference])).rows[0];
+        if (!group) { await client.query('ROLLBACK'); return res.status(200).json({ received: true, matched: false }); }
+        const children = (await client.query(`SELECT o.id,o.buyer_id,o.total_amount,o.currency,o.status,o.payment_provider_fee FROM marketplace_checkout_group_items gi JOIN marketplace_orders o ON o.id=gi.order_id WHERE gi.checkout_id=$1 ORDER BY o.id ASC FOR UPDATE OF o`, [group.id])).rows;
+        const expectedAmount = amountSubunit(group.buyer_total, group.currency);
+        const childTotal = children.reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
+        const childCurrencyValid = children.length > 0 && children.every((row) => String(row.currency || '').toUpperCase() === String(group.currency || '').toUpperCase());
+        const valid = transaction.status === 'success' && String(transaction.reference) === reference && expectedAmount !== null && expectedAmount === paidAmount && paidCurrency === String(group.currency).toUpperCase() && metadataCheckoutId === String(group.id) && metadataBuyerId === String(group.buyer_id) && Math.round(childTotal * 100) / 100 === Number(group.buyer_total) && childCurrencyValid;
+        if (!valid) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'checkout group payment data does not match' }); }
+        if (group.status === 'PAID' && children.every((row) => row.status === 'PAID')) { await client.query('COMMIT'); return res.status(200).json({ received: true, matched: true, idempotent: true, status: 'PAID', checkoutId: String(group.id) }); }
+        const providerFee = Number(transaction.fees);
+        if (!Number.isFinite(providerFee) || providerFee < 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'checkout group payment provider fee is invalid' }); }
+        const feeCents = Math.round(providerFee);
+        let allocatedFeeCents = 0;
+        for (let index = 0; index < children.length; index += 1) {
+          const child = children[index];
+          const childCents = amountSubunit(child.total_amount, child.currency);
+          if (!childCents) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'child order has invalid payment amount' }); }
+          const feeShare = index === children.length - 1 ? feeCents - allocatedFeeCents : Math.floor((feeCents * childCents) / expectedAmount);
+          allocatedFeeCents += feeShare;
+          if (child.status === 'PAYMENT_PENDING') {
+            await client.query(`UPDATE marketplace_orders SET status='PAID',payment_provider_fee=$2,updated_at=NOW() WHERE id=$1 AND status='PAYMENT_PENDING'`, [child.id, feeShare / 100]);
+            await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'PAYMENT_CONFIRMED','PAYMENT_PENDING','PAID',$3::jsonb)`, [child.id, child.buyer_id, JSON.stringify({ reference, provider: 'paystack', source: 'checkout-group-webhook', checkoutGroupId: String(group.id), amount: childCents, currency: String(child.currency).toUpperCase(), providerFee: feeShare / 100 })]);
+          } else if (child.status !== 'PAID') {
+            await client.query('ROLLBACK'); return res.status(400).json({ error: 'checkout child order is in an incompatible payment state' });
+          }
+        }
+        await client.query(`UPDATE marketplace_checkout_groups SET status='PAID',updated_at=NOW() WHERE id=$1 AND status='PAYMENT_PENDING'`, [group.id]);
+        await client.query('COMMIT');
+        return res.status(200).json({ received: true, matched: true, idempotent: false, status: 'PAID', checkoutId: String(group.id), childOrderCount: children.length });
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch {}
+        console.error('marketplace Paystack checkout group webhook', error);
+        return res.status(500).json({ error: 'checkout group webhook processing failed' });
+      } finally { client.release(); }
+    }
     const expectedAmount = amountSubunit(transaction.amount, transaction.currency), paidAmount = Number(transaction.amount), paidCurrency = String(transaction.currency || '').toUpperCase(), metadataOrderId = String(transaction.metadata?.orderId || transaction.metadata?.order_id || '');
     if (transaction.status !== 'success' || expectedAmount !== paidAmount || !metadataOrderId || !String(transaction.reference)) return res.status(400).json({ error: 'payment data does not match order' });
     const client = await pool.connect();
