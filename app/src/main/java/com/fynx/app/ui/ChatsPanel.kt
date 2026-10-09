@@ -72,6 +72,13 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     val rowSpacing = when (listView) { "Compact" -> 2.dp; "Large" -> 14.dp; else -> 8.dp }
     val avatarSize = when (listView) { "Compact" -> 38.dp; "Large" -> 54.dp; else -> 42.dp }
     val normalizedChatSearch = chatSearch.trim()
+    val visibleGroups = if (chatFilter == "All" && !showArchived) {
+        groups.filter { group ->
+            normalizedChatSearch.isBlank() ||
+                group.name.contains(normalizedChatSearch, ignoreCase = true) ||
+                group.description.contains(normalizedChatSearch, ignoreCase = true)
+        }
+    } else emptyList()
     val visibleChats = chats.filterNot { chat ->
         val candidate = chat.username.removePrefix("@").trim().lowercase()
         selfUsername.isNotBlank() && candidate == selfUsername
@@ -129,7 +136,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 placeholder = { Text("Search chats") },
             )
             Spacer(Modifier.height(14.dp))
-            if (visibleChats.isEmpty() && !(chatFilter == "All" && normalizedChatSearch.isBlank() && groups.isNotEmpty())) {
+            if (visibleChats.isEmpty() && visibleGroups.isEmpty()) {
                 Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
                     Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
@@ -290,7 +297,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                         }
                     }
 
-                    if (chatFilter == "All" && !showArchived && normalizedChatSearch.isBlank() && groups.isNotEmpty()) {
+                    if (visibleGroups.isNotEmpty()) {
                         item {
                             Spacer(Modifier.height(6.dp))
                             Text(
@@ -300,7 +307,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                                 modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
                             )
                         }
-                        items(groups, key = { "group:" + it.id }) { group ->
+                        items(visibleGroups, key = { "group:" + it.id }) { group ->
                             Card(
                                 onClick = { onOpenGroup(group.id) },
                                 modifier = Modifier.fillMaxWidth(),
