@@ -180,9 +180,15 @@ def find_control(xml_text:str, labels:list[str]):
         def collect(node):
             path.append(node)
             if _matches(node, wanted) and _center(node):
+                # Compose may expose a merged content description on a wrapper
+                # rather than the clickable IconButton node. Prefer the nearest
+                # clickable node, but retain the labeled 48dp wrapper as fallback.
+                target=node
                 for ancestor in reversed(path):
                     if ancestor.attrib.get("clickable","false").lower()=="true" and _center(ancestor):
-                        candidates.append(ancestor); break
+                        target=ancestor
+                        break
+                candidates.append(target)
             for child in list(node): collect(child)
             path.pop()
         collect(root)
