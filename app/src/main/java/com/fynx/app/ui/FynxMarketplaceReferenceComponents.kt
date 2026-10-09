@@ -93,6 +93,8 @@ internal fun MarketplaceReferenceCategoryRow(
     onSelect: (String) -> Unit,
     onNearby: () -> Unit,
     nearbySelected: Boolean,
+    nearbyLabel: String = "Near me",
+    nearbyLoading: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -102,7 +104,17 @@ internal fun MarketplaceReferenceCategoryRow(
         FilterChip(
             selected = nearbySelected,
             onClick = onNearby,
-            label = { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.LocationOn, null, Modifier.size(15.dp)); Spacer(Modifier.width(4.dp)); Text("Near me") } }
+            label = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (nearbyLoading) {
+                        androidx.compose.material3.CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.LocationOn, null, Modifier.size(15.dp))
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    Text(nearbyLabel)
+                }
+            }
         )
         categories.forEach { category ->
             FilterChip(selected = selected == category, onClick = { onSelect(category) }, label = { Text(category) })
