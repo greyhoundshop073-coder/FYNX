@@ -88,8 +88,12 @@ internal fun MarketplaceReferenceSearchBar(
                 }
             }
         }
-        IconButton(onClick = onCart) {
-            Icon(Icons.Default.ShoppingCart, "Cart", tint = FynxMarketplaceReferenceStyle.text)
+        androidx.compose.material3.BadgedBox(badge = {
+            if (cartCount > 0) androidx.compose.material3.Badge { Text(cartCount.toString()) }
+        }) {
+            IconButton(onClick = onCart) {
+                Icon(Icons.Default.ShoppingCart, "Cart", tint = FynxMarketplaceReferenceStyle.text)
+            }
         }
     }
 }
