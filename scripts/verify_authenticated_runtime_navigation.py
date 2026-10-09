@@ -715,9 +715,9 @@ if not FAILURES:
                     report.append("- PASS private-chat notification-route test skipped because no real chat participant identifier was visible; no test data was fabricated")
                 run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
                 reset=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-chat-group-reset.xml") or xml
-                groups_xml=tap_control(reset,["Chat"],"chat-for-group",["New group","No groups yet","Create group"])
+                groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Messages and groups in one place"])
                 if groups_xml:
-                    groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["New group","No groups yet","Create group"])
+                    groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["New group"])
                     if groups_tab:
                         group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
                         if not group_after:
