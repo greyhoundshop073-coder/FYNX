@@ -32,7 +32,8 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     var groups by remember { mutableStateOf(FynxGroupsStore.load(context)) }
     var selfUsername by remember { mutableStateOf("") }
     var listView by remember { mutableStateOf(FynxPreferencesStore.loadChatListView(context)) }
-    var showArchived by remember { mutableStateOf(false) }
+    var chatFilter by remember { mutableStateOf("All") }
+    val showArchived = chatFilter == "Archived"
     var openMenuFor by remember { mutableStateOf<String?>(null) }
     var chatSearch by remember { mutableStateOf("") }
 
@@ -76,6 +77,12 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         val archived = FynxPreferencesStore.isChatArchived(context, chat.username)
         archived == showArchived
     }.filter { chat ->
+        when (chatFilter) {
+            "Unread" -> chat.unreadCount > 0 || FynxChatStore.load(context, chat.username).any { !it.fromMe && !it.read }
+            "Pinned" -> FynxPreferencesStore.isChatPinned(context, chat.username)
+            else -> true
+        }
+    }.filter { chat ->
         normalizedChatSearch.isBlank() ||
             chat.name.contains(normalizedChatSearch, ignoreCase = true) ||
             chat.username.contains(normalizedChatSearch, ignoreCase = true) ||
@@ -95,8 +102,17 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         }
         Spacer(Modifier.height(12.dp))
         if (section == "Chats") {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { showArchived = !showArchived }) { Text(if (showArchived) "All chats" else "Archived") }
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf("All", "Unread", "Pinned", "Archived").forEach { filter ->
+                    FilterChip(
+                        selected = chatFilter == filter,
+                        onClick = { chatFilter = filter },
+                        label = { Text(filter) }
+                    )
+                }
             }
             Spacer(Modifier.height(10.dp))
             OutlinedTextField(
