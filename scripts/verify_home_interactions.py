@@ -170,3 +170,10 @@ print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed 
 # Home public conversation foundation: guard the existing comment privacy predicates.
 require(realtime_bootstrap, "OR (b.blocker_id=c.author_id AND b.blocked_id=$2))` + cursorClause + `", "comment page closes the block predicate before applying its cursor")
 require(realtime_bootstrap, "OR (b.blocker_id=c.author_id AND b.blocked_id=$3))`", "reply parent lookup closes the block predicate")
+
+
+# Home comment mentions: verify UI routing and notification integration.
+require(push, "notifyCommentMentions", "comment mention backend notification helper")
+require(realtime_bootstrap, "notifyCommentMentions", "reply mention backend notification helper")
+require(comments_panel, "ClickableText", "comment mentions are tappable in Home")
+require(comments_panel, "onOpenAuthorProfile", "comment mention profile navigation")
