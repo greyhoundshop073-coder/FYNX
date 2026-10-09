@@ -159,19 +159,17 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                             Spacer(Modifier.height(18.dp))
                             FynxAuthField(username, { username = it.replace(" ", "").removePrefix("@") }, "Username", "@")
                             Spacer(Modifier.height(10.dp))
-                            if (localDebugLoginAvailable) {
-                                Text("Saved-device login for this debug APK", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
-                            } else {
-                                FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
+                            // Always keep the password field visible. Availability of a local
+                            // debug-testing account must never hide or bypass real server sign-in.
+                            FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
+                            Spacer(Modifier.height(10.dp))
+                            if ((context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+                                Text(
+                                    "Debug APK only: enter your password for server sign-in, or use offline testing if the server is unavailable.",
+                                    color = Color.White.copy(alpha = .72f),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                                 Spacer(Modifier.height(10.dp))
-                                if ((context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
-                                    Text(
-                                        "Debug APK only: enter your password for server sign-in, or leave it empty to enter offline UI testing.",
-                                        color = Color.White.copy(alpha = .72f),
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                    Spacer(Modifier.height(10.dp))
-                                }
                             }
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                             Spacer(Modifier.height(14.dp))
@@ -180,19 +178,12 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                 val savedLocalUsername = localDebugAccountForLogin(context, requestedUsername)
                                 when {
                                     requestedUsername.isBlank() -> error = "Enter your username."
-                                    savedLocalUsername != null -> {
-                                        // Match the prior login behavior for an account already saved
-                                        // on this device: open the local UI without a password or server call.
-                                        FynxAuthStore.save(context, savedLocalUsername)
-                                        error = null
-                                        onAuthenticated(savedLocalUsername)
-                                    }
                                     password.isBlank() && (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 -> {
-                                        // Preserve passwordless offline UI entry in debug builds without
-                                        // hiding the real password field on a fresh installation.
-                                        FynxAuthStore.save(context, requestedUsername)
+                                        // Only an explicitly empty password selects offline UI testing.
+                                        // A typed password must always attempt real server sign-in.
+                                        FynxAuthStore.save(context, savedLocalUsername ?: requestedUsername)
                                         error = null
-                                        onAuthenticated(requestedUsername)
+                                        onAuthenticated(savedLocalUsername ?: requestedUsername)
                                     }
                                     password.isBlank() -> error = "Enter your username and password."
                                     else -> {
