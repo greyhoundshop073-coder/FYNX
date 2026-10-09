@@ -190,11 +190,16 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     Text("Marketplace", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text(if (nearbyMode && nearbyLabel.isNotBlank()) "Showing products near $nearbyLabel" else "Discover products from FYNX sellers", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                BadgedBox(badge = { if (cart.isNotEmpty()) Badge { Text(cart.size.toString()) } }) { IconButton(onClick = { showCart = true }) { Icon(Icons.Default.ShoppingCart, "Cart") } }
                 IconButton(onClick = { showOrders = true }) { Icon(Icons.Default.ReceiptLong, "Orders") }
                 IconButton(onClick = { reload() }) { Icon(Icons.Default.Refresh, "Refresh") }
             }
-            OutlinedTextField(value = query, onValueChange = { query = it.take(80) }, modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, null) }, placeholder = { Text("Search products or sellers") }, shape = FynxDesign.ControlShape)
+            MarketplaceReferenceSearchBar(
+                value = query,
+                onValueChange = { query = it.take(80) },
+                onCart = { showCart = true },
+                cartCount = cart.size,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+            )
             MarketplaceReferenceCategoryRow(
                 categories = categories,
                 selected = category,
