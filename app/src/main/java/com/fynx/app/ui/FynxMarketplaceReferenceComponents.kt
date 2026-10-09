@@ -41,14 +41,17 @@ import androidx.compose.ui.unit.dp
  * Marketplace remains the source of truth for all real data and actions.
  */
 internal object FynxMarketplaceReferenceStyle {
-    val background = Color(0xFF06142D)
-    val surface = Color(0xFF0B2144)
-    val surfaceRaised = Color(0xFF102A55)
-    val outline = Color(0xFF29466F)
-    val primary = Color(0xFF6957FF)
-    val primarySoft = Color(0xFF9A8CFF)
-    val text = Color(0xFFF4F7FF)
-    val textMuted = Color(0xFF9DAECC)
+    // Keep reference components on the app-wide design tokens instead of a
+    // second, hard-coded palette. Theme-specific runtime colors are handled by
+    // FynxTheme; these tokens preserve the established FYNX visual language.
+    val background = FynxDesign.Background
+    val surface = FynxDesign.Surface
+    val surfaceRaised = FynxDesign.SurfaceRaised
+    val outline = FynxDesign.Outline
+    val primary = FynxAccent.Purple.primary
+    val primarySoft = FynxAccent.Purple.secondary
+    val text = FynxDesign.TextPrimary
+    val textMuted = FynxDesign.TextSecondary
     val radius = RoundedCornerShape(18.dp)
 }
 
