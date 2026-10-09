@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
@@ -134,6 +135,13 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 singleLine = true,
                 shape = FynxDesign.ControlShape,
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search chats") },
+                trailingIcon = {
+                    if (chatSearch.isNotBlank()) {
+                        IconButton(onClick = { chatSearch = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear chat search")
+                        }
+                    }
+                },
                 placeholder = { Text("Search chats") },
             )
             Spacer(Modifier.height(14.dp))
@@ -347,6 +355,13 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 singleLine = true,
                 shape = FynxDesign.ControlShape,
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search groups") },
+                trailingIcon = {
+                    if (groupSearch.isNotBlank()) {
+                        IconButton(onClick = { groupSearch = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear group search")
+                        }
+                    }
+                },
                 placeholder = { Text("Search groups") },
             )
             Spacer(Modifier.height(10.dp))
