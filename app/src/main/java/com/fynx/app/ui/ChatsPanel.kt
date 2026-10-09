@@ -38,6 +38,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     val showArchived = chatFilter == "Archived"
     var openMenuFor by remember { mutableStateOf<String?>(null) }
     var chatSearch by remember { mutableStateOf("") }
+    var groupSearch by remember { mutableStateOf("") }
 
     fun refreshChats() {
         chats = FynxChatStore.loadPreviews(context).map { preview ->
@@ -339,14 +340,35 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             Spacer(Modifier.height(10.dp))
             OutlinedButton(onClick = onCreateGroup, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Create group" }) { Text("＋ Create group") }
         } else {
+            OutlinedTextField(
+                value = groupSearch,
+                onValueChange = { groupSearch = it },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                singleLine = true,
+                shape = FynxDesign.ControlShape,
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search groups") },
+                placeholder = { Text("Search groups") },
+            )
+            Spacer(Modifier.height(10.dp))
             Button(onClick = onCreateGroup) { Text("＋ New group") }
             Spacer(Modifier.height(10.dp))
-            if (groups.isEmpty()) {
-                Text("No groups yet", style = MaterialTheme.typography.titleMedium)
-                Text("Create a group to start a shared conversation.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val visibleGroupList = groups.filter { group ->
+                groupSearch.isBlank() ||
+                    group.name.contains(groupSearch.trim(), ignoreCase = true) ||
+                    group.description.contains(groupSearch.trim(), ignoreCase = true)
+            }
+            if (visibleGroupList.isEmpty()) {
+                Text(
+                    if (groups.isEmpty()) "No groups yet" else "No matching groups",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    if (groups.isEmpty()) "Create a group to start a shared conversation." else "Try another group name or description.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(rowSpacing), contentPadding = PaddingValues(bottom = 12.dp)) {
-                    items(groups, key = { it.id }) { group ->
+                    items(visibleGroupList, key = { it.id }) { group ->
                         Card(onClick = { onOpenGroup(group.id) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                             ListItem(
                                 headlineContent = { Text(group.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
