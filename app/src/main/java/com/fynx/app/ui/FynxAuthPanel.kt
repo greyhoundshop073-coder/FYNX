@@ -290,11 +290,15 @@ private fun localDebugAccountForLogin(context: android.content.Context, requeste
     val normalizedUsername = requestedUsername.trim().removePrefix("@")
     val saved = FynxAuthStore.storedUsername(context)?.trim()?.takeIf { it.isNotBlank() }
 
-    // Only use passwordless saved-device login for the identity actually saved
-    // on this device. On a fresh install (or for a different username), keep the
-    // password field visible so normal server authentication remains possible.
-    // This shortcut is unavailable in non-debug/release builds.
-    return saved?.takeIf { it.equals(normalizedUsername, ignoreCase = true) }
+    // Keep saved-account login when available. If this is a fresh install or
+    // session cleanup removed the saved username, let a developer enter the local
+    // UI using the username they provide when server authentication times out.
+    // This is strictly debug-APK-only; release builds always require server auth.
+    return when {
+        saved == null -> normalizedUsername
+        saved.equals(normalizedUsername, ignoreCase = true) -> saved
+        else -> null
+    }
 }
 
 private fun isLoginNetworkFailure(error: Throwable): Boolean =
