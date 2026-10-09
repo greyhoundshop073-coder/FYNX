@@ -31,6 +31,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
     var username by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    val localDebugLoginAvailable = localDebugAccountForLogin(context, username) != null
     var confirmPassword by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -157,7 +158,12 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                             Spacer(Modifier.height(18.dp))
                             FynxAuthField(username, { username = it.replace(" ", "").removePrefix("@") }, "Username", "@")
                             Spacer(Modifier.height(10.dp))
-                            FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
+                            if (localDebugLoginAvailable) {
+                                Text("Saved-device login for this debug APK", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
+                            } else {
+                                FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
+                                Spacer(Modifier.height(10.dp))
+                            }
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                             Spacer(Modifier.height(14.dp))
                             Button(onClick = {
@@ -165,9 +171,9 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                 val savedLocalUsername = localDebugAccountForLogin(context, requestedUsername)
                                 when {
                                     requestedUsername.isBlank() -> error = "Enter your username."
-                                    savedLocalUsername != null && password.isBlank() -> {
-                                        // Debug APK compatibility: a known account saved on this device can
-                                        // open the local UI while the remote backend is unavailable.
+                                    savedLocalUsername != null -> {
+                                        // Match the prior login behavior for an account already saved
+                                        // on this device: open the local UI without a password or server call.
                                         FynxAuthStore.save(context, savedLocalUsername)
                                         error = null
                                         onAuthenticated(savedLocalUsername)
