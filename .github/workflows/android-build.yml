@@ -99,7 +99,7 @@ jobs:
       - name: Verify live production backend reachability
         # This optional remote-service probe is intentionally skipped for focused Home runtime certification,
         # where its multi-minute retries delay the Android UI test without changing the job result.
-        if: ${{ !((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]'))) }}
+        if: ${{ !((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[home-cert]') || contains(github.event.head_commit.message, '[apk-preview]')))) }}
         continue-on-error: true
         run: node scripts/verify_production_backend_reachability.mjs
       - name: Verify consolidated FCM notification phase
