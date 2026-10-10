@@ -193,6 +193,25 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         }
     }
 
+    MaterialTheme(
+        colorScheme = darkColorScheme(
+            primary = Color(0xFF5548FF),
+            onPrimary = Color.White,
+            primaryContainer = Color(0xFF15316B),
+            onPrimaryContainer = Color.White,
+            secondary = Color(0xFF7B8CFF),
+            background = Color(0xFF061226),
+            surface = Color(0xFF0B1A30),
+            onSurface = Color(0xFFF3F6FF),
+            surfaceVariant = Color(0xFF172A45),
+            onSurfaceVariant = Color(0xFFA5B6D0),
+            outline = Color(0xFF2B4261),
+            error = Color(0xFFFF7777),
+            errorContainer = Color(0xFF421D2B),
+            onErrorContainer = Color(0xFFFFDCE4),
+            tertiary = Color(0xFFFFC857)
+        )
+    ) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -505,6 +524,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     multiCheckoutItems?.let { selectedItems -> FynxMarketplaceMultiCheckoutDialog(context, selectedItems, cartQuantities, onPaymentReady = { id, total, currency -> multiCheckoutItems = null; multiPayment = Triple(id, total, currency) }, onClose = { multiCheckoutItems = null }) }
     multiPayment?.let { p -> MarketplaceMultiProductPaymentDialog(context, p.first, p.second, p.third, onPaid = { multiPayment = null; reload() }, onClose = { multiPayment = null }) }
     if (showOrders) MarketplaceOrders(context, orders, onRefresh = { reload() }, onClose = { showOrders = false })
+    }
 }
 
 @Composable
