@@ -58,3 +58,16 @@ The eight storyboard stages define the intended flow:
 - Separate source implementation, APK inclusion, automated verification, backend-dependent verification, and live provider verification in all reports.
 - Preserve the existing single-product Buy Now flow and shared FYNX camera/video-call system.
 - Changes must be minimal, scoped, and tested on the isolated candidate branch before any merge to main.
+
+
+## APK verification gate — do not close Marketplace until checked
+
+For the consolidated candidate, the full Android emulator/runtime workflow must run; a fast build alone is not visual proof. Capture and inspect the actual Marketplace screen after navigation settles.
+
+Required checks:
+- Initial home has no hard-coded/demo product cards. With no backend/listings, show a genuine empty state; with an unavailable backend, show the separate retryable unavailable state.
+- Search and category selection route to the two-column All Products grid.
+- Existing Top Sellers (Highest Sales) section remains present when real seller sales/reputation data is available; never invent a ranking when data is absent.
+- Product detail, seller profile, cart/orders, Buy Now and Buy Together entry points remain reachable and retain their existing handlers.
+- Report the actual emulator screenshot/XML results. Explicitly distinguish: source present, compiled into APK, runtime-visible, backend-blocked, and not implemented.
+- Live Proof is not complete until its product/seller context, camera/session hand-off, buyer/seller controls, end state and return actions are traced and runtime-verified where backend/session setup permits.
