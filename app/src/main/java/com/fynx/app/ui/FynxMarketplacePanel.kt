@@ -207,6 +207,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
+    var sellerStoreUsername by remember { mutableStateOf<String?>(null) }
     var checkoutListing by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
     var paymentOrder by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }
     var protectedOrder by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }
@@ -491,7 +492,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                     items(visibleSellerListings, key = { it.sellerUsername.removePrefix("@").trim().lowercase() }) { seller ->
                                         val key = seller.sellerUsername.removePrefix("@").trim().lowercase()
                                         val reputation = sellerReputations[key]
-                                        if (reputation != null) MarketplaceSellerCard(seller, reputation, sellerPhotoIds[key]) { onOpenProfile(seller.sellerUsername) }
+                                        if (reputation != null) MarketplaceSellerCard(seller, reputation, sellerPhotoIds[key]) { sellerStoreUsername = seller.sellerUsername }
                                     }
                                 }
                             }
@@ -506,7 +507,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                 sellerRating = sellerReputations[sellerKey],
                                 sellerPhotoId = sellerPhotoIds[sellerKey],
                                 onOpen = { selected = listing },
-                                onProfile = { onOpenProfile(listing.sellerUsername) },
+                                onProfile = { sellerStoreUsername = listing.sellerUsername },
                                 onContact = { contactSeller(listing.sellerUsername, listing.id) }
                             )
                         }
@@ -538,7 +539,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                 items(visibleSellerListings, key = { it.sellerUsername.removePrefix("@").trim().lowercase() }) { seller ->
                                     val key = seller.sellerUsername.removePrefix("@").trim().lowercase()
                                     val reputation = sellerReputations[key]
-                                    if (reputation != null) MarketplaceSellerCard(seller, reputation, sellerPhotoIds[key]) { onOpenProfile(seller.sellerUsername) }
+                                    if (reputation != null) MarketplaceSellerCard(seller, reputation, sellerPhotoIds[key]) { sellerStoreUsername = seller.sellerUsername }
                                 }
                             }
                         }
@@ -555,7 +556,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                         sellerRating = sellerReputations[listing.sellerUsername.removePrefix("@").trim().lowercase()],
                                         sellerPhotoId = sellerPhotoIds[listing.sellerUsername.removePrefix("@").trim().lowercase()],
                                         onOpen = { selected = listing },
-                                        onProfile = { onOpenProfile(listing.sellerUsername) },
+                                        onProfile = { sellerStoreUsername = listing.sellerUsername },
                                         onContact = { contactSeller(listing.sellerUsername, listing.id) }
                                     )
                                 }
@@ -573,7 +574,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                         sellerRating = sellerReputations[listing.sellerUsername.removePrefix("@").trim().lowercase()],
                                         sellerPhotoId = sellerPhotoIds[listing.sellerUsername.removePrefix("@").trim().lowercase()],
                                         onOpen = { selected = listing },
-                                        onProfile = { onOpenProfile(listing.sellerUsername) },
+                                        onProfile = { sellerStoreUsername = listing.sellerUsername },
                                         onContact = { contactSeller(listing.sellerUsername, listing.id) }
                                     )
                                     }
@@ -600,7 +601,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                         sellerRating = sellerReputations[listing.sellerUsername.removePrefix("@").trim().lowercase()],
                                         sellerPhotoId = sellerPhotoIds[listing.sellerUsername.removePrefix("@").trim().lowercase()],
                                         onOpen = { selected = listing },
-                                        onProfile = { onOpenProfile(listing.sellerUsername) },
+                                        onProfile = { sellerStoreUsername = listing.sellerUsername },
                                         onContact = { contactSeller(listing.sellerUsername, listing.id) }
                                     )
                                 }
@@ -627,7 +628,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         MarketplaceDetails(
             l = listing,
             sellerReputation = sellerReputations[sellerKey],
-            onProfile = { onOpenProfile(listing.sellerUsername); selected = null },
+            onProfile = { sellerStoreUsername = listing.sellerUsername; selected = null },
             onContact = { contactSeller(listing.sellerUsername, listing.id) },
             onBuyNow = { selected = null; checkoutListing = listing },
             onAddToCart = { if (cart.none { it.id == listing.id }) { if (cart.size >= 20) error = "Your FYNX cart can contain at most 20 different products." else { cart = cart + listing; cartQuantities = cartQuantities + (listing.id to 1) } }; selected = null },
@@ -652,6 +653,17 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             },
             onOpenAssistant = { listingId -> onOpenAi(listingId) },
             onClose = { selected = null }
+        )
+    }
+    sellerStoreUsername?.let { username ->
+        FynxMarketplaceSellerStoreDialog(
+            username = username,
+            listings = listings.filter { it.sellerUsername.removePrefix("@").trim().equals(username.removePrefix("@").trim(), ignoreCase = true) },
+            reputation = sellerReputations[username.removePrefix("@").trim().lowercase()],
+            photoId = sellerPhotoIds[username.removePrefix("@").trim().lowercase()],
+            onOpenListing = { selected = it; sellerStoreUsername = null },
+            onContact = { listing -> contactSeller(username, listing.id) },
+            onClose = { sellerStoreUsername = null }
         )
     }
     checkoutListing?.let { listing -> FynxMarketplaceCheckoutDialog(context = context, listing = listing, onProtectedOrder = { order -> checkoutListing = null; orders = listOf(order) + orders.filterNot { it.id == order.id }; paymentOrder = order }, onClose = { checkoutListing = null }) }
