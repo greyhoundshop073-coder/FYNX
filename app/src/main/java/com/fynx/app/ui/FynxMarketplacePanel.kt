@@ -125,15 +125,24 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         scope.launch {
             loading = true
             error = null
-            val result = if (nearbyMode && nearbyLabel.isNotBlank()) {
-                FynxRemoteSocialClient.nearbyMarketplaceListings(context, query, category, nearbyLabel)
-            } else {
-                FynxRemoteSocialClient.listings(context, query, category)
+            val result = kotlinx.coroutines.withTimeoutOrNull(35_000L) {
+                if (nearbyMode && nearbyLabel.isNotBlank()) {
+                    FynxRemoteSocialClient.nearbyMarketplaceListings(context, query, category, nearbyLabel)
+                } else {
+                    FynxRemoteSocialClient.listings(context, query, category)
+                }
             }
-            result.onSuccess { listings = it }
-                .onFailure { error = it.message ?: "Marketplace could not load." }
-            FynxRemoteSocialClient.orders(context).onSuccess { orders = it }
+            if (result == null) {
+                error = "Marketplace is taking longer than expected. Check your connection and try again."
+            } else {
+                result.onSuccess { listings = it }
+                    .onFailure { error = it.message ?: "Marketplace could not load." }
+            }
+            // Listing visibility must not wait on the independent orders request.
             loading = false
+            scope.launch {
+                FynxRemoteSocialClient.orders(context).onSuccess { orders = it }
+            }
         }
     }
 
