@@ -242,7 +242,122 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         )
                     }
                 }
-                else -> LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 132.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) { if (visibleSellerListings.isNotEmpty()) { item(span = { GridItemSpan(maxLineSpan) }) { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { MarketplaceReferenceSectionTitle("Top Sellers (Highest Sales)"); Text("Highest successful sales from sellers currently represented here", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }; item(span = { GridItemSpan(maxLineSpan) }) { LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(start = 0.dp, end = 16.dp)) { items(visibleSellerListings, key = { it.sellerUsername.removePrefix("@").trim().lowercase() }) { seller -> MarketplaceSellerCard(seller, sellerReputations[seller.sellerUsername.removePrefix("@").trim().lowercase()]!!, sellerPhotoIds[seller.sellerUsername.removePrefix("@").trim().lowercase()], { onOpenProfile(seller.sellerUsername) }) } } }; item(span = { GridItemSpan(maxLineSpan) }) { MarketplaceReferenceSectionTitle(if (nearbyMode) "Popular near you" else "Recommended for you", modifier = Modifier.padding(top = 2.dp)) } }; gridItems(listings, key = { it.id }) { listing -> MarketplaceCard(l = listing, onProfile = { onOpenProfile(listing.sellerUsername) }, onContact = { contactSeller(listing.sellerUsername, listing.id) }, onOpen = { selected = listing }) } }
+                else -> LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    item(key = "marketplace-hero") {
+                        Surface(
+                            onClick = { query = ""; category = "All" },
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("Great Deals", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                    Text("Better Prices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                    Text("Discover products posted by real FYNX sellers.", style = MaterialTheme.typography.bodySmall)
+                                    Spacer(Modifier.height(2.dp))
+                                    Text("Shop Now  →", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                                }
+                                Icon(Icons.Default.ShoppingBag, contentDescription = null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                    item(key = "marketplace-recommended-title") {
+                        MarketplaceReferenceSectionTitle(
+                            "Recommended for you",
+                            action = "See all",
+                            onAction = { query = ""; category = "All"; if (nearbyMode) toggleNearby() }
+                        )
+                    }
+                    item(key = "marketplace-recommended-listings") {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding = PaddingValues(end = 4.dp)
+                        ) {
+                            items(listings.take(8), key = { "recommended-${it.id}" }) { listing ->
+                                Box(Modifier.width(208.dp)) {
+                                    MarketplaceCard(
+                                        l = listing,
+                                        onProfile = { onOpenProfile(listing.sellerUsername) },
+                                        onContact = { contactSeller(listing.sellerUsername, listing.id) },
+                                        onOpen = { selected = listing }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (nearbyMode && listings.isNotEmpty()) {
+                        item(key = "marketplace-nearby-title") {
+                            MarketplaceReferenceSectionTitle("Popular near you")
+                        }
+                        item(key = "marketplace-nearby-listings") {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                contentPadding = PaddingValues(end = 4.dp)
+                            ) {
+                                items(listings.take(8), key = { "nearby-${it.id}" }) { listing ->
+                                    Box(Modifier.width(208.dp)) {
+                                        MarketplaceCard(
+                                            l = listing,
+                                            onProfile = { onOpenProfile(listing.sellerUsername) },
+                                            onContact = { contactSeller(listing.sellerUsername, listing.id) },
+                                            onOpen = { selected = listing }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item(key = "marketplace-explore-title") {
+                        MarketplaceReferenceSectionTitle("Explore categories")
+                    }
+                    item(key = "marketplace-explore-categories") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            categories.filter { it != "All" }.forEach { itemCategory ->
+                                FilterChip(
+                                    selected = category == itemCategory,
+                                    onClick = { category = itemCategory },
+                                    label = { Text(itemCategory) }
+                                )
+                            }
+                        }
+                    }
+                    item(key = "marketplace-new-title") {
+                        MarketplaceReferenceSectionTitle(
+                            "New on FYNX",
+                            action = "See all",
+                            onAction = { query = ""; category = "All"; if (nearbyMode) toggleNearby() }
+                        )
+                    }
+                    item(key = "marketplace-new-listings") {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding = PaddingValues(end = 4.dp)
+                        ) {
+                            items(listings.take(8), key = { "new-${it.id}" }) { listing ->
+                                Box(Modifier.width(208.dp)) {
+                                    MarketplaceCard(
+                                        l = listing,
+                                        onProfile = { onOpenProfile(listing.sellerUsername) },
+                                        onContact = { contactSeller(listing.sellerUsername, listing.id) },
+                                        onOpen = { selected = listing }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         FloatingActionButton(onClick = { showSell = true }, modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().imePadding().padding(end = 18.dp, bottom = 18.dp), shape = RoundedCornerShape(18.dp)) { Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Sell", modifier = Modifier.padding(end = 14.dp)) }
