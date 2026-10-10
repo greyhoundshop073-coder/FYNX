@@ -48,14 +48,14 @@ internal object FynxMarketplaceReferenceStyle {
     // Keep reference components on the app-wide design tokens instead of a
     // second, hard-coded palette. Theme-specific runtime colors are handled by
     // FynxTheme; these tokens preserve the established FYNX visual language.
-    val background = FynxDesign.Background
-    val surface = FynxDesign.Surface
-    val surfaceRaised = FynxDesign.SurfaceRaised
-    val outline = FynxDesign.Outline
-    val primary = FynxAccent.Purple.primary
-    val primarySoft = FynxAccent.Purple.secondary
-    val text = FynxDesign.TextPrimary
-    val textMuted = FynxDesign.TextSecondary
+    val background = Color(0xFF061226)
+    val surface = Color(0xFF0B1A30)
+    val surfaceRaised = Color(0xFF10223B)
+    val outline = Color(0xFF2B4261)
+    val primary = Color(0xFF5548FF)
+    val primarySoft = Color(0xFF8290FF)
+    val text = Color(0xFFF3F6FF)
+    val textMuted = Color(0xFFA5B6D0)
     val radius = RoundedCornerShape(18.dp)
 }
 
