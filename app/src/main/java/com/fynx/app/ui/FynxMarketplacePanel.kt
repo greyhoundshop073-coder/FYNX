@@ -190,6 +190,18 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var listings by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
     var orders by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceOrder>>(emptyList()) }
     var query by remember { mutableStateOf("") }
+    val recentSearchesKey = "marketplace_recent_searches_v1"
+    var recentSearches by remember {
+        mutableStateOf(
+            runCatching {
+                val saved = context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+                    .getString(recentSearchesKey, "[]").orEmpty()
+                val json = JSONArray(saved)
+                (0 until json.length()).mapNotNull { json.optString(it).trim().takeIf(String::isNotBlank) }
+                    .distinctBy { it.lowercase(Locale.US) }.take(8)
+            }.getOrDefault(emptyList())
+        )
+    }
     var showAllProducts by remember { mutableStateOf(false) }
     var category by remember { mutableStateOf("All") }
     var loading by remember { mutableStateOf(true) }
@@ -310,6 +322,17 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             .take(8)
     }
 
+    LaunchedEffect(query) {
+        val term = query.trim()
+        if (term.length >= 2) {
+            delay(900)
+            recentSearches = (listOf(term) + recentSearches.filterNot { it.equals(term, ignoreCase = true) }).take(8)
+            val saved = JSONArray().apply { recentSearches.forEach(::put) }
+            context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+                .edit().putString(recentSearchesKey, saved.toString()).apply()
+        }
+    }
+
     LaunchedEffect(initialListingId) {
         val listingId = initialListingId?.trim().orEmpty()
         if (listingId.isNotBlank()) {
@@ -338,6 +361,43 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 nearbyLoading = nearbyLoading,
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
             )
+            if (query.isBlank() && recentSearches.isNotEmpty()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Recent searches", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    TextButton(onClick = {
+                        recentSearches = emptyList()
+                        context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+                            .edit().remove(recentSearchesKey).apply()
+                    }) { Text("Clear") }
+                }
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, bottom = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(end = 16.dp)
+                ) {
+                    items(recentSearches, key = { "recent-search-$it" }) { term ->
+                        InputChip(
+                            selected = false,
+                            onClick = { query = term },
+                            label = { Text(term, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = {
+                                        recentSearches = recentSearches.filterNot { it.equals(term, ignoreCase = true) }
+                                        val saved = JSONArray().apply { recentSearches.forEach(::put) }
+                                        context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+                                            .edit().putString(recentSearchesKey, saved.toString()).apply()
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) { Icon(Icons.Default.Close, contentDescription = "Remove $term", modifier = Modifier.size(14.dp)) }
+                            }
+                        )
+                    }
+                }
+            }
             if (error != null && listings.isNotEmpty()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(error.orEmpty(), modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
