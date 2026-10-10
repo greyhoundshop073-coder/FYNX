@@ -65,11 +65,11 @@ print("COVER/TAKEOVER PHOTO SOURCES:", ", ".join(cover_sources) if cover_sources
 # Push 10
 check("this gate is wired into Android CI", "verify_push5_to_push10_integration.py" in workflow)
 check("Android CI builds APK", "assembleDebug" in workflow)
-artifact_name = "FYNX-debug-${{ github.sha }}"
+artifact_name = "FYNX-debug-${{ github.event.pull_request.head.sha || github.sha }}"
 artifact_pos = workflow.find("name: FYNX Android Build")
 build_pos = workflow.find("assembleDebug")
 upload_pos = workflow.find("uses: actions/upload-artifact@v4")
-check("Android CI uploads exact-commit APK", artifact_name in workflow and "GITHUB_SHA" in workflow)
+check("Android CI uploads exact-commit APK", artifact_name in workflow and "FYNX_SOURCE_SHA" in workflow)
 check("APK upload follows the debug build", build_pos >= 0 and upload_pos > build_pos)
 check("APK upload fails when the expected file is missing", "if-no-files-found: error" in workflow)
 check("Push 9 investigation is recorded without adding a duplicate feature", (ROOT / "docs/FYNX_PROFILE_COVER_TAKEOVER_INVESTIGATION.md").is_file() and not cover_sources)
