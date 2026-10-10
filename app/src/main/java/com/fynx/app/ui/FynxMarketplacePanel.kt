@@ -330,11 +330,14 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             }
                         }
                         gridItems(listings, key = { it.id }) { listing ->
-                            MarketplaceCard(
-                                l = listing,
-                                onProfile = { onOpenProfile(listing.sellerUsername) },
-                                onContact = { contactSeller(listing.sellerUsername, listing.id) },
-                                onOpen = { selected = listing }
+                            val sellerKey = listing.sellerUsername.removePrefix("@").trim().lowercase()
+                            MarketplaceReferenceProductCard(
+                                listing = listing,
+                                sellerRating = sellerReputations[sellerKey],
+                                sellerPhotoId = sellerPhotoIds[sellerKey],
+                                onOpen = { selected = listing },
+                                onSeller = { onOpenProfile(listing.sellerUsername) },
+                                onContact = { contactSeller(listing.sellerUsername, listing.id) }
                             )
                         }
                     }
@@ -390,7 +393,14 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 4.dp)) {
                             items(listings.take(8), key = { "recommended-${it.id}" }) { listing ->
                                 Box(Modifier.width(208.dp)) {
-                                    MarketplaceCard(l = listing, onProfile = { onOpenProfile(listing.sellerUsername) }, onContact = { contactSeller(listing.sellerUsername, listing.id) }, onOpen = { selected = listing })
+                                    MarketplaceReferenceProductCard(
+                                        listing = listing,
+                                        sellerRating = sellerReputations[listing.sellerUsername.removePrefix("@").trim().lowercase()],
+                                        sellerPhotoId = sellerPhotoIds[listing.sellerUsername.removePrefix("@").trim().lowercase()],
+                                        onOpen = { selected = listing },
+                                        onSeller = { onOpenProfile(listing.sellerUsername) },
+                                        onContact = { contactSeller(listing.sellerUsername, listing.id) }
+                                    )
                                 }
                             }
                         }
@@ -401,7 +411,14 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 4.dp)) {
                                 items(listings.take(8), key = { "nearby-${it.id}" }) { listing ->
                                     Box(Modifier.width(208.dp)) {
-                                        MarketplaceCard(l = listing, onProfile = { onOpenProfile(listing.sellerUsername) }, onContact = { contactSeller(listing.sellerUsername, listing.id) }, onOpen = { selected = listing })
+                                        MarketplaceReferenceProductCard(
+                                        listing = listing,
+                                        sellerRating = sellerReputations[listing.sellerUsername.removePrefix("@").trim().lowercase()],
+                                        sellerPhotoId = sellerPhotoIds[listing.sellerUsername.removePrefix("@").trim().lowercase()],
+                                        onOpen = { selected = listing },
+                                        onSeller = { onOpenProfile(listing.sellerUsername) },
+                                        onContact = { contactSeller(listing.sellerUsername, listing.id) }
+                                    )
                                     }
                                 }
                             }
@@ -422,7 +439,14 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 4.dp)) {
                             items(listings.take(8), key = { "new-${it.id}" }) { listing ->
                                 Box(Modifier.width(208.dp)) {
-                                    MarketplaceCard(l = listing, onProfile = { onOpenProfile(listing.sellerUsername) }, onContact = { contactSeller(listing.sellerUsername, listing.id) }, onOpen = { selected = listing })
+                                    MarketplaceReferenceProductCard(
+                                        listing = listing,
+                                        sellerRating = sellerReputations[listing.sellerUsername.removePrefix("@").trim().lowercase()],
+                                        sellerPhotoId = sellerPhotoIds[listing.sellerUsername.removePrefix("@").trim().lowercase()],
+                                        onOpen = { selected = listing },
+                                        onSeller = { onOpenProfile(listing.sellerUsername) },
+                                        onContact = { contactSeller(listing.sellerUsername, listing.id) }
+                                    )
                                 }
                             }
                         }
