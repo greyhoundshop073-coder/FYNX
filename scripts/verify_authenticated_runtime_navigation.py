@@ -851,7 +851,7 @@ if not FAILURES:
 
 
 # Marketplace is a required APK surface. Capture the actual screen and hierarchy;
-# accept legitimate empty/network states, but do not silently skip navigation.
+# wait for the backend request to resolve and fail on an endless loading state.
 def verify_marketplace_surface():
     run("adb","shell","am","force-stop",PACKAGE)
     run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
@@ -868,17 +868,46 @@ def verify_marketplace_surface():
     if not marketplace:
         FAILURES.append("Marketplace tab did not open a recognizable Marketplace surface")
         return
+
+    # Navigation title alone is not a successful Marketplace test. Wait for the
+    # real listing request to finish so a stuck spinner cannot produce a false GREEN.
+    deadline=time.monotonic()+75.0
+    latest=marketplace
+    while time.monotonic()<deadline:
+        if 'class="android.widget.ProgressBar"' not in latest:
+            break
+        time.sleep(2.0)
+        latest=dump_ui("authenticated-marketplace-loading.xml")
+        if not latest:
+            FAILURES.append("Marketplace accessibility hierarchy disappeared while loading")
+            return
     screenshot("authenticated-marketplace.png")
     dump_ui("authenticated-marketplace.xml")
-    markers=visible_marker_summary(marketplace)
+    markers=visible_marker_summary(latest)
     report.append("- PASS authenticated Home -> Marketplace navigation; captured authenticated-marketplace.png and authenticated-marketplace.xml")
     report.append("- Marketplace visible UI markers: " + markers)
-    # Search must be present even when the backend has no listings; product content
-    # availability is reported separately from whether the screen itself opened.
-    if not find_control(marketplace, ["Search products", "Search products, sellers or categories"]):
-        report.append("- Marketplace search field not exposed in accessibility tree; listing/search interaction remains unverified")
+    if 'class="android.widget.ProgressBar"' in latest:
+        FAILURES.append("Marketplace remained in an endless loading state for 75 seconds; listing request did not resolve")
+        return
+
+    search=find_control(latest, ["Search products, sellers or categories"])
+    if not search:
+        FAILURES.append("Marketplace search field is not exposed to accessibility/runtime interaction")
+        return
+    report.append("- PASS Marketplace search field is exposed in the real APK accessibility tree")
+
+    # Distinguish a healthy empty marketplace from missing/failed content.
+    content_markers=[
+        "No products yet", "Be the first seller on FYNX", "No matching products",
+        "Recommended for you", "Popular near you", "Electronics", "Fashion"
+    ]
+    found=[label for label in content_markers if find_control(latest,[label])]
+    if found:
+        report.append("- PASS Marketplace finished loading; visible content/state: " + ", ".join(found))
     else:
-        report.append("- PASS Marketplace search field is exposed in the real APK accessibility tree")
+        # Category labels can be outside the captured viewport; the spinner being
+        # gone plus a search field is not enough to certify a populated/empty body.
+        FAILURES.append("Marketplace loading ended but no product cards or explicit empty-state marker were visible")
 
 def find_feature_entry(xml_text:str, labels:list[str]):
     """Find an actual clickable feature card, not the search field or its text."""
