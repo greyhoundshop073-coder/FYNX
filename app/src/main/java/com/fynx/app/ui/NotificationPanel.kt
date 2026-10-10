@@ -20,7 +20,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.launch
 
 @Composable
-fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit, onNotificationRead: (String) -> Unit = {}, onMarkAllRead: () -> Unit = {}, onUnreadCountChanged: (Int) -> Unit = {}, onNotificationOpen: (FynxNotification) -> Unit = {}) {
+fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit, onNotificationRead: (String) -> Unit = {}, onMarkAllRead: () -> Unit = {}, onUnreadCountChanged: (Int) -> Unit = {}, onNotificationOpen: (FynxNotification) -> Unit = {}, preferencesOnly: Boolean = false) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
@@ -30,7 +30,7 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
     var notificationPreferences by remember { mutableStateOf(FynxNotificationPreferencesClient.cached(context)) }
     var remoteUnreadCount by remember { mutableIntStateOf(0) }
     var showOverflow by remember { mutableStateOf(false) }
-    var showPreferences by remember { mutableStateOf(false) }
+    var showPreferences by remember(preferencesOnly) { mutableStateOf(preferencesOnly) }
     var selectedType by remember { mutableStateOf<FynxNotificationType?>(null) }
     var unreadOnly by remember { mutableStateOf(false) }
     var speakNotifications by remember { mutableStateOf(FynxNotificationFoundation.isSpeakNotificationsEnabled(context)) }
@@ -75,23 +75,28 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp).navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("‹ Back") }
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.weight(1f), horizontalAlignment = if (preferencesOnly) Alignment.Start else Alignment.CenterHorizontally) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Notifications", style = MaterialTheme.typography.titleLarge)
-                    val unread = maxOf(remoteUnreadCount, current.count { !it.read })
-                    if (unread > 0) {
-                        Spacer(Modifier.width(8.dp))
-                        Badge { Text(if (unread > 99) "99+" else unread.toString()) }
+                    Text(if (preferencesOnly) "Notification Preferences" else "Notifications", style = MaterialTheme.typography.titleLarge)
+                    if (!preferencesOnly) {
+                        val unread = maxOf(remoteUnreadCount, current.count { !it.read })
+                        if (unread > 0) {
+                            Spacer(Modifier.width(8.dp))
+                            Badge { Text(if (unread > 99) "99+" else unread.toString()) }
+                        }
                     }
                 }
-                Text("Stay up to date with FYNX", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
+                Text(if (preferencesOnly) "Choose which FYNX alerts you receive" else "Stay up to date with FYNX",
+                    style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
             }
-            Box {
-                IconButton(onClick = { showOverflow = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Notification options") }
-                DropdownMenu(expanded = showOverflow, onDismissRequest = { showOverflow = false }) {
-                    DropdownMenuItem(text = { Text("Mark all as read") }, leadingIcon = { Icon(Icons.Default.DoneAll, null) }, enabled = remoteUnreadCount > 0 || current.any { !it.read }, onClick = { showOverflow = false; markAllRead() })
-                    DropdownMenuItem(text = { Text("Notification settings") }, leadingIcon = { Icon(Icons.Default.Settings, null) }, onClick = { showOverflow = false; showPreferences = !showPreferences })
-                    DropdownMenuItem(text = { Text("Refresh notifications") }, leadingIcon = { Icon(Icons.Default.Refresh, null) }, onClick = { showOverflow = false; loadRemoteNotifications() })
+            if (!preferencesOnly) {
+                Box {
+                    IconButton(onClick = { showOverflow = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Notification options") }
+                    DropdownMenu(expanded = showOverflow, onDismissRequest = { showOverflow = false }) {
+                        DropdownMenuItem(text = { Text("Mark all as read") }, leadingIcon = { Icon(Icons.Default.DoneAll, null) }, enabled = remoteUnreadCount > 0 || current.any { !it.read }, onClick = { showOverflow = false; markAllRead() })
+                        DropdownMenuItem(text = { Text("Notification settings") }, leadingIcon = { Icon(Icons.Default.Settings, null) }, onClick = { showOverflow = false; showPreferences = !showPreferences })
+                        DropdownMenuItem(text = { Text("Refresh notifications") }, leadingIcon = { Icon(Icons.Default.Refresh, null) }, onClick = { showOverflow = false; loadRemoteNotifications() })
+                    }
                 }
             }
         }
@@ -106,24 +111,39 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
         if (showPreferences) {
             Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("GENERAL", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp, bottom = 3.dp))
                     NotificationPreferenceSwitch("Notifications", "Master switch for FYNX alerts", notificationPreferences.enabled) { savePreferences(FynxNotificationControlsBatch3.update(notificationPreferences, enabled = it)) }
                     NotificationPreferenceSwitch("Push alerts", "Allow notification banners and sounds", notificationPreferences.pushEnabled) { savePreferences(FynxNotificationControlsBatch3.update(notificationPreferences, pushEnabled = it)) }
                     NotificationPreferenceSwitch("Quiet mode", "Temporarily silence non-safety alerts", notificationPreferences.quietMode) { savePreferences(FynxNotificationControlsBatch3.update(notificationPreferences, quietMode = it)) }
-                    NotificationPreferenceSwitch("Speak notifications", "Read new alerts aloud", speakNotifications) { speakNotifications = it; FynxNotificationFoundation.setSpeakNotificationsEnabled(context, it) }
-                    Text("Notification types", style = MaterialTheme.typography.titleSmall)
-                    NotificationPreferenceSwitch("Messages", "Direct messages", notificationPreferences.messagesEnabled) { savePreferences(notificationPreferences.copy(messagesEnabled = it)) }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 5.dp))
+                    Text("COMMUNICATION", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    NotificationPreferenceSwitch("Chat notifications", "Direct messages", notificationPreferences.messagesEnabled) { savePreferences(notificationPreferences.copy(messagesEnabled = it)) }
                     NotificationPreferenceSwitch("Friends", "Friend requests and new followers", notificationPreferences.friendRequestsEnabled) { savePreferences(notificationPreferences.copy(friendRequestsEnabled = it)) }
-                    NotificationPreferenceSwitch("Stories", "Story activity", notificationPreferences.storiesEnabled) { savePreferences(notificationPreferences.copy(storiesEnabled = it)) }
+                    NotificationPreferenceSwitch("Groups", "Group activity", notificationPreferences.groupEnabled) { savePreferences(notificationPreferences.copy(groupEnabled = it)) }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 5.dp))
+                    Text("SOCIAL ACTIVITY", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     NotificationPreferenceSwitch("Reactions", "Reactions to your posts", notificationPreferences.reactionsEnabled) { savePreferences(notificationPreferences.copy(reactionsEnabled = it)) }
                     NotificationPreferenceSwitch("Comments", "Comments on your posts", notificationPreferences.commentsEnabled) { savePreferences(notificationPreferences.copy(commentsEnabled = it)) }
-                    NotificationPreferenceSwitch("Groups", "Group activity", notificationPreferences.groupEnabled) { savePreferences(notificationPreferences.copy(groupEnabled = it)) }
-                    NotificationPreferenceSwitch("Reminders", "FYNX reminders", notificationPreferences.remindersEnabled) { savePreferences(notificationPreferences.copy(remindersEnabled = it)) }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 5.dp))
+                    Text("STORIES & STATUS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    NotificationPreferenceSwitch("Stories", "Story activity", notificationPreferences.storiesEnabled) { savePreferences(notificationPreferences.copy(storiesEnabled = it)) }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 5.dp))
+                    Text("MARKETPLACE", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     NotificationPreferenceSwitch("Marketplace", "Orders and marketplace activity", notificationPreferences.marketplaceEnabled) { savePreferences(notificationPreferences.copy(marketplaceEnabled = it)) }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 5.dp))
+                    Text("MONEY ALERTS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     NotificationPreferenceSwitch("Money", "Wallet activity", notificationPreferences.walletEnabled) { savePreferences(notificationPreferences.copy(walletEnabled = it)) }
+                    NotificationPreferenceSwitch("Reminders", "FYNX reminders", notificationPreferences.remindersEnabled) { savePreferences(notificationPreferences.copy(remindersEnabled = it)) }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 5.dp))
+                    Text("SOUNDS & VIBRATION", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    NotificationPreferenceSwitch("Speak notifications", "Read new alerts aloud", speakNotifications) { speakNotifications = it; FynxNotificationFoundation.setSpeakNotificationsEnabled(context, it) }
+                    Text("Call ringtone and vibration follow your device's FYNX call notification channel.",
+                        style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
                 }
             }
             Spacer(Modifier.height(8.dp))
         }
+        if (!preferencesOnly) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = !unreadOnly, onClick = { unreadOnly = false }, label = { Text("All") }, shape = FynxDesign.ControlShape)
             FilterChip(selected = unreadOnly, onClick = { unreadOnly = true }, label = { Text("Unread") }, shape = FynxDesign.ControlShape)
@@ -173,6 +193,8 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
                     }
                 }
             }
+        }
+
         }
     }
 }
