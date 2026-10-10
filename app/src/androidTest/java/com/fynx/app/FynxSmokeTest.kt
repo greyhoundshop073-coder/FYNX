@@ -26,9 +26,19 @@ class FynxSmokeTest {
 
         launchIntent!!.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
         device.pressHome()
-        context.startActivity(launchIntent)
-        device.wait(Until.hasObject(By.pkg(context.packageName).depth(0)), 45_000)
-
+        val firstLaunchReachedFynx = run {
+            context.startActivity(launchIntent)
+            device.wait(Until.hasObject(By.pkg(context.packageName).depth(0)), 45_000)
+        }
+        // Emulator startup can occasionally race the launcher transition. Retry once only
+        // when FYNX never becomes visible; still fail if the app does not own the foreground.
+        val reachedFynx = firstLaunchReachedFynx || run {
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            context.startActivity(launchIntent)
+            device.wait(Until.hasObject(By.pkg(context.packageName).depth(0)), 15_000)
+        }
+        assertTrue("FYNX must become visible after launch", reachedFynx)
+        device.waitForIdle(5_000)
         assertEquals(context.packageName, device.currentPackageName)
         assertTrue("FYNX must expose a non-empty application label", context.applicationInfo.loadLabel(context.packageManager).toString().isNotBlank())
     }
