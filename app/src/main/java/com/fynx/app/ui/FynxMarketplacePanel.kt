@@ -59,6 +59,74 @@ import java.time.Instant
 import org.json.JSONObject
 import java.util.Locale
 
+
+@Composable
+private fun MarketplaceSmartDealsHero(
+    listings: List<FynxRemoteSocialClient.MarketplaceListing>,
+    onOpenListing: (FynxRemoteSocialClient.MarketplaceListing) -> Unit,
+    onShopNow: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val currency = listings.groupingBy { it.currency.trim().uppercase(Locale.US) }
+        .eachCount().maxByOrNull { it.value }?.key
+    val deals = remember(listings, currency) {
+        listings.filter { it.active && it.quantity > 0 && it.price >= 0.0 &&
+            (currency == null || it.currency.trim().uppercase(Locale.US) == currency) }
+            .distinctBy { it.id }
+            .sortedBy { it.price }
+    }
+    val rowState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(deals.map { it.id }) {
+        if (deals.size > 3) {
+            while (true) {
+                delay(4500)
+                val next = if (rowState.firstVisibleItemIndex + 3 >= deals.size) 0 else rowState.firstVisibleItemIndex + 1
+                rowState.animateScrollToItem(next)
+            }
+        }
+    }
+    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.primaryContainer, modifier = modifier) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("Great Deals", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Better Prices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Real products from FYNX sellers", style = MaterialTheme.typography.bodySmall)
+                }
+                IconButton(onClick = onShopNow) { Icon(Icons.Default.Storefront, contentDescription = "Browse all products", tint = MaterialTheme.colorScheme.primary) }
+            }
+            if (deals.isEmpty()) {
+                Text("Products will appear here when live seller listings are available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                LazyRow(state = rowState, horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(end = 4.dp)) {
+                    items(deals, key = { "smart-deal-${it.id}" }) { listing ->
+                        Surface(onClick = { onOpenListing(listing) }, shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface, modifier = Modifier.width(116.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(7.dp)) {
+                                if (listing.mediaIds.isNotEmpty()) {
+                                    RemoteMarketMedia(LocalContext.current, listing.mediaIds.first(), Modifier.fillMaxWidth().aspectRatio(0.95f).clip(RoundedCornerShape(10.dp)))
+                                } else {
+                                    Box(Modifier.fillMaxWidth().aspectRatio(0.95f).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) {
+                                        Icon(Icons.Default.ShoppingBag, contentDescription = "Product image unavailable", modifier = Modifier.size(30.dp), tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+                                Text(listing.title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text(listing.currency.uppercase(Locale.US) + " " + String.format(Locale.US, "%,.2f", listing.price), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+            }
+            TextButton(onClick = onShopNow, modifier = Modifier.align(Alignment.End)) {
+                Text("Shop Now")
+                Spacer(Modifier.width(5.dp))
+                Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(3.dp))
+                Icon(Icons.Default.Add, contentDescription = "Browse Marketplace", modifier = Modifier.size(16.dp))
+            }
+        }
+    }
+}
+
 @Composable
 fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, initialListingId: String? = null) {
     val context = LocalContext.current
@@ -80,6 +148,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var cartQuantities by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var multiCheckoutItems by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>?>(null) }
     var multiPayment by remember { mutableStateOf<Triple<String, Double, String>?>(null) }
+    var multiPaymentListingIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showCart by remember { mutableStateOf(false) }
     var priceWatchListingId by remember { mutableStateOf<String?>(null) }
     var priceWatchBusy by remember { mutableStateOf(false) }
@@ -244,28 +313,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             }
                         }
                     }
-                    item(key = "marketplace-hero") {
-                        Surface(
-                            onClick = { showAllProducts = true },
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text("Great Deals", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                                    Text("Better Prices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                                    Text("Discover products posted by real FYNX sellers.", style = MaterialTheme.typography.bodySmall)
-                                    Text("Shop Now  →", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                                }
-                                Icon(Icons.Default.ShoppingBag, contentDescription = null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                    }
                     item(key = "marketplace-recommended-title") {
                         MarketplaceReferenceSectionTitle("Recommended for you", action = "Try again", onAction = { reload() })
                     }
@@ -353,27 +400,12 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     item(key = "marketplace-hero") {
-                        Surface(
-                            onClick = { showAllProducts = true },
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
+                        MarketplaceSmartDealsHero(
+                            listings = listings,
+                            onOpenListing = { selected = it },
+                            onShopNow = { showAllProducts = true },
                             modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text("Great Deals", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                                    Text("Better Prices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                                    Text("Discover products posted by real FYNX sellers.", style = MaterialTheme.typography.bodySmall)
-                                    Spacer(Modifier.height(2.dp))
-                                    Text("Shop Now  →", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                                }
-                                Icon(Icons.Default.ShoppingBag, contentDescription = null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.primary)
-                            }
-                        }
+                        )
                     }
                     if (visibleSellerListings.isNotEmpty()) {
                         item(key = "marketplace-top-sellers-title") {
@@ -508,8 +540,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     paymentOrder?.let { order -> MarketplacePaymentDialog(context = context, order = order, onPaid = { paymentOrder = null; protectedOrder = order; reload() }, onClose = { paymentOrder = null }) }
     protectedOrder?.let { order -> MarketplaceProtectedOrderDialog(order = order, onViewOrder = { protectedOrder = null; showOrders = true }, onContinue = { protectedOrder = null }) }
     if (showCart) MarketplaceCartDialog(items = cart, quantities = cartQuantities, onQuantityChange = { id, value -> cartQuantities = cartQuantities + (id to value) }, onRemove = { item -> cart = cart.filterNot { it.id == item.id }; cartQuantities = cartQuantities - item.id }, onCheckout = { selectedItems -> showCart = false; multiCheckoutItems = selectedItems }, onClose = { showCart = false })
-    multiCheckoutItems?.let { selectedItems -> FynxMarketplaceMultiCheckoutDialog(context, selectedItems, cartQuantities, onPaymentReady = { id, total, currency -> multiCheckoutItems = null; multiPayment = Triple(id, total, currency) }, onClose = { multiCheckoutItems = null }) }
-    multiPayment?.let { p -> MarketplaceMultiProductPaymentDialog(context, p.first, p.second, p.third, onPaid = { multiPayment = null; reload() }, onClose = { multiPayment = null }) }
+    multiCheckoutItems?.let { selectedItems -> FynxMarketplaceMultiCheckoutDialog(context, selectedItems, cartQuantities, onPaymentReady = { id, total, currency -> multiPaymentListingIds = selectedItems.map { it.id }.toSet(); multiCheckoutItems = null; multiPayment = Triple(id, total, currency) }, onClose = { multiCheckoutItems = null }) }
+    multiPayment?.let { p -> MarketplaceMultiProductPaymentDialog(context, p.first, p.second, p.third, onPaid = { val paidIds = multiPaymentListingIds; cart = cart.filterNot { it.id in paidIds }; cartQuantities = cartQuantities.filterKeys { it !in paidIds }; multiPaymentListingIds = emptySet(); multiPayment = null; reload() }, onClose = { multiPaymentListingIds = emptySet(); multiPayment = null }) }
     if (showOrders) MarketplaceOrders(context, orders, onRefresh = { reload() }, onClose = { showOrders = false })
 }
 
