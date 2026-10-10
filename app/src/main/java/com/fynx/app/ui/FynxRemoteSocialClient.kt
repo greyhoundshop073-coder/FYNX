@@ -112,6 +112,16 @@ object FynxRemoteSocialClient {
         return FynxBackendClient.postJson(context, "/api/social/posts", JSONObject().apply { put("text", text.take(4000)); put("visibility", "PUBLIC"); put("mediaId", mediaId ?: JSONObject.NULL); put("mediaType", if (mediaId != null) "image" else JSONObject.NULL) }.toString()).map { Unit }
     }
     suspend fun listings(context: Context, query: String = "", category: String = "All", seller: String = ""): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/listings?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&seller=${URLEncoder.encode(seller.removePrefix("@"), "UTF-8")}").mapCatching(::parseListings)
+    data class MarketplaceListingPage(val listings: List<MarketplaceListing>, val hasMore: Boolean)
+    suspend fun marketplaceDiscoveryPage(context: Context, query: String = "", category: String = "All", limit: Int = 24, offset: Int = 0, location: String = ""): Result<MarketplaceListingPage> {
+        val safeLimit = limit.coerceIn(1, 60)
+        val safeOffset = offset.coerceAtLeast(0)
+        val path = "/api/marketplace/discovery?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&limit=$safeLimit&offset=$safeOffset&location=${URLEncoder.encode(location.trim(), "UTF-8")}"
+        return FynxBackendClient.get(context, path).mapCatching { raw ->
+            val root = JSONObject(raw)
+            MarketplaceListingPage(parseListings(raw), root.optBoolean("hasMore", false))
+        }
+    }
     suspend fun marketplacePriceWatchState(context: Context, listingId: String): Result<Boolean> {
         val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
         return FynxBackendClient.get(context, "/api/marketplace/listings/$numericId/price-watch").mapCatching { JSONObject(it).optBoolean("watched") }
