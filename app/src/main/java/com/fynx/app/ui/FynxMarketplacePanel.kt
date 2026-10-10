@@ -34,6 +34,11 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Star
@@ -60,11 +65,60 @@ import org.json.JSONObject
 import java.util.Locale
 
 
+
+@Composable
+private fun MarketplaceExploreCategoryTiles(
+    categories: List<String>,
+    selectedCategory: String,
+    onSelect: (String) -> Unit
+) {
+    val accents = listOf(Color(0xFF60A5FA), Color(0xFFF472B6), Color(0xFFFB923C), Color(0xFF34D399), Color(0xFFC084FC), Color(0xFFFBBF24), Color(0xFF38BDF8))
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        categories.forEachIndexed { index, itemCategory ->
+            val accent = accents[index % accents.size]
+            val icon = when (itemCategory.lowercase(Locale.US)) {
+                "electronics" -> Icons.Default.Devices
+                "fashion" -> Icons.Default.ShoppingBag
+                "home" -> Icons.Default.Home
+                "beauty" -> Icons.Default.Face
+                "vehicles" -> Icons.Default.DirectionsCar
+                "services" -> Icons.Default.Build
+                else -> Icons.Default.Storefront
+            }
+            Surface(
+                onClick = { onSelect(itemCategory) },
+                shape = RoundedCornerShape(16.dp),
+                color = if (selectedCategory == itemCategory) accent.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                modifier = Modifier.width(94.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 7.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(accent.copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(23.dp))
+                    }
+                    Text(itemCategory, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun MarketplaceSmartDealsHero(
     listings: List<FynxRemoteSocialClient.MarketplaceListing>,
     onOpenListing: (FynxRemoteSocialClient.MarketplaceListing) -> Unit,
     onShopNow: () -> Unit,
+    onOrders: () -> Unit,
+    onRefresh: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val currency = listings.groupingBy { it.currency.trim().uppercase(Locale.US) }
@@ -93,6 +147,8 @@ private fun MarketplaceSmartDealsHero(
                     Text("Better Prices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text("Real products from FYNX sellers", style = MaterialTheme.typography.bodySmall)
                 }
+                IconButton(onClick = onOrders) { Icon(Icons.Default.ReceiptLong, contentDescription = "Orders", tint = MaterialTheme.colorScheme.primary) }
+                IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, contentDescription = "Refresh listings", tint = MaterialTheme.colorScheme.primary) }
                 IconButton(onClick = onShopNow) { Icon(Icons.Default.Storefront, contentDescription = "Browse all products", tint = MaterialTheme.colorScheme.primary) }
             }
             if (deals.isEmpty()) {
@@ -265,14 +321,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Marketplace", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text(if (nearbyMode && nearbyLabel.isNotBlank()) "Showing products near $nearbyLabel" else "Discover products from FYNX sellers", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                IconButton(onClick = { showOrders = true }) { Icon(Icons.Default.ReceiptLong, "Orders") }
-                IconButton(onClick = { reload() }) { Icon(Icons.Default.Refresh, "Refresh") }
-            }
             MarketplaceReferenceSearchBar(
                 value = query,
                 onValueChange = { query = it.take(80) },
@@ -304,6 +352,16 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
+                    item(key = "marketplace-offline-hero") {
+                        MarketplaceSmartDealsHero(
+                            listings = listings,
+                            onOpenListing = { selected = it },
+                            onShopNow = { showAllProducts = true },
+                            onOrders = { showOrders = true },
+                            onRefresh = { reload() },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                     item(key = "marketplace-offline-status") {
                         Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
                             Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -321,10 +379,9 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     }
                     item(key = "marketplace-explore-title") { MarketplaceReferenceSectionTitle("Explore categories") }
                     item(key = "marketplace-explore-categories") {
-                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            categories.filter { it != "All" }.forEach { itemCategory ->
-                                FilterChip(selected = category == itemCategory, onClick = { category = itemCategory; showAllProducts = true }, label = { Text(itemCategory) })
-                            }
+                        MarketplaceExploreCategoryTiles(categories.filter { it != "All" }, category) { itemCategory ->
+                            category = itemCategory
+                            showAllProducts = true
                         }
                     }
                     item(key = "marketplace-new-title") { MarketplaceReferenceSectionTitle("More to explore") }
@@ -404,6 +461,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             listings = listings,
                             onOpenListing = { selected = it },
                             onShopNow = { showAllProducts = true },
+                            onOrders = { showOrders = true },
+                            onRefresh = { reload() },
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -464,10 +523,9 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     }
                     item(key = "marketplace-explore-title") { MarketplaceReferenceSectionTitle("Explore categories") }
                     item(key = "marketplace-explore-categories") {
-                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            categories.filter { it != "All" }.forEach { itemCategory ->
-                                FilterChip(selected = category == itemCategory, onClick = { category = itemCategory; showAllProducts = true }, label = { Text(itemCategory) })
-                            }
+                        MarketplaceExploreCategoryTiles(categories.filter { it != "All" }, category) { itemCategory ->
+                            category = itemCategory
+                            showAllProducts = true
                         }
                     }
                     item(key = "marketplace-new-title") {
