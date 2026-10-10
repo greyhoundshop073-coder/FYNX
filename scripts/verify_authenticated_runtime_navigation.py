@@ -583,7 +583,7 @@ def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[st
     return tap_control(xml,labels,name,expected_labels)
 
 report=["# FYNX Authenticated Runtime Visual Certification","",
-        f"- Commit: {os.environ.get('GITHUB_SHA','local')}",
+        f"- Commit: {os.environ.get('FYNX_SOURCE_SHA', os.environ.get('GITHUB_SHA','local'))}",
         f"- Run: {os.environ.get('GITHUB_RUN_ID','local')}","",
         "This journey first attempts a real FYNX account supplied through GitHub Actions secrets.",
         "No fabricated users, posts, messages, listings or application records are created.",
