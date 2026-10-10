@@ -27,7 +27,7 @@ server=read('backend/server.js'); management=read('backend/statusManagementRoute
 client=read('app/src/main/java/com/fynx/app/ui/FynxStatusClient.kt'); foundation=read('app/src/main/java/com/fynx/app/ui/FynxStatusFoundation.kt')
 composer=read('app/src/main/java/com/fynx/app/ui/FynxStatusComposerPanel.kt'); mature=read('app/src/main/java/com/fynx/app/ui/FynxMatureStatusComposerPanel.kt')
 timeline=read('app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt'); hub=read('app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt'); stories=read('app/src/main/java/com/fynx/app/ui/StoriesPanel.kt')
-share=read('app/src/main/java/com/fynx/app/ui/FynxShare.kt'); deeplink=read('app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt'); marketplace=read('app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt')
+share=read('app/src/main/java/com/fynx/app/ui/FynxShare.kt'); deeplink=read('app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt'); marketplace=read('app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt'); marketplace_detail=read('app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceDetailComponents.kt')
 remote_media=read('app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt'); camera=read('app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt')
 media_privacy=read('backend/mediaPrivacy.js')
 
@@ -155,7 +155,7 @@ require('Marketplace share preserves real listing id','marketplaceWebLink(listin
 require('Marketplace web link uses FYNX host','private const val FYNX_HOST = "fynx.app"' in deeplink and 'MARKETPLACE_PATH = "/marketplace"' in deeplink)
 require('external sharing uses Android share chooser','Intent.ACTION_SEND' in share and 'Intent.createChooser(sendIntent' in share)
 require('Marketplace link parses back to Marketplace','"marketplace"->if(normalizedPath.size<=2)FynxDeepLinkDestination.Marketplace(value)' in deeplink)
-require('Marketplace UI share action','FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title))' in marketplace and 'Share Marketplace listing' in marketplace)
+require('Marketplace UI share action is wired from live product details','FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title))' in marketplace and 'MarketplaceReferenceProductSummary(' in marketplace and 'onShare = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title)) }' in marketplace and 'IconButton(onClick = onShare)' in marketplace_detail and 'Icon(Icons.Default.Share, "Share"' in marketplace_detail)
 
 failed=[label for label,ok in checks if not ok]
 for label,ok in checks: print(('GREEN' if ok else 'RED')+' - '+label)
