@@ -223,6 +223,14 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             if (loading && listings.isNotEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
             when {
                 loading && listings.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+                listings.isEmpty() && error != null -> Box(Modifier.fillMaxSize().padding(24.dp), Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(Icons.Default.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(52.dp))
+                        Text("Marketplace is temporarily unavailable", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("We couldn't confirm the current listings. Your Marketplace isn't empty just because the connection failed.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = { reload() }) { Text("Try again") }
+                    }
+                }
                 listings.isEmpty() -> Box(Modifier.fillMaxSize().padding(24.dp), Alignment.Center) {
                     val filtered = query.isNotBlank() || category != "All" || nearbyMode
                     if (filtered) {
