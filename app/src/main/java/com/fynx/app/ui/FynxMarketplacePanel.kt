@@ -239,7 +239,12 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 nearbyLoading = nearbyLoading,
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
             )
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) }
+            if (error != null && listings.isNotEmpty()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(error.orEmpty(), modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    TextButton(onClick = { reload() }) { Text("Retry") }
+                }
+            }
             if (loading && listings.isNotEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
             when {
                 loading && listings.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
@@ -249,11 +254,11 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     item(key = "marketplace-offline-status") {
-                        Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("Marketplace listings are offline", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
-                                Text("The layout is ready, but live products cannot be confirmed while the service is unavailable. No sample products are being shown.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
-                                TextButton(onClick = { reload() }) { Text("Try again") }
+                        Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
+                            Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onErrorContainer)
+                                Text("Live listings could not load. Your Marketplace is ready to retry; no sample products are shown.", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                                TextButton(onClick = { reload() }, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)) { Text("Retry") }
                             }
                         }
                     }
