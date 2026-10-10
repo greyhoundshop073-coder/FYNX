@@ -301,7 +301,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     }
                     item(key = "marketplace-new-title") { MarketplaceReferenceSectionTitle("New on FYNX") }
                     item(key = "marketplace-no-new-listings") {
-                        Text("New listings will appear when sellers publish products.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("More products will appear here as additional real listings become available.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     item(key = "marketplace-offline-sell") {
                         OutlinedButton(onClick = { showSell = true }, modifier = Modifier.fillMaxWidth()) { Text("Sell something") }
@@ -431,7 +431,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         }
                     }
                     if (nearbyMode && listings.isNotEmpty()) {
-                        item(key = "marketplace-nearby-title") { MarketplaceReferenceSectionTitle("Popular near you", action = "See all", onAction = { showAllProducts = true }) }
+                        item(key = "marketplace-nearby-title") { MarketplaceReferenceSectionTitle("Listings near you", action = "See all", onAction = { showAllProducts = true }) }
                         item(key = "marketplace-nearby-listings") {
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 4.dp)) {
                                 items(listings.take(8), key = { "nearby-${it.id}" }) { listing ->
@@ -458,11 +458,11 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         }
                     }
                     item(key = "marketplace-new-title") {
-                        MarketplaceReferenceSectionTitle("New on FYNX", action = "See all", onAction = { showAllProducts = true })
+                        MarketplaceReferenceSectionTitle("More to explore", action = "See all", onAction = { showAllProducts = true })
                     }
                     item(key = "marketplace-new-listings") {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 4.dp)) {
-                            items(listings.take(8), key = { "new-${it.id}" }) { listing ->
+                            items(listings.drop(8).take(8), key = { "more-${it.id}" }) { listing ->
                                 Box(Modifier.width(208.dp)) {
                                     MarketplaceReferenceProductCard(
                                         listing = listing,
