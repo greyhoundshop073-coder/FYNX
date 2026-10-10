@@ -342,6 +342,7 @@ fun SettingsPanel(
     var appearance by remember { mutableStateOf(FynxPreferencesStore.loadAppearance(context)) }
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
     var showAppearance by remember { mutableStateOf(false) }
+    var showAppearancePage by remember { mutableStateOf(false) }
     var showColors by remember { mutableStateOf(false) }
     var showChatPersonalization by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
@@ -352,6 +353,26 @@ fun SettingsPanel(
     val query = search.trim().lowercase()
     if (showLanguage) {
         LanguageSelectionPanel(onBack = { showLanguage = false })
+        return
+    }
+    if (showAppearancePage) {
+        AppearanceSettingsPanel(
+            appearance = appearance,
+            accentName = accent.name,
+            onBack = { showAppearancePage = false },
+            onThemeSelected = {
+                appearance = it
+                FynxPreferencesStore.saveAppearance(context, it)
+                onAppearanceChanged(it)
+            },
+            onAccentClick = { showColors = true }
+        )
+        if (showColors) AccentDialog(accent, {
+            accent = it
+            FynxPreferencesStore.saveAccent(context, it)
+            onAccentChanged(it)
+            showColors = false
+        }, { showColors = false })
         return
     }
     fun visible(title: String, description: String): Boolean =
@@ -451,13 +472,7 @@ fun SettingsPanel(
                 item {
                     SettingsReferenceRow(Icons.Default.Palette, "Appearance",
                         "Theme, accent color and app appearance", androidx.compose.ui.graphics.Color(0xFF9B6BFF)) {
-                        showAppearance = true
-                    }
-                }
-                item {
-                    SettingsReferenceRow(Icons.Default.Palette, "Accent Color",
-                        accent.name, androidx.compose.ui.graphics.Color(0xFF5677E8)) {
-                        showColors = true
+                        showAppearancePage = true
                     }
                 }
             }
@@ -580,6 +595,85 @@ private fun SettingsReferenceRow(
             }
             Icon(Icons.Default.ChevronRight, contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(21.dp))
+        }
+    }
+}
+
+@Composable
+private fun AppearanceSettingsPanel(
+    appearance: String,
+    accentName: String,
+    onBack: () -> Unit,
+    onThemeSelected: (String) -> Unit,
+    onAccentClick: () -> Unit
+) {
+    val themes = listOf(
+        "System" to "System Default",
+        "Light" to "Light",
+        "Dark" to "Dark",
+        "Black AMOLED" to "AMOLED",
+        "Charcoal Black" to "Charcoal Black"
+    )
+    Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 16.dp)) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back to settings") }
+            Column(Modifier.weight(1f)) {
+                Text("Appearance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Make FYNX feel like yours", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+            item { SettingsSectionTitle("THEME") }
+            items(themes) { (value, label) ->
+                Card(
+                    onClick = { onThemeSelected(value) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .4f))
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(label, style = MaterialTheme.typography.titleMedium)
+                            if (value == "Black AMOLED") Text("Pure black surfaces", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (value == "Charcoal Black") Text("Soft dark contrast", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        RadioButton(selected = appearance == value, onClick = { onThemeSelected(value) })
+                    }
+                }
+            }
+            item { SettingsSectionTitle("ACCENT COLOR") }
+            item {
+                SettingsReferenceRow(Icons.Default.Palette, "Accent Color", accentName,
+                    androidx.compose.ui.graphics.Color(0xFF5677E8), onAccentClick)
+            }
+            item { SettingsSectionTitle("APP APPEARANCE") }
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .4f))
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column {
+                            Text("Font Size", style = MaterialTheme.typography.titleMedium)
+                            Text("Default", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        HorizontalDivider()
+                        Column {
+                            Text("Message Style", style = MaterialTheme.typography.titleMedium)
+                            Text("FYNX Default", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
         }
     }
 }
