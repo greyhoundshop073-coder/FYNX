@@ -56,13 +56,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
+      FYNX_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
       BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
       FYNX_E2E_USERNAME: ${{ secrets.FYNX_E2E_USERNAME }}
       FYNX_E2E_PASSWORD: ${{ secrets.FYNX_E2E_PASSWORD }}
     steps:
-      - name: Checkout
+      - name: Checkout exact source commit for APK/runtime certification
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
@@ -94,12 +97,12 @@ jobs:
           gcloud config get-value project
       - name: Verify FYNX network transport architecture
         run: |
-          echo "Running FYNX network certification on ${GITHUB_SHA}"
+          echo "Running FYNX network certification on ${FYNX_SOURCE_SHA}"
           python3 scripts/verify_network_transport_architecture.py
       - name: Verify live production backend reachability
         # This optional remote-service probe is intentionally skipped for focused Home runtime certification,
         # where its multi-minute retries delay the Android UI test without changing the job result.
-        if: ${{ !((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]'))) }}
+        if: ${{ !((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[home-cert]') || contains(github.event.head_commit.message, '[apk-preview]')))) }}
         continue-on-error: true
         run: node scripts/verify_production_backend_reachability.mjs
       - name: Verify consolidated FCM notification phase
@@ -182,6 +185,8 @@ jobs:
         run: python3 scripts/verify_home_cache_lifecycle.py
       - name: Verify Home feed correctness and pagination
         run: python3 scripts/verify_home_feed_correctness.py
+      - name: Verify Home request efficiency
+        run: python3 scripts/verify_home_request_efficiency.py
       - name: Verify Home interaction integrity
         run: python3 scripts/verify_home_interactions.py
       - name: Verify FYNX social recovery regression gate
@@ -245,19 +250,21 @@ jobs:
           python3 scripts/verify_social_feed_production.py
           echo "HOME_H12_SOURCE_GATE=GREEN"
       - name: Fast build, test and lint
+        id: fast_build
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
       - name: Full build, test and lint
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]')) }}
+        id: full_build
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[home-cert]') || startsWith(github.ref, 'refs/heads/build/fynx-one-apk-integrated-'))) || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'build/fynx-one-apk-integrated-')) }}
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
       - name: Enable KVM permissions for Android emulator
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]')) }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[home-cert]') || startsWith(github.ref, 'refs/heads/build/fynx-one-apk-integrated-'))) || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'build/fynx-one-apk-integrated-')) }}
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           if [ -e /dev/kvm ]; then ls -l /dev/kvm; else echo 'ERROR: /dev/kvm is unavailable on this runner'; exit 1; fi
       - name: Run Android instrumentation tests and capture the real FYNX UI
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]')) }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[home-cert]') || startsWith(github.ref, 'refs/heads/build/fynx-one-apk-integrated-'))) || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'build/fynx-one-apk-integrated-')) }}
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 35
@@ -266,24 +273,27 @@ jobs:
           profile: pixel_7_pro # [home-cert]
           script: ./gradlew connectedDebugAndroidTest --no-daemon --build-cache && python3 scripts/verify_authenticated_runtime_navigation.py
       - name: Upload FYNX runtime screenshots and UI hierarchies
-        if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]'))) }}
+        if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]')) || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'build/fynx-one-apk-integrated-'))) }}
         uses: actions/upload-artifact@v4
         with:
-          name: FYNX-runtime-visual-check-${{ github.sha }}
+          name: FYNX-runtime-visual-check-${{ github.event.pull_request.head.sha || github.sha }}
           path: fynx-runtime-screenshots/
           if-no-files-found: warn
           retention-days: 14
       - name: Verify APK is built from the exact checked-out commit
+        if: ${{ always() && steps.fast_build.outcome == 'success' }}
         run: |
           test -s app/build/outputs/apk/debug/app-debug.apk
-          echo "APK source commit: ${GITHUB_SHA}"
+          echo "APK source commit: ${FYNX_SOURCE_SHA}"
           sha256sum app/build/outputs/apk/debug/app-debug.apk
       - name: Prepare exact-commit debug APK filename
-        run: cp app/build/outputs/apk/debug/app-debug.apk "FYNX-debug-${GITHUB_SHA}.apk"
+        if: ${{ always() && steps.fast_build.outcome == 'success' }}
+        run: cp app/build/outputs/apk/debug/app-debug.apk "FYNX-debug-${FYNX_SOURCE_SHA}.apk"
       - name: Upload exact-commit debug APK
+        if: ${{ always() && steps.fast_build.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: FYNX-debug-apk-${{ github.sha }}
-          path: FYNX-debug-${{ github.sha }}.apk
+          name: FYNX-debug-apk-${{ github.event.pull_request.head.sha || github.sha }}
+          path: FYNX-debug-${{ github.event.pull_request.head.sha || github.sha }}.apk
           if-no-files-found: error
           retention-days: 14

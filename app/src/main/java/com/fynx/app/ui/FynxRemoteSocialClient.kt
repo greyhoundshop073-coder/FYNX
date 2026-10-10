@@ -112,6 +112,16 @@ object FynxRemoteSocialClient {
         return FynxBackendClient.postJson(context, "/api/social/posts", JSONObject().apply { put("text", text.take(4000)); put("visibility", "PUBLIC"); put("mediaId", mediaId ?: JSONObject.NULL); put("mediaType", if (mediaId != null) "image" else JSONObject.NULL) }.toString()).map { Unit }
     }
     suspend fun listings(context: Context, query: String = "", category: String = "All", seller: String = ""): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/listings?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&seller=${URLEncoder.encode(seller.removePrefix("@"), "UTF-8")}").mapCatching(::parseListings)
+    data class MarketplaceListingPage(val listings: List<MarketplaceListing>, val hasMore: Boolean)
+    suspend fun marketplaceDiscoveryPage(context: Context, query: String = "", category: String = "All", limit: Int = 24, offset: Int = 0, location: String = ""): Result<MarketplaceListingPage> {
+        val safeLimit = limit.coerceIn(1, 60)
+        val safeOffset = offset.coerceAtLeast(0)
+        val path = "/api/marketplace/discovery?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&limit=$safeLimit&offset=$safeOffset&location=${URLEncoder.encode(location.trim(), "UTF-8")}"
+        return FynxBackendClient.get(context, path).mapCatching { raw ->
+            val root = JSONObject(raw)
+            MarketplaceListingPage(parseListings(raw), root.optBoolean("hasMore", false))
+        }
+    }
     suspend fun marketplacePriceWatchState(context: Context, listingId: String): Result<Boolean> {
         val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
         return FynxBackendClient.get(context, "/api/marketplace/listings/$numericId/price-watch").mapCatching { JSONObject(it).optBoolean("watched") }
@@ -127,7 +137,7 @@ object FynxRemoteSocialClient {
     suspend fun nearbyMarketplaceListings(context: Context, query: String = "", category: String = "All", location: String): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/discovery?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&limit=60&location=${URLEncoder.encode(location.trim(), "UTF-8")}").mapCatching(::parseListings)
     suspend fun myListings(context: Context): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/my-listings").mapCatching(::parseListings)
     suspend fun createMarketplaceListing(context: Context, title: String, description: String, storeName: String, price: Double, currency: String, category: String, condition: String, quantity: Int, location: String, deliveryAvailable: Boolean, pickupAvailable: Boolean, deliveryFee: Double?, mediaUris: List<Uri>): Result<MarketplaceListing?> = runCatching {
-        require(title.trim().length >= 2) { "Product name is required." }; require(description.trim().length >= 5) { "Add a product description." }; require(price.isFinite() && price > 0) { "Enter a valid product price." }; require(quantity > 0) { "Product quantity must be at least 1." }; require(mediaUris.isNotEmpty()) { "Add at least one product photo or video." }
+        require(title.trim().length >= 2) { "Product name is required." }; require(description.trim().length >= 5) { "Add a product description." }; require(price.isFinite() && price > 0) { "Enter a valid product price." }; require(FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency)) { "Marketplace currently supports NGN and USD." }; require(quantity > 0) { "Product quantity must be at least 1." }; require(mediaUris.isNotEmpty()) { "Add at least one product photo or video." }
         val mediaIds = mediaUris.distinct().take(12).map { u -> val mime = mediaMimeType(context, u); require(mime.startsWith("image/") || mime.startsWith("video/")) { "Marketplace media must be an image or video." }; FynxProductionMessaging.uploadMedia(context, u, mime).getOrThrow().id }
         val raw = FynxBackendClient.postJson(context, "/api/marketplace/listings", JSONObject().apply { put("title", title.trim()); put("description", description.trim()); put("storeName", storeName.trim()); put("price", price); put("currency", currency.trim().uppercase()); put("category", category.trim()); put("condition", condition.trim().uppercase()); put("quantity", quantity); put("location", location.trim()); put("deliveryAvailable", deliveryAvailable); put("pickupAvailable", pickupAvailable); put("deliveryFee", deliveryFee ?: JSONObject.NULL); put("mediaIds", JSONArray(mediaIds)) }.toString()).getOrThrow()
         val id = JSONObject(raw).getJSONObject("listing").optString("id")
@@ -194,11 +204,17 @@ object FynxRemoteSocialClient {
         val safe = text.trim().takeIf { it.isNotBlank() && it.length <= 1000 } ?: return Result.failure(IllegalArgumentException("Reply must be 1-1000 characters."))
         return FynxBackendClient.postJson(context, "/api/social/posts/$post/comments/$parent/replies", JSONObject().put("text", safe).toString()).mapCatching { parseRemoteComment(JSONObject(it).getJSONObject("comment")) }
     }
-    suspend fun replies(context: Context, postId: String, parentCommentId: String, limit: Int = 50): Result<List<RemoteComment>> {
+    suspend fun replies(context: Context, postId: String, parentCommentId: String, before: String? = null, limit: Int = 50): Result<CommentPage> {
         val post = postId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
         val parent = parentCommentId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid parent comment id"))
         val safe = limit.coerceIn(1, 100)
-        return FynxBackendClient.get(context, "/api/social/posts/$post/comments/$parent/replies?limit=$safe").mapCatching { raw -> val a = JSONObject(raw).optJSONArray("comments") ?: JSONArray(); buildList { for (i in 0 until a.length()) add(parseRemoteComment(a.getJSONObject(i))) } }
+        val query = "?limit=$safe" + (if (before.isNullOrBlank()) "" else "&before=${URLEncoder.encode(before, "UTF-8")}")
+        return FynxBackendClient.get(context, "/api/social/posts/$post/comments/$parent/replies$query").mapCatching { raw ->
+            val root = JSONObject(raw)
+            val array = root.optJSONArray("comments") ?: JSONArray()
+            val page = buildList { for (index in 0 until array.length()) add(parseRemoteComment(array.getJSONObject(index))) }
+            CommentPage(page, root.optString("nextCursor").takeIf { it.isNotBlank() && it != "null" })
+        }
     }
     private fun parseRemoteComment(o: JSONObject) = RemoteComment(o.optString("id"), o.optString("text"), o.optDouble("timestamp").toLong(), o.optString("authorId"), o.optString("authorUsername"), o.optString("authorDisplayName"), o.optString("parentCommentId").takeIf { it.isNotBlank() && it != "null" })
     suspend fun likes(context: Context, id: String): Result<List<RemoteUser>> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); return FynxBackendClient.get(context, "/api/social/posts/$numericId/likes").mapCatching { raw -> val a = JSONObject(raw).optJSONArray("users") ?: JSONArray(); buildList { for (i in 0 until a.length()) { val o = a.getJSONObject(i); add(RemoteUser(o.optString("id"), o.optString("username"), o.optString("displayName"))) } } } }

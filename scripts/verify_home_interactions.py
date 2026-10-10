@@ -30,6 +30,7 @@ client = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
 saved_panel = read("app/src/main/java/com/fynx/app/ui/FynxSavedPostsPanel.kt")
 privacy_bootstrap = read("backend/homeCommentsPrivacyBootstrap.js")
 realtime_bootstrap = read("backend/realtimeIsolationBootstrap.js")
+push = read("backend/notificationPush.js")
 backend_package = read("backend/package.json")
 
 for route in ('app.post("/api/social/posts/:id/save"','app.delete("/api/social/posts/:id/save"','app.get("/api/social/saved"','app.post("/api/social/posts/:id/repost"','app.delete("/api/social/posts/:id/repost"','app.get("/api/social/posts/:id/interaction-state"'):
@@ -166,3 +167,25 @@ if 'TextToSpeech' in ai_panel or 'android.speech.tts' in ai_panel:
     raise SystemExit("HOME INTERACTIONS RED: Google Android TTS must not be reintroduced into FYNX AI")
 
 print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions including Save/Saved Posts continuity, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, clean-startup privacy boundaries, FYNX AI single-scroll/typing/security integration, and direct Create status -> existing composer wiring are present without duplicate vertical feed surfaces or client API secrets.")
+
+# Home public conversation foundation: guard the existing comment privacy predicates.
+require(realtime_bootstrap, "OR (b.blocker_id=c.author_id AND b.blocked_id=$2))` + cursorClause + `", "comment page closes the block predicate before applying its cursor")
+require(realtime_bootstrap, "OR (b.blocker_id=c.author_id AND b.blocked_id=$3))`", "reply parent lookup closes the block predicate")
+
+
+# Home comment mentions: verify UI routing and notification integration.
+require(push, "notifyCommentMentions", "comment mention backend notification helper")
+require(realtime_bootstrap, "notifyCommentMentions", "reply mention backend notification helper")
+require(comments_panel, "ClickableText", "comment mentions are tappable in Home")
+require(comments_panel, "onOpenAuthorProfile", "comment mention profile navigation")
+
+# Home conversation pagination, anti-spam and normal-feed composer.
+
+require(social_routes, "COMMENT_RATE_LIMIT", "comment anti-spam rate limit")
+require(realtime_bootstrap, "COMMENT_WRITE_RATE_LIMIT", "reply anti-spam rate limit")
+require(realtime_bootstrap, "nextCursor", "paginated reply response")
+require(client, "suspend fun replies(context: Context, postId: String, parentCommentId: String, before: String? = null", "paginated reply client API")
+require(comments_panel, "replyNextCursors", "reply pagination state")
+require(comments_panel, "Load more replies", "reply pagination UI")
+require_normalized(home, "Text(\"What's on your mind?\",", "Home keeps a persistent create-post entry above the feed")
+require(home, 'contentDescription = "Create post"', "Home create-post action remains accessible")

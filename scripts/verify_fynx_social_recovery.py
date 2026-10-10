@@ -43,7 +43,7 @@ check("header text matches the required three states", '"Waiting for network..."
 check("main push has the full static/unit/lint Android build", 'on:\n  push:' in workflow and './gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon' in workflow)
 # The workflow intentionally uses a commit-named file and commit-named artifact.
 # Keep this gate aligned with the live android-build.yml contract.
-check("main push publishes an exact-commit APK artifact", 'name: FYNX-debug-apk-${{ github.sha }}' in workflow and 'path: FYNX-debug-${{ github.sha }}.apk' in workflow and 'GITHUB_SHA' in workflow and 'if-no-files-found: error' in workflow and 'uses: actions/upload-artifact@v4' in workflow)
+check("main push publishes an exact-commit APK artifact", 'name: FYNX-debug-apk-${{ github.event.pull_request.head.sha || github.sha }}' in workflow and 'path: FYNX-debug-${{ github.event.pull_request.head.sha || github.sha }}.apk' in workflow and 'FYNX_SOURCE_SHA' in workflow and 'if-no-files-found: error' in workflow and 'uses: actions/upload-artifact@v4' in workflow)
 check("authenticated runtime certification is available as the explicit full-runtime path", 'verify_authenticated_runtime_navigation.py' in workflow and 'FYNX_E2E_USERNAME' in workflow and 'FYNX_E2E_PASSWORD' in workflow and 'connectedDebugAndroidTest' in workflow and "github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true'" in workflow and 'Upload exact-commit debug APK' in workflow)
 
 failed = [name for name, ok in checks if not ok]

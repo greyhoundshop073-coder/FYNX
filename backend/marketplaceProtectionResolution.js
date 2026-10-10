@@ -94,8 +94,9 @@ async function requireAdmin(userId) {
 
 async function refundPaystack(reference, amount, currency) {
   if (!PAYSTACK_SECRET_KEY) throw Object.assign(new Error('refund provider is not configured yet'), { code: 'PAYSTACK_NOT_CONFIGURED' });
-  if (String(currency).toUpperCase() !== 'NGN') throw Object.assign(new Error('Paystack marketplace refunds currently support NGN only'), { code: 'REFUND_CURRENCY_UNSUPPORTED' });
-  const response = await fetch('https://api.paystack.co/refund', { method: 'POST', headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ transaction: reference, amount: Math.round(Number(amount) * 100) }) });
+  const normalizedCurrency = String(currency || '').toUpperCase();
+  if (!['NGN','USD'].includes(normalizedCurrency)) throw Object.assign(new Error('Marketplace refunds support only active currencies'), { code: 'REFUND_CURRENCY_UNSUPPORTED' });
+  const response = await fetch('https://api.paystack.co/refund', { method: 'POST', headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ transaction: reference, amount: Math.round(Number(amount) * 100), currency: normalizedCurrency }) });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.status !== true) throw new Error(String(data?.message || `Paystack refund failed (${response.status})`));
   return data;
