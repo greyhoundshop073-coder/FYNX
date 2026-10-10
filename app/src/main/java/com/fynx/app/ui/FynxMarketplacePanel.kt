@@ -224,12 +224,62 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             if (loading && listings.isNotEmpty()) LinearProgressIndicator(Modifier.fillMaxWidth())
             when {
                 loading && listings.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                listings.isEmpty() && error != null -> Box(Modifier.fillMaxSize().padding(24.dp), Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Default.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(52.dp))
-                        Text("Marketplace is temporarily unavailable", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text("We couldn't confirm the current listings. Your Marketplace isn't empty just because the connection failed.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        TextButton(onClick = { reload() }) { Text("Try again") }
+                listings.isEmpty() && error != null -> LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    item(key = "marketplace-offline-status") {
+                        Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Marketplace listings are offline", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
+                                Text("The layout is ready, but live products cannot be confirmed while the service is unavailable. No sample products are being shown.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                                TextButton(onClick = { reload() }) { Text("Try again") }
+                            }
+                        }
+                    }
+                    item(key = "marketplace-hero") {
+                        Surface(
+                            onClick = { showAllProducts = true },
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("Great Deals", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                    Text("Better Prices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                    Text("Discover products posted by real FYNX sellers.", style = MaterialTheme.typography.bodySmall)
+                                    Text("Shop Now  →", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                                }
+                                Icon(Icons.Default.ShoppingBag, contentDescription = null, modifier = Modifier.size(52.dp), tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                    item(key = "marketplace-recommended-title") {
+                        MarketplaceReferenceSectionTitle("Recommended for you", action = "Try again", onAction = { reload() })
+                    }
+                    item(key = "marketplace-no-recommendations") {
+                        Text("Recommendations will appear here when real seller listings are available.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    item(key = "marketplace-explore-title") { MarketplaceReferenceSectionTitle("Explore categories") }
+                    item(key = "marketplace-explore-categories") {
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            categories.filter { it != "All" }.forEach { itemCategory ->
+                                FilterChip(selected = category == itemCategory, onClick = { category = itemCategory; showAllProducts = true }, label = { Text(itemCategory) })
+                            }
+                        }
+                    }
+                    item(key = "marketplace-new-title") { MarketplaceReferenceSectionTitle("New on FYNX") }
+                    item(key = "marketplace-no-new-listings") {
+                        Text("New listings will appear when sellers publish products.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    item(key = "marketplace-offline-sell") {
+                        OutlinedButton(onClick = { showSell = true }, modifier = Modifier.fillMaxWidth()) { Text("Sell something") }
                     }
                 }
                 listings.isEmpty() -> Box(Modifier.fillMaxSize().padding(24.dp), Alignment.Center) {
