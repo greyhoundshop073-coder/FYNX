@@ -65,6 +65,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var listings by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
     var orders by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceOrder>>(emptyList()) }
     var query by remember { mutableStateOf("") }
+    var showAllProducts by remember { mutableStateOf(false) }
     var category by remember { mutableStateOf("All") }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -250,14 +251,51 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         )
                     }
                 }
-                else -> LazyColumn(
+                else -> if (showAllProducts || query.isNotBlank() || category != "All" || nearbyMode) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 132.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        if (visibleSellerListings.isNotEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("Top Sellers (Highest Sales)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text("Highest successful sales from sellers currently represented here", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    items(visibleSellerListings, key = { it.sellerUsername.removePrefix("@").trim().lowercase() }) { seller ->
+                                        val key = seller.sellerUsername.removePrefix("@").trim().lowercase()
+                                        val reputation = sellerReputations[key]
+                                        if (reputation != null) MarketplaceSellerCard(seller, reputation, sellerPhotoIds[key]) { onOpenProfile(seller.sellerUsername) }
+                                    }
+                                }
+                            }
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                Text("Products", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        gridItems(listings, key = { it.id }) { listing ->
+                            MarketplaceCard(
+                                l = listing,
+                                onProfile = { onOpenProfile(listing.sellerUsername) },
+                                onContact = { contactSeller(listing.sellerUsername, listing.id) },
+                                onOpen = { selected = listing }
+                            )
+                        }
+                    }
+                } else LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     item(key = "marketplace-hero") {
                         Surface(
-                            onClick = { query = ""; category = "All" },
+                            onClick = { showAllProducts = true },
                             shape = RoundedCornerShape(20.dp),
                             color = MaterialTheme.colorScheme.primaryContainer,
                             modifier = Modifier.fillMaxWidth()
@@ -278,89 +316,63 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             }
                         }
                     }
+                    if (visibleSellerListings.isNotEmpty()) {
+                        item(key = "marketplace-top-sellers-title") {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Top Sellers (Highest Sales)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text("Based on successful sales, not invented rankings.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        item(key = "marketplace-top-sellers") {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                items(visibleSellerListings, key = { it.sellerUsername.removePrefix("@").trim().lowercase() }) { seller ->
+                                    val key = seller.sellerUsername.removePrefix("@").trim().lowercase()
+                                    val reputation = sellerReputations[key]
+                                    if (reputation != null) MarketplaceSellerCard(seller, reputation, sellerPhotoIds[key]) { onOpenProfile(seller.sellerUsername) }
+                                }
+                            }
+                        }
+                    }
                     item(key = "marketplace-recommended-title") {
-                        MarketplaceReferenceSectionTitle(
-                            "Recommended for you",
-                            action = "See all",
-                            onAction = { query = ""; category = "All"; if (nearbyMode) toggleNearby() }
-                        )
+                        MarketplaceReferenceSectionTitle("Recommended for you", action = "See all", onAction = { showAllProducts = true })
                     }
                     item(key = "marketplace-recommended-listings") {
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding = PaddingValues(end = 4.dp)
-                        ) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 4.dp)) {
                             items(listings.take(8), key = { "recommended-${it.id}" }) { listing ->
                                 Box(Modifier.width(208.dp)) {
-                                    MarketplaceCard(
-                                        l = listing,
-                                        onProfile = { onOpenProfile(listing.sellerUsername) },
-                                        onContact = { contactSeller(listing.sellerUsername, listing.id) },
-                                        onOpen = { selected = listing }
-                                    )
+                                    MarketplaceCard(l = listing, onProfile = { onOpenProfile(listing.sellerUsername) }, onContact = { contactSeller(listing.sellerUsername, listing.id) }, onOpen = { selected = listing })
                                 }
                             }
                         }
                     }
                     if (nearbyMode && listings.isNotEmpty()) {
-                        item(key = "marketplace-nearby-title") {
-                            MarketplaceReferenceSectionTitle("Popular near you")
-                        }
+                        item(key = "marketplace-nearby-title") { MarketplaceReferenceSectionTitle("Popular near you", action = "See all", onAction = { showAllProducts = true }) }
                         item(key = "marketplace-nearby-listings") {
-                            LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                contentPadding = PaddingValues(end = 4.dp)
-                            ) {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 4.dp)) {
                                 items(listings.take(8), key = { "nearby-${it.id}" }) { listing ->
                                     Box(Modifier.width(208.dp)) {
-                                        MarketplaceCard(
-                                            l = listing,
-                                            onProfile = { onOpenProfile(listing.sellerUsername) },
-                                            onContact = { contactSeller(listing.sellerUsername, listing.id) },
-                                            onOpen = { selected = listing }
-                                        )
+                                        MarketplaceCard(l = listing, onProfile = { onOpenProfile(listing.sellerUsername) }, onContact = { contactSeller(listing.sellerUsername, listing.id) }, onOpen = { selected = listing })
                                     }
                                 }
                             }
                         }
                     }
-                    item(key = "marketplace-explore-title") {
-                        MarketplaceReferenceSectionTitle("Explore categories")
-                    }
+                    item(key = "marketplace-explore-title") { MarketplaceReferenceSectionTitle("Explore categories") }
                     item(key = "marketplace-explore-categories") {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             categories.filter { it != "All" }.forEach { itemCategory ->
-                                FilterChip(
-                                    selected = category == itemCategory,
-                                    onClick = { category = itemCategory },
-                                    label = { Text(itemCategory) }
-                                )
+                                FilterChip(selected = category == itemCategory, onClick = { category = itemCategory; showAllProducts = true }, label = { Text(itemCategory) })
                             }
                         }
                     }
                     item(key = "marketplace-new-title") {
-                        MarketplaceReferenceSectionTitle(
-                            "New on FYNX",
-                            action = "See all",
-                            onAction = { query = ""; category = "All"; if (nearbyMode) toggleNearby() }
-                        )
+                        MarketplaceReferenceSectionTitle("New on FYNX", action = "See all", onAction = { showAllProducts = true })
                     }
                     item(key = "marketplace-new-listings") {
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding = PaddingValues(end = 4.dp)
-                        ) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 4.dp)) {
                             items(listings.take(8), key = { "new-${it.id}" }) { listing ->
                                 Box(Modifier.width(208.dp)) {
-                                    MarketplaceCard(
-                                        l = listing,
-                                        onProfile = { onOpenProfile(listing.sellerUsername) },
-                                        onContact = { contactSeller(listing.sellerUsername, listing.id) },
-                                        onOpen = { selected = listing }
-                                    )
+                                    MarketplaceCard(l = listing, onProfile = { onOpenProfile(listing.sellerUsername) }, onContact = { contactSeller(listing.sellerUsername, listing.id) }, onOpen = { selected = listing })
                                 }
                             }
                         }
