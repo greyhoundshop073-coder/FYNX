@@ -16,6 +16,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.rememberScrollState
@@ -188,6 +190,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var listings by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
+    var hasMoreListings by remember { mutableStateOf(false) }
+    var loadingMoreListings by remember { mutableStateOf(false) }
+    var nextListingsOffset by remember { mutableIntStateOf(0) }
+    val productsGridState = rememberLazyGridState()
     var orders by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceOrder>>(emptyList()) }
     var query by remember { mutableStateOf("") }
     val recentSearchesKey = "marketplace_recent_searches_v1"
@@ -264,25 +270,53 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     fun reload() {
         scope.launch {
             loading = true
+            loadingMoreListings = false
+            nextListingsOffset = 0
+            hasMoreListings = false
             error = null
             val result = kotlinx.coroutines.withTimeoutOrNull(35_000L) {
                 if (nearbyMode && nearbyLabel.isNotBlank()) {
-                    FynxRemoteSocialClient.nearbyMarketplaceListings(context, query, category, nearbyLabel)
+                    FynxRemoteSocialClient.nearbyMarketplaceListings(context, query, category, nearbyLabel).map { it to false }
                 } else {
-                    FynxRemoteSocialClient.listings(context, query, category)
+                    FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query, category, limit = 24, offset = 0)
+                        .map { page -> page.listings to page.hasMore }
+                        .recoverCatching { FynxRemoteSocialClient.listings(context, query, category).getOrThrow() to false }
                 }
             }
             if (result == null) {
                 error = "Marketplace is taking longer than expected. Check your connection and try again."
             } else {
-                result.onSuccess { listings = it }
-                    .onFailure { error = it.message ?: "Marketplace could not load." }
+                result.onSuccess { (items, more) ->
+                    listings = items.distinctBy { it.id }
+                    hasMoreListings = more
+                    nextListingsOffset = items.size
+                }.onFailure { error = it.message ?: "Marketplace could not load." }
             }
             // Listing visibility must not wait on the independent orders request.
             loading = false
-            scope.launch {
-                FynxRemoteSocialClient.orders(context).onSuccess { orders = it }
+            scope.launch { FynxRemoteSocialClient.orders(context).onSuccess { orders = it } }
+        }
+    }
+
+    fun loadMoreListings() {
+        if (loading || loadingMoreListings || !hasMoreListings || nearbyMode) return
+        scope.launch {
+            loadingMoreListings = true
+            val result = kotlinx.coroutines.withTimeoutOrNull(35_000L) {
+                FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query, category, limit = 24, offset = nextListingsOffset)
             }
+            if (result == null) {
+                error = "More products could not load. Scroll up and retry."
+            } else {
+                result.onSuccess { page ->
+                    val knownIds = listings.asSequence().map { it.id }.toHashSet()
+                    listings = listings + page.listings.filterNot { it.id in knownIds }
+                    nextListingsOffset += page.listings.size
+                    hasMoreListings = page.hasMore && page.listings.isNotEmpty()
+                    error = null
+                }.onFailure { error = it.message ?: "More products could not load." }
+            }
+            loadingMoreListings = false
         }
     }
 
@@ -300,6 +334,17 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     LaunchedEffect(query, category, nearbyMode, nearbyLabel) {
         delay(if (query.isBlank()) 0L else 350L)
         reload()
+    }
+
+    LaunchedEffect(showAllProducts, query, category, nearbyMode) {
+        if (showAllProducts || query.isNotBlank() || category != "All" || nearbyMode) {
+            snapshotFlow {
+                val layout = productsGridState.layoutInfo
+                (layout.visibleItemsInfo.lastOrNull()?.index ?: -1) to layout.totalItemsCount
+            }.collect { (lastVisible, total) ->
+                if (total > 0 && lastVisible >= total - 6) loadMoreListings()
+            }
+        }
     }
 
     LaunchedEffect(listings) {
@@ -474,6 +519,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 }
                 else -> if (showAllProducts || query.isNotBlank() || category != "All" || nearbyMode) {
                     LazyVerticalGrid(
+                        state = productsGridState,
                         columns = GridCells.Fixed(2),
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 132.dp),
@@ -510,6 +556,13 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                 onProfile = { sellerStoreUsername = listing.sellerUsername },
                                 onContact = { contactSeller(listing.sellerUsername, listing.id) }
                             )
+                        }
+                        if (loadingMoreListings) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                }
+                            }
                         }
                     }
                 } else LazyColumn(
