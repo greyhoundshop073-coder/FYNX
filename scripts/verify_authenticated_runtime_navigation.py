@@ -902,19 +902,20 @@ def verify_marketplace_surface():
         "No products yet", "Be the first seller on FYNX", "No matching products",
         "Recommended for you", "Popular near you", "Electronics", "Fashion"
     ]
-    found=[label for label in content_markers if find_control(latest,[label])]
-    if found:
-        report.append("- PASS Marketplace finished loading; visible content/state: " + ", ".join(found))
-    elif any(marker in latest for marker in (
+    backend_error = any(marker in latest for marker in (
+        "Marketplace is temporarily unavailable",
         "Marketplace is taking longer than expected",
         "Marketplace could not load.",
         "Marketplace could not load"
-    )):
-        # A recoverable network/backend error is not proof that Marketplace code is
-        # broken. Keep APK/UI resilience evidence while explicitly blocking content
-        # verification until the backend is available.
+    ))
+    found=[label for label in content_markers if find_control(latest,[label])]
+    if backend_error:
+        # Backend error takes precedence over empty-state text elsewhere in the
+        # hierarchy: a failed request is not evidence that there are zero listings.
         BLOCKED.append("Marketplace product/empty-state verification requires a reachable backend; the APK exposed a recoverable loading error")
         report.append("- BLOCKED Marketplace product content: backend request timed out/failed; no product data was assumed to exist")
+    elif found:
+        report.append("- PASS Marketplace finished loading; visible content/state: " + ", ".join(found))
     else:
         # Category labels can be outside the captured viewport; the spinner being
         # gone plus a search field is not enough to certify a populated/empty body.
