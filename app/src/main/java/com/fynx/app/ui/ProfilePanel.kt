@@ -16,6 +16,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.AutoStories
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.DataUsage
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Edit
@@ -335,6 +345,8 @@ fun SettingsPanel(
     var showChatPersonalization by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
     var showLanguage by remember { mutableStateOf(false) }
+    var infoTitle by remember { mutableStateOf<String?>(null) }
+    var infoDescription by remember { mutableStateOf("") }
 
     val query = search.trim().lowercase()
     if (showLanguage) {
@@ -347,89 +359,226 @@ fun SettingsPanel(
     Column(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 12.dp)
-            .widthIn(max = 720.dp)
+            .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
+            .padding(horizontal = 16.dp)
+            .widthIn(max = 720.dp)
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = onBack) { Text("‹ Back") }
-            Spacer(Modifier.width(4.dp))
-            Text(
-                "Settings & privacy",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ChevronRight, contentDescription = "Back to profile",
+                    modifier = Modifier.size(25.dp).then(Modifier), tint = MaterialTheme.colorScheme.onSurface)
+            }
+            Column(Modifier.weight(1f)) {
+                Text("FYNX", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary)
+                Text("Settings", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            }
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = .12f)) {
+                Icon(Icons.Default.Settings, contentDescription = "Settings", tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(10.dp).size(22.dp))
+            }
         }
         OutlinedTextField(
             value = search,
             onValueChange = { search = it },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
             singleLine = true,
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search settings") },
             placeholder = { Text("Search settings") },
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(18.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                focusedContainerColor = MaterialTheme.colorScheme.surface
+            )
         )
-        HorizontalDivider()
         LazyColumn(
             Modifier.weight(1f),
-            contentPadding = PaddingValues(vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            if (visible("Account", "Username bio profile account")) {
-                item { SettingsSectionTitle("Account") }
-                item { SettingsActionCard("Account & profile", "Username, bio and profile information") { onOpenAccountProfile() } }
+            if (visible("Account & Profile", "account profile username bio phone email account controls")) {
+                item { SettingsSectionTitle("ACCOUNT") }
+                item {
+                    SettingsReferenceRow(Icons.Default.AccountCircle, "Account & Profile",
+                        "Personal information and account details", androidx.compose.ui.graphics.Color(0xFF4F7BFF)) {
+                        onOpenAccountProfile()
+                    }
+                }
             }
-            if (visible("Privacy & Safety", "Profile online posts Status photo visibility")) {
-                item { SettingsSectionTitle("Privacy & Security") }
-                item { SettingsActionCard("Privacy & Safety", "Profile, online, posts, Status and photo visibility") { onOpenPrivacy() } }
+            if (visible("Privacy & Security", "profile privacy online status blocked users security people discovery")) {
+                item { SettingsSectionTitle("SECURITY") }
+                item {
+                    SettingsReferenceRow(Icons.Default.Security, "Privacy & Security",
+                        "Control your privacy and account safety", androidx.compose.ui.graphics.Color(0xFF8B5CF6)) {
+                        onOpenPrivacy()
+                    }
+                }
             }
-            if (visible("Notifications", "Sounds calls badges message alerts")) {
-                item { SettingsSectionTitle("Notifications") }
-                item { SettingsActionCard("Notifications", "Message alerts, sounds and notification controls") { onOpenNotifications() } }
+            if (visible("Notifications", "chat alerts social activity stories calls marketplace money sounds vibration")) {
+                item { SettingsSectionTitle("COMMUNICATION") }
+                item {
+                    SettingsReferenceRow(Icons.Default.Notifications, "Notifications",
+                        "Chat alerts, social activity, calls and more", androidx.compose.ui.graphics.Color(0xFFEF8B42)) {
+                        onOpenNotifications()
+                    }
+                }
             }
-            if (visible("Chat & personalization", "Wallpapers night mode animations stickers emoji read receipts")) {
-                item { SettingsSectionTitle("Chat Settings") }
-                item { SettingsActionCard("Chat & personalization", "Wallpapers, night mode, animations, stickers and emoji") { showChatPersonalization = true } }
-                item { SettingsActionCard("Read receipts", if (settings.readReceipts) "On • managed in Chat settings" else "Off • managed in Chat settings") { showChatPersonalization = true } }
-                item { SettingsActionCard("Story replies", if (settings.storyReplies) "On • managed in Privacy & Safety" else "Off • managed in Privacy & Safety") { onOpenPrivacy() } }
+            if (visible("Chat", "chat settings read receipts wallpapers messages personalization")) {
+                item {
+                    SettingsReferenceRow(Icons.Default.Chat, "Chat",
+                        "Wallpapers, message preferences and read receipts", androidx.compose.ui.graphics.Color(0xFF20A88A)) {
+                        showChatPersonalization = true
+                    }
+                }
             }
-            if (visible("Appearance", "Light, Charcoal Black, Dark, Black AMOLED, System theme")) {
-                item { SettingsSectionTitle("Appearance") }
-                item { SettingsActionCard("Appearance", appearance) { showAppearance = true } }
-                item { SettingsActionCard("Colors & accent", accent.name) { showColors = true } }
+            if (visible("Stories & Status", "stories status replies reactions privacy")) {
+                item {
+                    SettingsReferenceRow(Icons.Default.AutoStories, "Stories & Status",
+                        "Manage story replies and status privacy", androidx.compose.ui.graphics.Color(0xFFE45B91)) {
+                        onOpenPrivacy()
+                    }
+                }
             }
-            if (visible("Language", "App language English")) {
-                item { SettingsSectionTitle("General") }
-                item { SettingsActionCard("Language", "English • current language") { showLanguage = true } }
+            if (visible("Appearance", "theme system default light dark amoled accent color font size message style")) {
+                item { SettingsSectionTitle("PERSONALIZATION") }
+                item {
+                    SettingsReferenceRow(Icons.Default.Palette, "Appearance",
+                        "Theme, accent color and app appearance", androidx.compose.ui.graphics.Color(0xFF9B6BFF)) {
+                        showAppearance = true
+                    }
+                }
+                item {
+                    SettingsReferenceRow(Icons.Default.Palette, "Accent Color",
+                        accent.name, androidx.compose.ui.graphics.Color(0xFF5677E8)) {
+                        showColors = true
+                    }
+                }
+            }
+            if (visible("Media & Storage", "media storage cache downloads photos videos")) {
+                item { SettingsSectionTitle("APP & DATA") }
+                item {
+                    SettingsReferenceRow(Icons.Default.Storage, "Media & Storage",
+                        "Manage media and storage information", androidx.compose.ui.graphics.Color(0xFF2C9BCB)) {
+                        infoTitle = "Media & Storage"
+                        infoDescription = "FYNX uses your device storage for app data and cached media. Media controls will be shown here when the storage-management options are available."
+                    }
+                }
+            }
+            if (visible("Data & Network", "data network mobile data wifi usage uploads downloads")) {
+                item {
+                    SettingsReferenceRow(Icons.Default.DataUsage, "Data & Network",
+                        "Data usage and network preferences", androidx.compose.ui.graphics.Color(0xFF39A96B)) {
+                        infoTitle = "Data & Network"
+                        infoDescription = "Network and data-saving controls are not yet available in this settings screen."
+                    }
+                }
+            }
+            if (visible("Language & Accessibility", "language accessibility english font size")) {
+                item {
+                    SettingsReferenceRow(Icons.Default.Language, "Language & Accessibility",
+                        "Language and readability preferences", androidx.compose.ui.graphics.Color(0xFFCB8A35)) {
+                        showLanguage = true
+                    }
+                }
+            }
+            if (visible("Help & Support", "help support contact troubleshooting")) {
+                item { SettingsSectionTitle("FYNX") }
+                item {
+                    SettingsReferenceRow(Icons.Default.HelpOutline, "Help & Support",
+                        "Get help using FYNX", androidx.compose.ui.graphics.Color(0xFF477FEA)) {
+                        infoTitle = "Help & Support"
+                        infoDescription = "Help and support options will be available here."
+                    }
+                }
+            }
+            if (visible("About FYNX", "about version app information")) {
+                item {
+                    SettingsReferenceRow(Icons.Default.Info, "About FYNX",
+                        "App information and version", androidx.compose.ui.graphics.Color(0xFF8B69D6)) {
+                        infoTitle = "About FYNX"
+                        infoDescription = "FYNX brings communication, social sharing and marketplace tools together in one app."
+                    }
+                }
             }
             if (query.isNotBlank() && !listOf(
-    "Account" to "Username bio profile account",
-    "Privacy & Safety" to "Profile online posts Status photo visibility",
-    "Notifications" to "Sounds calls badges message alerts",
-    "Chat & personalization" to "Wallpapers night mode animations stickers emoji read receipts",
-    "Appearance" to "Light, Charcoal Black, Dark, Black AMOLED, System theme",
-    "Language" to "App language English"
-).any { (title, description) -> visible(title, description) }) {
+                "Account & Profile" to "account profile username bio phone email account controls",
+                "Privacy & Security" to "profile privacy online status blocked users security people discovery",
+                "Notifications" to "chat alerts social activity stories calls marketplace money sounds vibration",
+                "Chat" to "chat settings read receipts wallpapers messages personalization",
+                "Stories & Status" to "stories status replies reactions privacy",
+                "Appearance" to "theme system default light dark amoled accent color font size message style",
+                "Media & Storage" to "media storage cache downloads photos videos",
+                "Data & Network" to "data network mobile data wifi usage uploads downloads",
+                "Language & Accessibility" to "language accessibility english font size",
+                "Help & Support" to "help support contact troubleshooting",
+                "About FYNX" to "about version app information"
+            ).any { (title, description) -> visible(title, description) }) {
                 item {
-                    Text(
-                        "No matching settings",
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text("No matching settings", modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
     }
-    if (showAppearance) AppearanceDialog(appearance, { appearance = it; FynxPreferencesStore.saveAppearance(context, it); onAppearanceChanged(it); showAppearance = false }, { showAppearance = false })
-    if (showColors) AccentDialog(accent, { accent = it; FynxPreferencesStore.saveAccent(context, it); onAccentChanged(it); showColors = false }, { showColors = false })
+    if (showAppearance) AppearanceDialog(appearance, {
+        appearance = it
+        FynxPreferencesStore.saveAppearance(context, it)
+        onAppearanceChanged(it)
+        showAppearance = false
+    }, { showAppearance = false })
+    if (showColors) AccentDialog(accent, {
+        accent = it
+        FynxPreferencesStore.saveAccent(context, it)
+        onAccentChanged(it)
+        showColors = false
+    }, { showColors = false })
     if (showChatPersonalization) ChatPersonalizationDialog(settings, onSettingsChange, { showChatPersonalization = false })
-    
+    if (infoTitle != null) AlertDialog(
+        onDismissRequest = { infoTitle = null },
+        title = { Text(infoTitle!!) },
+        text = { Text(infoDescription) },
+        confirmButton = { TextButton(onClick = { infoTitle = null }) { Text("OK") } }
+    )
+}
+
+@Composable
+private fun SettingsReferenceRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    description: String,
+    tint: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .35f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(shape = RoundedCornerShape(13.dp), color = tint.copy(alpha = .14f)) {
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.padding(11.dp).size(23.dp))
+            }
+            Spacer(Modifier.width(13.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface)
+                Text(description, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(21.dp))
+        }
+    }
 }
 
 @Composable private fun SettingsSectionTitle(title: String) { Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp)) }
