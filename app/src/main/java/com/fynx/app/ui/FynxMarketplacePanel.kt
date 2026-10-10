@@ -336,7 +336,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                 sellerRating = sellerReputations[sellerKey],
                                 sellerPhotoId = sellerPhotoIds[sellerKey],
                                 onOpen = { selected = listing },
-                                onSeller = { onOpenProfile(listing.sellerUsername) },
+                                onProfile = { onOpenProfile(listing.sellerUsername) },
                                 onContact = { contactSeller(listing.sellerUsername, listing.id) }
                             )
                         }
@@ -398,7 +398,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                         sellerRating = sellerReputations[listing.sellerUsername.removePrefix("@").trim().lowercase()],
                                         sellerPhotoId = sellerPhotoIds[listing.sellerUsername.removePrefix("@").trim().lowercase()],
                                         onOpen = { selected = listing },
-                                        onSeller = { onOpenProfile(listing.sellerUsername) },
+                                        onProfile = { onOpenProfile(listing.sellerUsername) },
                                         onContact = { contactSeller(listing.sellerUsername, listing.id) }
                                     )
                                 }
@@ -416,7 +416,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                         sellerRating = sellerReputations[listing.sellerUsername.removePrefix("@").trim().lowercase()],
                                         sellerPhotoId = sellerPhotoIds[listing.sellerUsername.removePrefix("@").trim().lowercase()],
                                         onOpen = { selected = listing },
-                                        onSeller = { onOpenProfile(listing.sellerUsername) },
+                                        onProfile = { onOpenProfile(listing.sellerUsername) },
                                         onContact = { contactSeller(listing.sellerUsername, listing.id) }
                                     )
                                     }
@@ -444,7 +444,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                         sellerRating = sellerReputations[listing.sellerUsername.removePrefix("@").trim().lowercase()],
                                         sellerPhotoId = sellerPhotoIds[listing.sellerUsername.removePrefix("@").trim().lowercase()],
                                         onOpen = { selected = listing },
-                                        onSeller = { onOpenProfile(listing.sellerUsername) },
+                                        onProfile = { onOpenProfile(listing.sellerUsername) },
                                         onContact = { contactSeller(listing.sellerUsername, listing.id) }
                                     )
                                 }
