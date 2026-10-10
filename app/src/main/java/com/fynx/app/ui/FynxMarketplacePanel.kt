@@ -739,10 +739,15 @@ private fun MarketplaceDetails(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
-    AlertDialog(onDismissRequest = onClose, title = { Text(l.title, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, text = { Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding(), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+    AlertDialog(onDismissRequest = onClose, title = { Text("Product details", maxLines = 1) }, text = { Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (l.mediaIds.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(l.mediaIds.take(12)) { mediaId -> RemoteMarketMedia(LocalContext.current, mediaId, Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(12.dp))) } }
-        Text("${l.currency} ${String.format(Locale.US, "%,.2f", l.price)}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-        if (l.description.isNotBlank()) Text(l.description)
+        MarketplaceReferenceProductSummary(
+            listing = l,
+            onMessageSeller = onContact,
+            onBuyNow = onBuyNow,
+            onShare = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title)) }
+        )
+        MarketplaceReferenceDescriptionCard(listing = l)
         Text("Seller: ${l.sellerDisplayName.ifBlank { l.sellerUsername }}")
         Text("${l.quantity} available • ${l.condition}")
         if (l.location.isNotBlank()) Text("Location: ${l.location}")
@@ -775,14 +780,13 @@ private fun MarketplaceDetails(
             listing = l,
             onOpenAssistant = { listingId -> onOpenAssistant(listingId) }
         )
-    } }, confirmButton = { Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title)) }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Share, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Share Marketplace listing") }
-        OutlinedButton(onClick = onContact, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.ChatBubbleOutline, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Contact seller") }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onAddToCart, enabled = l.quantity > 0, modifier = Modifier.weight(1f)) { Icon(Icons.Default.ShoppingCart, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text("Add to cart") }
-            Button(onClick = onBuyNow, enabled = l.quantity > 0, modifier = Modifier.weight(1f)) { Text("Buy now") }
+    } }, confirmButton = {
+        Button(onClick = onAddToCart, enabled = l.quantity > 0, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.ShoppingCart, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Add to cart")
         }
-    } }, dismissButton = { TextButton(onClick = onProfile) { Text("View seller") } })
+    }, dismissButton = { TextButton(onClick = onProfile) { Text("View seller") } })
 }
 
 @Composable
