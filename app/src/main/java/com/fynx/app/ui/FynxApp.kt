@@ -433,7 +433,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                                         contentDescription = item.label
                                     },
                                     selected = selected == item.key,
-                                    onClick = { selected = item.key },
+                                    onClick = { notificationPreferencesOnly = false; selected = item.key },
                                     icon = {
                                         Icon(
                                             item.icon,
