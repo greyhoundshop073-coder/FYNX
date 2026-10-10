@@ -39,7 +39,7 @@ internal fun MarketplaceReferenceProductCard(
     sellerRating: FynxMarketplaceClient.SellerReputation? = null,
     sellerPhotoId: String? = null,
     onOpen: () -> Unit,
-    onSeller: () -> Unit,
+    onProfile: () -> Unit,
     onContact: (() -> Unit)? = null,
     onFavorite: (() -> Unit)? = null
 ) {
@@ -87,7 +87,7 @@ internal fun MarketplaceReferenceProductCard(
                 }
                 if (listing.location.isNotBlank()) Text(listing.location, color = FynxMarketplaceReferenceStyle.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.TextButton(onClick = onSeller, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
+                    androidx.compose.material3.TextButton(onClick = onProfile, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
                         Text("View seller", color = FynxMarketplaceReferenceStyle.primarySoft, style = androidx.compose.material3.MaterialTheme.typography.labelMedium)
                     }
                     if (onContact != null) {
