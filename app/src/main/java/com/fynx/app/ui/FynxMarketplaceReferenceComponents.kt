@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,6 +46,16 @@ import androidx.compose.ui.unit.dp
  * Marketplace remains the source of truth for all real data and actions.
  */
 internal object FynxMarketplaceReferenceStyle {
+    // Compatibility tokens remain for existing Marketplace detail/grid components.
+    // The app-wide theme is used directly by the components migrated below.
+    val background = Color(0xFF061226)
+    val surface = Color(0xFF0B1A30)
+    val surfaceRaised = Color(0xFF10223B)
+    val outline = Color(0xFF2B4261)
+    val primary = Color(0xFF5548FF)
+    val primarySoft = Color(0xFF8290FF)
+    val text = Color(0xFFF3F6FF)
+    val textMuted = Color(0xFFA5B6D0)
     val radius = RoundedCornerShape(18.dp)
 }
 @Composable
