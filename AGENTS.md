@@ -47,3 +47,13 @@ For reference-image work, compare the actual running screen with the reference: 
 A commit or green build alone does not mean the feature is done. Never claim “fixed,” “complete,” “all in the APK,” or “release-ready” without supporting evidence. Every push handoff must state: purpose; branch and SHA; changed files; CI/test status; user journey tested; APK/artifact identity; runtime evidence; regression checks; blockers/remaining work; final status.
 
 Do not move to the next dependent task while the current required release gate is red or unverified. Do not merge/release until the repository release gate passes. The goal is not more pushes; every push must be meaningful, traceable, tested, and visible to the user.
+
+
+## Substantial, outcome-based delivery (mandatory)
+- Optimize for completed user-visible outcomes, not commit count. Do not split one coherent feature into a series of tiny pushes merely to show activity.
+- Before editing, define the complete scope of the next delivery: intended screen/layout position, related interactions, data and persistence path, loading/empty/offline/error states, tests, and existing behavior to preserve.
+- Group all safe, directly related work into one substantial, reviewable push when possible. Include the UI, wiring, state/data handling, and tests needed for the feature to function end to end. Do not bundle unrelated work just to make a push look large.
+- A small isolated fix is appropriate when it is necessary to unblock a red gate or prevent a regression; explain why it must be separate. Never add speculative changes solely to increase push size.
+- Verify the feature appears in the exact APK built from the pushed commit and is positioned and behaves as intended. A source change, commit, green CI, or artifact upload alone is not proof of product delivery.
+- If a feature is missing from the APK or appears in the wrong place, trace the build/integration/UI path and fix the cause before calling it complete.
+- Maintain a clear implementation ledger: completed and runtime-verified; pushed but not runtime-verified; missing; blocked by a named external dependency. Do not repeat work already present without evidence of a real gap.

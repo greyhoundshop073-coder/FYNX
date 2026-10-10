@@ -112,3 +112,12 @@ For every user-visible Android change, tie the APK/artifact to the exact commit,
 
 ### No false completion
 A commit being pushed is not completion. A green build is not by itself proof of correct behavior. Do not call work done while required checks are red, pending, skipped, or unverified. After every push report the exact branch/SHA, intended purpose, changed files, relevant CI/tests, actual journey tested, APK/artifact identity, runtime evidence, regression checks, blockers, and GREEN/YELLOW/RED/MISSING status. Do not proceed to dependent work or release until required gates pass.
+
+
+## Substantial, APK-outcome-based pushes
+
+The objective is a working product, not a high number of commits. Avoid a sequence of tiny pushes for pieces of one feature. Before starting, define a coherent delivery scope and combine related, safe work—UI and correct screen placement, interactions, state/data/backend or persistence wiring, relevant empty/loading/offline/error handling, and tests—into one substantial, reviewable push wherever practical. Do not combine unrelated work or make speculative edits just to increase the size of a push.
+
+A separate small fix is justified when it is the minimal safe way to unblock a red required gate or prevent a regression; record why it is separate. Otherwise, finish the coherent feature batch before pushing. Afterward, verify the exact commit, complete diff, required CI, and the exact APK built from that commit. For UI work, inspect genuine runtime screenshots and exercise the relevant journey to confirm the feature appears in the intended position and works. A push, green CI, source presence, or artifact upload alone is not proof that the feature reached the APK.
+
+Keep an evidence-based work ledger distinguishing: (1) implemented and runtime-verified, (2) pushed but not runtime-verified, (3) missing/not implemented, and (4) blocked by a specific external dependency. Re-investigate claims from old handoffs against the live repository and APK; do not repeat work without evidence of a real gap. Report each delivery's intended outcome, branch/SHA, changed files, CI results, exact APK identity, runtime/screenshots evidence, regression checks, remaining gaps, and status.
