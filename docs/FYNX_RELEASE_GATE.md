@@ -94,3 +94,21 @@ This standard works together with:
 If a future ChatGPT session continues FYNX work, it must read these documents and inspect the live repository before making changes.
 
 LOCKED: This file is the permanent FYNX release-gate contract. It must be followed automatically after every completed push without requiring the user to remind the assistant.
+
+## AI blocker ownership and comparative product research
+
+Every AI coding session must also follow the root `AGENTS.md` and `.github/copilot-instructions.md`.
+
+### Own diagnosis and repair
+When a required build, test, workflow, integration, or runtime check fails, the AI must investigate and own the repair rather than stopping at the first error or asking the user to solve routine engineering problems. Inspect the exact commit, job/step logs, source, callers, configuration, dependencies, and environment; determine root cause; consult official documentation or reputable technical sources where useful; implement the smallest safe correction; and rerun and monitor the relevant checks to completion. Fix follow-on failures exposed by the correction before declaring the work complete.
+
+Do not make speculative repeated pushes, hide failures, weaken verifiers, bypass required tests, fabricate data, or disable security, authentication, or payment protections to obtain green CI. If a genuine external action is indispensable and only the user can perform it (for example, unavailable credentials, permissions, paid-service approval, or inaccessible hardware), first exhaust available investigation and complete independent safe work; then state the exact dependency and mark the affected gate NOT VERIFIED.
+
+### Compare relevant user journeys against established platforms
+When designing or auditing a social feature, research relevant established platforms and reliable sources, including official product/help/developer documentation where available. Compare real user goals, interaction flows, UI patterns, accessibility, performance, privacy, and safety. Separate verified facts from assumptions; account for regional/version differences; identify what FYNX already does, actual gaps, and worthwhile improvements. Do not copy competitors blindly or add needless complexity. Verify any resulting change in FYNX itself.
+
+### Exact-commit APK and visual evidence
+For every user-visible Android change, tie the APK/artifact to the exact commit, install/run it on a device or emulator when the environment permits, exercise the affected journey, and inspect genuine runtime screenshots/recordings for visual work. A mockup, preview, old APK, unrelated screenshot, source-code presence, or green compilation does not prove the current change works. If a required runtime check cannot run, record the precise reason and mark it NOT VERIFIED.
+
+### No false completion
+A commit being pushed is not completion. A green build is not by itself proof of correct behavior. Do not call work done while required checks are red, pending, skipped, or unverified. After every push report the exact branch/SHA, intended purpose, changed files, relevant CI/tests, actual journey tested, APK/artifact identity, runtime evidence, regression checks, blockers, and GREEN/YELLOW/RED/MISSING status. Do not proceed to dependent work or release until required gates pass.
