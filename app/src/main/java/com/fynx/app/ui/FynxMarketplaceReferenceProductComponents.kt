@@ -40,6 +40,7 @@ internal fun MarketplaceReferenceProductCard(
     sellerPhotoId: String? = null,
     onOpen: () -> Unit,
     onSeller: () -> Unit,
+    onContact: (() -> Unit)? = null,
     onFavorite: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -77,15 +78,25 @@ internal fun MarketplaceReferenceProductCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     FynxRemoteProfileAvatar(sellerPhotoId, listing.sellerDisplayName.ifBlank { listing.sellerUsername }, Modifier.size(24.dp).clip(CircleShape), ownerUsername = listing.sellerUsername)
                     Spacer(Modifier.width(6.dp))
-                    Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, modifier = Modifier.weight(1f), color = Color(0xFFDCE6FF), maxLines = 1, overflow = TextOverflow.Ellipsis, style = androidx.compose.material3.MaterialTheme.typography.labelMedium)
+                    Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, modifier = Modifier.weight(1f), color = FynxMarketplaceReferenceStyle.text, maxLines = 1, overflow = TextOverflow.Ellipsis, style = androidx.compose.material3.MaterialTheme.typography.labelMedium)
                     sellerRating?.takeIf { it.reviewCount > 0 }?.let {
-                        Icon(Icons.Default.Star, null, Modifier.size(14.dp), tint = Color(0xFFFFC857))
+                        Icon(Icons.Default.Star, null, Modifier.size(14.dp), tint = androidx.compose.material3.MaterialTheme.colorScheme.tertiary)
                         Spacer(Modifier.width(2.dp))
                         Text(String.format(Locale.US, "%.1f", it.averageRating), color = FynxMarketplaceReferenceStyle.textMuted, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
                     }
                 }
                 if (listing.location.isNotBlank()) Text(listing.location, color = FynxMarketplaceReferenceStyle.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
-                Text("View seller", color = FynxMarketplaceReferenceStyle.primarySoft, style = androidx.compose.material3.MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 2.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.TextButton(onClick = onSeller, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
+                        Text("View seller", color = FynxMarketplaceReferenceStyle.primarySoft, style = androidx.compose.material3.MaterialTheme.typography.labelMedium)
+                    }
+                    if (onContact != null) {
+                        Spacer(Modifier.weight(1f))
+                        androidx.compose.material3.TextButton(onClick = onContact, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
+                            Text("Contact", color = FynxMarketplaceReferenceStyle.primarySoft, style = androidx.compose.material3.MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
             }
         }
     }
