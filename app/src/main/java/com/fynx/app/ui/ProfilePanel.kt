@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.DataUsage
@@ -369,7 +370,7 @@ fun SettingsPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Default.ChevronRight, contentDescription = "Back to profile",
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back to profile",
                     modifier = Modifier.size(25.dp).then(Modifier), tint = MaterialTheme.colorScheme.onSurface)
             }
             Column(Modifier.weight(1f)) {
@@ -400,21 +401,23 @@ fun SettingsPanel(
             contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            if (visible("Account & Profile", "account profile username bio phone email account controls")) {
+            if (visible("Account & Profile", "account profile username bio phone email account controls") ||
+                visible("Privacy & Security", "profile privacy online status blocked users security people discovery")) {
                 item { SettingsSectionTitle("ACCOUNT") }
-                item {
-                    SettingsReferenceRow(Icons.Default.AccountCircle, "Account & Profile",
-                        "Personal information and account details", androidx.compose.ui.graphics.Color(0xFF4F7BFF)) {
-                        onOpenAccountProfile()
+                if (visible("Account & Profile", "account profile username bio phone email account controls")) {
+                    item {
+                        SettingsReferenceRow(Icons.Default.AccountCircle, "Account & Profile",
+                            "Personal information and account details", androidx.compose.ui.graphics.Color(0xFF4F7BFF)) {
+                            onOpenAccountProfile()
+                        }
                     }
                 }
-            }
-            if (visible("Privacy & Security", "profile privacy online status blocked users security people discovery")) {
-                item { SettingsSectionTitle("SECURITY") }
-                item {
-                    SettingsReferenceRow(Icons.Default.Security, "Privacy & Security",
-                        "Control your privacy and account safety", androidx.compose.ui.graphics.Color(0xFF8B5CF6)) {
-                        onOpenPrivacy()
+                if (visible("Privacy & Security", "profile privacy online status blocked users security people discovery")) {
+                    item {
+                        SettingsReferenceRow(Icons.Default.Security, "Privacy & Security",
+                            "Control your privacy and account safety", androidx.compose.ui.graphics.Color(0xFF8B5CF6)) {
+                            onOpenPrivacy()
+                        }
                     }
                 }
             }
