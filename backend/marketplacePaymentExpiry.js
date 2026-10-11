@@ -209,8 +209,137 @@ async function reconcileTerminalFinancialOperations({ logger = console } = {}) {
   return repaired;
 }
 
+
+async function verifyProviderCheckoutGroupPayment(group) {
+  if (!PAYSTACK_SECRET_KEY || !group.payment_reference) return { configured: false, paid: false };
+  try {
+    const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(group.payment_reference)}`, {
+      headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` }
+    });
+    const data = await response.json().catch(() => ({}));
+    const transaction = data?.data || {};
+    const expectedAmount = amountSubunit(group.buyer_total, group.currency);
+    const status = String(transaction.status || '').toLowerCase();
+    const valid = response.ok && data?.status === true
+      && status === 'success'
+      && expectedAmount !== null
+      && Number(transaction.amount) === expectedAmount
+      && String(transaction.currency || '').toUpperCase() === String(group.currency || '').toUpperCase()
+      && String(transaction.reference || '') === String(group.payment_reference)
+      && String(transaction.metadata?.checkoutGroupId || transaction.metadata?.checkout_group_id || '') === String(group.id)
+      && String(transaction.metadata?.buyerId || transaction.metadata?.buyer_id || '') === String(group.buyer_id)
+      && Number.isFinite(Number(transaction.fees)) && Number(transaction.fees) >= 0;
+    return { configured: true, paid: valid, status, providerFee: valid ? Math.round(Number(transaction.fees)) : 0 };
+  } catch {
+    return { configured: true, paid: false, providerUnavailable: true };
+  }
+}
+
+/**
+ * Reconcile an expired multi-product checkout as one unit. Never release stock
+ * while Paystack is unavailable or still processing a referenced payment.
+ */
+async function expireUnpaidMarketplaceCheckoutGroups({ logger = console } = {}) {
+  if (!pool) return 0;
+  let expired = 0;
+  try {
+    await pool.query(`ALTER TABLE marketplace_checkout_groups
+      ADD COLUMN IF NOT EXISTS payment_reference TEXT,
+      ADD COLUMN IF NOT EXISTS payment_authorization_url TEXT,
+      ADD COLUMN IF NOT EXISTS payment_access_code TEXT`);
+    const candidates = await pool.query(`
+      SELECT id,buyer_id,buyer_total,currency,status,payment_reference,created_at
+      FROM marketplace_checkout_groups
+      WHERE status='PAYMENT_PENDING'
+        AND created_at <= NOW() - ($1::text || ' minutes')::interval
+      ORDER BY created_at ASC
+      LIMIT 25
+    `, [PAYMENT_RESERVATION_TTL_MINUTES]);
+
+    for (const candidate of candidates.rows) {
+      const provider = candidate.payment_reference
+        ? await verifyProviderCheckoutGroupPayment(candidate)
+        : { configured: true, paid: false, status: 'uninitialized' };
+      if (candidate.payment_reference && (!provider.configured || provider.providerUnavailable)) continue;
+      if (candidate.payment_reference && !provider.paid
+        && !['failed', 'abandoned', 'reversed'].includes(provider.status)) continue;
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const group = (await client.query(`
+          SELECT id,buyer_id,buyer_total,currency,status,payment_reference
+          FROM marketplace_checkout_groups WHERE id=$1 FOR UPDATE
+        `, [candidate.id])).rows[0];
+        if (!group || group.status !== 'PAYMENT_PENDING'
+          || String(group.payment_reference || '') !== String(candidate.payment_reference || '')) {
+          await client.query('ROLLBACK');
+          continue;
+        }
+        const children = (await client.query(`
+          SELECT o.id,o.buyer_id,o.listing_id,o.quantity,o.total_amount,o.currency,o.status
+          FROM marketplace_checkout_group_items gi
+          JOIN marketplace_orders o ON o.id=gi.order_id
+          WHERE gi.checkout_id=$1 ORDER BY o.id ASC FOR UPDATE OF o
+        `, [group.id])).rows;
+        if (!children.length || children.some((child) => child.status !== 'PAYMENT_PENDING')) {
+          await client.query('ROLLBACK');
+          continue;
+        }
+
+        if (provider.paid) {
+          const expected = amountSubunit(group.buyer_total, group.currency);
+          const childCents = children.map((child) => amountSubunit(child.total_amount, child.currency));
+          if (!expected || childCents.some((amount) => !amount)
+            || childCents.reduce((sum, amount) => sum + amount, 0) !== expected
+            || children.some((child) => String(child.currency).toUpperCase() !== String(group.currency).toUpperCase())) {
+            await client.query('ROLLBACK');
+            logger.error('[fynx-marketplace] expired checkout group payment totals did not reconcile', String(group.id));
+            continue;
+          }
+          let allocated = 0;
+          for (let index = 0; index < children.length; index += 1) {
+            const child = children[index];
+            const fee = index === children.length - 1
+              ? provider.providerFee - allocated
+              : Math.floor((provider.providerFee * childCents[index]) / expected);
+            allocated += fee;
+            await client.query(`UPDATE marketplace_orders SET status='PAID',payment_provider_fee=$2,updated_at=NOW() WHERE id=$1 AND status='PAYMENT_PENDING'`, [child.id, fee / 100]);
+            await client.query(`
+              INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata)
+              VALUES ($1,$2,'PAYMENT_CONFIRMED','PAYMENT_PENDING','PAID',$3::jsonb)
+            `, [child.id, child.buyer_id, JSON.stringify({ reference: group.payment_reference, provider: 'paystack', source: 'checkout-group-expiry-reconciliation', checkoutGroupId: String(group.id), providerFee: fee / 100 })]);
+          }
+          await client.query(`UPDATE marketplace_checkout_groups SET status='PAID',updated_at=NOW() WHERE id=$1 AND status='PAYMENT_PENDING'`, [group.id]);
+        } else {
+          for (const child of children) {
+            await client.query(`UPDATE marketplace_orders SET status='CANCELLED',cancelled_at=NOW(),updated_at=NOW() WHERE id=$1 AND status='PAYMENT_PENDING'`, [child.id]);
+            await client.query(`UPDATE marketplace_listings SET reserved_quantity=GREATEST(0,reserved_quantity-$1),updated_at=NOW() WHERE id=$2`, [child.quantity, child.listing_id]);
+            await client.query(`
+              INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata)
+              VALUES ($1,$2,'ORDER_PAYMENT_EXPIRED','PAYMENT_PENDING','CANCELLED',$3::jsonb)
+            `, [child.id, child.buyer_id, JSON.stringify({ reason: 'checkout_group_payment_expired', checkoutGroupId: String(group.id), inventoryReleased: true, hadPaymentReference: Boolean(group.payment_reference) })]);
+          }
+          await client.query(`UPDATE marketplace_checkout_groups SET status='CANCELLED',updated_at=NOW() WHERE id=$1 AND status='PAYMENT_PENDING'`, [group.id]);
+          expired += 1;
+        }
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        logger.error('[fynx-marketplace] checkout group expiry reconciliation failed', error?.message || error);
+      } finally { client.release(); }
+    }
+  } catch (error) {
+    // Multi-product tables may not exist until the feature is first used.
+    if (!/marketplace_checkout_groups/i.test(String(error?.message || ''))) logger.error('[fynx-marketplace] checkout group expiry scan failed', error?.message || error);
+  }
+  if (expired) logger.log(`[fynx-marketplace] expired ${expired} unpaid multi-product checkout group(s)`);
+  return expired;
+}
+
 export async function expireUnpaidMarketplaceReservations({ logger = console } = {}) {
   if (!pool) return 0;
+  await expireUnpaidMarketplaceCheckoutGroups({ logger });
   const candidates = await pool.query(`
     SELECT id, buyer_id, listing_id, quantity, total_amount, currency, payment_reference
     FROM marketplace_orders

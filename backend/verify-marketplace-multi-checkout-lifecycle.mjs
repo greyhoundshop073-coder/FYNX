@@ -6,6 +6,7 @@ const checkout = read('./marketplaceCheckoutOrder.js');
 const completion = read('./marketplaceCompletion.js');
 const settlement = read('./marketplaceSettlementWorker.js');
 const webhook = read('./marketplacePaystackWebhook.js');
+const expiry = read('./marketplacePaymentExpiry.js');
 
 const checks = [
   ['multi-product checkout route exists', checkout.includes("/api/marketplace/checkout/multi-order")],
@@ -20,7 +21,10 @@ const checks = [
   ['completion is blocked by an active protection case', completion.includes('hasActiveProtectionCase(client, id)')],
   ['payout reconciliation remains child-order scoped', settlement.includes('WHERE order_id=$1') && settlement.includes('PAYOUT-RELEASE-' + '$' + '{operation.order_id}')],
   ['payout is blocked when a refund is active for that child', settlement.includes("operation_type='REFUND'") && settlement.includes('refund financial operation is active for this order')],
-  ['multi-product Paystack webhook reconciliation exists', webhook.includes('FYNX-CHECKOUT-') && webhook.includes('marketplace_checkout_groups') && webhook.includes('marketplace_checkout_group_items')]
+  ['multi-product Paystack webhook reconciliation exists', webhook.includes('FYNX-CHECKOUT-') && webhook.includes('marketplace_checkout_groups') && webhook.includes('marketplace_checkout_group_items')],
+  ['expired multi-product groups are reconciled as one unit', expiry.includes('expireUnpaidMarketplaceCheckoutGroups') && expiry.includes('UPDATE marketplace_checkout_groups SET status=\'CANCELLED\'')],
+  ['expired group checkout releases every child inventory reservation', expiry.includes('checkout_group_payment_expired') && expiry.includes('reserved_quantity=GREATEST(0,reserved_quantity-$1)')],
+  ['expired group payment is checked with Paystack before stock release', expiry.includes('verifyProviderCheckoutGroupPayment') && expiry.includes('provider.providerUnavailable') && expiry.includes('checkout-group-expiry-reconciliation')]
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
