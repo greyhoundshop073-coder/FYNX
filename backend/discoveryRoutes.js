@@ -1,9 +1,13 @@
 import crypto from "node:crypto";
+import { ensureMarketplaceSchemaForPool } from "./marketplaceSchema.js";
 
 export function registerDiscoveryRoutes({ app, pool, auth }) {
   let schemaPromise;
   const ensureSchema = async () => {
-    if (!schemaPromise) schemaPromise = pool.query(`
+    if (!schemaPromise) schemaPromise = (async () => {
+      // Discovery events reference marketplace_listings, so initialize listings first.
+      await ensureMarketplaceSchemaForPool(pool);
+      return pool.query(`
       CREATE TABLE IF NOT EXISTS fynx_discovery_events (
         id BIGSERIAL PRIMARY KEY,
         user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -19,7 +23,8 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       CREATE INDEX IF NOT EXISTS fynx_discovery_events_post_idx ON fynx_discovery_events(post_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS fynx_discovery_events_listing_idx ON fynx_discovery_events(listing_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS fynx_discovery_events_type_idx ON fynx_discovery_events(event_type, created_at DESC);
-    `).catch((error) => { schemaPromise = undefined; throw error; });
+    `);
+    })().catch((error) => { schemaPromise = undefined; throw error; });
     return schemaPromise;
   };
 
