@@ -217,8 +217,9 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var protectedOrder by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }
     var showSell by remember { mutableStateOf(false) }
     var showOrders by remember { mutableStateOf(false) }
-    var cart by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
-    var cartQuantities by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    val restoredMarketplaceCart = remember(context) { readFynxMarketplaceCart(context) }
+    var cart by remember { mutableStateOf(restoredMarketplaceCart.items) }
+    var cartQuantities by remember { mutableStateOf(restoredMarketplaceCart.quantities) }
     var multiCheckoutItems by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>?>(null) }
     var multiPayment by remember { mutableStateOf<Triple<String, Double, String>?>(null) }
     var multiPaymentListingIds by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -332,6 +333,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 error = "FYNX could not open the seller chat. Please try again."
             }
         }
+    }
+
+    LaunchedEffect(cart, cartQuantities) {
+        writeFynxMarketplaceCart(context, cart, cartQuantities)
     }
 
     LaunchedEffect(query, category, nearbyMode, nearbyLabel) {
@@ -735,6 +740,93 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     multiCheckoutItems?.let { selectedItems -> FynxMarketplaceMultiCheckoutDialog(context, selectedItems, cartQuantities, onPaymentReady = { id, total, currency -> multiPaymentListingIds = selectedItems.map { it.id }.toSet(); multiCheckoutItems = null; multiPayment = Triple(id, total, currency) }, onClose = { multiCheckoutItems = null }) }
     multiPayment?.let { p -> MarketplaceMultiProductPaymentDialog(context, p.first, p.second, p.third, onPaid = { val paidIds = multiPaymentListingIds; cart = cart.filterNot { it.id in paidIds }; cartQuantities = cartQuantities.filterKeys { it !in paidIds }; multiPaymentListingIds = emptySet(); multiPayment = null; reload() }, onClose = { multiPaymentListingIds = emptySet(); multiPayment = null }) }
     if (showOrders) MarketplaceOrders(context, orders, onRefresh = { reload() }, onClose = { showOrders = false })
+}
+
+private data class FynxSavedMarketplaceCart(
+    val items: List<FynxRemoteSocialClient.MarketplaceListing>,
+    val quantities: Map<String, Int>
+)
+
+private const val FYNX_MARKETPLACE_CART_KEY = "marketplace_cart_snapshot_v1"
+
+private fun readFynxMarketplaceCart(context: android.content.Context): FynxSavedMarketplaceCart {
+    return runCatching {
+        val raw = context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+            .getString(FYNX_MARKETPLACE_CART_KEY, null)
+            ?: return FynxSavedMarketplaceCart(emptyList(), emptyMap())
+        val array = JSONArray(raw)
+        val items = mutableListOf<FynxRemoteSocialClient.MarketplaceListing>()
+        val quantities = linkedMapOf<String, Int>()
+        for (index in 0 until minOf(array.length(), 20)) {
+            val item = array.optJSONObject(index) ?: continue
+            val id = item.optString("id").trim()
+            val cartQuantity = item.optInt("cartQuantity", 1)
+            if (id.isBlank() || cartQuantity !in 1..999 || items.any { it.id == id }) continue
+            val media = item.optJSONArray("mediaIds") ?: JSONArray()
+            val mediaIds = (0 until media.length()).mapNotNull { media.optString(it).trim().takeIf(String::isNotBlank) }
+            val listing = FynxRemoteSocialClient.MarketplaceListing(
+                id = id,
+                sellerId = item.optString("sellerId"),
+                sellerUsername = item.optString("sellerUsername"),
+                sellerDisplayName = item.optString("sellerDisplayName"),
+                storeName = item.optString("storeName"),
+                title = item.optString("title"),
+                description = item.optString("description"),
+                price = item.optDouble("price", Double.NaN),
+                currency = item.optString("currency"),
+                category = item.optString("category"),
+                condition = item.optString("condition"),
+                quantity = item.optInt("quantity", 0),
+                location = item.optString("location"),
+                deliveryAvailable = item.optBoolean("deliveryAvailable"),
+                pickupAvailable = item.optBoolean("pickupAvailable"),
+                deliveryFee = if (item.isNull("deliveryFee")) null else item.optDouble("deliveryFee"),
+                mediaIds = mediaIds,
+                active = item.optBoolean("active", false)
+            )
+            if (!listing.price.isFinite() || listing.price < 0.0 || listing.currency.isBlank()) continue
+            items += listing
+            quantities[id] = cartQuantity
+        }
+        FynxSavedMarketplaceCart(items, quantities)
+    }.getOrElse { FynxSavedMarketplaceCart(emptyList(), emptyMap()) }
+}
+
+private fun writeFynxMarketplaceCart(
+    context: android.content.Context,
+    items: List<FynxRemoteSocialClient.MarketplaceListing>,
+    quantities: Map<String, Int>
+) {
+    runCatching {
+        val array = JSONArray()
+        items.distinctBy { it.id }.take(20).forEach { listing ->
+            val cartQuantity = quantities[listing.id] ?: return@forEach
+            if (cartQuantity !in 1..999) return@forEach
+            array.put(JSONObject().apply {
+                put("id", listing.id)
+                put("sellerId", listing.sellerId)
+                put("sellerUsername", listing.sellerUsername)
+                put("sellerDisplayName", listing.sellerDisplayName)
+                put("storeName", listing.storeName)
+                put("title", listing.title)
+                put("description", listing.description)
+                put("price", listing.price)
+                put("currency", listing.currency)
+                put("category", listing.category)
+                put("condition", listing.condition)
+                put("quantity", listing.quantity)
+                put("location", listing.location)
+                put("deliveryAvailable", listing.deliveryAvailable)
+                put("pickupAvailable", listing.pickupAvailable)
+                if (listing.deliveryFee == null) put("deliveryFee", JSONObject.NULL) else put("deliveryFee", listing.deliveryFee)
+                put("mediaIds", JSONArray().apply { listing.mediaIds.forEach { put(it) } })
+                put("active", listing.active)
+                put("cartQuantity", cartQuantity)
+            })
+        }
+        context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+            .edit().putString(FYNX_MARKETPLACE_CART_KEY, array.toString()).apply()
+    }
 }
 
 @Composable
