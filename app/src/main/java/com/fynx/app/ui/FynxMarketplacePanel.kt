@@ -55,7 +55,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -74,13 +73,12 @@ private fun MarketplaceExploreCategoryTiles(
     selectedCategory: String,
     onSelect: (String) -> Unit
 ) {
-    val accents = listOf(Color(0xFF60A5FA), Color(0xFFF472B6), Color(0xFFFB923C), Color(0xFF34D399), Color(0xFFC084FC), Color(0xFFFBBF24), Color(0xFF38BDF8))
+    val accent = MaterialTheme.colorScheme.primary
     Row(
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        categories.forEachIndexed { index, itemCategory ->
-            val accent = accents[index % accents.size]
+        categories.forEach { itemCategory ->
             val icon = when (itemCategory.lowercase(Locale.US)) {
                 "electronics" -> Icons.Default.Devices
                 "fashion" -> Icons.Default.ShoppingBag
@@ -93,7 +91,7 @@ private fun MarketplaceExploreCategoryTiles(
             Surface(
                 onClick = { onSelect(itemCategory) },
                 shape = RoundedCornerShape(16.dp),
-                color = if (selectedCategory == itemCategory) accent.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                color = if (selectedCategory == itemCategory) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.width(94.dp)
             ) {
                 Column(
@@ -102,10 +100,10 @@ private fun MarketplaceExploreCategoryTiles(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Box(
-                        modifier = Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(accent.copy(alpha = 0.18f)),
+                        modifier = Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(23.dp))
+                        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(23.dp))
                     }
                     Text(itemCategory, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
                 }
