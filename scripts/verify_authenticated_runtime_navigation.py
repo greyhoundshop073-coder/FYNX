@@ -906,7 +906,12 @@ def verify_marketplace_surface():
         "Marketplace is temporarily unavailable",
         "Marketplace is taking longer than expected",
         "Marketplace could not load.",
-        "Marketplace could not load"
+        "Marketplace could not load",
+        "Live listings could not load.",
+        "Live listings could not load",
+        "Your Marketplace is ready to retry",
+        "marketplace lookup failed",
+        "marketplace discovery unavailable"
     ))
     found=[label for label in content_markers if find_control(latest,[label])]
     if backend_error:
