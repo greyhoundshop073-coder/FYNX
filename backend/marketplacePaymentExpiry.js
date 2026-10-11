@@ -340,11 +340,21 @@ async function expireUnpaidMarketplaceCheckoutGroups({ logger = console } = {}) 
 export async function expireUnpaidMarketplaceReservations({ logger = console } = {}) {
   if (!pool) return 0;
   await expireUnpaidMarketplaceCheckoutGroups({ logger });
+  // Multi-product child orders are owned by their checkout-group lifecycle.
+  // Exclude them from this single-order scan so an unavailable/inconclusive
+  // Paystack group check cannot be bypassed by releasing child reservations.
+  const groupItemsTable = (await pool.query(
+    "SELECT to_regclass('public.marketplace_checkout_group_items') AS table_name"
+  )).rows[0]?.table_name;
+  const groupChildExclusion = groupItemsTable
+    ? "AND NOT EXISTS (SELECT 1 FROM marketplace_checkout_group_items gi WHERE gi.order_id = marketplace_orders.id)"
+    : "";
   const candidates = await pool.query(`
     SELECT id, buyer_id, listing_id, quantity, total_amount, currency, payment_reference
     FROM marketplace_orders
     WHERE status='PAYMENT_PENDING'
       AND created_at <= NOW() - ($1::text || ' minutes')::interval
+      ${groupChildExclusion}
     ORDER BY created_at ASC
     LIMIT 50
   `, [PAYMENT_RESERVATION_TTL_MINUTES]);
