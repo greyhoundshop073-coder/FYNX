@@ -364,6 +364,10 @@ export async function expireUnpaidMarketplaceReservations({ logger = console } =
     if (order.payment_reference) {
       const provider = await verifyProviderPayment(order);
       if (!provider.configured || provider.providerUnavailable) continue;
+      // A referenced payment that is still pending/processing (or has an unknown
+      // provider status) must keep its inventory reservation. Only a confirmed
+      // success or an explicit terminal failure can be reconciled here.
+      if (!provider.paid && !['failed', 'abandoned', 'reversed'].includes(provider.status)) continue;
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
