@@ -41,7 +41,7 @@ checks = [
     ("active marketplace retains order protection", "MarketplaceProtectedOrderDialog" in marketplace),
     ("marketplace cart opens from the real cart button", "showCart = true" in marketplace and "Icons.Default.ShoppingCart" in marketplace),
     ("marketplace cart prevents duplicate listing entries", "cart.none { it.id == listing.id }" in marketplace),
-    ("marketplace cart restores its saved snapshot when the panel is recreated", "readFynxMarketplaceCart(context)" in marketplace and "var cart by mutableStateOf(restoredMarketplaceCart.items)" in marketplace and "var cartQuantities by mutableStateOf(restoredMarketplaceCart.quantities)" in marketplace),
+    ("marketplace cart restores its saved snapshot when the panel is recreated", "readFynxMarketplaceCart(context)" in marketplace and "var cart by remember { mutableStateOf(restoredMarketplaceCart.items) }" in marketplace and "var cartQuantities by remember { mutableStateOf(restoredMarketplaceCart.quantities) }" in marketplace),
     ("marketplace cart persists item and quantity changes locally", "LaunchedEffect(cart, cartQuantities)" in marketplace and "writeFynxMarketplaceCart(context, cart, cartQuantities)" in marketplace and "marketplace_cart_snapshot_v1" in marketplace),
     ("marketplace saved cart is bounded to 20 distinct listings", "minOf(array.length(), 20)" in marketplace and "items.distinctBy { it.id }.take(20)" in marketplace),
     ("marketplace saved cart rejects blank/duplicate IDs and invalid quantities", 'if (id.isBlank() || cartQuantity !in 1..999 || items.any { it.id == id }) continue' in marketplace),
