@@ -190,6 +190,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var hasMoreListings by remember { mutableStateOf(false) }
     var loadingMoreListings by remember { mutableStateOf(false) }
     var nextListingsOffset by remember { mutableIntStateOf(0) }
+    // Invalidates in-flight search/filter and pagination responses when the active listing query changes.
+    var listingRequestGeneration by remember { mutableIntStateOf(0) }
     val productsGridState = rememberLazyGridState()
     var orders by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceOrder>>(emptyList()) }
     var query by remember { mutableStateOf("") }
@@ -270,6 +272,11 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
 
     fun reload() {
         scope.launch {
+            val requestGeneration = ++listingRequestGeneration
+            val requestQuery = query
+            val requestCategory = category
+            val requestNearbyMode = nearbyMode
+            val requestNearbyLabel = nearbyLabel
             loading = true
             loadingMoreListings = false
             nextListingsOffset = 0
@@ -277,18 +284,19 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             error = null
             discoveryFallbackWarning = null
             val result = kotlinx.coroutines.withTimeoutOrNull(35_000L) {
-                if (nearbyMode && nearbyLabel.isNotBlank()) {
-                    FynxRemoteSocialClient.nearbyMarketplaceListings(context, query, category, nearbyLabel).map { it to false }
+                if (requestNearbyMode && requestNearbyLabel.isNotBlank()) {
+                    FynxRemoteSocialClient.nearbyMarketplaceListings(context, requestQuery, requestCategory, requestNearbyLabel).map { it to false }
                 } else {
-                    FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query, category, limit = 24, offset = 0)
+                    FynxRemoteSocialClient.marketplaceDiscoveryPage(context, requestQuery, requestCategory, limit = 24, offset = 0)
                         .map { page -> page.listings to page.hasMore }
                         .recoverCatching {
-                            val fallbackListings = FynxRemoteSocialClient.listings(context, query, category).getOrThrow()
+                            val fallbackListings = FynxRemoteSocialClient.listings(context, requestQuery, requestCategory).getOrThrow()
                             discoveryFallbackWarning = "Marketplace discovery is temporarily unavailable; showing live listings through the backup route."
                             fallbackListings to false
                         }
                 }
             }
+            if (requestGeneration != listingRequestGeneration) return@launch
             if (result == null) {
                 error = "Marketplace is taking longer than expected. Check your connection and try again."
             } else {
@@ -306,11 +314,16 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
 
     fun loadMoreListings() {
         if (loading || loadingMoreListings || !hasMoreListings || nearbyMode) return
+        val requestGeneration = listingRequestGeneration
+        val requestQuery = query
+        val requestCategory = category
+        val requestOffset = nextListingsOffset
         scope.launch {
             loadingMoreListings = true
             val result = kotlinx.coroutines.withTimeoutOrNull(35_000L) {
-                FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query, category, limit = 24, offset = nextListingsOffset)
+                FynxRemoteSocialClient.marketplaceDiscoveryPage(context, requestQuery, requestCategory, limit = 24, offset = requestOffset)
             }
+            if (requestGeneration != listingRequestGeneration) return@launch
             if (result == null) {
                 error = "More products could not load. Scroll up and retry."
             } else {
@@ -342,6 +355,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     }
 
     LaunchedEffect(query, category, nearbyMode, nearbyLabel) {
+        // Invalidate prior requests immediately, before the search debounce completes.
+        listingRequestGeneration += 1
         delay(if (query.isBlank()) 0L else 350L)
         reload()
     }
