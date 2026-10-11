@@ -209,6 +209,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var category by remember { mutableStateOf("All") }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var discoveryFallbackWarning by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
     var sellerStoreUsername by remember { mutableStateOf<String?>(null) }
     var checkoutListing by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
@@ -271,13 +272,18 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             nextListingsOffset = 0
             hasMoreListings = false
             error = null
+            discoveryFallbackWarning = null
             val result = kotlinx.coroutines.withTimeoutOrNull(35_000L) {
                 if (nearbyMode && nearbyLabel.isNotBlank()) {
                     FynxRemoteSocialClient.nearbyMarketplaceListings(context, query, category, nearbyLabel).map { it to false }
                 } else {
                     FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query, category, limit = 24, offset = 0)
                         .map { page -> page.listings to page.hasMore }
-                        .recoverCatching { FynxRemoteSocialClient.listings(context, query, category).getOrThrow() to false }
+                        .recoverCatching {
+                            val fallbackListings = FynxRemoteSocialClient.listings(context, query, category).getOrThrow()
+                            discoveryFallbackWarning = "Marketplace discovery is temporarily unavailable; showing live listings through the backup route."
+                            fallbackListings to false
+                        }
                 }
             }
             if (result == null) {
@@ -439,6 +445,12 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             }
                         )
                     }
+                }
+            }
+            if (discoveryFallbackWarning != null && listings.isNotEmpty()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(discoveryFallbackWarning.orEmpty(), modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    TextButton(onClick = { reload() }) { Text("Retry discovery") }
                 }
             }
             if (error != null && listings.isNotEmpty()) {
