@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
@@ -85,7 +86,12 @@ internal fun MarketplaceReferenceProductCard(
                         Text(String.format(Locale.US, "%.1f", it.averageRating), color = FynxMarketplaceReferenceStyle.textMuted, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
                     }
                 }
-                if (listing.location.isNotBlank()) Text(listing.location, color = FynxMarketplaceReferenceStyle.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
+                if (listing.location.isNotBlank()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(Icons.Default.LocationOn, contentDescription = "Seller location", modifier = Modifier.size(15.dp), tint = FynxMarketplaceReferenceStyle.primarySoft)
+                        Text(listing.location.trim(), color = FynxMarketplaceReferenceStyle.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
+                    }
+                }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.TextButton(onClick = onProfile, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
                         Text("View seller", color = FynxMarketplaceReferenceStyle.primarySoft, style = androidx.compose.material3.MaterialTheme.typography.labelMedium)
