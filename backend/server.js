@@ -12,7 +12,6 @@ import { registerMarketplaceCompletionRoutes } from "./marketplaceCompletion.js"
 import { registerMoneyPlannerRoutes } from "./moneyPlanner.js";
 import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
-import { registerDiscoveryRoutes } from "./discoveryRoutes.js";
 
 const { Pool } = pg;
 const app = express();
@@ -775,7 +774,6 @@ wss.on("connection", (socket, req) => {
 });
 
 registerSocialRoutes(app, { pool, auth, findUserByUsername });
-if (pool) registerDiscoveryRoutes({ app, pool, auth });
 if (pool) registerTrustSafetyRoutes({ app, pool, auth });
 if (pool) registerMarketplaceTransactionRoutes({ app, pool, auth });
 registerMarketplaceReputationRoutes({ app, pool, auth });
