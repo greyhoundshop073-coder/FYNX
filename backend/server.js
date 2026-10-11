@@ -6,7 +6,6 @@ import jwt from "jsonwebtoken";
 import pg from "pg";
 import { WebSocketServer } from "ws";
 import { registerSocialRoutes } from "./socialRoutes.js";
-import { registerDiscoveryRoutes } from "./discoveryRoutes.js";
 import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";
 import { registerMarketplaceReputationRoutes } from "./marketplaceReputation.js";
 import { registerMarketplaceCompletionRoutes } from "./marketplaceCompletion.js";
@@ -775,7 +774,6 @@ wss.on("connection", (socket, req) => {
 });
 
 registerSocialRoutes(app, { pool, auth, findUserByUsername });
-if (pool) registerDiscoveryRoutes({ app, pool, auth });
 if (pool) registerTrustSafetyRoutes({ app, pool, auth });
 if (pool) registerMarketplaceTransactionRoutes({ app, pool, auth });
 registerMarketplaceReputationRoutes({ app, pool, auth });
