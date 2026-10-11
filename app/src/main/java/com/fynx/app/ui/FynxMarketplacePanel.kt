@@ -217,7 +217,9 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var protectedOrder by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }
     var showSell by remember { mutableStateOf(false) }
     var showOrders by remember { mutableStateOf(false) }
-    val restoredMarketplaceCart = remember(context) { readFynxMarketplaceCart(context) }
+    // Keep saved carts isolated when multiple accounts use the same device.
+    val cartOwnerKey = currentUsername.removePrefix("@").trim().lowercase(Locale.US).ifBlank { "preview" }
+    val restoredMarketplaceCart = remember(context, cartOwnerKey) { readFynxMarketplaceCart(context, cartOwnerKey) }
     var cart by remember { mutableStateOf(restoredMarketplaceCart.items) }
     var cartQuantities by remember { mutableStateOf(restoredMarketplaceCart.quantities) }
     var multiCheckoutItems by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>?>(null) }
@@ -335,8 +337,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         }
     }
 
-    LaunchedEffect(cart, cartQuantities) {
-        writeFynxMarketplaceCart(context, cart, cartQuantities)
+    LaunchedEffect(cartOwnerKey, cart, cartQuantities) {
+        writeFynxMarketplaceCart(context, cartOwnerKey, cart, cartQuantities)
     }
 
     LaunchedEffect(query, category, nearbyMode, nearbyLabel) {
@@ -749,10 +751,12 @@ private data class FynxSavedMarketplaceCart(
 
 private const val FYNX_MARKETPLACE_CART_KEY = "marketplace_cart_snapshot_v1"
 
-private fun readFynxMarketplaceCart(context: android.content.Context): FynxSavedMarketplaceCart {
+private fun marketplaceCartStorageKey(ownerKey: String): String = "$FYNX_MARKETPLACE_CART_KEY:${ownerKey.trim().lowercase(Locale.US)}"
+
+private fun readFynxMarketplaceCart(context: android.content.Context, ownerKey: String): FynxSavedMarketplaceCart {
     return runCatching {
         val raw = context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
-            .getString(FYNX_MARKETPLACE_CART_KEY, null)
+            .getString(marketplaceCartStorageKey(ownerKey), null)
             ?: return FynxSavedMarketplaceCart(emptyList(), emptyMap())
         val array = JSONArray(raw)
         val items = mutableListOf<FynxRemoteSocialClient.MarketplaceListing>()
@@ -794,6 +798,7 @@ private fun readFynxMarketplaceCart(context: android.content.Context): FynxSaved
 
 private fun writeFynxMarketplaceCart(
     context: android.content.Context,
+    ownerKey: String,
     items: List<FynxRemoteSocialClient.MarketplaceListing>,
     quantities: Map<String, Int>
 ) {
@@ -825,7 +830,7 @@ private fun writeFynxMarketplaceCart(
             })
         }
         context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
-            .edit().putString(FYNX_MARKETPLACE_CART_KEY, array.toString()).apply()
+            .edit().putString(marketplaceCartStorageKey(ownerKey), array.toString()).apply()
     }
 }
 
