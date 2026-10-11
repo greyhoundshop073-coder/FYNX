@@ -12,6 +12,8 @@ const checks = [
   ['multi-product checkout route exists', checkout.includes("/api/marketplace/checkout/multi-order")],
   ['multi-product checkout is capped at 20 distinct products', checkout.includes('rawItems.length > 20') && checkout.includes('at most 20 different products')],
   ['duplicate listings are rejected', checkout.includes('DUPLICATE_LISTING')],
+  ['checkout idempotency locks and checks the existing group', checkout.includes('FOR UPDATE', checkout.indexOf('FROM marketplace_checkout_groups WHERE id=$1 AND buyer_id=$2')) && checkout.includes('CHECKOUT_ID_REUSE_CONFLICT')],
+  ['checkout idempotency compares every requested listing, quantity, fulfillment method and delivery address', checkout.includes('const sameRequest = requestedItems.length === existingItems.length') && checkout.includes('order.group_listing_id') && checkout.includes('order.group_quantity') && checkout.includes('sameAddress(order.shipping_address, item.address)') && checkout.includes('requestedBuyerNote')],
   ['mixed currencies are rejected', checkout.includes('MIXED_CURRENCIES')],
   ['checkout group has one child link per order', checkout.includes('marketplace_checkout_group_items') && checkout.includes('order_id UUID NOT NULL UNIQUE')],
   ['each child order retains its own seller and listing', checkout.includes('seller_id,listing_id,quantity') && checkout.includes('sellerId: String(row.seller_id)')],
