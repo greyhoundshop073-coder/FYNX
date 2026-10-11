@@ -608,6 +608,11 @@ private fun AppearanceSettingsPanel(
     onThemeSelected: (String) -> Unit,
     onAccentClick: () -> Unit
 ) {
+    val context = LocalContext.current
+    var fontSize by remember { mutableStateOf(FynxPreferencesStore.loadSettingsFontSize(context)) }
+    var messageStyle by remember { mutableStateOf(FynxPreferencesStore.loadSettingsMessageStyle(context)) }
+    var chooseFontSize by remember { mutableStateOf(false) }
+    var chooseMessageStyle by remember { mutableStateOf(false) }
     val themes = listOf(
         "System" to "System Default",
         "Light" to "Light",
@@ -660,22 +665,55 @@ private fun AppearanceSettingsPanel(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .4f))
                 ) {
-                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Column {
-                            Text("Font Size", style = MaterialTheme.typography.titleMedium)
-                            Text("Default", style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        HorizontalDivider()
-                        Column {
-                            Text("Message Style", style = MaterialTheme.typography.titleMedium)
-                            Text("FYNX Default", style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+                    Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        SettingsActionCard("Font Size", fontSize) { chooseFontSize = true }
+                        SettingsActionCard("Message Style", messageStyle) { chooseMessageStyle = true }
                     }
                 }
             }
         }
+    }
+    if (chooseFontSize) {
+        AlertDialog(
+            onDismissRequest = { chooseFontSize = false },
+            title = { Text("Font Size") },
+            text = {
+                Column {
+                    listOf("Small", "Default", "Large", "Extra large").forEach { option ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = fontSize == option, onClick = {
+                                fontSize = option
+                                FynxPreferencesStore.saveSettingsFontSize(context, option)
+                                chooseFontSize = false
+                            })
+                            Text(option, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { chooseFontSize = false }) { Text("Done") } }
+        )
+    }
+    if (chooseMessageStyle) {
+        AlertDialog(
+            onDismissRequest = { chooseMessageStyle = false },
+            title = { Text("Message Style") },
+            text = {
+                Column {
+                    listOf("FYNX Default", "Compact", "Comfortable").forEach { option ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = messageStyle == option, onClick = {
+                                messageStyle = option
+                                FynxPreferencesStore.saveSettingsMessageStyle(context, option)
+                                chooseMessageStyle = false
+                            })
+                            Text(option, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { chooseMessageStyle = false }) { Text("Done") } }
+        )
     }
 }
 
