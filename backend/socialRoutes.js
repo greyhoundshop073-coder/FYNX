@@ -1,8 +1,9 @@
 import { Buffer } from "node:buffer";
 import { queueFynxNotification, notifyCommentMentions } from "./notificationPush.js";
+import { ensureMarketplaceSchemaForPool } from "./marketplaceSchema.js";
 
 export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
-  let marketplaceSchemaPromise;
+  const ensureMarketplaceSchema = () => ensureMarketplaceSchemaForPool(pool);
   const commentRate = new Map();
   const COMMENT_RATE_WINDOW_MS = 60_000;
   const COMMENT_RATE_LIMIT = 30;
