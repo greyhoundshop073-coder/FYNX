@@ -242,4 +242,4 @@ await installSocialFeed();
 await installHomeCommentBackend();
 await installHomeCommentPrivacy();
 await installSocialPostReactions();
-await import("./checkoutBootstrap.js");
+await import("./serverBootstrap.js");
