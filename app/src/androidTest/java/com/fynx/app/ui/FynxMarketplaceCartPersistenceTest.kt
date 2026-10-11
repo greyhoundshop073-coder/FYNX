@@ -25,7 +25,7 @@ class FynxMarketplaceCartPersistenceTest {
         val first = listing("listing-1", "NGN", 12500.0)
         val second = listing("listing-2", "NGN", 750.0)
 
-        writeFynxMarketplaceCart(context, "@BuyerOne", listOf(first, second), mapOf(first.id to 2, second.id to 4))
+        writeFynxMarketplaceCart(context, "BuyerOne", listOf(first, second), mapOf(first.id to 2, second.id to 4))
 
         val restored = readFynxMarketplaceCart(context, "buyerone")
         assertEquals(listOf(first, second), restored.items)
