@@ -28,6 +28,7 @@ const checks = [
   ['expired multi-product groups are reconciled as one unit', expiry.includes('expireUnpaidMarketplaceCheckoutGroups') && expiry.includes('UPDATE marketplace_checkout_groups SET status=\'CANCELLED\'')],
   ['expired group checkout releases every child inventory reservation', expiry.includes('checkout_group_payment_expired') && expiry.includes('reserved_quantity=GREATEST(0,reserved_quantity-$1)')],
   ['expired group payment is checked with Paystack before stock release', expiry.includes('verifyProviderCheckoutGroupPayment') && expiry.includes('provider.providerUnavailable') && expiry.includes('checkout-group-expiry-reconciliation')],
+  ['single-order expiry retains stock for non-terminal referenced payments', expiry.includes("if (!provider.paid && !['failed', 'abandoned', 'reversed'].includes(provider.status)) continue;")],
   ['single-order expiry excludes child orders owned by checkout groups', expiry.includes('to_regclass(\'public.marketplace_checkout_group_items\')') && expiry.includes('NOT EXISTS (SELECT 1 FROM marketplace_checkout_group_items gi WHERE gi.order_id = marketplace_orders.id)')],
   ['group child exclusion remains safe before multi-product tables are created', expiry.includes('const groupChildExclusion = groupItemsTable') && expiry.includes(': "";')]
 ];
