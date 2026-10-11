@@ -346,6 +346,8 @@ fun SettingsPanel(
     var showAppearancePage by remember { mutableStateOf(false) }
     var showColors by remember { mutableStateOf(false) }
     var showChatPersonalization by remember { mutableStateOf(false) }
+    var showStoriesStatus by remember { mutableStateOf(false) }
+    var storyVisibility by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, "privacy_status_visibility")) }
     var search by remember { mutableStateOf("") }
     var showLanguage by remember { mutableStateOf(false) }
     var infoTitle by remember { mutableStateOf<String?>(null) }
@@ -463,8 +465,9 @@ fun SettingsPanel(
             if (visible("Stories & Status", "stories status replies reactions privacy")) {
                 item {
                     SettingsReferenceRow(Icons.Default.AutoStories, "Stories & Status",
-                        "Manage story replies and status privacy", androidx.compose.ui.graphics.Color(0xFFE45B91)) {
-                        onOpenPrivacy()
+                        "Manage story visibility and status privacy", androidx.compose.ui.graphics.Color(0xFFE45B91)) {
+                        storyVisibility = FynxPreferencesStore.loadVisibility(context, "privacy_status_visibility")
+                        showStoriesStatus = true
                     }
                 }
             }
@@ -692,6 +695,32 @@ private fun AppearanceSettingsPanel(
                 }
             },
             confirmButton = { TextButton(onClick = { chooseFontSize = false }) { Text("Done") } }
+        )
+    }
+    if (showStoriesStatus) {
+        AlertDialog(
+            onDismissRequest = { showStoriesStatus = false },
+            title = { Text("Stories & Status") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Who can view your status?")
+                    listOf("Everyone", "My friends", "Nobody").forEach { option ->
+                        Row(Modifier.fillMaxWidth().clickable {
+                            storyVisibility = option
+                            FynxPreferencesStore.saveVisibility(context, "privacy_status_visibility", option)
+                            showStoriesStatus = false
+                        }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = storyVisibility == option, onClick = {
+                                storyVisibility = option
+                                FynxPreferencesStore.saveVisibility(context, "privacy_status_visibility", option)
+                                showStoriesStatus = false
+                            })
+                            Text(option, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showStoriesStatus = false }) { Text("Done") } }
         )
     }
     if (chooseMessageStyle) {
