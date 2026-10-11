@@ -73,7 +73,6 @@ private fun MarketplaceExploreCategoryTiles(
     selectedCategory: String,
     onSelect: (String) -> Unit
 ) {
-    val accent = MaterialTheme.colorScheme.primary
     Row(
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
