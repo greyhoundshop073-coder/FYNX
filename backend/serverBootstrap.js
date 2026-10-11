@@ -31,7 +31,10 @@ source = source.replace(
 
 source = source.replace('from "./socialRoutes.js";', 'from "./.fynx-runtime-socialRoutes.js";\nimport { registerDiscoveryRoutes } from "./discoveryRoutes.js";\nimport { registerBusinessRoutes } from "./businessRoutes.js";\nimport { startMarketplaceInspectionReconciliation } from "./marketplaceInspectionReconciliation.js";\nimport { registerMarketplacePaystackWebhook } from "./marketplacePaystackWebhook.js";\nimport { registerMarketplaceCheckoutRoutes } from "./marketplaceCheckout.js";\nimport { registerMarketplaceCheckoutOrderRoutes } from "./marketplaceCheckoutOrder.js";\nimport { registerMarketplaceShippingRoutes } from "./marketplaceShipping.js";');
 source = source.replace('registerSocialRoutes(app, { pool, auth, findUserByUsername });', 'registerSocialRoutes(app, { pool, auth, findUserByUsername });\nif (pool) registerDiscoveryRoutes({ app, pool, auth });\nif (pool) registerBusinessRoutes({ app, auth });\nif (pool) startMarketplaceInspectionReconciliation({ pool });\nif (pool) registerMarketplacePaystackWebhook({ app, pool });');
-source = source.replace(\n  'registerMarketplaceCompletionRoutes({ app, pool, auth });',\n  'registerMarketplaceCompletionRoutes({ app, pool, auth });\\nif (pool) {\\n  registerMarketplaceCheckoutRoutes({ app, pool, auth });\\n  registerMarketplaceCheckoutOrderRoutes({ app, pool, auth });\\n  registerMarketplaceShippingRoutes({ app, pool, auth });\\n}'\n);
+source = source.replace(
+  'registerMarketplaceCompletionRoutes({ app, pool, auth });',
+  'registerMarketplaceCompletionRoutes({ app, pool, auth });\nif (pool) {\n  registerMarketplaceCheckoutRoutes({ app, pool, auth });\n  registerMarketplaceCheckoutOrderRoutes({ app, pool, auth });\n  registerMarketplaceShippingRoutes({ app, pool, auth });\n}'
+);
 source = source.replace(
   'app.use(express.json({ limit: "18mb", strict: true }));',
   'app.use(express.json({ limit: "18mb", strict: true, verify: (req, _res, buf) => { req.rawBody = Buffer.from(buf); } }));'
