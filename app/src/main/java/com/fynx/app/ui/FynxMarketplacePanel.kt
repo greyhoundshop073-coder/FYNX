@@ -744,7 +744,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     if (showOrders) MarketplaceOrders(context, orders, onRefresh = { reload() }, onClose = { showOrders = false })
 }
 
-private data class FynxSavedMarketplaceCart(
+internal data class FynxSavedMarketplaceCart(
     val items: List<FynxRemoteSocialClient.MarketplaceListing>,
     val quantities: Map<String, Int>
 )
@@ -753,7 +753,7 @@ private const val FYNX_MARKETPLACE_CART_KEY = "marketplace_cart_snapshot_v1"
 
 private fun marketplaceCartStorageKey(ownerKey: String): String = "$FYNX_MARKETPLACE_CART_KEY:${ownerKey.trim().lowercase(Locale.US)}"
 
-private fun readFynxMarketplaceCart(context: android.content.Context, ownerKey: String): FynxSavedMarketplaceCart {
+internal fun readFynxMarketplaceCart(context: android.content.Context, ownerKey: String): FynxSavedMarketplaceCart {
     return runCatching {
         val raw = context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
             .getString(marketplaceCartStorageKey(ownerKey), null)
@@ -796,7 +796,7 @@ private fun readFynxMarketplaceCart(context: android.content.Context, ownerKey: 
     }.getOrElse { FynxSavedMarketplaceCart(emptyList(), emptyMap()) }
 }
 
-private fun writeFynxMarketplaceCart(
+internal fun writeFynxMarketplaceCart(
     context: android.content.Context,
     ownerKey: String,
     items: List<FynxRemoteSocialClient.MarketplaceListing>,
