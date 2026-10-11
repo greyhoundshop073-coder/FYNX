@@ -220,8 +220,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     // Keep saved carts isolated when multiple accounts use the same device.
     val cartOwnerKey = currentUsername.removePrefix("@").trim().lowercase(Locale.US).ifBlank { "preview" }
     val restoredMarketplaceCart = remember(context, cartOwnerKey) { readFynxMarketplaceCart(context, cartOwnerKey) }
-    var cart by remember { mutableStateOf(restoredMarketplaceCart.items) }
-    var cartQuantities by remember { mutableStateOf(restoredMarketplaceCart.quantities) }
+    var cart by remember(cartOwnerKey) { mutableStateOf(restoredMarketplaceCart.items) }
+    var cartQuantities by remember(cartOwnerKey) { mutableStateOf(restoredMarketplaceCart.quantities) }
     var multiCheckoutItems by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>?>(null) }
     var multiPayment by remember { mutableStateOf<Triple<String, Double, String>?>(null) }
     var multiPaymentListingIds by remember { mutableStateOf<Set<String>>(emptySet()) }
