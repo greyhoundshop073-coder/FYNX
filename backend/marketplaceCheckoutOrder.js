@@ -136,7 +136,14 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
       await client.query('CREATE TABLE IF NOT EXISTS marketplace_checkout_group_items (checkout_id UUID NOT NULL REFERENCES marketplace_checkout_groups(id) ON DELETE CASCADE,order_id UUID NOT NULL UNIQUE REFERENCES marketplace_orders(id) ON DELETE CASCADE,listing_id BIGINT NOT NULL REFERENCES marketplace_listings(id) ON DELETE RESTRICT,quantity INTEGER NOT NULL CHECK (quantity > 0),line_total NUMERIC(14,2) NOT NULL CHECK (line_total > 0),PRIMARY KEY (checkout_id,order_id))');
       await client.query('CREATE INDEX IF NOT EXISTS marketplace_checkout_groups_buyer_idx ON marketplace_checkout_groups (buyer_id, created_at DESC)');
       await client.query('CREATE INDEX IF NOT EXISTS marketplace_checkout_group_items_checkout_idx ON marketplace_checkout_group_items (checkout_id)');
-      const existing = (await client.query('SELECT id,buyer_id,currency,subtotal,delivery_fee,marketplace_fee,buyer_total,status FROM marketplace_checkout_groups WHERE id=$1 AND buyer_id=$2 FOR UPDATE', [checkoutId, req.user.sub])).rows[0];
+      // Serialize requests that reuse the same checkout UUID, including when no row exists yet.
+      // The transaction-scoped lock closes the race before the unique group row can be inserted.
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('fynx-marketplace-checkout:' || $1::text))", [checkoutId]);
+      const existing = (await client.query('SELECT id,buyer_id,currency,subtotal,delivery_fee,marketplace_fee,buyer_total,status FROM marketplace_checkout_groups WHERE id=$1 FOR UPDATE', [checkoutId])).rows[0];
+      if (existing && String(existing.buyer_id) !== String(req.user.sub)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'checkout id is already in use', code: 'CHECKOUT_ID_REUSE_CONFLICT' });
+      }
       if (existing) {
         const children = await client.query('SELECT gi.listing_id AS group_listing_id,gi.quantity AS group_quantity,o.* FROM marketplace_orders o JOIN marketplace_checkout_group_items gi ON gi.order_id=o.id WHERE gi.checkout_id=$1 ORDER BY gi.listing_id ASC', [checkoutId]);
         const requestedItems = [...items].sort((a, b) => a.listingId - b.listingId);
