@@ -285,14 +285,18 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             discoveryFallbackWarning = null
             val result = kotlinx.coroutines.withTimeoutOrNull(35_000L) {
                 if (requestNearbyMode && requestNearbyLabel.isNotBlank()) {
-                    FynxRemoteSocialClient.nearbyMarketplaceListings(context, requestQuery, requestCategory, requestNearbyLabel).map { it to false }
+                    FynxRemoteSocialClient.nearbyMarketplaceListings(context, requestQuery, requestCategory, requestNearbyLabel)
+                        .map { Triple(it, false, null as String?) }
                 } else {
                     FynxRemoteSocialClient.marketplaceDiscoveryPage(context, requestQuery, requestCategory, limit = 24, offset = 0)
-                        .map { page -> page.listings to page.hasMore }
+                        .map { page -> Triple(page.listings, page.hasMore, null as String?) }
                         .recoverCatching {
                             val fallbackListings = FynxRemoteSocialClient.listings(context, requestQuery, requestCategory).getOrThrow()
-                            discoveryFallbackWarning = "Marketplace discovery is temporarily unavailable; showing live listings through the backup route."
-                            fallbackListings to false
+                            Triple(
+                                fallbackListings,
+                                false,
+                                "Marketplace discovery is temporarily unavailable; showing live listings through the backup route."
+                            )
                         }
                 }
             }
@@ -300,8 +304,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             if (result == null) {
                 error = "Marketplace is taking longer than expected. Check your connection and try again."
             } else {
-                result.onSuccess { (items, more) ->
+                result.onSuccess { (items, more, fallbackWarning) ->
                     listings = items.distinctBy { it.id }
+                    hasMoreListings = more
+                    discoveryFallbackWarning = fallbackWarning
                     hasMoreListings = more
                     nextListingsOffset = items.size
                 }.onFailure { error = it.message ?: "Marketplace could not load." }
