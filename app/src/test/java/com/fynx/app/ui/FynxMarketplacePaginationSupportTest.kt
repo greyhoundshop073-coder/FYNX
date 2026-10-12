@@ -45,4 +45,17 @@ class FynxMarketplacePaginationSupportTest {
 
         assertEquals(existing, appendDistinctMarketplacePage(existing, emptyList()) { it.id })
     }
+
+    @Test
+    fun paginationOffsetAdvancesByRequestedPageSizeEvenWhenPagesAreShortOrOverlap() {
+        assertEquals(24, advanceMarketplaceListingsOffset(0, 24))
+        assertEquals(48, advanceMarketplaceListingsOffset(24, 24))
+        assertEquals(72, advanceMarketplaceListingsOffset(48, 24))
+    }
+
+    @Test
+    fun paginationOffsetUsesAtLeastOneForInvalidPageSize() {
+        assertEquals(25, advanceMarketplaceListingsOffset(24, 0))
+        assertEquals(25, advanceMarketplaceListingsOffset(24, -10))
+    }
 }
