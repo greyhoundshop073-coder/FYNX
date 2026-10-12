@@ -834,7 +834,7 @@ private fun AccountProfileSettingsPanel(
     onEditProfile: () -> Unit
 ) {
     val context = LocalContext.current
-    val profile = remember { FynxPreferencesStore.loadProfile(context, FynxAuthStore.currentSession(context).username) }
+    val profile = remember { FynxPreferencesStore.loadProfile(context, null) }
     var infoTitle by remember { mutableStateOf<String?>(null) }
     var infoText by remember { mutableStateOf("") }
 
