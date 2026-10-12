@@ -346,6 +346,7 @@ fun SettingsPanel(
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
     var showAppearance by remember { mutableStateOf(false) }
     var showAppearancePage by remember { mutableStateOf(false) }
+    var showAccountProfile by remember { mutableStateOf(false) }
     var showColors by remember { mutableStateOf(false) }
     var showChatPersonalization by remember { mutableStateOf(false) }
     var showStoriesStatus by remember { mutableStateOf(false) }
@@ -358,6 +359,13 @@ fun SettingsPanel(
     var infoDescription by remember { mutableStateOf("") }
 
     val query = search.trim().lowercase()
+    if (showAccountProfile) {
+        AccountProfileSettingsPanel(
+            onBack = { showAccountProfile = false },
+            onEditProfile = { showAccountProfile = false; onOpenAccountProfile() }
+        )
+        return
+    }
     if (showLanguage) {
         LanguageSelectionPanel(onBack = { showLanguage = false })
         return
@@ -444,7 +452,7 @@ fun SettingsPanel(
                     item {
                         SettingsReferenceRow(Icons.Default.AccountCircle, "Account & Profile",
                             "Personal information and account details", androidx.compose.ui.graphics.Color(0xFF4F7BFF)) {
-                            onOpenAccountProfile()
+                            showAccountProfile = true
                         }
                     }
                 }
@@ -521,18 +529,18 @@ fun SettingsPanel(
                 item { SettingsSectionTitle("FYNX") }
                 item {
                     SettingsReferenceRow(Icons.Default.HelpOutline, "Help & Support",
-                        "Troubleshooting steps for common problems", androidx.compose.ui.graphics.Color(0xFF477FEA)) {
+                        "Get help using FYNX", androidx.compose.ui.graphics.Color(0xFF477FEA)) {
                         infoTitle = "Help & Support"
-                        infoDescription = "Need a hand with FYNX? Try these quick tips.\n\nConnection: Check your internet connection and try again.\n\nAccount access: Confirm that your sign-in details are correct. Never share your password or verification codes.\n\nApp performance: If a screen becomes unresponsive, close and reopen FYNX. Keeping the app updated can also help you get the best experience.\n\nStill having trouble? Make a note of the feature involved and any error message, so you have the details ready when seeking assistance."
+                        infoDescription = "Help and support options will be available here."
                     }
                 }
             }
             if (visible("About FYNX", "about version app information")) {
                 item {
                     SettingsReferenceRow(Icons.Default.Info, "About FYNX",
-                        "What FYNX brings together", androidx.compose.ui.graphics.Color(0xFF8B69D6)) {
+                        "App information and version", androidx.compose.ui.graphics.Color(0xFF8B69D6)) {
                         infoTitle = "About FYNX"
-                        infoDescription = "FYNX brings people together through messaging, social sharing, Stories, groups, marketplace experiences and personalized settings—all in one place. Connect with people, share your moments and explore what matters to you."
+                        infoDescription = "FYNX brings communication, social sharing and marketplace tools together in one app."
                     }
                 }
             }
@@ -816,5 +824,98 @@ private fun LanguageSelectionPanel(onBack: () -> Unit) {
             Spacer(Modifier.height(10.dp))
             Text("English is currently the supported FYNX app language.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
+    }
+}
+
+
+@Composable
+private fun AccountProfileSettingsPanel(
+    onBack: () -> Unit,
+    onEditProfile: () -> Unit
+) {
+    val context = LocalContext.current
+    val profile = remember { FynxPreferencesStore.loadProfile(context, null) }
+    var infoTitle by remember { mutableStateOf<String?>(null) }
+    var infoText by remember { mutableStateOf("") }
+
+    Column(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding().padding(horizontal = 16.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back to settings")
+            }
+            Column(Modifier.weight(1f)) {
+                Text("Account & Profile", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Manage your personal information", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .35f))
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FynxAvatar(profile.displayName.ifBlank { "FYNX User" }, Modifier.size(58.dp).clip(CircleShape))
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(profile.displayName.ifBlank { "FYNX User" }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("@${profile.username.removePrefix("@")}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        TextButton(onClick = onEditProfile) { Text("Edit") }
+                    }
+                }
+            }
+            item { SettingsSectionTitle("ACCOUNT INFORMATION") }
+            item {
+                SettingsReferenceRow(Icons.Default.AccountCircle, "Profile Information",
+                    "Display name, bio, profile photo and description",
+                    androidx.compose.ui.graphics.Color(0xFF4F7BFF), onEditProfile)
+            }
+            item {
+                SettingsReferenceRow(Icons.Default.Edit, "Username",
+                    "@${profile.username.removePrefix("@")}",
+                    androidx.compose.ui.graphics.Color(0xFF20A88A), onEditProfile)
+            }
+            item {
+                SettingsReferenceRow(Icons.Default.Info, "Phone & Email",
+                    "Contact details depend on your sign-in and account setup",
+                    androidx.compose.ui.graphics.Color(0xFFCB8A35)) {
+                    infoTitle = "Phone & Email"
+                    infoText = "This screen does not yet provide verified phone or email editing. No contact details have been changed."
+                }
+            }
+            item { SettingsSectionTitle("ACCOUNT CONTROLS") }
+            item {
+                SettingsReferenceRow(Icons.Default.Security, "Account Controls",
+                    "Review account access and safety options",
+                    androidx.compose.ui.graphics.Color(0xFF8B5CF6)) {
+                    infoTitle = "Account Controls"
+                    infoText = "Account access and security controls remain in their existing FYNX account and privacy flows."
+                }
+            }
+        }
+    }
+    if (infoTitle != null) {
+        AlertDialog(
+            onDismissRequest = { infoTitle = null },
+            title = { Text(infoTitle!!) },
+            text = { Text(infoText) },
+            confirmButton = { TextButton(onClick = { infoTitle = null }) { Text("OK") } }
+        )
     }
 }
