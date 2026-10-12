@@ -353,6 +353,7 @@ fun SettingsPanel(
     var search by remember { mutableStateOf("") }
     var showLanguage by remember { mutableStateOf(false) }
     var showMediaStoragePage by remember { mutableStateOf(false) }
+    var showNetworkStatusPage by remember { mutableStateOf(false) }
     var infoTitle by remember { mutableStateOf<String?>(null) }
     var infoDescription by remember { mutableStateOf("") }
 
@@ -363,6 +364,10 @@ fun SettingsPanel(
     }
     if (showMediaStoragePage) {
         MediaStorageSettingsPanel(onBack = { showMediaStoragePage = false })
+        return
+    }
+    if (showNetworkStatusPage) {
+        DataNetworkSettingsPanel(onBack = { showNetworkStatusPage = false })
         return
     }
     if (showAppearancePage) {
@@ -500,8 +505,7 @@ fun SettingsPanel(
                 item {
                     SettingsReferenceRow(Icons.Default.DataUsage, "Data & Network",
                         "Data usage and network preferences", androidx.compose.ui.graphics.Color(0xFF39A96B)) {
-                        infoTitle = "Data & Network"
-                        infoDescription = "Network and data-saving controls are not yet available in this settings screen."
+                        showNetworkStatusPage = true
                     }
                 }
             }
