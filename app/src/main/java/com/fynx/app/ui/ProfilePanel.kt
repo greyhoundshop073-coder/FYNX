@@ -523,7 +523,7 @@ fun SettingsPanel(
                     SettingsReferenceRow(Icons.Default.HelpOutline, "Help & Support",
                         "Troubleshooting steps for common problems", androidx.compose.ui.graphics.Color(0xFF477FEA)) {
                         infoTitle = "Help & Support"
-                        infoDescription = "If FYNX is not loading: check your internet connection, then use the screen’s refresh or retry option. If a feature fails to save, reopen it and check whether the change was confirmed; do not assume it synced if an error appears. For sign-in or account problems, confirm you are using the correct account and never share your password or verification code. Keep FYNX updated and restart the app if it becomes unresponsive. If the problem continues, note which screen you were on, what you tapped, the exact error, and whether it happens every time. This screen does not send a support request or upload your data."
+                        infoDescription = "Welcome to FYNX Help & Support.\n\nConnection or loading: Check that your device is connected to the internet, then try again.\n\nAccount access: Make sure you are using the correct sign-in details. For your security, never share your password or verification codes.\n\nApp experience: If a screen does not respond as expected, close and reopen FYNX, and check that you are using the latest version.\n\nGetting help: When contacting FYNX support, describe the feature you were using and include any error message so the team can better understand your question."
                     }
                 }
             }
@@ -532,7 +532,7 @@ fun SettingsPanel(
                     SettingsReferenceRow(Icons.Default.Info, "About FYNX",
                         "What FYNX brings together", androidx.compose.ui.graphics.Color(0xFF8B69D6)) {
                         infoTitle = "About FYNX"
-                        infoDescription = "FYNX brings messaging, social sharing, Stories, groups, marketplace tools, money features and personalization together in one app. Feature availability can depend on account access, network connectivity and service status."
+                        infoDescription = "FYNX brings people together through messaging, social sharing, Stories, groups, marketplace experiences and personalized settings—all in one place. Connect with people, share your moments and explore what matters to you."
                     }
                 }
             }
