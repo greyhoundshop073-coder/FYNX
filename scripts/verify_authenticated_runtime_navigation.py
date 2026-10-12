@@ -567,6 +567,21 @@ else:
     else: report.append("- PASS real account authenticated through the FYNX login flow")
 
 if not FAILURES:
+    # Capture the real Settings home from the authenticated running APK.
+    profile_xml=tap_control(xml,["Open FYNX profile"],"settings-open-profile",["Edit profile","Settings"])
+    if profile_xml:
+        settings_xml=tap_control(profile_xml,["Settings"],"settings-home",["Search settings","Account & Profile","Notifications"])
+        if settings_xml:
+            report.append("- PASS actual Settings home screenshot/UI hierarchy captured from the running APK")
+        else:
+            FAILURES.append("profile -> Settings home did not open")
+    else:
+        FAILURES.append("Home -> profile entry did not open for Settings visual capture")
+    # Return to Home before continuing the existing navigation certification.
+    run("adb","shell","am","force-stop",PACKAGE)
+    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
+    time.sleep(2.5)
+    xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-after-settings.xml") or xml
     composer_xml=tap_control(xml,["Open FYNX camera"],"home-camera-composer",["What's on your mind?"])
     if composer_xml:
         report.append("- PASS Home header camera -> real post composer screenshot/UI hierarchy")
