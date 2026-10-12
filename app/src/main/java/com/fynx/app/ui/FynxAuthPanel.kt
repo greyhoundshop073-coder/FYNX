@@ -19,6 +19,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 enum class FynxAuthPage { WELCOME, REGISTER, VERIFY, LOGIN }
 
@@ -31,6 +32,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
     var username by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    val localDebugLoginAvailable = localDebugAccountForLogin(context, username) != null
     var confirmPassword by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -157,17 +159,93 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                             Spacer(Modifier.height(18.dp))
                             FynxAuthField(username, { username = it.replace(" ", "").removePrefix("@") }, "Username", "@")
                             Spacer(Modifier.height(10.dp))
+                            // Always keep the password field visible. Availability of a local
+                            // debug-testing account must never hide or bypass real server sign-in.
                             FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
+                            Spacer(Modifier.height(10.dp))
+                            if ((context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+                                Text(
+                                    "Debug APK only: enter your password for server sign-in, or use offline testing if the server is unavailable.",
+                                    color = Color.White.copy(alpha = .72f),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Spacer(Modifier.height(10.dp))
+                            }
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                             Spacer(Modifier.height(14.dp))
                             Button(onClick = {
-                                if (username.isBlank() || password.isBlank()) error = "Enter your username and password."
-                                else {
-                                    busy = true
-                                    error = null
-                                    scope.launch { finish(FynxRemoteAuthClient.login(context, username.trim(), password)) }
+                                val requestedUsername = username.trim().removePrefix("@")
+                                val savedLocalUsername = localDebugAccountForLogin(context, requestedUsername)
+                                when {
+                                    requestedUsername.isBlank() -> error = "Enter your username."
+                                    password.isBlank() && (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 -> {
+                                        // Only an explicitly empty password selects offline UI testing.
+                                        // A typed password must always attempt real server sign-in.
+                                        FynxAuthStore.save(context, savedLocalUsername ?: requestedUsername)
+                                        error = null
+                                        onAuthenticated(savedLocalUsername ?: requestedUsername)
+                                    }
+                                    password.isBlank() -> error = "Enter your username and password."
+                                    else -> {
+                                        busy = true
+                                        error = null
+                                        scope.launch {
+                                            // A sleeping/unreachable backend must not trap developers outside
+                                            // the debug APK while they are trying to test the app UI. Give
+                                            // real server sign-in a short chance first; only network timeout
+                                            // falls back to local UI entry, and only in debuggable builds.
+                                            val isDebuggable =
+                                                (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+                                            val result = if (isDebuggable) {
+                                                withTimeoutOrNull(DEBUG_LOGIN_TIMEOUT_MS) {
+                                                    FynxRemoteAuthClient.login(context, requestedUsername, password)
+                                                }
+                                            } else {
+                                                FynxRemoteAuthClient.login(context, requestedUsername, password)
+                                            }
+                                            val failure = result?.exceptionOrNull()
+                                            val offlineAccount = if (
+                                                result == null ||
+                                                (failure != null && isLoginNetworkFailure(failure))
+                                            ) {
+                                                localDebugAccountForLogin(context, requestedUsername)
+                                            } else null
+                                            if (offlineAccount != null) {
+                                                FynxAuthStore.save(context, offlineAccount)
+                                                busy = false
+                                                error = null
+                                                onAuthenticated(offlineAccount)
+                                            } else if (result != null) {
+                                                finish(result)
+                                            } else {
+                                                busy = false
+                                                error = "FYNX server sign-in timed out. Please try again."
+                                            }
+                                        }
+                                    }
                                 }
                             }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Signing in…" else "Sign In") }
+                            if ((context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedButton(
+                                    onClick = {
+                                        // Dedicated debug-only path for offline UI testing. Keep server
+                                        // sign-in intact above; this must never be exposed in release APKs.
+                                        val testUsername = username.trim().removePrefix("@").ifBlank {
+                                            FynxAuthStore.storedUsername(context) ?: "fynx_tester"
+                                        }
+                                        FynxAuthStore.save(context, testUsername)
+                                        error = null
+                                        busy = false
+                                        onAuthenticated(testUsername)
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                                    enabled = !busy,
+                                    shape = RoundedCornerShape(26.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF6A4CFF))
+                                ) { Text("Continue to FYNX for testing (offline)") }
+                            }
                             TextButton(onClick = { error = null; page = FynxAuthPage.REGISTER }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = .8f))) { Text("Create a new account") }
                         }
                     }
@@ -209,3 +287,37 @@ private fun FynxAuthField(value: String, onValueChange: (String) -> Unit, label:
         )
     )
 }
+
+
+/**
+ * Release builds always authenticate with the server. Debug builds can restore
+ * a previously saved local account solely for offline UI testing.
+ */
+private const val DEBUG_LOGIN_TIMEOUT_MS = 4_000L
+
+private fun localDebugAccountForLogin(context: android.content.Context, requestedUsername: String): String? {
+    val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    if (!isDebuggable || requestedUsername.isBlank()) return null
+
+    val normalizedUsername = requestedUsername.trim().removePrefix("@")
+    val saved = FynxAuthStore.storedUsername(context)?.trim()?.takeIf { it.isNotBlank() }
+
+    // Keep saved-account login when available. If this is a fresh install or
+    // session cleanup removed the saved username, let a developer enter the local
+    // UI using the username they provide when server authentication times out.
+    // This is strictly debug-APK-only; release builds always require server auth.
+    return when {
+        saved == null -> normalizedUsername
+        saved.equals(normalizedUsername, ignoreCase = true) -> saved
+        else -> null
+    }
+}
+
+private fun isLoginNetworkFailure(error: Throwable): Boolean =
+    generateSequence(error) { it.cause }.any { cause ->
+        cause is java.net.SocketTimeoutException ||
+            cause is java.net.UnknownHostException ||
+            cause is java.net.ConnectException ||
+            (cause is java.io.IOException &&
+                cause.message?.contains("network connection is unavailable", ignoreCase = true) == true)
+    }

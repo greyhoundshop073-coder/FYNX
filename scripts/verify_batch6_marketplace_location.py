@@ -2,6 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text()
+reference = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceComponents.kt").read_text()
 discovery = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDiscoveryClient.kt").read_text()
 remote = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt").read_text()
 routes = (ROOT / "backend/discoveryRoutes.js").read_text()
@@ -11,7 +12,14 @@ checks = [
     ("Marketplace reuses the real FYNX location resolver", "FynxPostLocationClient.currentPlace(context)" in panel),
     ("Marketplace requests location only from user actions", "RequestMultiplePermissions" in panel and "toggleNearby()" in panel and "useCurrentListingLocation()" in panel),
     ("Marketplace requests fine and coarse together", "ACCESS_FINE_LOCATION" in panel and "ACCESS_COARSE_LOCATION" in panel),
-    ("Marketplace buyer has a real Near me control", 'Text(if (nearbyMode)' in panel and "Icons.Default.LocationOn" in panel),
+    (
+        "Marketplace buyer has a real Near me control",
+        "MarketplaceReferenceCategoryRow(" in panel
+        and "nearbySelected = nearbyMode" in panel
+        and "onNearby = { toggleNearby() }" in panel
+        and 'Text(nearbyLabel)' in reference
+        and "Icons.Default.LocationOn" in reference,
+    ),
     ("Marketplace buyer uses real nearby discovery", "nearbyMarketplaceListings" in panel and "suspend fun nearbyMarketplaceListings(context: Context" in remote and "/api/marketplace/discovery" in remote),
     ("Discovery client sends the selected location area", 'location=${encode(location)}' in discovery),
     ("Backend filters only real listing locations", "l.location ILIKE" in routes and "req.query?.location" in routes),

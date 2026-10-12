@@ -83,7 +83,7 @@ check("deep-link destination routing is connected to the live app", all(x in app
 # The production Marketplace UI delegates listing reads to FynxRemoteSocialClient
 # and listing creation/safety to FynxRemoteSocialClient/FynxMarketplaceClient.
 # The legacy RemotePanel is only a compatibility entry point.
-check("marketplace uses the real remote listing flow and seller contact", "FynxRemoteSocialClient.listings(context, query, category)" in marketplace and "FynxRemoteSocialClient.nearbyMarketplaceListings" in marketplace and "createMarketplaceListing" in marketplace and "onContact" in marketplace and "sellerUsername" in marketplace)
+check("marketplace uses the real remote listing flow and seller contact", any(call in marketplace for call in ["FynxRemoteSocialClient.listings(context, query, category)", "FynxRemoteSocialClient.listings(context, requestQuery, requestCategory)"]) and "FynxRemoteSocialClient.nearbyMarketplaceListings" in marketplace and "createMarketplaceListing" in marketplace and "onContact" in marketplace and "sellerUsername" in marketplace)
 check("marketplace client retains server-side safety validation", "FynxMarketplaceSafety.analyze" in marketplace_client and "FynxMarketplaceSafety.publishDecision" in marketplace_client)
 check("protected marketplace transaction backend remains present", (ROOT / "backend/marketplaceTransactions.js").is_file() and all(x in transactions for x in ["marketplace_orders", "PAYMENT_PENDING", "DISPUTED", "marketplace_order_disputes", "payout:'not_released'"]))
 
