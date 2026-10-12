@@ -66,6 +66,9 @@ import java.time.Instant
 import org.json.JSONObject
 import java.util.Locale
 
+// Covers three bounded backend GET attempts on weak networks (45s each) plus retry delays.
+private const val MARKETPLACE_LISTING_REQUEST_TIMEOUT_MS = 150_000L
+
 internal fun advanceMarketplaceListingsOffset(currentOffset: Int, requestedLimit: Int): Int =
     currentOffset + requestedLimit.coerceAtLeast(1)
 
@@ -287,7 +290,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             hasMoreListings = false
             error = null
             discoveryFallbackWarning = null
-            val result = kotlinx.coroutines.withTimeoutOrNull(35_000L) {
+            val result = kotlinx.coroutines.withTimeoutOrNull(MARKETPLACE_LISTING_REQUEST_TIMEOUT_MS) {
                 if (requestNearbyMode && requestNearbyLabel.isNotBlank()) {
                     FynxRemoteSocialClient.nearbyMarketplaceListings(context, requestQuery, requestCategory, requestNearbyLabel)
                         .map { Triple(it, false, null as String?) }
@@ -329,7 +332,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         val requestOffset = nextListingsOffset
         scope.launch {
             loadingMoreListings = true
-            val result = kotlinx.coroutines.withTimeoutOrNull(35_000L) {
+            val result = kotlinx.coroutines.withTimeoutOrNull(MARKETPLACE_LISTING_REQUEST_TIMEOUT_MS) {
                 FynxRemoteSocialClient.marketplaceDiscoveryPage(context, requestQuery, requestCategory, limit = 24, offset = requestOffset)
             }
             if (requestGeneration != listingRequestGeneration) return@launch
