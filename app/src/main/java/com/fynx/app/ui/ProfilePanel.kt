@@ -523,7 +523,7 @@ fun SettingsPanel(
                     SettingsReferenceRow(Icons.Default.HelpOutline, "Help & Support",
                         "Troubleshooting steps for common problems", androidx.compose.ui.graphics.Color(0xFF477FEA)) {
                         infoTitle = "Help & Support"
-                        infoDescription = "Welcome to FYNX Help & Support.\n\nConnection or loading: Check that your device is connected to the internet, then try again.\n\nAccount access: Make sure you are using the correct sign-in details. For your security, never share your password or verification codes.\n\nApp experience: If a screen does not respond as expected, close and reopen FYNX, and check that you are using the latest version.\n\nGetting help: When contacting FYNX support, describe the feature you were using and include any error message so the team can better understand your question."
+                        infoDescription = "Need a hand with FYNX? Try these quick tips.\n\nConnection: Check your internet connection and try again.\n\nAccount access: Confirm that your sign-in details are correct. Never share your password or verification codes.\n\nApp performance: If a screen becomes unresponsive, close and reopen FYNX. Keeping the app updated can also help you get the best experience.\n\nStill having trouble? Make a note of the feature involved and any error message, so you have the details ready when seeking assistance."
                     }
                 }
             }
