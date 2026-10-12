@@ -508,7 +508,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         }
                     }
                     item(key = "marketplace-recommended-title") {
-                        MarketplaceReferenceSectionTitle("Recommended for you", action = "Try again", onAction = { reload() })
+                        MarketplaceReferenceSectionTitle("Recommended for you")
                     }
                     item(key = "marketplace-no-recommendations") {
                         Text("Recommendations will appear here when real seller listings are available.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
