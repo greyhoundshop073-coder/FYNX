@@ -299,6 +299,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     FynxRemoteSocialClient.marketplaceDiscoveryPage(context, requestQuery, requestCategory, limit = 24, offset = 0)
                         .map { page -> Triple(page.listings, page.hasMore, null as String?) }
                         .recoverCatching {
+                            if (it is kotlin.coroutines.cancellation.CancellationException) throw it
                             val fallbackListings = FynxRemoteSocialClient.listings(context, requestQuery, requestCategory).getOrThrow()
                             Triple(
                                 fallbackListings,
