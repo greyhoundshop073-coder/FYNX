@@ -60,6 +60,9 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
     var reportReason by remember { mutableStateOf("") }
     var reportDetails by remember { mutableStateOf("") }
     var submittingReport by remember { mutableStateOf(false) }
+    var blockedUsers by remember { mutableStateOf<List<FynxSocialClient.User>>(emptyList()) }
+    var blockedLoading by remember { mutableStateOf(true) }
+    var unblockingUser by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         FynxPrivacyRemoteClient.load(context).onSuccess { remote ->
@@ -71,6 +74,13 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
             messages = remote["messages_visibility"]
             listOf(KEY_PROFILE to profile, KEY_ONLINE to online, KEY_POSTS to posts, KEY_STATUS to status, KEY_PROFILE_PHOTO to photo, KEY_MESSAGES to messages).forEach { (key, value) -> FynxPreferencesStore.saveVisibility(context, key, value) }
         }.onFailure { error -> notice = error.message ?: "Privacy settings are currently offline." }
+    }
+
+    LaunchedEffect(Unit) {
+        blockedLoading = true
+        FynxSocialClient.blocked(context).onSuccess { blockedUsers = it }
+            .onFailure { error -> notice = error.message ?: "Could not load blocked users." }
+        blockedLoading = false
     }
 
     LaunchedEffect(Unit) {
@@ -223,6 +233,37 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
                             Text("Recent appeals", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp))
                             appeals.take(5).forEach { appeal ->
                                 Text("#${appeal.id} • ${appeal.status}${if (appeal.decisionNote.isNotBlank()) " • ${appeal.decisionNote}" else ""}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 5.dp))
+                            }
+                        }
+                    }
+                }
+            }
+            item {
+                Card(modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                        Text("Blocked users", style = MaterialTheme.typography.titleMedium)
+                        Text("Blocked accounts cannot interact with you. You can unblock them here.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 3.dp))
+                        when {
+                            blockedLoading -> CircularProgressIndicator(modifier = Modifier.padding(top = 10.dp).size(22.dp), strokeWidth = 2.dp)
+                            blockedUsers.isEmpty() -> Text("You haven't blocked anyone.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 10.dp))
+                            else -> blockedUsers.forEach { user ->
+                                Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(user.displayName.ifBlank { user.username }, style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                                        Text("@${user.username.removePrefix("@")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    TextButton(enabled = unblockingUser == null, onClick = {
+                                        val username = user.username
+                                        unblockingUser = username
+                                        scope.launch {
+                                            FynxSocialClient.unblock(context, username).onSuccess {
+                                                blockedUsers = blockedUsers.filterNot { it.username.equals(username, ignoreCase = true) }
+                                                notice = "Unblocked @${username.removePrefix("@")}."
+                                            }.onFailure { error -> notice = error.message ?: "Could not unblock this account." }
+                                            unblockingUser = null
+                                        }
+                                    }) { Text(if (unblockingUser == user.username) "Unblocking…" else "Unblock") }
+                                }
                             }
                         }
                     }
