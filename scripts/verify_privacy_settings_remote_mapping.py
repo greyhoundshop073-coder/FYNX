@@ -52,4 +52,14 @@ for label, ok in account_checks:
     if not ok:
         raise SystemExit(1)
 
-print(f"Privacy and account settings integration checks passed ({len(expected) + len(checks) + len(account_checks)} checks).")
+story_checks = [
+    ("Stories & Status saves through one guarded selection handler", "fun saveStoryVisibility(option: String)" in (ROOT / "app/src/main/java/com/fynx/app/ui/ProfilePanel.kt").read_text(encoding="utf-8") and "if (storySaving) return" in (ROOT / "app/src/main/java/com/fynx/app/ui/ProfilePanel.kt").read_text(encoding="utf-8")),
+    ("Stories & Status prevents changing/dismissing while a save is pending", "enabled = !storySaving" in (ROOT / "app/src/main/java/com/fynx/app/ui/ProfilePanel.kt").read_text(encoding="utf-8") and 'Text("Saving…"' in (ROOT / "app/src/main/java/com/fynx/app/ui/ProfilePanel.kt").read_text(encoding="utf-8")),
+    ("Stories & Status reports failed server sync while preserving local choice", "Saved on this device, but server sync failed:" in (ROOT / "app/src/main/java/com/fynx/app/ui/ProfilePanel.kt").read_text(encoding="utf-8")),
+]
+for label, ok in story_checks:
+    print(f"{'PASS' if ok else 'FAIL'}: {label}")
+    if not ok:
+        raise SystemExit(1)
+
+print(f"Privacy and account settings integration checks passed ({len(expected) + len(checks) + len(account_checks) + len(story_checks)} checks).")
