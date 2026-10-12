@@ -64,6 +64,13 @@ checks = [
     ("buyer nearby discovery still uses the shared smart-location resolver", "FynxPostLocationClient.currentPlace(context)" in marketplace and ("nearbyMarketplaceListings(context, query, category, nearbyLabel)" in marketplace or "nearbyMarketplaceListings(context, requestQuery, requestCategory, requestNearbyLabel)" in marketplace)),
 ]
 
+
+    ("cart selection toggles individual real listing IDs", "selectedIds = if (checked) selectedIds + item.id else selectedIds - item.id" in marketplace),
+    ("cart checkout only submits selected items", "onCheckout(selected)" in marketplace and "selected.isNotEmpty() && !mixed" in marketplace),
+    ("cart prevents cross-currency checkout before submission", "val mixed = selected.map { it.currency.trim().uppercase(Locale.US) }.distinct().size > 1" in marketplace and "A single checkout cannot mix NGN and USD. Select one currency." in marketplace),
+    ("cart quantity changes stay within available stock and a minimum of one", "((quantities[item.id] ?: 1)-1).coerceAtLeast(1)" in marketplace and "((quantities[item.id] ?: 1)+1).coerceAtMost(item.quantity)" in marketplace),
+    ("cart exposes an actionable empty state", "Your cart is empty." in marketplace and "Add products from the marketplace to start checkout." in marketplace),
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
