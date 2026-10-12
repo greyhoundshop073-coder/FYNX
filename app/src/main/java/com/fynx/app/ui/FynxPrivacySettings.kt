@@ -23,6 +23,18 @@ private const val KEY_STATUS = "privacy_status_visibility"
 private const val KEY_PROFILE_PHOTO = "privacy_profile_photo_visibility"
 private const val KEY_MESSAGES = "privacy_messages_visibility"
 
+private val PRIVACY_REMOTE_KEYS = mapOf(
+    KEY_PROFILE to "profile_visibility",
+    KEY_ONLINE to "online_visibility",
+    KEY_POSTS to "posts_visibility",
+    KEY_STATUS to "status_visibility",
+    KEY_PROFILE_PHOTO to "profile_photo_visibility",
+    KEY_MESSAGES to "messages_visibility"
+)
+
+private fun remotePrivacyKey(localKey: String): String =
+    requireNotNull(PRIVACY_REMOTE_KEYS[localKey]) { "Unknown local privacy setting" }
+
 @Composable
 fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
     val context = LocalContext.current
@@ -51,12 +63,12 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
 
     LaunchedEffect(Unit) {
         FynxPrivacyRemoteClient.load(context).onSuccess { remote ->
-            profile = remote[KEY_PROFILE]
-            online = remote[KEY_ONLINE]
-            posts = remote[KEY_POSTS]
-            status = remote[KEY_STATUS]
-            photo = remote[KEY_PROFILE_PHOTO]
-            messages = remote[KEY_MESSAGES]
+            profile = remote["profile_visibility"]
+            online = remote["online_visibility"]
+            posts = remote["posts_visibility"]
+            status = remote["status_visibility"]
+            photo = remote["profile_photo_visibility"]
+            messages = remote["messages_visibility"]
             listOf(KEY_PROFILE to profile, KEY_ONLINE to online, KEY_POSTS to posts, KEY_STATUS to status, KEY_PROFILE_PHOTO to photo, KEY_MESSAGES to messages).forEach { (key, value) -> FynxPreferencesStore.saveVisibility(context, key, value) }
         }.onFailure { error -> notice = error.message ?: "Privacy settings are currently offline." }
     }
@@ -85,14 +97,14 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
         notice = null
         scope.launch {
             try {
-                FynxPrivacyRemoteClient.update(context, key, option).onSuccess { remote ->
+                FynxPrivacyRemoteClient.update(context, remotePrivacyKey(key), option).onSuccess { remote ->
                     profile = remote[KEY_PROFILE]
                     online = remote[KEY_ONLINE]
                     posts = remote[KEY_POSTS]
                     status = remote[KEY_STATUS]
                     photo = remote[KEY_PROFILE_PHOTO]
                     messages = remote[KEY_MESSAGES]
-                    FynxPreferencesStore.saveVisibility(context, key, remote[key])
+                    FynxPreferencesStore.saveVisibility(context, key, remote[remotePrivacyKey(key)])
                     openKey = null
                 }.onFailure { error ->
                     // Keep the local choice visible and persisted; report the remote
