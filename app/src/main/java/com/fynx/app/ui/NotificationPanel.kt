@@ -73,11 +73,18 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
     }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp).navigationBarsPadding()) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("‹ Back") }
-            Column(Modifier.weight(1f), horizontalAlignment = if (preferencesOnly) Alignment.Start else Alignment.CenterHorizontally) {
+        Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back to Settings", tint = MaterialTheme.colorScheme.onSurface) }
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = androidx.compose.ui.graphics.Color(0xFFEF8B42).copy(alpha = 0.14f)
+            ) {
+                Icon(Icons.Default.Notifications, contentDescription = null, tint = androidx.compose.ui.graphics.Color(0xFFEF8B42), modifier = Modifier.padding(10.dp).size(24.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (preferencesOnly) "Notification Preferences" else "Notifications", style = MaterialTheme.typography.titleLarge)
+                    Text(if (preferencesOnly) "Notification Preferences" else "Notifications", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                     if (!preferencesOnly) {
                         val unread = maxOf(remoteUnreadCount, current.count { !it.read })
                         if (unread > 0) {
