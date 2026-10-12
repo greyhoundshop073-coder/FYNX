@@ -329,7 +329,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             } else {
                 result.onSuccess { page ->
                     val knownIds = listings.asSequence().map { it.id }.toHashSet()
-                    listings = listings + page.listings.filterNot { it.id in knownIds }
+                    val newListings = page.listings.filter { knownIds.add(it.id) }
+                    listings = listings + newListings
                     nextListingsOffset += page.listings.size
                     hasMoreListings = page.hasMore && page.listings.isNotEmpty()
                     error = null
