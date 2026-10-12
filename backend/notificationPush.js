@@ -122,6 +122,7 @@ function preferenceColumn(type) {
 }
 
 async function pushAllowed(pool, userId, type) {
+  if (type === "SAFETY") return true;
   const column = preferenceColumn(type);
   const result = await pool.query(`SELECT enabled,push_enabled,${column} AS category_enabled,quiet_mode FROM notification_preferences WHERE user_id=$1`, [userId]);
   const row = result.rows[0];
