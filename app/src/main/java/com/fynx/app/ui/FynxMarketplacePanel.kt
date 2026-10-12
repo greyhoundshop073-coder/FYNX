@@ -1,7 +1,5 @@
 package com.fynx.app.ui
 
-internal fun advanceMarketplaceListingsOffset(currentOffset: Int, requestedLimit: Int): Int =
-    currentOffset + requestedLimit.coerceAtLeast(1)
 
 import android.Manifest
 import android.content.Intent
@@ -67,6 +65,9 @@ import org.json.JSONArray
 import java.time.Instant
 import org.json.JSONObject
 import java.util.Locale
+
+internal fun advanceMarketplaceListingsOffset(currentOffset: Int, requestedLimit: Int): Int =
+    currentOffset + requestedLimit.coerceAtLeast(1)
 
 
 
