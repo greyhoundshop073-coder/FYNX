@@ -78,4 +78,17 @@ for label, ok in media_checks:
     if not ok:
         raise SystemExit(1)
 
-print(f"Privacy and account settings integration checks passed ({len(expected) + len(checks) + len(account_checks) + len(story_checks) + len(media_checks)} checks).")
+
+# Help & Support should offer a direct route to the existing report and appeal tools.
+profile_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/ProfilePanel.kt").read_text(encoding="utf-8")
+help_checks = [
+    ("Help & Support dialog offers direct Privacy & Security navigation", 'if (infoTitle == "Help & Support")' in profile_panel and 'Text("Open Privacy & Security")' in profile_panel),
+    ("Help & Support action invokes the existing privacy navigation callback", 'TextButton(onClick = { infoTitle = null; onOpenPrivacy() })' in profile_panel),
+    ("Privacy & Security contains actual report and appeal submission flows", 'FynxSafetyRemoteClient.submitReport(context, reportTarget, reportReason, reportDetails)' in panel and 'FynxSafetyRemoteClient.submitAppeal(context, appealReportId.ifBlank { null }, appealSubject, appealDetails)' in panel),
+]
+for label, ok in help_checks:
+    print(f"{'PASS' if ok else 'FAIL'}: {label}")
+    if not ok:
+        raise SystemExit(1)
+
+print(f"Privacy and account settings integration checks passed ({len(expected) + len(checks) + len(account_checks) + len(story_checks) + len(media_checks) + len(help_checks)} checks).")
