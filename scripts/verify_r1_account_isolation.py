@@ -53,6 +53,11 @@ for name in account_scoped:
     check(f"{name} local state references the account namespace", "FynxAuthStore.accountStorageKey" in source)
 
 check("profile/settings state is cleared before another account enters", "clearAccountSessionData" in prefs and "remove(KEY_PROFILE_PHOTO)" in prefs and "remove(KEY_ASSET)" in prefs)
+privacy_keys = [
+    "privacy_profile_visibility", "privacy_online_visibility", "privacy_posts_visibility",
+    "privacy_status_visibility", "privacy_profile_photo_visibility", "privacy_messages_visibility",
+]
+check("account-specific privacy visibility choices are cleared at sign-out", all(f'remove("{key}")' in prefs for key in privacy_keys))
 check("live app reads account-bound notification and profile state", "FynxNotificationStore.load(context)" in text["auth_app"] and "FynxPreferencesStore.loadProfile(context, authSession.username)" in text["auth_app"])
 
 failed = [name for name, ok in checks if not ok]
