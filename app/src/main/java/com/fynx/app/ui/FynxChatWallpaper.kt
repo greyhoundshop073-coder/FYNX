@@ -521,10 +521,79 @@ fun FynxChatPersonalizationDialog(onDismiss: () -> Unit) {
 
 @Composable
 fun AppearanceDialog(current: String, onSelected: (String) -> Unit, onDismiss: () -> Unit) {
-    val options = listOf("System", "Light", "Charcoal Black", "Dark", "Black AMOLED")
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Appearance") }, text = {
-        Column { options.forEach { option -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Column(Modifier.weight(1f)) { Text(option); if (option == "Charcoal Black") Text("Mature charcoal surfaces with soft contrast", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall); if (option == "Black AMOLED") Text("Pure black AMOLED surfaces with white text", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }; RadioButton(selected = current == option, onClick = { onSelected(option) }) } } }
-    }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
+    // Keep the global appearance choice focused and easy to understand.
+    // Chat wallpaper themes remain independently configurable below.
+    val options = listOf(
+        Triple("System", "Follows your phone's light or dark setting", Color(0xFF64748B)),
+        Triple("Light", "Bright surfaces with calm FYNX blue accents", Color(0xFFF1F5F9)),
+        Triple("Dark", "Deep navy surfaces with clear, high-contrast text", Color(0xFF101827))
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Appearance", style = MaterialTheme.typography.headlineSmall) },
+        text = {
+            Column(
+                Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "Choose how FYNX looks across the app.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                options.forEach { (option, description, swatch) ->
+                    val selected = current == option
+                    Surface(
+                        onClick = { onSelected(option) },
+                        shape = MaterialTheme.shapes.medium,
+                        color = if (selected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = androidx.compose.foundation.BorderStroke(
+                            if (selected) 1.5.dp else 1.dp,
+                            if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outlineVariant
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 11.dp),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        ) {
+                            Box(
+                                Modifier.size(width = 34.dp, height = 42.dp)
+                                    .background(swatch, androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    option,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                        else MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            RadioButton(
+                                selected = selected,
+                                onClick = { onSelected(option) }
+                            )
+                        }
+                    }
+                }
+                Text(
+                    "Your choice is saved immediately. Chat wallpaper colours are managed separately.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
+    )
 }
 
 @Composable
