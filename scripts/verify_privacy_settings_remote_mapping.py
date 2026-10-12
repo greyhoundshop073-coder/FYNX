@@ -62,4 +62,20 @@ for label, ok in story_checks:
     if not ok:
         raise SystemExit(1)
 
-print(f"Privacy and account settings integration checks passed ({len(expected) + len(checks) + len(account_checks) + len(story_checks)} checks).")
+
+# Media & Storage must inspect and clear the exact account-scoped cache used by media downloads.
+media_storage = (ROOT / "app/src/main/java/com/fynx/app/ui/MediaStorageSettingsPanel.kt").read_text(encoding="utf-8")
+production_messaging = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt").read_text(encoding="utf-8")
+media_checks = [
+    ("Media & Storage uses the app cache directory", "File(context.cacheDir, \"fynx_media_$it\")" in media_storage),
+    ("Media & Storage scopes cache to the current account", "FynxAuthStore.accountStorageKey(context)" in media_storage and "safeAccount" in media_storage),
+    ("Media & Storage size reads the actual download cache", "cachedMediaDirectory(context)?.let(::directorySize)" in media_storage),
+    ("Media & Storage clear removes the same cache directory", "val directory = cachedMediaDirectory(context)" in media_storage and "directory.deleteRecursively()" in media_storage),
+    ("Media downloads write to the same account-scoped cache convention", 'File(context.cacheDir, "fynx_media_$safeAccount")' in production_messaging),
+]
+for label, ok in media_checks:
+    print(f"{'PASS' if ok else 'FAIL'}: {label}")
+    if not ok:
+        raise SystemExit(1)
+
+print(f"Privacy and account settings integration checks passed ({len(expected) + len(checks) + len(account_checks) + len(story_checks) + len(media_checks)} checks).")
