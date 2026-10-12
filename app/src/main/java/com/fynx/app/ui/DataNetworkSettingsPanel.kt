@@ -17,7 +17,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-private data class NetworkSnapshot(val connected: Boolean, val transport: String, val quality: String, val downKbps: Int, val upKbps: Int)
+private data class NetworkSnapshot(
+    val hasNetwork: Boolean,
+    val internetValidated: Boolean,
+    val transport: String,
+    val metered: String,
+    val downKbps: Int,
+    val upKbps: Int
+)
 
 @Composable
 internal fun DataNetworkSettingsPanel(onBack: () -> Unit) {
@@ -38,15 +45,30 @@ internal fun DataNetworkSettingsPanel(onBack: () -> Unit) {
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .4f))) {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Connection status", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(snapshot?.let { if (it.connected) "Connected" else "No internet connection detected" } ?: "Checking…", style = MaterialTheme.typography.headlineSmall)
+                Text(
+                    snapshot?.let { if (it.hasNetwork) "Network available" else "No active network" } ?: "Checking…",
+                    style = MaterialTheme.typography.headlineSmall
+                )
                 HorizontalDivider()
                 NetworkDetailRow("Connection type", snapshot?.transport ?: "Checking…")
-                NetworkDetailRow("Quality estimate", snapshot?.quality ?: "Checking…")
+                NetworkDetailRow(
+                    "Internet access",
+                    snapshot?.let { when {
+                        !it.hasNetwork -> "Not connected"
+                        it.internetValidated -> "Verified by Android"
+                        else -> "Not verified"
+                    } } ?: "Checking…"
+                )
+                NetworkDetailRow("Data usage type", snapshot?.metered ?: "Checking…")
                 NetworkDetailRow("Downstream estimate", snapshot?.let { if (it.downKbps > 0) "${it.downKbps} Kbps" else "Not reported" } ?: "Checking…")
                 NetworkDetailRow("Upstream estimate", snapshot?.let { if (it.upKbps > 0) "${it.upKbps} Kbps" else "Not reported" } ?: "Checking…")
             }
         }
-        Text("Speed figures are Android network estimates, not a live speed test. A connection can be available while a particular service is temporarily unreachable.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            "Bandwidth values are Android estimates for the first network link, not measured speeds. “Verified by Android” means the system currently reports validated internet access; a particular FYNX service may still be unavailable.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -60,25 +82,28 @@ private fun NetworkDetailRow(label: String, value: String) {
 
 private fun readNetworkSnapshot(context: Context): NetworkSnapshot {
     val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-        ?: return NetworkSnapshot(false, "Unavailable", "Unknown", 0, 0)
-    val network = manager.activeNetwork ?: return NetworkSnapshot(false, "Offline", "Offline", 0, 0)
+        ?: return NetworkSnapshot(false, false, "Unavailable", "Unknown", 0, 0)
+    val network = manager.activeNetwork
+        ?: return NetworkSnapshot(false, false, "Offline", "Unknown", 0, 0)
     val caps = manager.getNetworkCapabilities(network)
-        ?: return NetworkSnapshot(false, "Unknown", "Unknown", 0, 0)
-    val connected = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        ?: return NetworkSnapshot(false, false, "Unknown", "Unknown", 0, 0)
+
+    val internetValidated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     val transport = when {
+        caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "VPN"
         caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "Wi-Fi"
         caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "Mobile data"
         caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
-        caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "VPN"
         else -> "Other"
     }
-    val down = caps.linkDownstreamBandwidthKbps
-    val up = caps.linkUpstreamBandwidthKbps
-    val quality = when {
-        !connected -> "Offline"
-        down <= 0 -> "Unknown"
-        down < 1000 -> "Weak"
-        else -> "Good"
-    }
-    return NetworkSnapshot(connected, transport, quality, down, up)
+    val metered = if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) "Unmetered" else "Metered or unknown"
+    return NetworkSnapshot(
+        hasNetwork = true,
+        internetValidated = internetValidated,
+        transport = transport,
+        metered = metered,
+        downKbps = caps.linkDownstreamBandwidthKbps,
+        upKbps = caps.linkUpstreamBandwidthKbps
+    )
 }
