@@ -521,18 +521,18 @@ fun SettingsPanel(
                 item { SettingsSectionTitle("FYNX") }
                 item {
                     SettingsReferenceRow(Icons.Default.HelpOutline, "Help & Support",
-                        "Get help using FYNX", androidx.compose.ui.graphics.Color(0xFF477FEA)) {
+                        "Troubleshooting steps for common problems", androidx.compose.ui.graphics.Color(0xFF477FEA)) {
                         infoTitle = "Help & Support"
-                        infoDescription = "Help and support options will be available here."
+                        infoDescription = "Need a hand with FYNX? Try these quick tips.\n\nConnection: Check your internet connection and try again.\n\nAccount access: Confirm that your sign-in details are correct. Never share your password or verification codes.\n\nApp performance: If a screen becomes unresponsive, close and reopen FYNX. Keeping the app updated can also help you get the best experience.\n\nStill having trouble? Make a note of the feature involved and any error message, so you have the details ready when seeking assistance."
                     }
                 }
             }
             if (visible("About FYNX", "about version app information")) {
                 item {
                     SettingsReferenceRow(Icons.Default.Info, "About FYNX",
-                        "App information and version", androidx.compose.ui.graphics.Color(0xFF8B69D6)) {
+                        "What FYNX brings together", androidx.compose.ui.graphics.Color(0xFF8B69D6)) {
                         infoTitle = "About FYNX"
-                        infoDescription = "FYNX brings communication, social sharing and marketplace tools together in one app."
+                        infoDescription = "FYNX brings people together through messaging, social sharing, Stories, groups, marketplace experiences and personalized settings—all in one place. Connect with people, share your moments and explore what matters to you."
                     }
                 }
             }
