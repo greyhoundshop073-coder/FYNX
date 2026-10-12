@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,7 +20,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private const val FYNX_CACHED_MEDIA_DIRECTORY = "fynx_media_cache_v2"
+private fun cachedMediaDirectory(context: Context): File? {
+    val accountKey = FynxAuthStore.accountStorageKey(context) ?: return null
+    val safeAccount = accountKey.map { if (it.isLetterOrDigit()) it else '_' }.joinToString("").take(80)
+    return safeAccount.takeIf { it.isNotBlank() }?.let { File(context.cacheDir, "fynx_media_$it") }
+}
 
 @Composable
 internal fun MediaStorageSettingsPanel(onBack: () -> Unit) {
@@ -34,7 +39,7 @@ internal fun MediaStorageSettingsPanel(onBack: () -> Unit) {
     LaunchedEffect(revision) {
         loading = true
         cacheBytes = withContext(Dispatchers.IO) {
-            directorySize(File(context.filesDir, FYNX_CACHED_MEDIA_DIRECTORY))
+            cachedMediaDirectory(context)?.let(::directorySize) ?: 0L
         }
         loading = false
     }
@@ -99,8 +104,8 @@ internal fun MediaStorageSettingsPanel(onBack: () -> Unit) {
                     notice = null
                     scope.launch {
                         val deleted = withContext(Dispatchers.IO) {
-                            val directory = File(context.filesDir, FYNX_CACHED_MEDIA_DIRECTORY)
-                            !directory.exists() || directory.deleteRecursively()
+                            val directory = cachedMediaDirectory(context)
+                            directory == null || !directory.exists() || directory.deleteRecursively()
                         }
                         notice = if (deleted) "Cached media cleared." else "Some cached files could not be removed. Try again."
                         revision++
