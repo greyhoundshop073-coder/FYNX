@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -41,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -710,11 +712,10 @@ private fun AppearanceSettingsPanel(
     var chooseFontSize by remember { mutableStateOf(false) }
     var chooseMessageStyle by remember { mutableStateOf(false) }
     val themes = listOf(
-        "System" to "System Default",
-        "Light" to "Light",
-        "Dark" to "Dark",
-        "Black AMOLED" to "AMOLED",
-        "Charcoal Black" to "Charcoal Black"
+        Triple("System", "System Default", Color(0xFF64748B)),
+        Triple("Light", "Soft white surfaces with subtle FYNX blue accents", Color(0xFFF5F7FB)),
+        Triple("Dark", "Deep navy surfaces with subtle blue reflections", Color(0xFF101827)),
+        Triple("Black AMOLED", "True black surfaces, white text, blue selection", Color.Black)
     )
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 16.dp)) {
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -727,24 +728,45 @@ private fun AppearanceSettingsPanel(
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
             item { SettingsSectionTitle("THEME") }
-            items(themes) { (value, label) ->
+            items(themes) { (value, description, swatch) ->
+                val selected = appearance == value
                 Card(
                     onClick = { onThemeSelected(value) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .4f))
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surface
+                    ),
+                    border = BorderStroke(
+                        if (selected) 1.5.dp else 1.dp,
+                        if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outline.copy(alpha = .4f)
+                    )
                 ) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            Modifier.size(width = 38.dp, height = 46.dp)
+                                .background(swatch, RoundedCornerShape(9.dp))
+                                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .45f), RoundedCornerShape(9.dp))
+                        )
+                        Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(label, style = MaterialTheme.typography.titleMedium)
-                            if (value == "Black AMOLED") Text("Pure black surfaces", style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (value == "Charcoal Black") Text("Soft dark contrast", style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                if (value == "System") "System Default" else if (value == "Black AMOLED") "AMOLED" else value,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+                            )
+                            Text(
+                                description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                        RadioButton(selected = appearance == value, onClick = { onThemeSelected(value) })
+                        RadioButton(selected = selected, onClick = { onThemeSelected(value) })
                     }
                 }
             }
