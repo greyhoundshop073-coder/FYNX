@@ -521,18 +521,18 @@ fun SettingsPanel(
                 item { SettingsSectionTitle("FYNX") }
                 item {
                     SettingsReferenceRow(Icons.Default.HelpOutline, "Help & Support",
-                        "Get help using FYNX", androidx.compose.ui.graphics.Color(0xFF477FEA)) {
+                        "Troubleshooting steps for common problems", androidx.compose.ui.graphics.Color(0xFF477FEA)) {
                         infoTitle = "Help & Support"
-                        infoDescription = "Help and support options will be available here."
+                        infoDescription = "If FYNX is not loading: check your internet connection, then use the screen’s refresh or retry option. If a feature fails to save, reopen it and check whether the change was confirmed; do not assume it synced if an error appears. For sign-in or account problems, confirm you are using the correct account and never share your password or verification code. Keep FYNX updated and restart the app if it becomes unresponsive. If the problem continues, note which screen you were on, what you tapped, the exact error, and whether it happens every time. This screen does not send a support request or upload your data."
                     }
                 }
             }
             if (visible("About FYNX", "about version app information")) {
                 item {
                     SettingsReferenceRow(Icons.Default.Info, "About FYNX",
-                        "App information and version", androidx.compose.ui.graphics.Color(0xFF8B69D6)) {
+                        "What FYNX brings together", androidx.compose.ui.graphics.Color(0xFF8B69D6)) {
                         infoTitle = "About FYNX"
-                        infoDescription = "FYNX brings communication, social sharing and marketplace tools together in one app."
+                        infoDescription = "FYNX brings messaging, social sharing, Stories, groups, marketplace tools, money features and personalization together in one app. Feature availability can depend on account access, network connectivity and service status."
                     }
                 }
             }
