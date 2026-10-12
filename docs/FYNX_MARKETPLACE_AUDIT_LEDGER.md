@@ -59,6 +59,14 @@ The correction is not to add more checklist-only commits. It is to use this ledg
 - Existing backend verification scripts cover multi-checkout lifecycle, currency contract, Price Watch, settlement/payout isolation, refund/dispute isolation, and end-to-end source contracts. A script passing is evidence for the assertions it actually executes, not proof of live provider settlement.
 - The Marketplace reference design and master architecture prohibit fake product data and require a canonical listing identity across product details, seller, chat, order, inventory, and feed surfaces.
 
+### Pagination behavior test added on October 12, 2026
+
+- Source change: extracted the existing page-merge behavior into `appendDistinctMarketplacePage` and kept the Marketplace UI calling it. This is a testability improvement; the previous inline code already deduplicated IDs.
+- Added `FynxMarketplacePaginationSupportTest` for overlap across pages, duplicate IDs within one incoming page, stable first occurrence and ordering, fully overlapping pages, and empty incoming pages.
+- The pagination offset still advances by the server page size, not by the number of newly displayed listings; this preserves offset semantics when server pages overlap.
+- Delivery commits: `5df1cdc3301d4a95007cf3ab3147bd37f836025c` (implementation) and `de2ed408aa89bc887eee20baf154a9b3a1dc0fad` (tests). These are separate because the available repository write operation commits one file at a time; they are one logical batch, not independent feature pushes.
+- **CI status: AWAITING VERIFICATION.** Do not count this batch as complete until the exact latest branch head's Android Build/unit tests and Backend CI are checked. This test does not prove live backend connectivity or a full APK journey.
+
 ### Exact CI and artifact evidence
 
 For `346e472e75a41e218130d4c12675d4c4dffc3dde`:
