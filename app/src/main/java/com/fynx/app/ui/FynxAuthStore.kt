@@ -24,6 +24,10 @@ object FynxAuthStore {
 
     fun storedUsername(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_USERNAME, null)
 
+    /** Phone number supplied when this local account was created, if available. */
+    fun storedPhone(context: Context): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_PHONE, null)
+
     /** Stable local namespace for account-scoped caches and stores. */
     fun accountStorageKey(context: Context): String? =
         storedUsername(context)?.trim()?.lowercase()?.ifBlank { null }
