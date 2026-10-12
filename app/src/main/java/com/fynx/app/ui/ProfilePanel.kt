@@ -141,7 +141,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
     }
 
     if (settingsOpen) {
-        SettingsPanel(settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy, onOpenNotifications = onOpenNotifications, onOpenAccountProfile = { settingsOpen = false; editing = true })
+        SettingsPanel(settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy, onOpenNotifications = onOpenNotifications, onSignOut = { if (onSignOut != null) onSignOut() else { FynxAuthStore.clear(context); (context as? Activity)?.recreate() } }, onOpenAccountProfile = { settingsOpen = false; editing = true })
         return
     }
 
@@ -337,6 +337,7 @@ fun SettingsPanel(
     onAccentChanged: (FynxAccent) -> Unit = {},
     onOpenPrivacy: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
+    onSignOut: () -> Unit = {},
     onOpenAccountProfile: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -362,7 +363,9 @@ fun SettingsPanel(
     if (showAccountProfile) {
         AccountProfileSettingsPanel(
             onBack = { showAccountProfile = false },
-            onEditProfile = { showAccountProfile = false; onOpenAccountProfile() }
+            onEditProfile = { showAccountProfile = false; onOpenAccountProfile() },
+            onOpenPrivacy = { showAccountProfile = false; onOpenPrivacy() },
+            onSignOut = onSignOut
         )
         return
     }
@@ -833,7 +836,9 @@ private fun LanguageSelectionPanel(onBack: () -> Unit) {
 @Composable
 private fun AccountProfileSettingsPanel(
     onBack: () -> Unit,
-    onEditProfile: () -> Unit
+    onEditProfile: () -> Unit,
+    onOpenPrivacy: () -> Unit,
+    onSignOut: () -> Unit
 ) {
     val context = LocalContext.current
     val profile = remember { FynxPreferencesStore.loadProfile(context, null) }
@@ -910,10 +915,10 @@ private fun AccountProfileSettingsPanel(
             item { SettingsSectionTitle("ACCOUNT CONTROLS") }
             item {
                 SettingsReferenceRow(Icons.Default.Security, "Account Controls",
-                    "Review account access and safety options",
+                    "Privacy, sign out and account access",
                     androidx.compose.ui.graphics.Color(0xFF8B5CF6)) {
                     infoTitle = "Account Controls"
-                    infoText = "Account access and security controls remain in their existing FYNX account and privacy flows."
+                    infoText = "Choose a real account action. Privacy & Security contains the available visibility and blocked-user controls. Sign out ends this session on this device."
                 }
             }
         }
@@ -923,7 +928,16 @@ private fun AccountProfileSettingsPanel(
             onDismissRequest = { infoTitle = null },
             title = { Text(infoTitle!!) },
             text = { Text(infoText) },
-            confirmButton = { TextButton(onClick = { infoTitle = null }) { Text("OK") } }
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (infoTitle == "Account Controls") {
+                        TextButton(onClick = { infoTitle = null; onOpenPrivacy() }) { Text("Privacy & Security") }
+                        TextButton(onClick = { infoTitle = null; onSignOut() }) { Text("Sign out") }
+                    } else {
+                        TextButton(onClick = { infoTitle = null }) { Text("OK") }
+                    }
+                }
+            }
         )
     }
 }
