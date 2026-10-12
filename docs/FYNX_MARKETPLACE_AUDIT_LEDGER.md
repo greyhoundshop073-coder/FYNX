@@ -113,3 +113,12 @@ Use evidence-based ecommerce UX as a design reference, adapted to FYNX and its N
 **Implementation rule:** choose the highest-impact confirmed gap that can be completed as one coherent batch. If no code defect is established, do not manufacture one; complete the runtime evidence/verification gap and record exactly what remains blocked.
 
 **Finish:** report exact branch/SHA, diff, relevant workflow runs, APK artifact identity, actual screens/journeys inspected, regressions checked, external blockers, and status. Update this ledger in the same coherent delivery when the evidence changes. Do not move to the next workstream while required checks are red or pending.
+
+### Marketplace discovery timeout alignment — October 12, 2026
+
+- Confirmed source mismatch: both Marketplace initial reload and load-more wrap requests in a 35-second `withTimeoutOrNull` (`app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt`, lines 290 and 332 at audit SHA `4819cfe121129290e5505df1e174dddc48e440df`).
+- The shared backend client permits 30-second reads on normal networks and 45-second reads on weak networks, and retries idempotent GET requests up to two times. The outer 35-second Marketplace timeout can cancel a valid slow/cold-start request before the backend client's configured retry budget finishes.
+- The repository's production reachability probe independently allows 120 seconds per request and explicitly documents Render cold starts exceeding the previous 45-second budget (`scripts/verify_production_backend_reachability.mjs`). This supports treating the 35-second UI cancellation as a real timeout-budget mismatch, not proof that Render is down.
+- Planned minimal fix: align both Marketplace discovery timeout guards with the maximum bounded backend GET retry window while preserving existing loading/error/retry behavior, request-generation stale-response guards, authentication, and live-only listing policy.
+- Required verification: unit tests + full Android certification and exact-SHA runtime screenshot on the resulting `[marketplace-cert]` commit. Live listing success remains unverified unless the authenticated service is actually reachable during that run.
+
