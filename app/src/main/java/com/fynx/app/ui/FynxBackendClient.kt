@@ -72,7 +72,7 @@ object FynxBackendClient {
                         if (destination.exists() && !destination.delete()) throw IOException("Unable to replace downloaded media"); if (!temporary.renameTo(destination)) throw IOException("Unable to finalize downloaded media"); completed = Result.success(result)
                     } catch (error: Exception) {
                         if (error is CancellationException) throw error
-                        temporary.delete(); if (!isRetryableFailure(error) || attempt >= maxRetries) completed = Result.failure(error) else { attempt++; awaitValidatedNetwork(context); delay(RETRY_DELAY_MS * attempt) }
+                        temporary.delete(); if (!isRetryableFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) completed = Result.failure(error) else { attempt++; awaitValidatedNetwork(context); delay(RETRY_DELAY_MS * attempt) }
                     }
                 }
                 checkNotNull(completed)
@@ -82,7 +82,7 @@ object FynxBackendClient {
 
     private suspend fun downloadOnce(context: Context, target: URL, temporary: File, maxBytes: Long): DownloadedMedia {
         val weakNetwork = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK
-        val connection = (target.openConnection() as HttpURLConnection).apply { connectTimeout = connectTimeoutOverrideMs ?: if (weakNetwork) WEAK_CONNECT_TIMEOUT_MS else CONNECT_TIMEOUT_MS; readTimeout = readTimeoutOverrideMs ?: if (weakNetwork) WEAK_READ_TIMEOUT_MS else READ_TIMEOUT_MS; useCaches = false; instanceFollowRedirects = false; setRequestProperty("Accept", "image/*,video/*,audio/*,*/*"); setRequestProperty("Accept-Encoding", "identity"); setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0"); setRequestProperty("Pragma", "no-cache"); setRequestProperty("Connection", "close"); setRequestProperty("User-Agent", "FYNX-Android/1"); accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") } }
+        val connection = (target.openConnection() as HttpURLConnection).apply { connectTimeout = if (weakNetwork) WEAK_CONNECT_TIMEOUT_MS else CONNECT_TIMEOUT_MS; readTimeout = if (weakNetwork) WEAK_READ_TIMEOUT_MS else READ_TIMEOUT_MS; useCaches = false; instanceFollowRedirects = false; setRequestProperty("Accept", "image/*,video/*,audio/*,*/*"); setRequestProperty("Accept-Encoding", "identity"); setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0"); setRequestProperty("Pragma", "no-cache"); setRequestProperty("Connection", "close"); setRequestProperty("User-Agent", "FYNX-Android/1"); accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") } }
         val cancellationHandle = currentCoroutineContext().job.invokeOnCompletion { connection.disconnect() }
         try { val status = connection.responseCode; if (status == HttpURLConnection.HTTP_UNAUTHORIZED) { FynxAuthStore.clear(context); throw FynxUnauthorizedException() }; val stream = if (status in 200..299) connection.inputStream else connection.errorStream; if (status !in 200..299) throw FynxHttpException(status, stream?.use { it.bufferedReader().readText().take(600) }.orEmpty()); val declaredLength = connection.contentLengthLong; require(declaredLength < 0L || declaredLength <= maxBytes) { "FYNX media is too large" }; temporary.delete(); var total = 0L; stream?.use { input -> temporary.outputStream().use { output -> val buffer = ByteArray(32 * 1024); while (true) { val count = input.read(buffer); if (count < 0) break; total += count; if (total > maxBytes) throw IOException("FYNX media is too large"); output.write(buffer, 0, count) }; output.flush() } } ?: throw IOException("FYNX media response was empty"); if (total <= 0L || temporary.length() != total) throw IOException("FYNX media download was incomplete"); return DownloadedMedia(connection.contentType?.substringBefore(';')?.trim()?.lowercase(), total) } finally { cancellationHandle.dispose(); connection.disconnect() }
     }
@@ -94,12 +94,12 @@ object FynxBackendClient {
                 var attempt = 0; var completed: Result<String>? = null
                 while (completed == null) {
                     try {
-                        val response: String = requestSemaphore.withPermit { if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK) weakRequestSemaphore.withPermit { executeRequest(context, root, method, path, body, connectTimeoutMs, readTimeoutMs) } else executeRequest(context, root, method, path, body) }
+                        val response: String = requestSemaphore.withPermit { if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK) weakRequestSemaphore.withPermit { executeRequest(context, root, method, path, body, connectTimeoutMs, readTimeoutMs) } else executeRequest(context, root, method, path, body, connectTimeoutMs, readTimeoutMs) }
                         completed = Result.success(response)
                     } catch (error: Exception) {
                         if (error is CancellationException) throw error
                         val retryable = method == "GET" || method == "DELETE"
-                        if (!retryable || !isRetryableFailure(error) || attempt >= MAX_IDEMPOTENT_RETRIES) completed = Result.failure(error) else { attempt++; delay(RETRY_DELAY_MS * attempt); awaitValidatedNetwork(context) }
+                        if (!retryable || !isRetryableFailure(error) || attempt >= maxRetries) completed = Result.failure(error) else { attempt++; delay(RETRY_DELAY_MS * attempt); awaitValidatedNetwork(context) }
                     }
                 }
                 checkNotNull(completed)
@@ -114,8 +114,8 @@ object FynxBackendClient {
         val requiresAuthentication = !isPublicAuthPath(path)
         val connection = (URL(root + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
-            connectTimeout = if (weakNetwork) WEAK_CONNECT_TIMEOUT_MS else CONNECT_TIMEOUT_MS
-            readTimeout = if (weakNetwork) WEAK_READ_TIMEOUT_MS else READ_TIMEOUT_MS
+            connectTimeout = connectTimeoutOverrideMs ?: if (weakNetwork) WEAK_CONNECT_TIMEOUT_MS else CONNECT_TIMEOUT_MS
+            readTimeout = readTimeoutOverrideMs ?: if (weakNetwork) WEAK_READ_TIMEOUT_MS else READ_TIMEOUT_MS
             useCaches = false
             setRequestProperty("Accept", "application/json")
             setRequestProperty("Accept-Encoding", "identity")
