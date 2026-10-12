@@ -1,9 +1,13 @@
 import crypto from "node:crypto";
+import { ensureMarketplaceSchemaForPool } from "./marketplaceSchema.js";
 
 export function registerDiscoveryRoutes({ app, pool, auth }) {
   let schemaPromise;
   const ensureSchema = async () => {
-    if (!schemaPromise) schemaPromise = pool.query(`
+    if (!schemaPromise) schemaPromise = (async () => {
+      // Discovery events reference marketplace_listings, so initialize listings first.
+      await ensureMarketplaceSchemaForPool(pool);
+      return pool.query(`
       CREATE TABLE IF NOT EXISTS fynx_discovery_events (
         id BIGSERIAL PRIMARY KEY,
         user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -19,7 +23,8 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       CREATE INDEX IF NOT EXISTS fynx_discovery_events_post_idx ON fynx_discovery_events(post_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS fynx_discovery_events_listing_idx ON fynx_discovery_events(listing_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS fynx_discovery_events_type_idx ON fynx_discovery_events(event_type, created_at DESC);
-    `).catch((error) => { schemaPromise = undefined; throw error; });
+    `);
+    })().catch((error) => { schemaPromise = undefined; throw error; });
     return schemaPromise;
   };
 
@@ -121,7 +126,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       const category = cleanText(req.query?.category, 40);
       const location = cleanText(req.query?.location, 160);
       const params = [req.user.sub];
-      const where = ["l.active=TRUE", "l.quantity>0", "l.seller_id<>$1"];
+      const where = ["l.active=TRUE", "l.quantity>0", "l.seller_id<>$1", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')"];
       if (q) { params.push(`%${q}%`); const n=params.length; where.push(`(l.title ILIKE $${n} OR l.description ILIKE $${n} OR u.username ILIKE $${n} OR u.display_name ILIKE $${n})`); }
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category=${params.length}`); }
       if (location) { params.push(`%${location}%`); where.push(`l.location ILIKE ${params.length}`); }
@@ -152,7 +157,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
         SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,l.store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.active,l.created_at
         FROM marketplace_listings l
         JOIN users u ON u.id=l.seller_id
-        WHERE l.id=$1
+        WHERE l.id=$1 AND UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')
         LIMIT 1
       `, [listingId]);
       if (!result.rows[0]) return res.status(404).json({ error: "listing not found" });

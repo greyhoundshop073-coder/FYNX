@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -40,6 +41,8 @@ fun FynxMarketplaceSellerCenterPanel() {
     var error by remember { mutableStateOf<String?>(null) }
     var deletingId by remember { mutableStateOf<String?>(null) }
     var payoutAccount by remember { mutableStateOf<JSONObject?>(null) }
+    var payoutAccounts by remember { mutableStateOf(emptyList<JSONObject>()) }
+    var payoutCurrency by rememberSaveable { mutableStateOf("NGN") }
     var accountLoading by remember { mutableStateOf(true) }
     var accountSaving by remember { mutableStateOf(false) }
     var accountMessage by remember { mutableStateOf<String?>(null) }
@@ -114,7 +117,15 @@ fun FynxMarketplaceSellerCenterPanel() {
             accountLoading = true
             FynxBackendClient.get(context, "/api/marketplace/settlement/payout-account")
                 .onSuccess { raw ->
-                    payoutAccount = JSONObject(raw).optJSONObject("payoutAccount")
+                    val payload = JSONObject(raw)
+                    val parsed = mutableListOf<JSONObject>()
+                    val accounts = payload.optJSONArray("payoutAccounts")
+                    if (accounts != null) {
+                        for (i in 0 until accounts.length()) accounts.optJSONObject(i)?.let { parsed += it }
+                    }
+                    if (parsed.isEmpty()) payload.optJSONObject("payoutAccount")?.let { parsed += it }
+                    payoutAccounts = parsed
+                    payoutAccount = parsed.firstOrNull { it.optString("currency").trim().uppercase() == payoutCurrency } ?: parsed.firstOrNull()
                     accountMessage = null
                 }
                 .onFailure { accountMessage = it.message ?: "Payout account status could not load." }
@@ -272,6 +283,11 @@ fun FynxMarketplaceSellerCenterPanel() {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("FYNX verifies the bank details with the payout provider before the account can receive protected Marketplace payouts.", style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("NGN", "USD").forEach { currency ->
+                            FilterChip(selected = payoutCurrency == currency, onClick = { payoutCurrency = currency }, label = { Text(currency) })
+                        }
+                    }
                     OutlinedTextField(bankCode, { bankCode = it.filter(Char::isDigit) }, label = { Text("Bank code") }, singleLine = true)
                     OutlinedTextField(accountNumber, { accountNumber = it.filter(Char::isDigit) }, label = { Text("Account number") }, singleLine = true)
                     OutlinedTextField(accountName, { accountName = it }, label = { Text("Account name") }, singleLine = true)
@@ -283,15 +299,22 @@ fun FynxMarketplaceSellerCenterPanel() {
                     accountSaving = true
                     accountMessage = null
                     scope.launch {
-                        val body = JSONObject()
+                        val bodyJson = JSONObject()
                             .put("bankCode", bankCode.trim())
                             .put("accountNumber", accountNumber.trim())
                             .put("accountName", accountName.trim())
+                            .put("currency", payoutCurrency)
                             .put("bankName", payoutAccount?.optString("bankName").orEmpty())
-                            .toString()
+                        val body = bodyJson.toString()
                         FynxBackendClient.postJson(context, "/api/marketplace/settlement/payout-account", body)
                             .onSuccess { raw ->
-                                payoutAccount = JSONObject(raw).optJSONObject("payoutAccount")
+                                val saved = JSONObject(raw).optJSONObject("payoutAccount")
+                                if (saved != null) {
+                                    val savedCurrency = saved.optString("currency").trim().uppercase()
+                                    payoutAccounts = payoutAccounts.filterNot { it.optString("currency").trim().uppercase() == savedCurrency } + saved
+                                    payoutAccount = saved
+                                    payoutCurrency = savedCurrency
+                                }
                                 accountMessage = "Payout account verified and connected."
                                 bankCode = ""; accountNumber = ""; accountName = ""
                             }

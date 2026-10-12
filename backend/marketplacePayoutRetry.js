@@ -40,7 +40,7 @@ export function registerMarketplacePayoutRetryRoutes({ app }) {
       const escrow = (await client.query(`SELECT * FROM marketplace_escrows WHERE order_id=$1 FOR UPDATE`, [orderId])).rows[0];
       if (!escrow || escrow.status !== 'RELEASE_ELIGIBLE') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'payout is not currently eligible for retry' }); }
 
-      const payoutAccount = (await client.query(`SELECT recipient_code,verified,active,currency FROM marketplace_payout_accounts WHERE seller_id=$1 FOR UPDATE`, [req.user.sub])).rows[0];
+      const payoutAccount = (await client.query(`SELECT recipient_code,verified,active,currency FROM marketplace_payout_accounts WHERE seller_id=$1 AND active=TRUE AND verified=TRUE AND UPPER(currency)=UPPER($2) FOR UPDATE`, [req.user.sub, order.currency])).rows[0];
       if (!payoutAccount || !payoutAccount.verified || !payoutAccount.active || !payoutAccount.recipient_code) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'verified active payout account is required' }); }
       if (String(payoutAccount.currency).toUpperCase() !== String(order.currency).toUpperCase()) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'payout account currency does not match the order' }); }
 
