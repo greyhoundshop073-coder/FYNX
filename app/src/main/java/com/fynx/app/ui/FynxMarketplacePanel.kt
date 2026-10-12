@@ -308,7 +308,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     listings = items.distinctBy { it.id }
                     hasMoreListings = more
                     discoveryFallbackWarning = fallbackWarning
-                    hasMoreListings = more
                     nextListingsOffset = items.size
                 }.onFailure { error = it.message ?: "Marketplace could not load." }
             }
