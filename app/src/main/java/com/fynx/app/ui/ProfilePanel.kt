@@ -647,7 +647,16 @@ fun SettingsPanel(
         onDismissRequest = { infoTitle = null },
         title = { Text(infoTitle!!) },
         text = { Text(infoDescription) },
-        confirmButton = { TextButton(onClick = { infoTitle = null }) { Text("OK") } }
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (infoTitle == "Help & Support") {
+                    TextButton(onClick = { infoTitle = null; onOpenPrivacy() }) {
+                        Text("Open Privacy & Security")
+                    }
+                }
+                TextButton(onClick = { infoTitle = null }) { Text("OK") }
+            }
+        }
     )
 }
 
