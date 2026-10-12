@@ -27,6 +27,9 @@ notification_models = read("app/src/main/java/com/fynx/app/ui/NotificationModels
 
 check("notification UI loads server preferences", "FynxNotificationPreferencesClient.load(context)" in panel)
 check("notification UI saves through server client", "FynxNotificationPreferencesClient.update(context" in panel)
+check("notification preference save failures are visible and revert optimistic state", "Notification settings were not saved" in panel and "FynxNotificationPreferencesClient.cached(context)" in panel and ".onFailure" in panel)
+check("rapid notification preference writes are serialized and stale snapshots skipped", "preferenceSaveMutex.withLock" in panel and "version != preferenceSaveVersion" in panel)
+check("backend safety notifications bypass ordinary preference and quiet-mode gates", 'if(type==="SAFETY")return true;const column=preferenceColumn(type);' in read("backend/notificationPush.js"))
 check("notification preferences are account-scoped locally", "FynxAuthStore.accountStorageKey(context)" in notification_client and "accountKey(context)" in notification_client)
 check("notification preferences are remote-backed", '"/api/notification-preferences"' in notification_client and "FynxBackendClient.patchJson" in notification_client)
 check("notification foundation applies shared controls", "FynxNotificationPreferencesClient.cached(context)" in notification_foundation and "FynxNotificationControlsBatch3.shouldPush(preferences, type)" in notification_foundation)
