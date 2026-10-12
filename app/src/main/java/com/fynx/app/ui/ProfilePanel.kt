@@ -352,12 +352,17 @@ fun SettingsPanel(
     var storyVisibility by remember { mutableStateOf(FynxPreferencesStore.loadVisibility(context, "privacy_status_visibility")) }
     var search by remember { mutableStateOf("") }
     var showLanguage by remember { mutableStateOf(false) }
+    var showMediaStoragePage by remember { mutableStateOf(false) }
     var infoTitle by remember { mutableStateOf<String?>(null) }
     var infoDescription by remember { mutableStateOf("") }
 
     val query = search.trim().lowercase()
     if (showLanguage) {
         LanguageSelectionPanel(onBack = { showLanguage = false })
+        return
+    }
+    if (showMediaStoragePage) {
+        MediaStorageSettingsPanel(onBack = { showMediaStoragePage = false })
         return
     }
     if (showAppearancePage) {
@@ -487,8 +492,7 @@ fun SettingsPanel(
                 item {
                     SettingsReferenceRow(Icons.Default.Storage, "Media & Storage",
                         "Manage media and storage information", androidx.compose.ui.graphics.Color(0xFF2C9BCB)) {
-                        infoTitle = "Media & Storage"
-                        infoDescription = "FYNX uses your device storage for app data and cached media. Media controls will be shown here when the storage-management options are available."
+                        showMediaStoragePage = true
                     }
                 }
             }
