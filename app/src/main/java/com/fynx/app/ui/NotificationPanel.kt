@@ -18,6 +18,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 @Composable
 fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit, onNotificationRead: (String) -> Unit = {}, onMarkAllRead: () -> Unit = {}, onUnreadCountChanged: (Int) -> Unit = {}, onNotificationOpen: (FynxNotification) -> Unit = {}) {
@@ -28,6 +30,9 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
     var remoteNotifications by remember { mutableStateOf<List<FynxNotification>>(emptyList()) }
     var remoteError by remember { mutableStateOf<String?>(null) }
     var notificationPreferences by remember { mutableStateOf(FynxNotificationPreferencesClient.cached(context)) }
+    var preferenceSaveError by remember { mutableStateOf<String?>(null) }
+    var preferenceSaveVersion by remember { mutableIntStateOf(0) }
+    val preferenceSaveMutex = remember { Mutex() }
     var remoteUnreadCount by remember { mutableIntStateOf(0) }
     var showOverflow by remember { mutableStateOf(false) }
     var showPreferences by remember { mutableStateOf(false) }
@@ -58,7 +63,28 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
     }
     fun savePreferences(next: FynxNotificationPreferences) {
         notificationPreferences = next
-        scope.launch { FynxNotificationPreferencesClient.update(context, next).onSuccess { notificationPreferences = it } }
+        preferenceSaveError = null
+        val version = ++preferenceSaveVersion
+        scope.launch {
+            preferenceSaveMutex.withLock {
+                // Serialize writes and skip stale queued snapshots so rapid toggles cannot
+                // leave the server with an older preference state.
+                if (version != preferenceSaveVersion) return@withLock
+                FynxNotificationPreferencesClient.update(context, next)
+                    .onSuccess {
+                        if (version == preferenceSaveVersion) {
+                            notificationPreferences = it
+                            preferenceSaveError = null
+                        }
+                    }
+                    .onFailure {
+                        if (version == preferenceSaveVersion) {
+                            notificationPreferences = FynxNotificationPreferencesClient.cached(context)
+                            preferenceSaveError = "Notification settings were not saved. Check your connection and try again."
+                        }
+                    }
+            }
+        }
     }
     fun markAllRead() {
         FynxNotificationStore.markAllRead(context)
@@ -106,6 +132,7 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
         if (showPreferences) {
             Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    preferenceSaveError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                     NotificationPreferenceSwitch("Notifications", "Master switch for FYNX alerts", notificationPreferences.enabled) { savePreferences(FynxNotificationControlsBatch3.update(notificationPreferences, enabled = it)) }
                     NotificationPreferenceSwitch("Push alerts", "Allow notification banners and sounds", notificationPreferences.pushEnabled) { savePreferences(FynxNotificationControlsBatch3.update(notificationPreferences, pushEnabled = it)) }
                     NotificationPreferenceSwitch("Quiet mode", "Temporarily silence non-safety alerts", notificationPreferences.quietMode) { savePreferences(FynxNotificationControlsBatch3.update(notificationPreferences, quietMode = it)) }
