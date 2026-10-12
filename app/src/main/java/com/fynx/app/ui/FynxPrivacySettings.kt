@@ -1,8 +1,12 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -121,7 +125,7 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
         ) {
             IconButton(onClick = onBack) {
                 Icon(
-                    androidx.compose.material.icons.Icons.Default.ArrowBack,
+                    Icons.Default.ArrowBack,
                     contentDescription = "Back to Settings",
                     tint = MaterialTheme.colorScheme.onSurface
                 )
@@ -131,7 +135,7 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
                 color = androidx.compose.ui.graphics.Color(0xFF8B5CF6).copy(alpha = 0.13f)
             ) {
                 Icon(
-                    androidx.compose.material.icons.Icons.Default.Security,
+                    Icons.Default.Security,
                     contentDescription = null,
                     tint = androidx.compose.ui.graphics.Color(0xFF8B5CF6),
                     modifier = Modifier.padding(10.dp).size(24.dp)
