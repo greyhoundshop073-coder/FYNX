@@ -420,7 +420,8 @@ fun SettingsPanel(
             Column(Modifier.weight(1f)) {
                 Text("FYNX", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.primary)
-                Text("Settings", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                Text("Settings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text("Manage your account, privacy, and app preferences.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = .12f)) {
                 Icon(Icons.Default.Settings, contentDescription = "Settings", tint = MaterialTheme.colorScheme.primary,
@@ -451,7 +452,7 @@ fun SettingsPanel(
                 if (visible("Account & Profile", "account profile username bio phone email account controls")) {
                     item {
                         SettingsReferenceRow(Icons.Default.AccountCircle, "Account & Profile",
-                            "Personal information and account details", androidx.compose.ui.graphics.Color(0xFF4F7BFF)) {
+                            "Profile, username, phone & email", androidx.compose.ui.graphics.Color(0xFF4F7BFF)) {
                             showAccountProfile = true
                         }
                     }
@@ -459,7 +460,7 @@ fun SettingsPanel(
                 if (visible("Privacy & Security", "profile privacy online status blocked users security people discovery")) {
                     item {
                         SettingsReferenceRow(Icons.Default.Security, "Privacy & Security",
-                            "Control your privacy and account safety", androidx.compose.ui.graphics.Color(0xFF8B5CF6)) {
+                            "Privacy, blocking, security & sessions", androidx.compose.ui.graphics.Color(0xFF8B5CF6)) {
                             onOpenPrivacy()
                         }
                     }
@@ -469,7 +470,7 @@ fun SettingsPanel(
                 item { SettingsSectionTitle("COMMUNICATION") }
                 item {
                     SettingsReferenceRow(Icons.Default.Notifications, "Notifications",
-                        "Chat alerts, social activity, calls and more", androidx.compose.ui.graphics.Color(0xFFEF8B42)) {
+                        "Messages, calls, social & more", androidx.compose.ui.graphics.Color(0xFFEF8B42)) {
                         onOpenNotifications()
                     }
                 }
@@ -477,7 +478,7 @@ fun SettingsPanel(
             if (visible("Chat", "chat settings read receipts wallpapers messages personalization")) {
                 item {
                     SettingsReferenceRow(Icons.Default.Chat, "Chat",
-                        "Wallpapers, message preferences and read receipts", androidx.compose.ui.graphics.Color(0xFF20A88A)) {
+                        "Chat settings are in the Chat section", androidx.compose.ui.graphics.Color(0xFF20A88A)) {
                         showChatPersonalization = true
                     }
                 }
@@ -485,7 +486,7 @@ fun SettingsPanel(
             if (visible("Stories & Status", "stories status replies reactions privacy")) {
                 item {
                     SettingsReferenceRow(Icons.Default.AutoStories, "Stories & Status",
-                        "Manage story visibility and status privacy", androidx.compose.ui.graphics.Color(0xFFE45B91)) {
+                        "Stories, replies, reactions, archive", androidx.compose.ui.graphics.Color(0xFFE45B91)) {
                         storyVisibility = FynxPreferencesStore.loadVisibility(context, "privacy_status_visibility")
                         showStoriesStatus = true
                     }
@@ -495,7 +496,7 @@ fun SettingsPanel(
                 item { SettingsSectionTitle("PERSONALIZATION") }
                 item {
                     SettingsReferenceRow(Icons.Default.Palette, "Appearance",
-                        "Theme, accent color and app appearance", androidx.compose.ui.graphics.Color(0xFF9B6BFF)) {
+                        "Theme, colors, app style", androidx.compose.ui.graphics.Color(0xFF9B6BFF)) {
                         showAppearancePage = true
                     }
                 }
@@ -504,7 +505,7 @@ fun SettingsPanel(
                 item { SettingsSectionTitle("APP & DATA") }
                 item {
                     SettingsReferenceRow(Icons.Default.Storage, "Media & Storage",
-                        "Manage media and storage information", androidx.compose.ui.graphics.Color(0xFF2C9BCB)) {
+                        "Downloads, storage, cache", androidx.compose.ui.graphics.Color(0xFF2C9BCB)) {
                         showMediaStoragePage = true
                     }
                 }
@@ -512,7 +513,7 @@ fun SettingsPanel(
             if (visible("Data & Network", "data network mobile data wifi usage uploads downloads")) {
                 item {
                     SettingsReferenceRow(Icons.Default.DataUsage, "Data & Network",
-                        "Data usage and network preferences", androidx.compose.ui.graphics.Color(0xFF39A96B)) {
+                        "Data usage, upload/download, network", androidx.compose.ui.graphics.Color(0xFF39A96B)) {
                         showNetworkStatusPage = true
                     }
                 }
@@ -520,7 +521,7 @@ fun SettingsPanel(
             if (visible("Language & Accessibility", "language accessibility english font size")) {
                 item {
                     SettingsReferenceRow(Icons.Default.Language, "Language & Accessibility",
-                        "Language and readability preferences", androidx.compose.ui.graphics.Color(0xFFCB8A35)) {
+                        "Language, text size, accessibility", androidx.compose.ui.graphics.Color(0xFFCB8A35)) {
                         showLanguage = true
                     }
                 }
@@ -529,7 +530,7 @@ fun SettingsPanel(
                 item { SettingsSectionTitle("FYNX") }
                 item {
                     SettingsReferenceRow(Icons.Default.HelpOutline, "Help & Support",
-                        "Get help using FYNX", androidx.compose.ui.graphics.Color(0xFF477FEA)) {
+                        "Help center, report, support", androidx.compose.ui.graphics.Color(0xFF477FEA)) {
                         infoTitle = "Help & Support"
                         infoDescription = "Try these steps for common problems:\n\nConnection problems: Check that your internet is working, then reopen the screen and retry.\n\nSign-in problems: Check your sign-in details and never share your password or verification codes.\n\nCamera, microphone or media problems: Review FYNX permissions in Android Settings and make sure the app is up to date.\n\nPrivacy or account safety: Open Privacy & Security to review visibility controls, submit a report or follow an appeal.\n\nIf the problem continues, note which FYNX screen you were using and the exact error message before asking for support. Do not include passwords or verification codes."
                     }
@@ -538,7 +539,7 @@ fun SettingsPanel(
             if (visible("About FYNX", "about version app information")) {
                 item {
                     SettingsReferenceRow(Icons.Default.Info, "About FYNX",
-                        "App information and version", androidx.compose.ui.graphics.Color(0xFF8B69D6)) {
+                        "Version, terms, privacy", androidx.compose.ui.graphics.Color(0xFF8B69D6)) {
                         infoTitle = "About FYNX"
                         val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "Unknown"
                         infoDescription = "FYNX brings communication, social sharing and marketplace tools together in one app.\n\nVersion: $version"
