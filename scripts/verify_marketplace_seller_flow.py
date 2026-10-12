@@ -61,6 +61,7 @@ checks = [
     ("completed protected orders support seller reviews", "reviewMarketplaceOrder" in marketplace and "Submit review" in marketplace),
     ("seller publish still requires a real listing area", "location.trim().isNotBlank()" in marketplace and "validListing(title, desc, price.toDoubleOrNull(), quantity.toIntOrNull(), media)" in marketplace),
     ("seller listing location remains human-readable and privacy-preserving", "FynxPostLocationClient.currentPlace(context)" in marketplace and "your exact GPS coordinates are not published with the listing." in marketplace),
+    ("marketplace pagination deduplicates listing IDs across existing results and within each new page", "val knownIds = listings.asSequence().map { it.id }.toHashSet()" in marketplace and "val newListings = page.listings.filter { knownIds.add(it.id) }" in marketplace and "listings = listings + newListings" in marketplace),
     ("buyer nearby discovery still uses the shared smart-location resolver", "FynxPostLocationClient.currentPlace(context)" in marketplace and ("nearbyMarketplaceListings(context, query, category, nearbyLabel)" in marketplace or "nearbyMarketplaceListings(context, requestQuery, requestCategory, requestNearbyLabel)" in marketplace)),
     ("cart selection toggles individual real listing IDs", "selectedIds = if (checked) selectedIds + item.id else selectedIds - item.id" in marketplace),
     ("cart checkout only submits selected items", "onCheckout(selected)" in marketplace and "selected.isNotEmpty() && !mixed" in marketplace),
