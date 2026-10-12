@@ -835,6 +835,7 @@ private fun AccountProfileSettingsPanel(
 ) {
     val context = LocalContext.current
     val profile = remember { FynxPreferencesStore.loadProfile(context, null) }
+    val storedPhone = remember { FynxAuthStore.storedPhone(context)?.takeIf { it.isNotBlank() } }
     var infoTitle by remember { mutableStateOf<String?>(null) }
     var infoText by remember { mutableStateOf("") }
 
@@ -893,10 +894,18 @@ private fun AccountProfileSettingsPanel(
             }
             item {
                 SettingsReferenceRow(Icons.Default.Info, "Phone & Email",
-                    "Contact details depend on your sign-in and account setup",
+                    buildString {
+                        append("Phone: ")
+                        append(storedPhone ?: "not saved on this device")
+                        append(" · Email: verification not connected")
+                    },
                     androidx.compose.ui.graphics.Color(0xFFCB8A35)) {
                     infoTitle = "Phone & Email"
-                    infoText = "This screen does not yet provide verified phone or email editing. No contact details have been changed."
+                    infoText = buildString {
+                        append("Phone: ")
+                        append(storedPhone ?: "No phone number is saved in this local account record.")
+                        append("\n\nEmail editing and verification are not connected yet. Contact details have not been changed.")
+                    }
                 }
             }
             item { SettingsSectionTitle("ACCOUNT CONTROLS") }
