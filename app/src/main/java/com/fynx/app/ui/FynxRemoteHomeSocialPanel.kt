@@ -317,20 +317,32 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         scope.launch {
             loading = true
             val hadFreshCache = !forceRefresh && FynxRemoteSocialClient.hasCachedFeed(context)
+            var cachedRevalidationStarted = false
             FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
                 .onSuccess { page ->
                     posts = page.posts; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null
                     interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null
                     resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); hydratePostMedia(page.posts)
                     discoveryOffset = 0; discoveryHasMore = false
-                    if (hadFreshCache) scope.launch {
-                        FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false)
-                            .onSuccess { fresh -> posts = fresh.posts; hasMore = fresh.hasMore; feedNextCursor = fresh.nextCursor; error = null; resolveAuthorPhotos(fresh.posts); hydrateInteractionStates(fresh.posts); hydrateReactionStates(fresh.posts); hydratePostMedia(fresh.posts) }
-                            .onFailure { /* Keep the valid cached snapshot visible. */ }
+                    if (hadFreshCache) {
+                        // Keep pagination locked until cache revalidation settles. Otherwise a
+                        // next-page request can race this response and use a stale cursor.
+                        cachedRevalidationStarted = true
+                        loading = false
+                        scope.launch {
+                            try {
+                                FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false)
+                                    .onSuccess { fresh -> posts = fresh.posts; hasMore = fresh.hasMore; feedNextCursor = fresh.nextCursor; error = null; resolveAuthorPhotos(fresh.posts); hydrateInteractionStates(fresh.posts); hydrateReactionStates(fresh.posts); hydratePostMedia(fresh.posts) }
+                                    .onFailure { /* Keep the valid cached snapshot visible. */ }
+                            } finally {
+                                feedRequestInFlight = false
+                            }
+                        }
                     }
                 }
                 .onFailure { error = if (it.message?.contains("HTTP 404", true) == true) "Your FYNX feed service is temporarily unavailable." else it.message ?: "Unable to load your feed." }
-            loading = false; feedRequestInFlight = false
+            loading = false
+            if (!cachedRevalidationStarted) feedRequestInFlight = false
         }
     }
 
