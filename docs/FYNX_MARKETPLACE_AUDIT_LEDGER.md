@@ -122,3 +122,12 @@ Use evidence-based ecommerce UX as a design reference, adapted to FYNX and its N
 - Planned minimal fix: align both Marketplace discovery timeout guards with the maximum bounded backend GET retry window while preserving existing loading/error/retry behavior, request-generation stale-response guards, authentication, and live-only listing policy.
 - Required verification: unit tests + full Android certification and exact-SHA runtime screenshot on the resulting `[marketplace-cert]` commit. Live listing success remains unverified unless the authenticated service is actually reachable during that run.
 
+
+### Marketplace discovery timeout correction and verification status — October 12, 2026
+
+- Red run investigated: Android Build [#38295907945](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/38295907945) failed its runtime watchdog because Marketplace remained in loading state for 75 seconds. The source at that SHA used a 150,000 ms outer listing timeout, longer than the 75-second watchdog.
+- Minimal correction pushed at `d64f3369e9deb6cfa6e2aac9d121bc313418afa1`: `MARKETPLACE_LISTING_REQUEST_TIMEOUT_MS = 60_000L`. Existing error/retry behavior and request-generation guards were preserved.
+- Android Build [#38297477702](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/38297477702) completed **GREEN** for that exact SHA and uploaded `FYNX-debug-apk-d64f3369e9deb6cfa6e2aac9d121bc313418afa1` (47,173,442 bytes). APK SHA-256: `945f87eb347c51b5b3dba9e8a319355df7a4af02b06f5a25be770aecddf316e1`.
+- That push did not trigger the opt-in `[marketplace-cert]` emulator/runtime step. Therefore the timeout fix is build-verified but **NOT YET RUNTIME-VERIFIED**; the APK contents were inspected, but no current-SHA screenshot or authenticated journey was produced by this run.
+- Initial branch comparison found 40 Marketplace-prefixed branches/refs. Several older branches are ancestors of the integration branch; some newer/diverged heads contain unique file changes, including Marketplace checkout/client/panel and discovery route work. Do not merge whole branches blindly. Continue by checking each candidate's unique commits and exact diff against the integration SHA, then port only confirmed required changes and re-run backend/Android checks.
+- Live listing retrieval and payment-provider end-to-end behavior remain **BACKEND-UNVERIFIED** while the production backend/test environment is unavailable. A green Android build does not establish live backend health.
