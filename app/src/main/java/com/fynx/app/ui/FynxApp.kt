@@ -71,6 +71,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
     var appearance by remember { mutableStateOf(FynxPreferencesStore.loadAppearance(context)) }
     var openProfileSettings by remember { mutableStateOf(false) }
+    var notificationPreferencesOnly by remember { mutableStateOf(false) }
     var profileVersion by remember { mutableIntStateOf(0) }
     var remoteMyPhotoId: String? by remember(authSession.username, profileVersion) { mutableStateOf(FynxProfileRemoteClient.cachedProfilePhotoId(context, authSession.username ?: "")) }
     var aiCaptionDraft by remember { mutableStateOf<String?>(null) }
@@ -432,7 +433,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                                         contentDescription = item.label
                                     },
                                     selected = selected == item.key,
-                                    onClick = { selected = item.key },
+                                    onClick = { notificationPreferencesOnly = false; selected = item.key },
                                     icon = {
                                         Icon(
                                             item.icon,
@@ -519,7 +520,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Groups" -> FynxGroupsPanel(currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", onOpenGroup = { openGroup = it })
             "Notifications" -> NotificationPanel(
                 notifications = notifications,
-                onBack = { selected = "Home" },
+                preferencesOnly = notificationPreferencesOnly,
+                onBack = { selected = if (notificationPreferencesOnly) "Profile" else "Home"; notificationPreferencesOnly = false },
                 onNotificationRead = { notifications = FynxNotificationStore.load(context) },
                 onMarkAllRead = { notifications = FynxNotificationStore.load(context); remoteUnreadCount = 0 },
                 onUnreadCountChanged = { remoteUnreadCount = it },
@@ -571,7 +573,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Advertising AI" -> { selected = "AI" }
             "Announcements" -> FynxAnnouncementsPanel()
             "Admin" -> if (adminRole != null) FynxAdminControlCenterPanel()
-            "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" }, onOpenNotifications = { openProfileSettings = false; selected = "Notifications" })
+            "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" }, onOpenNotifications = { openProfileSettings = false; notificationPreferencesOnly = true; selected = "Notifications" })
             else -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview")
                     }
                 }

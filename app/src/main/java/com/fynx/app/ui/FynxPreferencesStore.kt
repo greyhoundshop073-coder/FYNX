@@ -117,6 +117,20 @@ object FynxPreferencesStore {
     private fun accountNamespace(context: Context): String = storageKey(FynxAuthStore.accountStorageKey(context) ?: "signed_out")
     private fun cacheKey(username: String): String = storageKey(username.removePrefix("@").trim().lowercase())
 
+    private const val KEY_SETTINGS_FONT_SIZE = "settings_font_size"
+    private const val KEY_SETTINGS_MESSAGE_STYLE = "settings_message_style"
+
+    fun loadSettingsFontSize(context: Context): String =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_SETTINGS_FONT_SIZE, "Default") ?: "Default"
+    fun saveSettingsFontSize(context: Context, value: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_SETTINGS_FONT_SIZE, value).apply()
+    }
+    fun loadSettingsMessageStyle(context: Context): String =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_SETTINGS_MESSAGE_STYLE, "FYNX Default") ?: "FYNX Default"
+    fun saveSettingsMessageStyle(context: Context, value: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_SETTINGS_MESSAGE_STYLE, value).apply()
+    }
+
     fun loadAppearance(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_APPEARANCE, "System") ?: "System"
     fun saveAppearance(context: Context, value: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_APPEARANCE, value).apply() }
     fun loadLanguage(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_LANGUAGE, "Device default") ?: "Device default"

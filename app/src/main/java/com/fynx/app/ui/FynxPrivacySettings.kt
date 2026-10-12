@@ -1,8 +1,12 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -109,15 +113,44 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
         }
     }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
-        Row(Modifier.fillMaxWidth()) {
-            TextButton(onClick = onBack) { Text("‹ Back") }
-            Spacer(Modifier.width(4.dp))
-            Text("Privacy & Safety", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
+    Column(
+        Modifier.fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    Icons.Default.ArrowBack,
+                    contentDescription = "Back to Settings",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Surface(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                color = androidx.compose.ui.graphics.Color(0xFF8B5CF6).copy(alpha = 0.13f)
+            ) {
+                Icon(
+                    Icons.Default.Security,
+                    contentDescription = null,
+                    tint = androidx.compose.ui.graphics.Color(0xFF8B5CF6),
+                    modifier = Modifier.padding(10.dp).size(24.dp)
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Privacy & Security", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text("Choose what others can see and how your account is protected", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
-        HorizontalDivider()
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         notice?.let { message -> Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 10.dp)) }
-        LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(contentPadding = PaddingValues(top = 14.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            item { Text("SAFETY CENTER", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)) }
             item {
                 Card(modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) {
                     Column(Modifier.fillMaxWidth().padding(14.dp)) {
@@ -183,6 +216,7 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
                     }
                 }
             }
+            item { Text("PRIVACY CONTROLS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 2.dp)) }
             item { PrivacyChoiceCard("Who can see my profile", profile) { openKey = KEY_PROFILE } }
             item { PrivacyChoiceCard("Who can see me online", online) { openKey = KEY_ONLINE } }
             item { PrivacyChoiceCard("Who can see my posts", posts) { openKey = KEY_POSTS } }

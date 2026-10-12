@@ -71,6 +71,18 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == FynxConversationPreferences.chatWallpaper(context, chat.username) } ?: FynxGlassThemeId.PURE_BLACK
     val glassPalette = fynxGlassPalette(glassThemeId)
     val messageTextSizeSp = FynxConversationPreferences.chatTextSizeSp(context, chat.username)
+    var messageStyle by remember { mutableStateOf(FynxPreferencesStore.loadSettingsMessageStyle(context)) }
+    DisposableEffect(context) {
+        val prefs = context.getSharedPreferences("fynx_preferences", Context.MODE_PRIVATE)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "settings_message_style") messageStyle = FynxPreferencesStore.loadSettingsMessageStyle(context)
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    val messageHorizontalPadding = when (messageStyle) { "Compact" -> 7.dp; "Comfortable" -> 13.dp; else -> 9.dp }
+    val messageVerticalPadding = when (messageStyle) { "Compact" -> 3.dp; "Comfortable" -> 8.dp; else -> 5.dp }
+    val messageCornerRadius = when (messageStyle) { "Compact" -> 12.dp; "Comfortable" -> 21.dp; else -> 16.dp }
     val bubbleTransparency = FynxConversationPreferences.chatBubbleTransparency(context, chat.username)
     val bubbleLighting = FynxConversationPreferences.chatBubbleLighting(context, chat.username)
     val bubbleGradient = FynxConversationPreferences.chatBubbleGradient(context, chat.username)
@@ -671,7 +683,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
                         Box {
                             val mediaOnly = message.attachmentUri != null && message.text.isBlank() && message.attachmentType in setOf("image", "video", "video_note")
-                            val bubbleShape = RoundedCornerShape(16.dp)
+                            val bubbleShape = RoundedCornerShape(messageCornerRadius)
                             val bubbleBrush = if (message.fromMe) {
                                 Brush.horizontalGradient(listOf(glassPalette.outgoingStart.copy(alpha = bubbleTransparency), glassPalette.outgoingEnd.copy(alpha = bubbleGradient)))
                             } else {
@@ -707,7 +719,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                     }
                                     .combinedClickable(onClick = { menuMessageId = message.id }, onLongClick = { menuMessageId = message.id })
                             ) {
-                            Column(Modifier.padding(horizontal = if (mediaOnly) 0.dp else 9.dp, vertical = if (mediaOnly) 0.dp else 5.dp)) {
+                            Column(Modifier.padding(horizontal = if (mediaOnly) 0.dp else messageHorizontalPadding, vertical = if (mediaOnly) 0.dp else messageVerticalPadding)) {
                                 if (message.pinned) {
                                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
                                         Icon(Icons.Default.PushPin, contentDescription = "Pinned", tint = if (message.fromMe) glassPalette.messageText.copy(alpha = 0.9f) else glassPalette.doodleSecondary, modifier = Modifier.size(13.dp))

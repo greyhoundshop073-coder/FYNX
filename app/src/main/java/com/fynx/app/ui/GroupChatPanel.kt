@@ -50,6 +50,18 @@ fun GroupChatPanel(
     val groupAppearance = FynxConversationPreferences.groupAppearance(context, group.id)
     val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == groupAppearance } ?: FynxGlassThemeId.PURE_BLACK
     val glassPalette = fynxGlassPalette(glassThemeId)
+    var messageStyle by remember { mutableStateOf(FynxPreferencesStore.loadSettingsMessageStyle(context)) }
+    DisposableEffect(context) {
+        val prefs = context.getSharedPreferences("fynx_preferences", Context.MODE_PRIVATE)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "settings_message_style") messageStyle = FynxPreferencesStore.loadSettingsMessageStyle(context)
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    val messageHorizontalPadding = when (messageStyle) { "Compact" -> 7.dp; "Comfortable" -> 13.dp; else -> 10.dp }
+    val messageVerticalPadding = when (messageStyle) { "Compact" -> 3.dp; "Comfortable" -> 8.dp; else -> 10.dp }
+    val messageCornerRadius = when (messageStyle) { "Compact" -> 12.dp; "Comfortable" -> 21.dp; else -> 18.dp }
     val isAdmin = group.isAdmin(currentUsername)
     var newMember by remember { mutableStateOf("") }
     var description by remember { mutableStateOf(group.description) }
@@ -400,13 +412,13 @@ fun GroupChatPanel(
                             Surface(
                                 color = if (message.fromMe) glassPalette.outgoingStart.copy(alpha = 0.92f) else glassPalette.incomingGlass.copy(alpha = 0.96f),
                                 contentColor = glassPalette.messageText,
-                                shape = RoundedCornerShape(18.dp),
+                                shape = RoundedCornerShape(messageCornerRadius),
                                 modifier = Modifier.widthIn(max = 330.dp).combinedClickable(
                                     onClick = { actionMessage = message },
                                     onLongClick = { actionMessage = message }
                                 )
                             ) {
-                                Column(Modifier.padding(10.dp)) {
+                                Column(Modifier.padding(horizontal = messageHorizontalPadding, vertical = messageVerticalPadding)) {
                                     if (message.replyToId != null) {
                                         val parent = messages.firstOrNull { it.id == message.replyToId }
                                         Text(

@@ -7,6 +7,11 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
@@ -83,6 +88,25 @@ private fun fynxTypography(): Typography = Typography().run {
     )
 }
 
+
+private fun Typography.scaled(scale: Float): Typography = copy(
+    displayLarge = displayLarge.copy(fontSize = displayLarge.fontSize * scale),
+    displayMedium = displayMedium.copy(fontSize = displayMedium.fontSize * scale),
+    displaySmall = displaySmall.copy(fontSize = displaySmall.fontSize * scale),
+    headlineLarge = headlineLarge.copy(fontSize = headlineLarge.fontSize * scale),
+    headlineMedium = headlineMedium.copy(fontSize = headlineMedium.fontSize * scale),
+    headlineSmall = headlineSmall.copy(fontSize = headlineSmall.fontSize * scale),
+    titleLarge = titleLarge.copy(fontSize = titleLarge.fontSize * scale),
+    titleMedium = titleMedium.copy(fontSize = titleMedium.fontSize * scale),
+    titleSmall = titleSmall.copy(fontSize = titleSmall.fontSize * scale),
+    bodyLarge = bodyLarge.copy(fontSize = bodyLarge.fontSize * scale),
+    bodyMedium = bodyMedium.copy(fontSize = bodyMedium.fontSize * scale),
+    bodySmall = bodySmall.copy(fontSize = bodySmall.fontSize * scale),
+    labelLarge = labelLarge.copy(fontSize = labelLarge.fontSize * scale),
+    labelMedium = labelMedium.copy(fontSize = labelMedium.fontSize * scale),
+    labelSmall = labelSmall.copy(fontSize = labelSmall.fontSize * scale)
+)
+
 private fun scheduledNightModeActive(context: android.content.Context): Boolean {
     if (FynxPreferencesStore.loadNightMode(context) != "Scheduled") return false
     val start = runCatching { LocalTime.parse(FynxPreferencesStore.loadNightModeStart(context)) }.getOrDefault(LocalTime.of(22, 0))
@@ -98,8 +122,23 @@ fun FynxTheme(
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
+    var settingsFontSize by remember { mutableStateOf(FynxPreferencesStore.loadSettingsFontSize(context)) }
+    DisposableEffect(context) {
+        val prefs = context.getSharedPreferences("fynx_preferences", android.content.Context.MODE_PRIVATE)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "settings_font_size") settingsFontSize = FynxPreferencesStore.loadSettingsFontSize(context)
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
     val appearance = FynxPreferencesStore.loadAppearance(context)
     val effectiveAccent = accent ?: FynxPreferencesStore.loadAccent(context)
+    val typographyScale = when (settingsFontSize) {
+        "Small" -> 0.90f
+        "Large" -> 1.12f
+        "Extra large" -> 1.25f
+        else -> 1.0f
+    }
     val charcoal = appearance == "Charcoal Black"
     val amoled = appearance == "Black AMOLED"
     val scheduledNight = appearance == "System" && scheduledNightModeActive(context)
@@ -192,7 +231,7 @@ fun FynxTheme(
     }
     MaterialTheme(
         colorScheme = scheme,
-        typography = fynxTypography(),
+        typography = fynxTypography().scaled(typographyScale),
         shapes = Shapes(small = FynxDesign.ControlShape, medium = FynxDesign.CardShape, large = FynxDesign.LargeCardShape),
         content = { FynxCustomizationBackground(content) }
     )
