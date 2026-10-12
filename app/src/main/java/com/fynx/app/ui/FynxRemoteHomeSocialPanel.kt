@@ -445,9 +445,54 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     LazyColumn(state = feedListState, modifier = modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp)) {
         header?.let { content -> item(key = "home_ai_status") { content() } }
         item(key = "feed_header") {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) { Text("Your feed", style = MaterialTheme.typography.titleMedium); Text("Real posts from your FYNX network", style = MaterialTheme.typography.bodySmall) }
-
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = FynxDesign.LargeCardShape,
+                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+                border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .45f))
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        modifier = Modifier.size(40.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = .12f)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    TextButton(
+                        onClick = onCreatePost,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            "What's on your mind?",
+                            modifier = Modifier.fillMaxWidth(),
+                            color = FynxDesign.TextSecondary,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Start
+                        )
+                    }
+                    IconButton(
+                        onClick = onCreatePost,
+                        modifier = Modifier.semantics { contentDescription = "Create post" }
+                    ) {
+                        Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Create post")
+                    }
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Your feed", style = MaterialTheme.typography.titleMedium)
+                    Text("Real posts from your FYNX network", style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
         if (loading) item(key = "feed_loading") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
