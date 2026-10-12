@@ -4,6 +4,8 @@ import android.content.Context
 import org.json.JSONObject
 
 object FynxSafetyRemoteClient {
+    private val updateKeys = setOf("messageSafety", "marketplaceSafety", "loginAlerts")
+
     data class Safety(
         val messageSafety: Boolean,
         val marketplaceSafety: Boolean,
@@ -29,31 +31,28 @@ object FynxSafetyRemoteClient {
 
     suspend fun load(context: Context): Result<Safety> =
         FynxBackendClient.get(context, "/api/safety").mapCatching { raw ->
-            val json = JSONObject(raw).optJSONObject("safety") ?: JSONObject()
-            Safety(
-                messageSafety = json.optBoolean("messageSafety", true),
-                marketplaceSafety = json.optBoolean("marketplaceSafety", true),
-                loginAlerts = json.optBoolean("loginAlerts", true),
-                accountStatus = json.optString("accountStatus", "ACTIVE"),
-                statusNote = json.optString("statusNote", "")
-            )
+            parseSafety(raw)
         }
 
-    suspend fun update(context: Context, key: String, enabled: Boolean): Result<Safety> =
-        FynxBackendClient.patchJson(
+    suspend fun update(context: Context, key: String, enabled: Boolean): Result<Safety> {
+        require(key in updateKeys) { "Unknown safety setting" }
+        return FynxBackendClient.patchJson(
             context,
             "/api/safety",
             JSONObject().put(key, enabled).toString()
-        ).mapCatching { raw ->
-            val json = JSONObject(raw).optJSONObject("safety") ?: JSONObject()
-            Safety(
-                messageSafety = json.optBoolean("messageSafety", true),
-                marketplaceSafety = json.optBoolean("marketplaceSafety", true),
-                loginAlerts = json.optBoolean("loginAlerts", true),
-                accountStatus = json.optString("accountStatus", "ACTIVE"),
-                statusNote = json.optString("statusNote", "")
-            )
-        }
+        ).mapCatching { raw -> parseSafety(raw) }
+    }
+
+    private fun parseSafety(raw: String): Safety {
+        val json = JSONObject(raw).optJSONObject("safety") ?: JSONObject()
+        return Safety(
+            messageSafety = json.optBoolean("messageSafety", true),
+            marketplaceSafety = json.optBoolean("marketplaceSafety", true),
+            loginAlerts = json.optBoolean("loginAlerts", true),
+            accountStatus = json.optString("accountStatus", "ACTIVE"),
+            statusNote = json.optString("statusNote", "")
+        )
+    }
 
     suspend fun reports(context: Context): Result<List<Report>> =
         FynxBackendClient.get(context, "/api/social/reports/mine").mapCatching { raw ->
