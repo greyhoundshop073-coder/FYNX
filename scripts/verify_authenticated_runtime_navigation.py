@@ -577,11 +577,19 @@ if not FAILURES:
             FAILURES.append("profile -> Settings home did not open")
     else:
         FAILURES.append("Home -> profile entry did not open for Settings visual capture")
-    # Return to Home before continuing the existing navigation certification.
-    run("adb","shell","am","force-stop",PACKAGE)
-    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-    time.sleep(2.5)
+    # Return through the app's own back stack. Do not force-stop/relaunch here:
+    # offline/local test sessions may be in-memory and a cold start can send the
+    # emulator back to the sign-in gate, making unrelated navigation checks fail.
+    for step in range(3):
+        current=dump_ui(f"authenticated-after-settings-back-{step}.xml")
+        if find_control(current,["Open FYNX camera"]) or find_control(current,["Chat"]) and find_control(current,["Friends"]):
+            xml=current
+            break
+        run("adb","shell","input","keyevent","4")
+        time.sleep(0.8)
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-after-settings.xml") or xml
+    if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
+        FAILURES.append("Settings visual capture returned to the sign-in gate; in-app back navigation did not preserve the authenticated Home session")
     composer_xml=tap_control(xml,["Open FYNX camera"],"home-camera-composer",["What's on your mind?"])
     if composer_xml:
         report.append("- PASS Home header camera -> real post composer screenshot/UI hierarchy")
