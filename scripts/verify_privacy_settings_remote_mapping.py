@@ -40,4 +40,16 @@ for label, ok in checks:
     if not ok:
         raise SystemExit(1)
 
-print(f"Privacy settings integration checks passed ({len(expected) + len(checks)} checks).")
+# Account & Profile controls must invoke real existing flows, not an informational-only dialog.
+account_checks = [
+    ("Account Controls exposes Privacy & Security navigation", 'TextButton(onClick = { infoTitle = null; onOpenPrivacy() })' in (ROOT / "app/src/main/java/com/fynx/app/ui/ProfilePanel.kt").read_text(encoding="utf-8")),
+    ("Account Controls exposes sign out", 'TextButton(onClick = { infoTitle = null; onSignOut() })' in (ROOT / "app/src/main/java/com/fynx/app/ui/ProfilePanel.kt").read_text(encoding="utf-8")),
+    ("Account Controls sign out uses the existing session cleanup path", "FynxAuthStore.clear(context)" in (ROOT / "app/src/main/java/com/fynx/app/ui/ProfilePanel.kt").read_text(encoding="utf-8")),
+    ("Phone & Email shows the saved account phone without claiming editing works", "FynxAuthStore.storedPhone(context)" in (ROOT / "app/src/main/java/com/fynx/app/ui/ProfilePanel.kt").read_text(encoding="utf-8") and "verified account flow" in (ROOT / "app/src/main/java/com/fynx/app/ui/ProfilePanel.kt").read_text(encoding="utf-8")),
+]
+for label, ok in account_checks:
+    print(f"{'PASS' if ok else 'FAIL'}: {label}")
+    if not ok:
+        raise SystemExit(1)
+
+print(f"Privacy and account settings integration checks passed ({len(expected) + len(checks) + len(account_checks)} checks).")
