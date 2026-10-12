@@ -66,8 +66,9 @@ import java.time.Instant
 import org.json.JSONObject
 import java.util.Locale
 
-// Covers three bounded backend GET attempts on weak networks (45s each) plus retry delays.
-private const val MARKETPLACE_LISTING_REQUEST_TIMEOUT_MS = 150_000L
+// Bound the visible listing wait so Marketplace always reaches its retry/error state before the runtime watchdog (75s).
+// The backend client may retry slow GETs, but the UI must not remain in an endless loading state.
+private const val MARKETPLACE_LISTING_REQUEST_TIMEOUT_MS = 60_000L
 
 internal fun advanceMarketplaceListingsOffset(currentOffset: Int, requestedLimit: Int): Int =
     currentOffset + requestedLimit.coerceAtLeast(1)
