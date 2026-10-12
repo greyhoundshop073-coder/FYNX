@@ -131,3 +131,11 @@ Use evidence-based ecommerce UX as a design reference, adapted to FYNX and its N
 - That push did not trigger the opt-in `[marketplace-cert]` emulator/runtime step. Therefore the timeout fix is build-verified but **NOT YET RUNTIME-VERIFIED**; the APK contents were inspected, but no current-SHA screenshot or authenticated journey was produced by this run.
 - Initial branch comparison found 40 Marketplace-prefixed branches/refs. Several older branches are ancestors of the integration branch; some newer/diverged heads contain unique file changes, including Marketplace checkout/client/panel and discovery route work. Do not merge whole branches blindly. Continue by checking each candidate's unique commits and exact diff against the integration SHA, then port only confirmed required changes and re-run backend/Android checks.
 - Live listing retrieval and payment-provider end-to-end behavior remain **BACKEND-UNVERIFIED** while the production backend/test environment is unavailable. A green Android build does not establish live backend health.
+
+
+## 2026-10-12 — Bound Marketplace catalogue request duration
+
+- Runtime certification on commit `85129cdb0df591485c45d2376d949c6b46395079` remained red: Marketplace stayed in loading for 75 seconds. The timeout-only correction did not resolve the runtime symptom.
+- Follow-up correction adds `FynxBackendClient.getBounded` for Marketplace listing/discovery reads. It uses one attempt, an 8-second connect timeout, and a 12-second read timeout, so unavailable catalogue services can return an error promptly instead of consuming the generic retry budget. Other backend calls retain their existing retry and timeout behavior.
+- Marketplace discovery, nearby listings, and fallback listings use the bounded read path. Existing user-facing retry/error handling remains in place; no sample products are introduced.
+- Verification status: pending build and authenticated runtime certification on the exact new commit. Do not call the issue fixed until that run proves the loading state resolves.
