@@ -98,12 +98,12 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
         scope.launch {
             try {
                 FynxPrivacyRemoteClient.update(context, remotePrivacyKey(key), option).onSuccess { remote ->
-                    profile = remote[KEY_PROFILE]
-                    online = remote[KEY_ONLINE]
-                    posts = remote[KEY_POSTS]
-                    status = remote[KEY_STATUS]
-                    photo = remote[KEY_PROFILE_PHOTO]
-                    messages = remote[KEY_MESSAGES]
+                    profile = remote["profile_visibility"]
+                    online = remote["online_visibility"]
+                    posts = remote["posts_visibility"]
+                    status = remote["status_visibility"]
+                    photo = remote["profile_photo_visibility"]
+                    messages = remote["messages_visibility"]
                     FynxPreferencesStore.saveVisibility(context, key, remote[remotePrivacyKey(key)])
                     openKey = null
                 }.onFailure { error ->
