@@ -66,7 +66,7 @@ checks = [
     ("cart checkout only submits selected items", "onCheckout(selected)" in marketplace and "selected.isNotEmpty() && !mixed" in marketplace),
     ("cart prevents cross-currency checkout before submission", "val mixed = selected.map { it.currency.trim().uppercase(Locale.US) }.distinct().size > 1" in marketplace and "A single checkout cannot mix NGN and USD. Select one currency." in marketplace),
     ("cart quantity changes stay within available stock and a minimum of one", "((quantities[item.id] ?: 1)-1).coerceAtLeast(1)" in marketplace and "((quantities[item.id] ?: 1)+1).coerceAtMost(item.quantity)" in marketplace),
-    ("cart exposes an actionable empty state", "Your cart is empty." in marketplace and "Add products from the marketplace to start checkout"),
+    ("cart exposes an actionable empty state", "Your cart is empty." in marketplace and "Add products from the marketplace to start checkout." in marketplace),
 ]
 
 failed = [name for name, ok in checks if not ok]
