@@ -204,6 +204,14 @@ object FynxPreferencesStore {
             .remove(KEY_PRIVATE_PROFILE)
             .remove(KEY_READ_RECEIPTS)
             .remove(KEY_STORY_REPLIES)
+            // Privacy choices belong to the signed-in account. Clear them at the
+            // session boundary so the next account never inherits visibility rules.
+            .remove("privacy_profile_visibility")
+            .remove("privacy_online_visibility")
+            .remove("privacy_posts_visibility")
+            .remove("privacy_status_visibility")
+            .remove("privacy_profile_photo_visibility")
+            .remove("privacy_messages_visibility")
             .remove(KEY_PROFILE_PHOTO)
             .remove(KEY_ASSET)
             .remove(KEY_NIGHT_MODE)
