@@ -15,7 +15,7 @@ expected = {
 }
 
 for local_key, remote_key in expected.items():
-    pattern = rf"{local_key}\s+to\s+\\"{remote_key}\\""
+    pattern = rf'{local_key}\s+to\s+"{re.escape(remote_key)}"'
     ok = re.search(pattern, panel) is not None
     print(f"{'PASS' if ok else 'FAIL'}: {local_key} maps to backend field {remote_key}")
     if not ok:
