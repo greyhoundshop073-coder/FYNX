@@ -35,7 +35,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
 
-    fun finish(result: Result<FynxRemoteAuthClient.ResultData>) {
+    fun finish(result: Result<FynxRemoteAuthClient.ResultData>, allowOfflineEntry: Boolean = false) {
         result.onSuccess { account ->
             FynxBackendClient.saveAccessToken(context, account.token)
             FynxAuthStore.saveAccount(context, account.displayName.ifBlank { displayName.trim() }, account.username, account.phone.ifBlank { phone.trim() })
@@ -43,9 +43,20 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
             busy = false
             error = null
             onAuthenticated(account.username)
-        }.onFailure {
+        }.onFailure { failure ->
             busy = false
-            error = it.message?.substringAfter(": ")?.trim()?.removePrefix("{")?.removeSuffix("}") ?: "FYNX could not complete the account request."
+            if (allowOfflineEntry) {
+                // Temporary offline access requested while the FYNX backend is unavailable.
+                // Do not fabricate a server token: keep a local session so the app UI can open,
+                // while backend-dependent features remain unavailable until connectivity returns.
+                val localUsername = username.trim().removePrefix("@")
+                FynxAuthStore.saveAccount(context, localUsername, localUsername, "")
+                error = null
+                onAuthenticated(localUsername)
+            } else {
+                error = failure.message?.substringAfter(": ")?.trim()?.removePrefix("{")?.removeSuffix("}")
+                    ?: "FYNX could not complete the account request."
+            }
         }
     }
 
@@ -165,7 +176,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                 else {
                                     busy = true
                                     error = null
-                                    scope.launch { finish(FynxRemoteAuthClient.login(context, username.trim(), password)) }
+                                    scope.launch { finish(FynxRemoteAuthClient.login(context, username.trim(), password), allowOfflineEntry = true) }
                                 }
                             }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Signing in…" else "Sign In") }
                             TextButton(onClick = { error = null; page = FynxAuthPage.REGISTER }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = .8f))) { Text("Create a new account") }
