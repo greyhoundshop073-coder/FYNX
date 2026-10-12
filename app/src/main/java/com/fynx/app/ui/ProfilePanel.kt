@@ -895,10 +895,16 @@ private fun AccountProfileSettingsPanel(
             }
             item {
                 SettingsReferenceRow(Icons.Default.Info, "Phone & Email",
-                    "Contact details depend on your sign-in and account setup",
+                    "View the phone number saved with this account",
                     androidx.compose.ui.graphics.Color(0xFFCB8A35)) {
+                    val phone = FynxAuthStore.storedPhone(context)
                     infoTitle = "Phone & Email"
-                    infoText = "This screen does not yet provide verified phone or email editing. No contact details have been changed."
+                    infoText = buildString {
+                        append("Phone number: ")
+                        append(phone ?: "No phone number is saved on this device.")
+                        append("\n\nEmail: No email address is currently available in the saved account details.")
+                        append("\n\nChanging contact details requires a verified account flow, which is not yet available here. Your details have not been changed.")
+                    }
                 }
             }
             item { SettingsSectionTitle("ACCOUNT CONTROLS") }
