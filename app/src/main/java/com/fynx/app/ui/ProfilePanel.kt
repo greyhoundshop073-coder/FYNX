@@ -343,6 +343,7 @@ fun SettingsPanel(
     val context = LocalContext.current
     val settingsScope = rememberCoroutineScope()
     var storySaveNotice by remember { mutableStateOf<String?>(null) }
+    var storySaving by remember { mutableStateOf(false) }
     var appearance by remember { mutableStateOf(FynxPreferencesStore.loadAppearance(context)) }
     var accent by remember { mutableStateOf(FynxPreferencesStore.loadAccent(context)) }
     var showAppearance by remember { mutableStateOf(false) }
@@ -358,6 +359,29 @@ fun SettingsPanel(
     var showNetworkStatusPage by remember { mutableStateOf(false) }
     var infoTitle by remember { mutableStateOf<String?>(null) }
     var infoDescription by remember { mutableStateOf("") }
+
+    fun saveStoryVisibility(option: String) {
+        if (storySaving) return
+        storyVisibility = option
+        FynxPreferencesStore.saveVisibility(context, "privacy_status_visibility", option)
+        storySaveNotice = null
+        storySaving = true
+        settingsScope.launch {
+            FynxPrivacyRemoteClient.update(context, "status_visibility", option)
+                .onSuccess { remote ->
+                    val saved = remote["status_visibility"].ifBlank { option }
+                    storyVisibility = saved
+                    FynxPreferencesStore.saveVisibility(context, "privacy_status_visibility", saved)
+                    storySaveNotice = null
+                    showStoriesStatus = false
+                }
+                .onFailure { error ->
+                    // Keep the local choice, but clearly report that server sync failed.
+                    storySaveNotice = "Saved on this device, but server sync failed: ${error.message ?: "try again later"}"
+                }
+            storySaving = false
+        }
+    }
 
     val query = search.trim().lowercase()
     if (showAccountProfile) {
@@ -584,51 +608,39 @@ fun SettingsPanel(
     if (showChatPersonalization) ChatPersonalizationDialog(settings, onSettingsChange, { showChatPersonalization = false })
     if (showStoriesStatus) {
         AlertDialog(
-            onDismissRequest = { showStoriesStatus = false },
+            onDismissRequest = { if (!storySaving) showStoriesStatus = false },
             title = { Text("Stories & Status") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Who can view your status?")
                     storySaveNotice?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                     listOf("Everyone", "My friends", "Nobody").forEach { option ->
-                        Row(Modifier.fillMaxWidth().clickable {
-                            storyVisibility = option
-                            FynxPreferencesStore.saveVisibility(context, "privacy_status_visibility", option)
-                            settingsScope.launch {
-                                FynxPrivacyRemoteClient.update(context, "status_visibility", option)
-                                    .onSuccess { remote ->
-                                        storyVisibility = remote["status_visibility"]
-                                        FynxPreferencesStore.saveVisibility(context, "privacy_status_visibility", storyVisibility)
-                                        storySaveNotice = null
-                                        showStoriesStatus = false
-                                    }
-                                    .onFailure { error ->
-                                        storySaveNotice = "Saved on this device, but server sync failed: ${error.message ?: "try again later"}"
-                                    }
-                            }
-                        }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = storyVisibility == option, onClick = {
-                                storyVisibility = option
-                                FynxPreferencesStore.saveVisibility(context, "privacy_status_visibility", option)
-                                settingsScope.launch {
-                                    FynxPrivacyRemoteClient.update(context, "status_visibility", option)
-                                        .onSuccess { remote ->
-                                            storyVisibility = remote["status_visibility"]
-                                            FynxPreferencesStore.saveVisibility(context, "privacy_status_visibility", storyVisibility)
-                                            storySaveNotice = null
-                                            showStoriesStatus = false
-                                        }
-                                        .onFailure { error ->
-                                            storySaveNotice = "Saved on this device, but server sync failed: ${error.message ?: "try again later"}"
-                                        }
-                                }
-                            })
+                        Row(
+                            Modifier.fillMaxWidth().clickable(enabled = !storySaving) {
+                                saveStoryVisibility(option)
+                            }.padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = storyVisibility == option,
+                                enabled = !storySaving,
+                                onClick = { saveStoryVisibility(option) }
+                            )
                             Text(option, modifier = Modifier.weight(1f))
+                        }
+                    }
+                    if (storySaving) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Saving…", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showStoriesStatus = false }) { Text("Done") } }
+            confirmButton = {
+                TextButton(enabled = !storySaving, onClick = { showStoriesStatus = false }) { Text("Done") }
+            }
         )
     }
     if (infoTitle != null) AlertDialog(
