@@ -531,7 +531,7 @@ fun SettingsPanel(
                     SettingsReferenceRow(Icons.Default.HelpOutline, "Help & Support",
                         "Get help using FYNX", androidx.compose.ui.graphics.Color(0xFF477FEA)) {
                         infoTitle = "Help & Support"
-                        infoDescription = "Help and support options will be available here."
+                        infoDescription = "Try these steps for common problems:\n\nConnection problems: Check that your internet is working, then reopen the screen and retry.\n\nSign-in problems: Check your sign-in details and never share your password or verification codes.\n\nCamera, microphone or media problems: Review FYNX permissions in Android Settings and make sure the app is up to date.\n\nPrivacy or account safety: Open Privacy & Security to review visibility controls, submit a report or follow an appeal.\n\nIf the problem continues, note which FYNX screen you were using and the exact error message before asking for support. Do not include passwords or verification codes."
                     }
                 }
             }
@@ -540,7 +540,8 @@ fun SettingsPanel(
                     SettingsReferenceRow(Icons.Default.Info, "About FYNX",
                         "App information and version", androidx.compose.ui.graphics.Color(0xFF8B69D6)) {
                         infoTitle = "About FYNX"
-                        infoDescription = "FYNX brings communication, social sharing and marketplace tools together in one app."
+                        val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "Unknown"
+                        infoDescription = "FYNX brings communication, social sharing and marketplace tools together in one app.\n\nVersion: $version"
                     }
                 }
             }
