@@ -1,5 +1,8 @@
 package com.fynx.app.ui
 
+internal fun advanceMarketplaceListingsOffset(currentOffset: Int, requestedLimit: Int): Int =
+    currentOffset + requestedLimit.coerceAtLeast(1)
+
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -308,7 +311,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     listings = items.distinctBy { it.id }
                     hasMoreListings = more
                     discoveryFallbackWarning = fallbackWarning
-                    nextListingsOffset = items.size
+                    nextListingsOffset = advanceMarketplaceListingsOffset(0, 24)
                 }.onFailure { error = it.message ?: "Marketplace could not load." }
             }
             // Listing visibility must not wait on the independent orders request.
@@ -334,7 +337,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             } else {
                 result.onSuccess { page ->
                     listings = appendDistinctMarketplacePage(listings, page.listings) { it.id }
-                    nextListingsOffset += page.listings.size
+                    nextListingsOffset = advanceMarketplaceListingsOffset(nextListingsOffset, 24)
                     hasMoreListings = page.hasMore && page.listings.isNotEmpty()
                     error = null
                 }.onFailure { error = it.message ?: "More products could not load." }
