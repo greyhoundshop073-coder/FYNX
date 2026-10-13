@@ -25,6 +25,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun HomePanel(
     currentUsername: String = "",
+    networkReady: Boolean? = null,
     onOpenChats: () -> Unit = {},
     onOpenStories: () -> Unit = {},
     onOpenProfile: () -> Unit = {},
@@ -83,6 +84,7 @@ fun HomePanel(
                     FynxRemoteHomeSocialPanel(
                         modifier = Modifier.fillMaxSize(),
                         currentUsername = displayUsername,
+                        networkReady = networkReady,
                         onOpenFindPeople = onOpenFindPeople,
                         onOpenMarketplace = onOpenMarketplace,
                         onOpenMarketplaceListing = { listingId -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FynxDeepLinkParser.marketplaceAppLink(listingId)))) },

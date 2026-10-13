@@ -55,6 +55,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 @Composable
 fun FynxHomeSocialHubPanel(
     currentUsername: String,
+    networkReady: Boolean? = null,
     initialCaption: String? = null,
     onCaptionConsumed: () -> Unit = {},
     cameraRequest: Int = 0,
@@ -456,6 +457,7 @@ fun FynxHomeSocialHubPanel(
     Box(Modifier.fillMaxSize()) {
         HomePanel(
             currentUsername = currentUsername,
+            networkReady = networkReady,
             initialPostId = initialPostId,
             initialCommentId = initialCommentId,
             onInitialPostConsumed = onInitialPostConsumed,

@@ -36,11 +36,11 @@ Work sequentially on `main` in coherent batches. Never start the next batch unti
 - [x] Like: optimistic state, persistence, retry, count consistency
 - [x] Comment: persistence, refresh, count consistency
 - [x] Reply: persistence, threading, retry, count consistency
-- [ ] Save: persistence, unsave, refresh, saved-list consistency
+- [ ] Save: implementation updated (authoritative state, media rendering, paginated Saved list); authenticated runtime proof for non-empty Saved posts and unsave remains pending.
 - [x] Repost: persistence, undo, duplicate prevention
 - [x] Share: real share flow and failure handling
 - [x] Follow/profile navigation from post identity
-- [ ] Post media open/playback/full-screen behavior
+- [ ] Media viewer implementation updated (interaction state sync, retryable failures, full-screen play/pause/mute); runtime playback proof still needs an authenticated post with media.
 - [x] Post menu and ownership actions
 - [x] Delete/removed-post handling
 - [x] Feed refresh and pagination
@@ -125,6 +125,6 @@ The assistant must not require the user to report RED/GREEN status manually when
 
 - [x] Candidate source/build checks reviewed for PR #147 at `f12086096ac188146dc14f613a5446485c86f842`.
 - [x] Exact-commit debug APK artifact exists for that candidate SHA.
-- [ ] Full Android emulator/authenticated runtime certification must pass on the final candidate commit before PR #147 is merged to `main`.
-- [ ] Confirm the Marketplace surface is visible in the runtime capture and the authenticated journey remains stable; do not change the locked test-login behavior to work around runtime failures.
-- [ ] After merge, verify a new APK artifact built from the resulting `main` commit before calling the integration complete.
+- [x] Full Android emulator/authenticated runtime certification passed on candidate commit `c93d2f40a75055a0daddd8ece681cac24be2b09c` before PR #147 was merged to `main`.
+- [x] Marketplace surface and authenticated journey were covered by the candidate runtime capture; locked test-login behavior was preserved.
+- [ ] After merge, verify a new APK artifact built from the resulting `main` commit before calling the integration complete (main SHA: `cd3ecae8d44cbf772563db94e619489d8e836fce`; workflow still running at time of this change).
