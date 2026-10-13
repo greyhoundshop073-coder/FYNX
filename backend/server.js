@@ -781,7 +781,7 @@ registerMarketplaceCompletionRoutes({ app, pool, auth });
 if (pool) registerMoneyPlannerRoutes({ app, pool, auth });
 if (pool) registerMarketplaceAdvertisingRoutes({ app, pool, auth });
 
-initDatabase().catch((error) => { console.error("database initialization failed", error); process.exitCode = 1; });
+await initDatabase();
 
 const shutdown = async (signal) => {
   console.log(`[fynx-shutdown] ${signal}`);
