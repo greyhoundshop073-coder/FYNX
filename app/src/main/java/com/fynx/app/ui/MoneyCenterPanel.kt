@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -7,17 +8,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 private data class MoneySection(val key: String, val title: String, val description: String, val icon: String)
 
 @Composable
 fun MoneyCenterPanel() {
+    val context = LocalContext.current
     var selectedTool by remember { mutableStateOf<String?>(null) }
     val sections = listOf(
         MoneySection("Planner", "Money Planner", "Track income and expenses, set budgets, save toward goals and plan recurring costs", "🗓️"),
         MoneySection("Dashboard", "Money Dashboard", "Balances, income, expenses and your overall money picture", "💰"),
-        MoneySection("Transfer", "Send & Transfer Money", "Money transfers and payment movement", "↔️"),
+        MoneySection("Transfer", "Transfer Records", "Record a planned transfer; this does not move real money", "↔️"),
         MoneySection("Bills", "Bills & Payments", "Bills, payment reminders and due amounts", "🧾"),
         MoneySection("Transactions", "Transactions", "Your recorded money activity", "📜"),
         MoneySection("Accounts", "Accounts & Wallets", "Keep your tracked cash, bank and wallet accounts together", "🏦"),
@@ -28,9 +31,11 @@ fun MoneyCenterPanel() {
         MoneySection("Insights", "Money Insights", "Patterns and useful financial summaries", "📊"),
         MoneySection("Spending Insights", "Spending Insights", "Where your money is going", "📈"),
         MoneySection("Alerts", "Money Alerts", "Important money warnings and reminders", "🔔"),
-        MoneySection("Vault", "Secure Money Vault", "Protected money information", "🔐"),
+        MoneySection("Vault", "Local Money Lock (Demo)", "A UI-only lock; it does not secure stored financial data", "🔐"),
         MoneySection("Currency", "Currency Converter", "Convert between currencies", "💱")
     )
+
+    BackHandler(enabled = selectedTool != null) { selectedTool = null }
 
     if (selectedTool != null) {
         Column(Modifier.fillMaxSize()) {
@@ -47,7 +52,13 @@ fun MoneyCenterPanel() {
                 "Subscriptions" -> SubscriptionsPanel()
                 "Receipts" -> ReceiptsExpensePanel()
                 "Insights" -> MoneyInsightsPanel()
-                "Spending Insights" -> SpendingInsightsPanel()
+                "Spending Insights" -> {
+                    val transactions = FynxMoneyStore.loadTransactions(context)
+                    SpendingInsightsPanel(
+                        income = transactions.filter { it.type == "Income" }.sumOf { it.amount },
+                        expenses = transactions.filter { it.type == "Expense" }.sumOf { it.amount }
+                    )
+                }
                 "Alerts" -> MoneyAlertsPanel()
                 "Vault" -> SecureMoneyVaultPanel()
                 "Currency" -> CurrencyConverterPanel()

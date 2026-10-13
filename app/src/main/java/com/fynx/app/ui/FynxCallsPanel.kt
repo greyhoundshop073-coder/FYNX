@@ -39,6 +39,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     var endingCall by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var calls by remember { mutableStateOf(FynxCallsStore.load(context)) }
+    var newCallUsername by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(FynxCallHistoryFilter.ALL) }
     var realtimeState by remember { mutableStateOf(FynxRealtimeClient.State.DISCONNECTED) }
     var mediaConnected by remember { mutableStateOf(false) }
@@ -240,6 +241,32 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
         Text("Voice and video calls", color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (realtimeState == FynxRealtimeClient.State.FAILED) Text("Call connection is reconnecting…", style = MaterialTheme.typography.bodySmall)
         errorMessage?.let { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer), modifier = Modifier.padding(top = 10.dp)) { Text(it, modifier = Modifier.padding(14.dp), color = MaterialTheme.colorScheme.onErrorContainer) } }
+        Spacer(Modifier.height(12.dp))
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Start a call", style = MaterialTheme.typography.titleMedium)
+                OutlinedTextField(
+                    value = newCallUsername,
+                    onValueChange = { newCallUsername = it.removePrefix("@").take(60) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("FYNX username") },
+                    placeholder = { Text("Enter username") },
+                    singleLine = true
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { beginOutgoing(newCallUsername, false) },
+                        enabled = newCallUsername.isNotBlank(),
+                        modifier = Modifier.weight(1f)
+                    ) { Icon(Icons.Default.Call, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Voice") }
+                    OutlinedButton(
+                        onClick = { beginOutgoing(newCallUsername, true) },
+                        enabled = newCallUsername.isNotBlank(),
+                        modifier = Modifier.weight(1f)
+                    ) { Icon(Icons.Default.Videocam, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Video") }
+                }
+            }
+        }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(FynxCallHistoryFilter.ALL to "All", FynxCallHistoryFilter.MISSED to "Missed", FynxCallHistoryFilter.VIDEO to "Video", FynxCallHistoryFilter.VOICE to "Voice").forEach { (value, label) -> FilterChip(filter == value, onClick = { filter = value }, label = { Text(label) }) } }
         Spacer(Modifier.height(10.dp))

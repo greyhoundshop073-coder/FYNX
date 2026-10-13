@@ -6,19 +6,43 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.Locale
 
 private data class RecurringPayment(val id: Long, val name: String, val amount: Double, val nextDate: String, val frequency: String)
 
+private fun loadRecurringPayments(context: Context): List<RecurringPayment> = runCatching {
+    val array = JSONArray(FynxMoneyStore.loadToolRecords(context, "subscriptions"))
+    buildList {
+        for (i in 0 until array.length()) {
+            val o = array.optJSONObject(i) ?: continue
+            val name = o.optString("name").trim()
+            val amount = o.optDouble("amount", Double.NaN)
+            val frequency = o.optString("frequency", "Monthly")
+            if (name.isNotBlank() && amount.isFinite() && amount > 0 && frequency in setOf("Daily", "Weekly", "Monthly", "Yearly")) add(RecurringPayment(o.optLong("id", i.toLong()), name, amount, o.optString("nextDate"), frequency))
+        }
+    }
+}.getOrDefault(emptyList())
+
+private fun saveRecurringPayments(context: Context, payments: List<RecurringPayment>) {
+    val array = JSONArray()
+    payments.forEach { item -> array.put(JSONObject().put("id", item.id).put("name", item.name).put("amount", item.amount).put("nextDate", item.nextDate).put("frequency", item.frequency)) }
+    FynxMoneyStore.saveToolRecords(context, "subscriptions", array.toString())
+}
+
 @Composable
 fun SubscriptionsPanel() {
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var nextDate by remember { mutableStateOf("") }
     var frequency by remember { mutableStateOf("Monthly") }
-    var payments by remember { mutableStateOf(emptyList<RecurringPayment>()) }
-    var nextId by remember { mutableLongStateOf(1L) }
+    var payments by remember(context) { mutableStateOf(loadRecurringPayments(context)) }
+    var nextId by remember(context) { mutableLongStateOf((payments.maxOfOrNull { it.id } ?: 0L) + 1L) }
 
     val monthlyEstimate = payments.sumOf { payment -> when (payment.frequency) { "Daily" -> payment.amount * 30.0; "Weekly" -> payment.amount * 4.33; "Yearly" -> payment.amount / 12.0; else -> payment.amount } }
 
@@ -43,6 +67,7 @@ fun SubscriptionsPanel() {
             val value = amount.toDoubleOrNull()
             if (name.isNotBlank() && value != null && value > 0 && nextDate.isNotBlank()) {
                 payments = payments + RecurringPayment(nextId++, name.trim(), value, nextDate.trim(), frequency)
+                saveRecurringPayments(context, payments)
                 name = ""; amount = ""; nextDate = ""
             }
         }) { Text("Add Recurring Payment") }

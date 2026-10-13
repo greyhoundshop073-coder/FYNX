@@ -7,19 +7,42 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.Locale
 
 private data class BillItem(val id: Long, val name: String, val amount: Double, val dueDate: String, val recurring: Boolean, val paid: Boolean)
 
+private fun loadBills(context: Context): List<BillItem> = runCatching {
+    val array = JSONArray(FynxMoneyStore.loadToolRecords(context, "bills"))
+    buildList {
+        for (i in 0 until array.length()) {
+            val o = array.optJSONObject(i) ?: continue
+            val name = o.optString("name").trim()
+            val amount = o.optDouble("amount", Double.NaN)
+            if (name.isNotBlank() && amount.isFinite() && amount > 0) add(BillItem(o.optLong("id", i.toLong()), name, amount, o.optString("dueDate"), o.optBoolean("recurring"), o.optBoolean("paid")))
+        }
+    }
+}.getOrDefault(emptyList())
+
+private fun saveBills(context: Context, bills: List<BillItem>) {
+    val array = JSONArray()
+    bills.forEach { bill -> array.put(JSONObject().put("id", bill.id).put("name", bill.name).put("amount", bill.amount).put("dueDate", bill.dueDate).put("recurring", bill.recurring).put("paid", bill.paid)) }
+    FynxMoneyStore.saveToolRecords(context, "bills", array.toString())
+}
+
 @Composable
 fun BillsPaymentPanel() {
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var dueDate by remember { mutableStateOf("") }
     var recurring by remember { mutableStateOf(false) }
-    var bills by remember { mutableStateOf(emptyList<BillItem>()) }
-    var nextId by remember { mutableLongStateOf(1L) }
+    var bills by remember(context) { mutableStateOf(loadBills(context)) }
+    var nextId by remember(context) { mutableLongStateOf((bills.maxOfOrNull { it.id } ?: 0L) + 1L) }
 
     val outstanding = bills.filterNot { it.paid }.sumOf { it.amount }
 
@@ -46,6 +69,7 @@ fun BillsPaymentPanel() {
             val value = amount.toDoubleOrNull()
             if (name.isNotBlank() && value != null && value > 0 && dueDate.isNotBlank()) {
                 bills = bills + BillItem(nextId++, name.trim(), value, dueDate.trim(), recurring, false)
+                saveBills(context, bills)
                 name = ""; amount = ""; dueDate = ""; recurring = false
             }
         }) { Text("Add Bill") }
@@ -60,7 +84,7 @@ fun BillsPaymentPanel() {
                         }
                         Text("Due: ${bill.dueDate}${if (bill.recurring) " • Recurring" else ""}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (bill.paid) Text("🟢 Paid", color = MaterialTheme.colorScheme.primary)
-                        else Button(onClick = { bills = bills.map { if (it.id == bill.id) it.copy(paid = true) else it } }) { Text("Mark as Paid") }
+                        else Button(onClick = { bills = bills.map { if (it.id == bill.id) it.copy(paid = true) else it }; saveBills(context, bills) }) { Text("Mark as Paid") }
                     }
                 }
             }

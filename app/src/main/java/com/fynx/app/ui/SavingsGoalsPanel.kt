@@ -6,19 +6,43 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.Locale
 
 private data class SavingsGoal(val id: Long, val name: String, val target: Double, val saved: Double, val targetDate: String)
 
+private fun loadSavingsGoals(context: Context): List<SavingsGoal> = runCatching {
+    val array = JSONArray(FynxMoneyStore.loadToolRecords(context, "savings_goals"))
+    buildList {
+        for (i in 0 until array.length()) {
+            val o = array.optJSONObject(i) ?: continue
+            val name = o.optString("name").trim()
+            val target = o.optDouble("target", Double.NaN)
+            val saved = o.optDouble("saved", Double.NaN)
+            if (name.isNotBlank() && target.isFinite() && target > 0 && saved.isFinite() && saved >= 0) add(SavingsGoal(o.optLong("id", i.toLong()), name, target, saved.coerceAtMost(target), o.optString("targetDate")))
+        }
+    }
+}.getOrDefault(emptyList())
+
+private fun saveSavingsGoals(context: Context, goals: List<SavingsGoal>) {
+    val array = JSONArray()
+    goals.forEach { item -> array.put(JSONObject().put("id", item.id).put("name", item.name).put("target", item.target).put("saved", item.saved).put("targetDate", item.targetDate)) }
+    FynxMoneyStore.saveToolRecords(context, "savings_goals", array.toString())
+}
+
 @Composable
 fun SavingsGoalsPanel() {
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var targetText by remember { mutableStateOf("") }
     var savedText by remember { mutableStateOf("") }
     var targetDate by remember { mutableStateOf("") }
-    var nextId by remember { mutableLongStateOf(1L) }
-    var goals by remember { mutableStateOf(emptyList<SavingsGoal>()) }
+    var goals by remember(context) { mutableStateOf(loadSavingsGoals(context)) }
+    var nextId by remember(context) { mutableLongStateOf((goals.maxOfOrNull { it.id } ?: 0L) + 1L) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("Savings Goals 🎯", style = MaterialTheme.typography.headlineSmall)
@@ -33,6 +57,7 @@ fun SavingsGoalsPanel() {
             val saved = savedText.toDoubleOrNull() ?: 0.0
             if (name.isNotBlank() && target != null && target > 0 && saved >= 0 && targetDate.isNotBlank()) {
                 goals = goals + SavingsGoal(nextId++, name.trim(), target, saved.coerceAtMost(target), targetDate.trim())
+                saveSavingsGoals(context, goals)
                 name = ""; targetText = ""; savedText = ""; targetDate = ""
             }
         }) { Text("Add Savings Goal") }

@@ -253,6 +253,8 @@ jobs:
           python3 scripts/verify_home_4f_media_lifecycle.py
           python3 scripts/verify_social_feed_production.py
           echo "HOME_H12_SOURCE_GATE=GREEN"
+      - name: Verify More tools local reliability contract
+        run: python3 scripts/verify_more_tools_reliability.py
       - name: Fast build, test and lint
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
       - name: Full build, test and lint

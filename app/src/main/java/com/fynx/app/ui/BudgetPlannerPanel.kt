@@ -7,22 +7,42 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import android.content.Context
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.Locale
 
 private data class BudgetItem(val id: Long, val category: String, val limit: Double, val spent: Double)
 
+private fun loadBudgets(context: Context): List<BudgetItem> = runCatching {
+    val array = JSONArray(FynxMoneyStore.loadToolRecords(context, "budgets"))
+    buildList {
+        for (i in 0 until array.length()) {
+            val o = array.optJSONObject(i) ?: continue
+            val category = o.optString("category").trim()
+            val limit = o.optDouble("limit", Double.NaN)
+            val spent = o.optDouble("spent", Double.NaN)
+            if (category.isNotBlank() && limit.isFinite() && limit > 0 && spent.isFinite() && spent >= 0) add(BudgetItem(o.optLong("id", i.toLong()), category, limit, spent))
+        }
+    }
+}.getOrDefault(emptyList())
+
+private fun saveBudgets(context: Context, budgets: List<BudgetItem>) {
+    val array = JSONArray()
+    budgets.forEach { item -> array.put(JSONObject().put("id", item.id).put("category", item.category).put("limit", item.limit).put("spent", item.spent)) }
+    FynxMoneyStore.saveToolRecords(context, "budgets", array.toString())
+}
+
 @Composable
 fun BudgetPlannerPanel() {
+    val context = LocalContext.current
     var category by remember { mutableStateOf("") }
     var limitText by remember { mutableStateOf("") }
     var spentText by remember { mutableStateOf("") }
     var period by remember { mutableStateOf("Monthly") }
-    var nextId by remember { mutableLongStateOf(1L) }
-    var budgets by remember { mutableStateOf(emptyList<BudgetItem>()) }
+    var budgets by remember(context) { mutableStateOf(loadBudgets(context)) }
+    var nextId by remember(context) { mutableLongStateOf((budgets.maxOfOrNull { it.id } ?: 0L) + 1L) }
 
     val totalLimit = budgets.sumOf { it.limit }
     val totalSpent = budgets.sumOf { it.spent }
@@ -52,6 +72,7 @@ fun BudgetPlannerPanel() {
             val spent = spentText.toDoubleOrNull() ?: 0.0
             if (category.isNotBlank() && limit != null && limit > 0 && spent >= 0) {
                 budgets = budgets + BudgetItem(nextId++, category.trim(), limit, spent)
+                saveBudgets(context, budgets)
                 category = ""; limitText = ""; spentText = ""
             }
         }) { Text("Add Budget") }
