@@ -94,6 +94,9 @@ required_saved = [
     "COALESCE(l.likes,0) AS like_count",
     "COALESCE(c.comments,0) AS comment_count",
     "AS liked_by_current_user",
+    "[req.user.sub, limit + 1, offset]",
+    "const hasMore = result.rows.length > limit",
+    "const rows = hasMore ? result.rows.slice(0, limit) : result.rows",
 ]
 missing_saved = [token for token in required_saved if token not in discovery]
 if missing_saved:
