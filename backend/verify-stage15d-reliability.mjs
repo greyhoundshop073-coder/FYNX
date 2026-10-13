@@ -6,6 +6,9 @@ const server = fs.readFileSync(new URL("./server.js", import.meta.url), "utf8");
 const notificationBootstrap = fs.readFileSync(new URL("./notificationBootstrap.js", import.meta.url), "utf8");
 const phase1Bootstrap = fs.readFileSync(new URL("./phase1FoundationBootstrap.js", import.meta.url), "utf8");
 const socialPostReactionBootstrap = fs.readFileSync(new URL("./socialPostReactionBootstrap.js", import.meta.url), "utf8");
+const homeCommentsPrivacyBootstrap = fs.readFileSync(new URL("./homeCommentsPrivacyBootstrap.js", import.meta.url), "utf8");
+const socialFeedBootstrap = fs.readFileSync(new URL("./socialFeedBootstrap.js", import.meta.url), "utf8");
+const realtimeIsolationBootstrap = fs.readFileSync(new URL("./realtimeIsolationBootstrap.js", import.meta.url), "utf8");
 const checks = [
   ["rate-limit middleware is registered only after its configuration initializes", server.indexOf("const RATE_LIMITS =") < server.indexOf('app.use("/api/auth", rateLimit("auth", RATE_LIMITS.auth));') && server.indexOf("function rateLimit(bucket, limit)") < server.indexOf('app.use("/api/auth", rateLimit("auth", RATE_LIMITS.auth));')],
   ["health readiness rejects a missing or unavailable database", server.includes('res.status(database === "ready" ? 200 : 503).json({ ok: database === "ready", service: "fynx-backend", database });')],
@@ -14,6 +17,8 @@ const checks = [
   ["notification bootstrap avoids repeating already-applied replacements", notificationBootstrap.includes("if (source.includes(patch.replacement)) continue;") && notificationBootstrap.includes("source = source.replace(patch.marker, patch.replacement);")],
   ["Home reaction-user lookup matches the reaction_type schema", socialPostReactionBootstrap.includes("r.reaction_type AS reaction") && socialPostReactionBootstrap.includes("r.reaction_type=$2") && !socialPostReactionBootstrap.includes("r.reaction=$2")],
   ["phase-one bootstrap contains valid idempotency cleanup instead of escaped source text", phase1Bootstrap.includes("source = source.replaceAll(") && !phase1Bootstrap.includes("\\\\nsource = source.replaceAll")],
+  ["Home comment bootstrap applies privacy hardening after installing the route and keeps cursor placeholders aligned", realtimeIsolationBootstrap.indexOf("await installHomeCommentBackend();") < realtimeIsolationBootstrap.indexOf("await installHomeCommentPrivacy();") && homeCommentsPrivacyBootstrap.includes("c.id < $4") && homeCommentsPrivacyBootstrap.includes("LIMIT $3") && homeCommentsPrivacyBootstrap.includes("b.blocker_id=$2")],
+  ["Home feed bootstrap is idempotent and refuses to install without the authoritative schema initializer", socialFeedBootstrap.includes("if (source.includes(\"/api/social/feed\")) return;") && socialFeedBootstrap.includes("const ensureSocialSchema = async") && socialFeedBootstrap.includes("LIMIT $2 OFFSET $3")],
   ["bounded retry helper", reliability.includes("retryWithBackoff") && reliability.includes("maxAttempts")],
   ["exponential backoff with jitter", reliability.includes("2 ** (attempt - 1)") && reliability.includes("Math.random")],
   ["transient database retry classification", reliability.includes("40001") && reliability.includes("40P01") && reliability.includes("08006")],
