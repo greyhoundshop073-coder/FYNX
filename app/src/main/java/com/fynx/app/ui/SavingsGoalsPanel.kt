@@ -41,6 +41,7 @@ fun SavingsGoalsPanel() {
     var targetText by remember { mutableStateOf("") }
     var savedText by remember { mutableStateOf("") }
     var targetDate by remember { mutableStateOf("") }
+    var validationError by remember { mutableStateOf<String?>(null) }
     var goals by remember(context) { mutableStateOf(loadSavingsGoals(context)) }
     var nextId by remember(context) { mutableLongStateOf((goals.maxOfOrNull { it.id } ?: 0L) + 1L) }
 
@@ -52,13 +53,20 @@ fun SavingsGoalsPanel() {
         OutlinedTextField(targetText, { targetText = it }, label = { Text("Target amount") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(savedText, { savedText = it }, label = { Text("Currently saved") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(targetDate, { targetDate = it }, label = { Text("Target date") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        validationError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         Button(onClick = {
             val target = targetText.toDoubleOrNull()
             val saved = savedText.toDoubleOrNull() ?: 0.0
-            if (name.isNotBlank() && target != null && target > 0 && saved >= 0 && targetDate.isNotBlank()) {
+            when {
+                name.isBlank() -> validationError = "Enter a goal name."
+                target == null || !target.isFinite() || target <= 0 -> validationError = "Enter a valid target greater than zero."
+                !saved.isFinite() || saved < 0 -> validationError = "Enter a valid saved amount."
+                !FynxMoneyStore.isValidLocalDate(targetDate) -> validationError = "Use a valid date in YYYY-MM-DD format."
+                else -> {
                 goals = goals + SavingsGoal(nextId++, name.trim(), target, saved.coerceAtMost(target), targetDate.trim())
                 saveSavingsGoals(context, goals)
-                name = ""; targetText = ""; savedText = ""; targetDate = ""
+                name = ""; targetText = ""; savedText = ""; targetDate = ""; validationError = null
+                }
             }
         }) { Text("Add Savings Goal") }
         Spacer(Modifier.height(10.dp))
