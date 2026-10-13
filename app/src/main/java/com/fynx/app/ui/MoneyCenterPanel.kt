@@ -20,7 +20,7 @@ fun MoneyCenterPanel() {
     val sections = listOf(
         MoneySection("Planner", "Money Planner", "Track income and expenses, set budgets, save toward goals and plan recurring costs", "🗓️"),
         MoneySection("Dashboard", "Money Dashboard", "Balances, income, expenses and your overall money picture", "💰"),
-        MoneySection("Transfer", "Send & Transfer Money", "Money transfers and payment movement", "↔️"),
+        MoneySection("Transfer", "Transfer Records", "Record a planned transfer; this does not move real money", "↔️"),
         MoneySection("Bills", "Bills & Payments", "Bills, payment reminders and due amounts", "🧾"),
         MoneySection("Transactions", "Transactions", "Your recorded money activity", "📜"),
         MoneySection("Accounts", "Accounts & Wallets", "Keep your tracked cash, bank and wallet accounts together", "🏦"),
@@ -31,7 +31,7 @@ fun MoneyCenterPanel() {
         MoneySection("Insights", "Money Insights", "Patterns and useful financial summaries", "📊"),
         MoneySection("Spending Insights", "Spending Insights", "Where your money is going", "📈"),
         MoneySection("Alerts", "Money Alerts", "Important money warnings and reminders", "🔔"),
-        MoneySection("Vault", "Secure Money Vault", "Protected money information", "🔐"),
+        MoneySection("Vault", "Local Money Lock (Demo)", "A UI-only lock; it does not secure stored financial data", "🔐"),
         MoneySection("Currency", "Currency Converter", "Convert between currencies", "💱")
     )
 
