@@ -14,7 +14,6 @@ import kotlin.math.roundToLong
 @Composable
 fun MoneyToolsPanel() {
     val context = LocalContext.current
-    var balance by remember { mutableStateOf(0.0) }
     var title by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("Income") }
@@ -41,8 +40,9 @@ fun MoneyToolsPanel() {
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Money Dashboard 💰", style = MaterialTheme.typography.titleLarge)
-                Text("Available tracked balance", color = FynxDesign.TextSecondary)
-                Text(formatMoney(accountsTotal + net + balance), style = MaterialTheme.typography.headlineMedium)
+                Text("Tracked account balances (manual records)", color = FynxDesign.TextSecondary)
+                Text(formatMoney(accountsTotal), style = MaterialTheme.typography.headlineMedium)
+                Text("Transaction totals are shown separately to avoid double-counting. These are personal records, not verified bank balances.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Income ${formatMoney(income)}", color = MaterialTheme.colorScheme.primary)
                     Text("Expenses ${formatMoney(expenses)}", color = MaterialTheme.colorScheme.error)
