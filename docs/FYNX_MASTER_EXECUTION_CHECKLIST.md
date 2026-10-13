@@ -127,4 +127,4 @@ The assistant must not require the user to report RED/GREEN status manually when
 - [x] Exact-commit debug APK artifact exists for that candidate SHA.
 - [x] Full Android emulator/authenticated runtime certification passed on candidate commit `c93d2f40a75055a0daddd8ece681cac24be2b09c` before PR #147 was merged to `main`.
 - [x] Marketplace surface and authenticated journey were covered by the candidate runtime capture; locked test-login behavior was preserved.
-- [ ] After merge, verify a new APK artifact built from the resulting `main` commit before calling the integration complete (main SHA: `cd3ecae8d44cbf772563db94e619489d8e836fce`; workflow still running at time of this change).
+- [ ] After the Home Saved Posts integration merge, verify an APK artifact built from the exact current `main` HEAD and complete authenticated runtime certification before calling the integration complete. PR-merge APKs do not substitute for an exact-`main` artifact; keep this gate pending until both are evidenced.
