@@ -41,6 +41,7 @@ fun BillsPaymentPanel() {
     var amount by remember { mutableStateOf("") }
     var dueDate by remember { mutableStateOf("") }
     var recurring by remember { mutableStateOf(false) }
+    var validationError by remember { mutableStateOf<String?>(null) }
     var bills by remember(context) { mutableStateOf(loadBills(context)) }
     var nextId by remember(context) { mutableLongStateOf((bills.maxOfOrNull { it.id } ?: 0L) + 1L) }
 
@@ -65,12 +66,18 @@ fun BillsPaymentPanel() {
             Checkbox(checked = recurring, onCheckedChange = { recurring = it })
             Text("Recurring bill")
         }
+        validationError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         Button(onClick = {
             val value = amount.toDoubleOrNull()
-            if (name.isNotBlank() && value != null && value > 0 && dueDate.isNotBlank()) {
+            when {
+                name.isBlank() -> validationError = "Enter a bill name."
+                value == null || !value.isFinite() || value <= 0 -> validationError = "Enter a valid amount greater than zero."
+                !FynxMoneyStore.isValidLocalDate(dueDate) -> validationError = "Use a valid date in YYYY-MM-DD format."
+                else -> {
                 bills = bills + BillItem(nextId++, name.trim(), value, dueDate.trim(), recurring, false)
                 saveBills(context, bills)
-                name = ""; amount = ""; dueDate = ""; recurring = false
+                name = ""; amount = ""; dueDate = ""; recurring = false; validationError = null
+                }
             }
         }) { Text("Add Bill") }
         Spacer(Modifier.height(10.dp))
