@@ -94,3 +94,14 @@ This standard works together with:
 If a future ChatGPT session continues FYNX work, it must read these documents and inspect the live repository before making changes.
 
 LOCKED: This file is the permanent FYNX release-gate contract. It must be followed automatically after every completed push without requiring the user to remind the assistant.
+
+## LOCKED TEST-LOGIN POLICY — DO NOT CHANGE WITHOUT EXPLICIT USER APPROVAL
+
+The owner explicitly requires the current FYNX test-login experience to remain easy for repeated APK testing. During testing, login must not be changed to require an email/SMS verification code or a live backend connection merely to enter the app. Preserve the existing user-approved test/offline login behavior exactly as currently implemented.
+
+- Do not refactor, remove, tighten, replace, or “fix” the login/auth/session restoration path as part of unrelated work.
+- Do not introduce mandatory verification codes, backend availability checks, account provisioning, or production-only authentication gates into the test APK flow.
+- Do not use login changes to work around unrelated runtime-certification failures. Diagnose the failing journey/test harness separately.
+- Keep any test/offline bypass limited to the existing intended test/debug scope; do not expose a test bypass in production/release builds or weaken real-account security.
+- Before touching any authentication/login/session code, stop and ask the user. This rule applies to every future ChatGPT session/branch.
+- A successful test login is not permission to alter its behavior. If a CI test cannot stay authenticated, fix the test journey/state setup without changing the user-approved login contract.
