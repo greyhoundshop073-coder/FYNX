@@ -86,12 +86,12 @@ fun FynxStatusTimelinePanel(
 
     LaunchedEffect(refreshKey) { refresh() }
 
-    LaunchedEffect(statuses, openOwnerUsername, openStatusId, loading) {
-        // Do not consume a command while the first status fetch is still in flight:
-        // an empty list at that point does not mean the requested owner/status is
-        // missing. Once loading has settled, every command is consumed exactly once,
-        // including a stale/expired target that cannot be opened.
-        if (loading) return@LaunchedEffect
+    LaunchedEffect(statuses, openOwnerUsername, openStatusId, loading, error) {
+        // Keep a requested Status deep link pending while loading or after a failed
+        // fetch. A transient network failure must not consume the command before
+        // the requested owner/status can be checked. A successful fetch consumes it
+        // once, including when the target is stale or expired.
+        if (loading || error != null) return@LaunchedEffect
         val hasCommand = !openStatusId.isNullOrBlank() || !openOwnerUsername.isNullOrBlank()
         if (!hasCommand) return@LaunchedEffect
 

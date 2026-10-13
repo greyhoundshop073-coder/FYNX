@@ -45,21 +45,26 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
     var loading by remember { mutableStateOf(true) }
     var busy by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var refreshError by remember { mutableStateOf<String?>(null) }
+    var friendsLoadFailed by remember { mutableStateOf(false) }
     var menuUser by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
 
     suspend fun refresh() {
         loading = true
         error = null
+        refreshError = null
         val fr = FynxSocialClient.friends(context)
         val rr = FynxSocialClient.requests(context)
         val br = FynxSocialClient.blocked(context)
-        friends = fr.getOrElse { emptyList() }
-        val requests = rr.getOrElse { emptyList() }
+        friendsLoadFailed = fr.isFailure
+        friends = fr.getOrElse { friends }
+        val requests = rr.getOrElse { incoming + outgoing }
         incoming = requests.filter { it.status.equals("incoming", true) }
         outgoing = requests.filter { it.status.equals("outgoing", true) }
-        blocked = br.getOrElse { emptyList() }
-        error = fr.exceptionOrNull()?.message ?: rr.exceptionOrNull()?.message ?: br.exceptionOrNull()?.message
+        blocked = br.getOrElse { blocked }
+        refreshError = fr.exceptionOrNull()?.message ?: rr.exceptionOrNull()?.message ?: br.exceptionOrNull()?.message
+        error = refreshError
         loading = false
     }
 
@@ -101,6 +106,14 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
 
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 20.dp)) {
             item {
+                refreshError?.let { message ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(message, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { scope.launch { refresh() } }, enabled = !loading) { Text("Retry") }
+                    }
+                }
+            }
+            item {
                 Text("Find People", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
             }
             item {
@@ -133,6 +146,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
             if (section == "Friends") {
                 item { Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) { Text("Your Friends", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); Text(friends.size.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold) } }
                 if (loading) item { Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+                else if (friends.isEmpty() && friendsLoadFailed) emptyState("Couldn't load friends", "Check your connection and retry.")
                 else if (friends.isEmpty()) emptyState("No friends yet", "Accepted FYNX connections will appear here.")
                 else items(friends, key = { "friend_${it.username}" }) { person -> FriendRow(person, busy == person.username, menuUser == person.username, { open -> menuUser = if (open) person.username else null }, onOpenProfile, onOpenChat) { act(person.username) { FynxSocialClient.removeFriend(context, person.username) } } }
             } else {
