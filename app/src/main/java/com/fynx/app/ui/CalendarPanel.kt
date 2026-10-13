@@ -16,17 +16,21 @@ import java.util.Locale
 
 private val calendarFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
-private fun isValidCalendarDate(value: String): Boolean = try {
-    val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
-    val parsed = formatter.parse(value) ?: return false
-    formatter.format(parsed) == value
-} catch (_: Exception) { false }
+private fun isValidCalendarDate(value: String): Boolean {
+    return try {
+        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
+        val parsed = formatter.parse(value)
+        parsed != null && formatter.format(parsed) == value
+    } catch (_: Exception) { false }
+}
 
-private fun isValidCalendarTime(value: String): Boolean = try {
-    val formatter = SimpleDateFormat("HH:mm", Locale.US).apply { isLenient = false }
-    val parsed = formatter.parse(value) ?: return false
-    formatter.format(parsed) == value
-} catch (_: Exception) { false }
+private fun isValidCalendarTime(value: String): Boolean {
+    return try {
+        val formatter = SimpleDateFormat("HH:mm", Locale.US).apply { isLenient = false }
+        val parsed = formatter.parse(value)
+        parsed != null && formatter.format(parsed) == value
+    } catch (_: Exception) { false }
+}
 private const val PREFS = "fynx_calendar_events"
 
 data class FynxCalendarEvent(val id: Long, val title: String, val date: String, val time: String = "", val notes: String = "", val repeat: String = "None")
