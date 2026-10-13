@@ -7,25 +7,47 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import android.content.Context
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.Locale
 
-private data class BudgetItem(val id: Long, val category: String, val limit: Double, val spent: Double)
+private data class BudgetItem(val id: Long, val category: String, val limit: Double, val spent: Double, val period: String)
+
+private fun loadBudgets(context: Context): List<BudgetItem> = runCatching {
+    val array = JSONArray(FynxMoneyStore.loadToolRecords(context, "budgets"))
+    buildList {
+        for (i in 0 until array.length()) {
+            val o = array.optJSONObject(i) ?: continue
+            val category = o.optString("category").trim()
+            val limit = o.optDouble("limit", Double.NaN)
+            val spent = o.optDouble("spent", Double.NaN)
+            val period = o.optString("period", "Monthly").takeIf { it in setOf("Weekly", "Monthly") } ?: "Monthly"
+            if (category.isNotBlank() && limit.isFinite() && limit > 0 && spent.isFinite() && spent >= 0) add(BudgetItem(o.optLong("id", i.toLong()), category, limit, spent, period))
+        }
+    }
+}.getOrDefault(emptyList())
+
+private fun saveBudgets(context: Context, budgets: List<BudgetItem>) {
+    val array = JSONArray()
+    budgets.forEach { item -> array.put(JSONObject().put("id", item.id).put("category", item.category).put("limit", item.limit).put("spent", item.spent).put("period", item.period)) }
+    FynxMoneyStore.saveToolRecords(context, "budgets", array.toString())
+}
 
 @Composable
 fun BudgetPlannerPanel() {
+    val context = LocalContext.current
     var category by remember { mutableStateOf("") }
     var limitText by remember { mutableStateOf("") }
     var spentText by remember { mutableStateOf("") }
     var period by remember { mutableStateOf("Monthly") }
-    var nextId by remember { mutableLongStateOf(1L) }
-    var budgets by remember { mutableStateOf(emptyList<BudgetItem>()) }
+    var budgets by remember(context) { mutableStateOf(loadBudgets(context)) }
+    var nextId by remember(context) { mutableLongStateOf((budgets.maxOfOrNull { it.id } ?: 0L) + 1L) }
 
-    val totalLimit = budgets.sumOf { it.limit }
-    val totalSpent = budgets.sumOf { it.spent }
+    val visibleBudgets = budgets.filter { it.period == period }
+    val totalLimit = visibleBudgets.sumOf { it.limit }
+    val totalSpent = visibleBudgets.sumOf { it.spent }
     val remaining = totalLimit - totalSpent
 
 
@@ -51,22 +73,24 @@ fun BudgetPlannerPanel() {
             val limit = limitText.toDoubleOrNull()
             val spent = spentText.toDoubleOrNull() ?: 0.0
             if (category.isNotBlank() && limit != null && limit > 0 && spent >= 0) {
-                budgets = budgets + BudgetItem(nextId++, category.trim(), limit, spent)
+                budgets = budgets + BudgetItem(nextId++, category.trim(), limit, spent, period)
+                saveBudgets(context, budgets)
                 category = ""; limitText = ""; spentText = ""
             }
         }) { Text("Add Budget") }
         Spacer(Modifier.height(10.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(budgets, key = { it.id }) { budget ->
+            items(visibleBudgets, key = { it.id }) { budget ->
                 val progress = if (budget.limit > 0) (budget.spent / budget.limit).coerceIn(0.0, 1.0) else 0.0
                 val over = budget.spent > budget.limit
                 Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(budget.category, style = MaterialTheme.typography.titleMedium); Text(money(budget.limit)) }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Column(Modifier.weight(1f)) { Text(budget.category, style = MaterialTheme.typography.titleMedium); Text(budget.period, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }; Text(money(budget.limit)) }
                     LinearProgressIndicator(progress = { progress.toFloat() }, modifier = Modifier.fillMaxWidth())
                     Text("Spent ${money(budget.spent)} • Remaining ${money(budget.limit - budget.spent)}")
                     if (over) Text("⚠️ Over budget", color = MaterialTheme.colorScheme.error)
                     else if (progress >= 0.8) Text("🔔 Close to limit", color = MaterialTheme.colorScheme.error)
                     else Text("🟢 Within budget", color = MaterialTheme.colorScheme.primary)
+                    TextButton(onClick = { budgets = budgets.filterNot { it.id == budget.id }; saveBudgets(context, budgets) }) { Text("Delete budget") }
                 } }
             }
         }

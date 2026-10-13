@@ -53,7 +53,7 @@ fun TodoPanel() {
         val matchesSearch = search.isBlank() || todo.title.contains(search.trim(), ignoreCase = true)
         val matchesFilter = when (filter) {
             TodoFilter.ALL -> true
-            TodoFilter.TODAY -> todo.dueDate == today || (!todo.completed && todo.dueDate == null)
+            TodoFilter.TODAY -> (!todo.completed && todo.dueDate != null && todo.dueDate!! <= today) || (!todo.completed && todo.dueDate == null) || (todo.completed && todo.dueDate == today)
             TodoFilter.ACTIVE -> !todo.completed
             TodoFilter.COMPLETED -> todo.completed
             TodoFilter.HIGH_PRIORITY -> todo.priority == TodoPriority.HIGH && !todo.completed
