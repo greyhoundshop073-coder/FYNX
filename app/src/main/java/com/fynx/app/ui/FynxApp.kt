@@ -188,7 +188,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         }
     }
     LaunchedEffect(selected) {
-        if (backNavigationRequested || (selected == "Features" && navigationHistory.lastOrNull() == "Saved Posts")) {
+        if (selected in setOf("Home", "Chats", "Friends", "Marketplace", "Features")) {
+            backNavigationRequested = false
+            navigationHistory = listOf(selected)
+        } else if (backNavigationRequested) {
             backNavigationRequested = false
             navigationHistory = navigationHistory.dropLast(1).ifEmpty { listOf("Home") }
         } else if (navigationHistory.lastOrNull() != selected) {
