@@ -383,8 +383,23 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { selected = if (selected == "Saved Posts") "Features" else "Home" }, modifier = Modifier.semantics { contentDescription = if (selected == "Saved Posts") "Back to Features" else "Back to Home" }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, if (selected == "Saved Posts") "Back to Features" else "Back to Home")
+                    IconButton(
+                        onClick = {
+                            if (selected == "Saved Posts") {
+                                selected = "Features"
+                            } else {
+                                backNavigationRequested = true
+                                selected = navigationHistory.getOrNull(navigationHistory.lastIndex - 1) ?: "Home"
+                            }
+                        },
+                        modifier = Modifier.semantics {
+                            contentDescription = if (selected == "Saved Posts") "Back to Features" else "Back to previous screen"
+                        }
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            if (selected == "Saved Posts") "Back to Features" else "Back to previous screen"
+                        )
                     }
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                         Text(
