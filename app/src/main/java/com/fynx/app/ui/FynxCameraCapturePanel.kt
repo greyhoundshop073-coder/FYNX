@@ -133,7 +133,7 @@ fun FynxCameraCapturePanel(
             recording?.stop()
         }
     }
-    LaunchedEffect(showCaptureControls, pendingUri, recording) { if (showCaptureControls && pendingUri == null && recording == null && timerCountingDown == 0) { delay(5000L); showCaptureControls = false } }
+    LaunchedEffect(showCaptureControls, pendingUri, recording, cameraControl, hasCamera) { if (showCaptureControls && pendingUri == null && recording == null && timerCountingDown == 0 && cameraControl != null && hasCamera) { delay(5000L); showCaptureControls = false } }
     LaunchedEffect(timerCountingDown) { if (timerCountingDown > 0) { delay(1000L); timerCountingDown -= 1 } }
     LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner) {
         val generation = bindGeneration + 1; bindGeneration = generation

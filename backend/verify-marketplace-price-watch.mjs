@@ -1,10 +1,18 @@
 import fs from "node:fs";
 
 const social = fs.readFileSync("socialRoutes.js", "utf8");
+const schema = fs.readFileSync("marketplaceSchema.js", "utf8");
 const push = fs.readFileSync("notificationPush.js", "utf8");
 
+// Marketplace table creation belongs to the shared schema helper so discovery
+// and seller routes initialize the same schema. Keep legacy detection to make
+// the verifier compatible with branches that have not extracted the helper yet.
+const marketplaceSchema = schema.includes("CREATE TABLE IF NOT EXISTS marketplace_price_watches")
+  ? schema
+  : social;
+
 const checks = [
-  ["price-watch table is account/listing scoped", social.includes("CREATE TABLE IF NOT EXISTS marketplace_price_watches") && social.includes("PRIMARY KEY (user_id, listing_id)")],
+  ["price-watch table is account/listing scoped", marketplaceSchema.includes("CREATE TABLE IF NOT EXISTS marketplace_price_watches") && marketplaceSchema.includes("PRIMARY KEY (user_id, listing_id)")],
   ["price-watch state is authenticated", social.includes('app.get("/api/marketplace/listings/:id/price-watch", auth')],
   ["price-watch create is authenticated", social.includes('app.post("/api/marketplace/listings/:id/price-watch", auth')],
   ["price-watch delete is authenticated", social.includes('app.delete("/api/marketplace/listings/:id/price-watch", auth')],

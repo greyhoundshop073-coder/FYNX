@@ -50,7 +50,7 @@ import org.json.JSONObject
 
 /** User-facing FYNX Assistant assistant. Sensitive FYNX data is not exposed by this panel. */
 @Composable
-fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
+fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}, initialMarketplaceListingId: String? = null) {
     var messages by remember { mutableStateOf(emptyList<AiMessage>()) }
     var input by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
@@ -83,6 +83,11 @@ fun FynxAiAssistantPanel(onOpenDestination: (String) -> Unit = {}) {
                 pendingMediaUploading = false
             }
         }
+    }
+
+    LaunchedEffect(initialMarketplaceListingId) {
+        val listingId = initialMarketplaceListingId?.trim().orEmpty()
+        if (listingId.isNotBlank()) input = "Help me evaluate Marketplace listing #$listingId. Review its price, seller/reputation information, risks, and what I should check before buying."
     }
 
     LaunchedEffect(Unit) {

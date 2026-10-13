@@ -99,7 +99,7 @@ DIAGNOSTIC_MARKERS = (
     "New post", "What's on your mind?", "Photo", "Video/Camera",
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
-    "FYNX Features", "Search FYNX tools", "Switch front/back camera", "Recording",
+    "FYNX Features", "Search FYNX tools", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
     "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password"
 )
 
@@ -932,9 +932,28 @@ def open_features(target_labels:list[str]|None=None):
             else: FAILURES.append("authenticated Features -> "+name)
     else: FAILURES.append("authenticated Home -> Features")
 
+# Certify the actual Marketplace destination in the same exact-commit APK.
+# This is a UI/runtime assertion only; the screen must remain navigable when the
+# live service is unavailable, and no sample listing data is fabricated.
+run("adb","shell","am","force-stop",PACKAGE)
+run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
+time.sleep(2.5)
+marketplace_home = dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-marketplace-entry.xml")
+marketplace_xml = tap_control(
+    marketplace_home,
+    ["Marketplace"],
+    "marketplace",
+    ["Search products, sellers or categories"]
+)
+if marketplace_xml:
+    screenshot("authenticated-marketplace.png")
+    report.append("- PASS authenticated Home -> Marketplace search/cart surface screenshot/UI hierarchy")
+else:
+    FAILURES.append("authenticated Home -> Marketplace")
+    
 report += ["","## Captured authenticated surfaces",
            "- authenticated-home.png","- authenticated-chat.png","- authenticated-friends.png",
-           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-ai.png","",
+           "- authenticated-stories.png","- authenticated-features.png","- authenticated-money.png","- authenticated-ai.png","- authenticated-marketplace.png","",
            f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
 if FAILURES: report += ["","Failures:"]+["- "+x for x in FAILURES]
 (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")

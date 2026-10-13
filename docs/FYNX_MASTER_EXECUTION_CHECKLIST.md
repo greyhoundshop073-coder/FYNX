@@ -120,3 +120,11 @@ For every unchecked batch:
 7. If GREEN, mark the batch complete and continue.
 
 The assistant must not require the user to report RED/GREEN status manually when GitHub status is accessible.
+
+## Consolidated APK integration gate — 2026-10-13
+
+- [x] Candidate source/build checks reviewed for PR #147 at `f12086096ac188146dc14f613a5446485c86f842`.
+- [x] Exact-commit debug APK artifact exists for that candidate SHA.
+- [ ] Full Android emulator/authenticated runtime certification must pass on the final candidate commit before PR #147 is merged to `main`.
+- [ ] Confirm the Marketplace surface is visible in the runtime capture and the authenticated journey remains stable; do not change the locked test-login behavior to work around runtime failures.
+- [ ] After merge, verify a new APK artifact built from the resulting `main` commit before calling the integration complete.
