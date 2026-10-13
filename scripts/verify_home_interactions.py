@@ -147,6 +147,10 @@ if 'OPENAI_API_KEY' in visible_updates or 'OPENAI_API_KEY' in ai_client:
     raise SystemExit("HOME INTERACTIONS RED: OpenAI API key must never be present in Android client code")
 
 app_source = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
+require(app_source, 'BackHandler(enabled = openChat == null && openGroup == null && selected == "Saved Posts") { selected = "Features" }', "Saved Posts system-back returns to its Features entry point")
+require(app_source, 'selected != "Contacts" && selected != "Saved Posts") { selected = "Home" }', "generic secondary back handler does not override Saved Posts navigation")
+require(app_source, 'onClick = { selected = if (selected == "Saved Posts") "Features" else "Home" }', "Saved Posts header back returns to Features")
+require(app_source, 'contentDescription = if (selected == "Saved Posts") "Back to Features" else "Back to Home"', "Saved Posts back action has accurate accessibility label")
 money_center = read("app/src/main/java/com/fynx/app/ui/MoneyCenterPanel.kt")
 budget = read("app/src/main/java/com/fynx/app/ui/BudgetPlannerPanel.kt")
 require(app_source, '"AI Creation" -> { selected = "AI" }', "AI Creation central route")
