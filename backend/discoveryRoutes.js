@@ -250,13 +250,17 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       const limit = Math.min(Math.max(Number(req.query?.limit) || 30, 1), 100);
       const offset = Math.max(Number(req.query?.offset) || 0, 0);
       const result = await pool.query(`
-        SELECT p.id,p.author_id,u.username author_username,u.display_name author_display_name,p.text,p.visibility,p.media_id,p.media_type,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp,sp.created_at saved_at
+        SELECT p.id,p.author_id,u.username author_username,u.display_name author_display_name,p.text,p.visibility,p.media_id,p.media_type,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp,sp.created_at saved_at,
+               COALESCE(l.likes,0) AS like_count, COALESCE(c.comments,0) AS comment_count,
+               EXISTS (SELECT 1 FROM social_post_likes mine WHERE mine.post_id=p.id AND mine.user_id=$1) AS liked_by_current_user
         FROM social_saved_posts sp JOIN social_posts p ON p.id=sp.post_id JOIN users u ON u.id=p.author_id
+        LEFT JOIN (SELECT post_id,COUNT(*)::int AS likes FROM social_post_likes GROUP BY post_id) l ON l.post_id=p.id
+        LEFT JOIN (SELECT post_id,COUNT(*)::int AS comments FROM social_post_comments GROUP BY post_id) c ON c.post_id=p.id
         WHERE sp.user_id=$1 AND (${`p.author_id=$1 OR p.visibility='PUBLIC'`} OR (p.visibility='FRIENDS_ONLY' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$1) OR (f.user_id=$1 AND f.friend_id=p.author_id)) AND f.status='accepted')))
           AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$1))
         ORDER BY sp.created_at DESC LIMIT $2 OFFSET $3
       `, [req.user.sub, limit, offset]);
-      return res.json({ posts: result.rows.map(row => ({ id:String(row.id), authorId:String(row.author_id), authorUsername:row.author_username, authorDisplayName:row.author_display_name, text:row.text, visibility:row.visibility, mediaId:row.media_id==null?null:String(row.media_id), mediaType:row.media_type||null, timestamp:Number(row.timestamp), savedAtMillis:new Date(row.saved_at).getTime() })), hasMore: result.rows.length === limit });
+      return res.json({ posts: result.rows.map(row => ({ id:String(row.id), authorId:String(row.author_id), authorUsername:row.author_username, authorDisplayName:row.author_display_name, text:row.text, visibility:row.visibility, mediaId:row.media_id==null?null:String(row.media_id), mediaType:row.media_type||null, timestamp:Number(row.timestamp), savedAtMillis:new Date(row.saved_at).getTime(), likeCount:Number(row.like_count||0), commentCount:Number(row.comment_count||0), likedByCurrentUser:Boolean(row.liked_by_current_user), followedByCurrentUser:false })), hasMore: result.rows.length === limit });
     } catch (error) { console.error("saved social posts", error); return res.status(500).json({ error: "saved posts lookup failed" }); }
   });
 
