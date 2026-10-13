@@ -36,11 +36,11 @@ Work sequentially on `main` in coherent batches. Never start the next batch unti
 - [x] Like: optimistic state, persistence, retry, count consistency
 - [x] Comment: persistence, refresh, count consistency
 - [x] Reply: persistence, threading, retry, count consistency
-- [x] Save: persistence, unsave, refresh, saved-list consistency (authoritative state, media rendering, paginated Saved list)
+- [ ] Save: implementation updated (authoritative state, media rendering, paginated Saved list); authenticated runtime proof for non-empty Saved posts and unsave remains pending.
 - [x] Repost: persistence, undo, duplicate prevention
 - [x] Share: real share flow and failure handling
 - [x] Follow/profile navigation from post identity
-- [x] Post media open/playback/full-screen behavior (viewer state synchronized back to Home; failed media has retry)
+- [ ] Media viewer implementation updated (interaction state sync, retryable failures, full-screen play/pause/mute); runtime playback proof still needs an authenticated post with media.
 - [x] Post menu and ownership actions
 - [x] Delete/removed-post handling
 - [x] Feed refresh and pagination

@@ -10,6 +10,7 @@ MEDIA_CACHE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxMediaCache.kt"
 DISCOVERY = ROOT / "backend/discoveryRoutes.js"
 SAVED_PANEL = ROOT / "app/src/main/java/com/fynx/app/ui/FynxSavedPostsPanel.kt"
 VIEWER = ROOT / "app/src/main/java/com/fynx/app/ui/FynxPostMediaViewer.kt"
+RUNTIME_NAVIGATION = ROOT / "scripts/verify_authenticated_runtime_navigation.py"
 
 home = HOME.read_text(encoding="utf-8")
 panel = PANEL.read_text(encoding="utf-8")
@@ -18,6 +19,7 @@ media_cache = MEDIA_CACHE.read_text(encoding="utf-8")
 discovery = DISCOVERY.read_text(encoding="utf-8")
 saved_panel = SAVED_PANEL.read_text(encoding="utf-8")
 viewer = VIEWER.read_text(encoding="utf-8")
+runtime_navigation = RUNTIME_NAVIGATION.read_text(encoding="utf-8")
 
 required_home = {
     "FynxMediaCache.getOrDownload": "real media cache/download path",
@@ -130,5 +132,15 @@ required_media_recovery = [
 missing_media_recovery = [token for token in required_media_recovery if token not in home]
 if missing_media_recovery:
     raise SystemExit("HOME 4F MEDIA RED: media loading/error/retry state missing " + ", ".join(missing_media_recovery))
+
+required_runtime_capture = [
+    'def wait_for_home_feed_settled(timeout:float=30.0)->tuple[str,bool]:',
+    'settled_xml,feed_settled=wait_for_home_feed_settled()',
+    'if not feed_settled:',
+    'Home feed did not leave its loading state within 30 seconds',
+]
+missing_runtime_capture = [token for token in required_runtime_capture if token not in runtime_navigation]
+if missing_runtime_capture:
+    raise SystemExit("HOME 4F RUNTIME RED: stable Home capture gate missing " + ", ".join(missing_runtime_capture))
 
 print("HOME 4F MEDIA/LIFECYCLE GREEN: account-scoped Home cache, Saved-post media and pagination, authoritative viewer interaction state, media retry/error handling, lifecycle safety, accessibility, theme, and privacy boundaries are wired")
