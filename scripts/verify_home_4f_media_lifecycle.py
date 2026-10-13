@@ -91,6 +91,9 @@ required_saved = [
     "AND NOT EXISTS (SELECT 1 FROM blocks b",
     "ORDER BY sp.created_at DESC LIMIT $2 OFFSET $3",
     "saved_at",
+    "COALESCE(l.likes,0) AS like_count",
+    "COALESCE(c.comments,0) AS comment_count",
+    "AS liked_by_current_user",
 ]
 missing_saved = [token for token in required_saved if token not in discovery]
 if missing_saved:
@@ -105,6 +108,8 @@ required_saved_panel = [
     'Load more saved posts',
     'FynxPostMediaViewer(',
     'FynxRemoteSocialClient.save(context, entry.post.id, false)',
+    'likeCount = o.optInt("likeCount"), commentCount = o.optInt("commentCount")',
+    'likedByCurrentUser = o.optBoolean("likedByCurrentUser")',
 ]
 missing_saved_panel = [token for token in required_saved_panel if token not in saved_panel]
 if missing_saved_panel:
