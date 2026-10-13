@@ -34,18 +34,37 @@ import java.io.File
 data class FynxPostViewerItem(val id: String, val mediaType: String, val position: Int, val mediaUrl: String)
 
 @Composable
-fun FynxPostMediaViewer(context: Context, post: FynxRemoteSocialClient.RemotePost, media: List<FynxPostViewerItem>, initialIndex: Int = 0, onDismiss: () -> Unit) {
+fun FynxPostMediaViewer(
+    context: Context,
+    post: FynxRemoteSocialClient.RemotePost,
+    media: List<FynxPostViewerItem>,
+    initialIndex: Int = 0,
+    onDismiss: () -> Unit,
+    onPostChanged: (liked: Boolean, likeCount: Int, saved: Boolean, savedCount: Int, reposted: Boolean, repostCount: Int, commentCount: Int) -> Unit = { _, _, _, _, _, _, _ -> }
+) {
     if (media.isEmpty()) return
     val pager = rememberPagerState(initialPage = initialIndex.coerceIn(0, media.lastIndex), pageCount = { media.size })
     val scope = rememberCoroutineScope()
     var liked by remember(post.id) { mutableStateOf(post.likedByCurrentUser) }
     var likes by remember(post.id) { mutableIntStateOf(post.likeCount) }
     var saved by remember(post.id) { mutableStateOf(false) }
+    var savedCount by remember(post.id) { mutableIntStateOf(0) }
     var reposted by remember(post.id) { mutableStateOf(false) }
+    var repostCount by remember(post.id) { mutableIntStateOf(0) }
     var comments by remember(post.id) { mutableIntStateOf(post.commentCount) }
-    var busy by remember(post.id) { mutableStateOf(false) }
+    var busy by remember(post.id) { mutableStateOf(true) }
     var commentsOpen by remember(post.id) { mutableStateOf(false) }
     var error by remember(post.id) { mutableStateOf<String?>(null) }
+    LaunchedEffect(post.id) {
+        FynxRemoteSocialClient.interactionState(context, post.id)
+            .onSuccess { state ->
+                saved = state.saved; savedCount = state.savedCount
+                reposted = state.reposted; repostCount = state.repostCount
+                onPostChanged(liked, likes, saved, savedCount, reposted, repostCount, comments)
+            }
+            .onFailure { cause -> error = cause.message ?: "Post interaction state could not be loaded." }
+        busy = false
+    }
     BackHandler { onDismiss() }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(Modifier.fillMaxSize(), color = Color.Black) {
@@ -65,24 +84,24 @@ fun FynxPostMediaViewer(context: Context, post: FynxRemoteSocialClient.RemotePos
                 if (post.text.isNotBlank()) Text(post.text, Modifier.fillMaxWidth().padding(12.dp), color = Color.White, maxLines = 4)
                 Row(Modifier.fillMaxWidth().padding(4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                     ViewerAction(if (liked) Icons.Default.Favorite else Icons.Default.FavoriteBorder, likes.toString(), liked, !busy) {
-                        if (!busy) { busy = true; scope.launch { FynxRemoteSocialClient.like(context, post.id).onSuccess { r -> liked = r.first; likes = r.second }.onFailure { error = it.message }; busy = false } }
+                        if (!busy) { busy = true; scope.launch { FynxRemoteSocialClient.like(context, post.id).onSuccess { r -> liked = r.first; likes = r.second; onPostChanged(liked, likes, saved, savedCount, reposted, repostCount, comments) }.onFailure { error = it.message }; busy = false } }
                     }
                     ViewerAction(Icons.Default.ChatBubbleOutline, comments.toString(), false, !busy) { commentsOpen = true }
                     ViewerAction(Icons.Default.Share, "Share", false, !busy) {
                         runCatching { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, (post.authorDisplayName.ifBlank { post.authorUsername } + " on FYNX:\n" + post.text).trim()) }, "Share with…")) }.onFailure { error = it.message }
                     }
-                    ViewerAction(if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, "Save", saved, !busy) {
-                        if (!busy) { busy = true; scope.launch { FynxRemoteSocialClient.save(context, post.id, !saved).onSuccess { r -> saved = r.first }.onFailure { error = it.message }; busy = false } }
+                    ViewerAction(if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, if (saved) "Saved" else "Save", saved, !busy) {
+                        if (!busy) { busy = true; scope.launch { FynxRemoteSocialClient.save(context, post.id, !saved).onSuccess { r -> saved = r.first; savedCount = r.second; onPostChanged(liked, likes, saved, savedCount, reposted, repostCount, comments) }.onFailure { error = it.message }; busy = false } }
                     }
-                    ViewerAction(Icons.Default.Repeat, "Repost", reposted, !busy) {
-                        if (!busy) { busy = true; scope.launch { FynxRemoteSocialClient.repost(context, post.id, !reposted).onSuccess { r -> reposted = r.first }.onFailure { error = it.message }; busy = false } }
+                    ViewerAction(Icons.Default.Repeat, if (reposted) "Reposted" else "Repost", reposted, !busy) {
+                        if (!busy) { busy = true; scope.launch { FynxRemoteSocialClient.repost(context, post.id, !reposted).onSuccess { r -> reposted = r.first; repostCount = r.second; onPostChanged(liked, likes, saved, savedCount, reposted, repostCount, comments) }.onFailure { error = it.message }; busy = false } }
                     }
                 }
                 error?.let { Text(it ?: "", Modifier.padding(8.dp), color = Color.White.copy(alpha = .8f), style = MaterialTheme.typography.labelSmall) }
             }
         }
     }
-    if (commentsOpen) FynxHomeCommentsPanel(post = post.copy(likeCount = likes, commentCount = comments, likedByCurrentUser = liked), onClose = { commentsOpen = false }, onCommentCountChanged = { comments = it })
+    if (commentsOpen) FynxHomeCommentsPanel(post = post.copy(likeCount = likes, commentCount = comments, likedByCurrentUser = liked), onClose = { commentsOpen = false }, onCommentCountChanged = { comments = it; onPostChanged(liked, likes, saved, savedCount, reposted, repostCount, comments) })
 }
 
 @Composable private fun FynxViewerMediaPage(context: Context, item: FynxPostViewerItem) {

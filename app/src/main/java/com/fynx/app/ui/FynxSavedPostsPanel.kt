@@ -17,9 +17,11 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,65 +38,81 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
-private data class SavedPostEntry(
-    val post: FynxRemoteSocialClient.RemotePost,
-    val savedAtMillis: Long
-)
+private data class SavedPostEntry(val post: FynxRemoteSocialClient.RemotePost, val savedAtMillis: Long)
 
 @Composable
-fun FynxSavedPostsPanel(
-    onOpenAuthorProfile: (String) -> Unit = {}
-) {
+fun FynxSavedPostsPanel(onOpenAuthorProfile: (String) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var posts by remember { mutableStateOf<List<SavedPostEntry>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
+    var loadingMore by remember { mutableStateOf(false) }
+    var hasMore by remember { mutableStateOf(false) }
+    var nextOffset by remember { mutableStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
     var refreshToken by remember { mutableStateOf(0) }
+    var unsavingIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var mediaViewerPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
+    var mediaViewerItems by remember { mutableStateOf<List<FynxPostViewerItem>>(emptyList()) }
+    var openingMediaPostId by remember { mutableStateOf<String?>(null) }
+
+    suspend fun fetchPage(offset: Int): Result<Pair<List<SavedPostEntry>, Boolean>> = runCatching {
+        val raw = FynxBackendClient.get(context, "/api/social/saved?limit=50&offset=$offset").getOrThrow()
+        val root = JSONObject(raw)
+        val array = root.optJSONArray("posts") ?: JSONArray()
+        val page = buildList {
+            for (i in 0 until array.length()) {
+                val o = array.getJSONObject(i)
+                val mediaId = o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }
+                val mediaType = o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" }
+                val post = FynxRemoteSocialClient.RemotePost(
+                    id = o.optString("id"), authorId = o.optString("authorId"),
+                    authorUsername = o.optString("authorUsername"), authorDisplayName = o.optString("authorDisplayName"),
+                    text = o.optString("text"), visibility = o.optString("visibility"),
+                    mediaId = mediaId, mediaType = mediaType,
+                    mediaUrl = mediaId?.let { "/api/social/media/$it" },
+                    timestamp = o.optLong("timestamp"), likeCount = 0, commentCount = 0,
+                    likedByCurrentUser = false, followedByCurrentUser = false
+                )
+                if (post.id.isNotBlank() && post.id != "null") add(SavedPostEntry(post, o.optLong("savedAtMillis")))
+            }
+        }
+        page to root.optBoolean("hasMore", page.size == 50)
+    }
 
     LaunchedEffect(refreshToken) {
-        loading = true
+        loading = posts.isEmpty()
         error = null
-        FynxBackendClient.get(context, "/api/social/saved?limit=50&offset=0")
-            .mapCatching { raw ->
-                val root = JSONObject(raw)
-                val array = root.optJSONArray("posts") ?: JSONArray()
-                buildList {
-                    for (i in 0 until array.length()) {
-                        val o = array.getJSONObject(i)
-                        val post = FynxRemoteSocialClient.RemotePost(
-                            id = o.optString("id"),
-                            authorId = o.optString("authorId"),
-                            authorUsername = o.optString("authorUsername"),
-                            authorDisplayName = o.optString("authorDisplayName"),
-                            text = o.optString("text"),
-                            visibility = o.optString("visibility"),
-                            mediaId = o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" },
-                            mediaType = o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" },
-                            mediaUrl = null,
-                            timestamp = o.optLong("timestamp"),
-                            likeCount = 0,
-                            commentCount = 0,
-                            likedByCurrentUser = false,
-                            followedByCurrentUser = false
-                        )
-                        add(SavedPostEntry(post, o.optLong("savedAtMillis")))
-                    }
-                }
-            }
-            .onSuccess { result -> posts = result; loading = false }
+        fetchPage(0)
+            .onSuccess { (page, more) -> posts = page; nextOffset = page.size; hasMore = more; loading = false }
             .onFailure { cause -> error = cause.message ?: "Saved posts could not be loaded."; loading = false }
+    }
+
+    fun loadMore() {
+        if (loading || loadingMore || !hasMore) return
+        loadingMore = true
+        error = null
+        scope.launch {
+            fetchPage(nextOffset)
+                .onSuccess { (page, more) -> posts = (posts + page).distinctBy { it.post.id }; nextOffset += page.size; hasMore = more; loadingMore = false }
+                .onFailure { cause -> error = cause.message ?: "More saved posts could not be loaded."; loadingMore = false }
+        }
     }
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            IconButton(onClick = { refreshToken++ }, enabled = !loading) {
-                Icon(Icons.Default.Refresh, "Refresh saved posts")
-            }
+            IconButton(onClick = { refreshToken++ }, enabled = !loading && !loadingMore) { Icon(Icons.Default.Refresh, "Refresh saved posts") }
+        }
+        if (error != null && posts.isNotEmpty()) {
+            Text(error!!, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.error)
+            OutlinedButton(onClick = { if (hasMore && nextOffset > 0) loadMore() else refreshToken++ }, modifier = Modifier.padding(horizontal = 16.dp)) { Text("Retry") }
         }
         when {
-            loading -> Text("Loading saved posts…", modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            error != null -> Text(error!!, modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
+            loading && posts.isEmpty() -> Text("Loading saved posts…", modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            error != null && posts.isEmpty() -> Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(error ?: "Saved posts could not be loaded.", color = MaterialTheme.colorScheme.error)
+                OutlinedButton(onClick = { refreshToken++ }, enabled = !loading) { Text("Retry") }
+            }
             posts.isEmpty() -> Column(Modifier.fillMaxWidth().padding(24.dp)) {
                 Icon(Icons.Default.BookmarkBorder, null)
                 Spacer(Modifier.height(8.dp))
@@ -103,56 +121,66 @@ fun FynxSavedPostsPanel(
             }
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
                 items(posts, key = { it.post.id }) { entry ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = FynxDesign.CardShape,
-                        colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface)
-                    ) {
+                    Card(modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                         Column(Modifier.padding(14.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Column(Modifier.weight(1f)) {
-                                    Text(
-                                        entry.post.authorDisplayName.ifBlank { entry.post.authorUsername },
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Text(
-                                        "@${entry.post.authorUsername.removePrefix("@")} · ${entry.post.visibility}",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(top = 2.dp)
-                                    )
+                                    Text(entry.post.authorDisplayName.ifBlank { entry.post.authorUsername }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                    Text("@${entry.post.authorUsername.removePrefix("@")} · ${entry.post.visibility}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
                                 }
-                                IconButton(onClick = {
+                                IconButton(enabled = entry.post.id !in unsavingIds, onClick = {
+                                    unsavingIds = unsavingIds + entry.post.id
                                     scope.launch {
                                         FynxRemoteSocialClient.save(context, entry.post.id, false)
-                                            .onSuccess { posts = posts.filterNot { it.post.id == entry.post.id } }
+                                            .onSuccess { posts = posts.filterNot { it.post.id == entry.post.id }; nextOffset = (nextOffset - 1).coerceAtLeast(0); hasMore = true }
+                                            .onFailure { cause -> error = cause.message ?: "Post could not be removed from Saved." }
+                                        unsavingIds = unsavingIds - entry.post.id
                                     }
-                                }) {
-                                    Icon(Icons.Default.Bookmark, "Unsave post")
-                                }
+                                }) { Icon(Icons.Default.Bookmark, if (entry.post.id in unsavingIds) "Removing saved post" else "Unsave post") }
                             }
                             if (entry.post.text.isNotBlank()) {
                                 Spacer(Modifier.height(8.dp))
                                 Text(entry.post.text, style = MaterialTheme.typography.bodyLarge)
                             }
-                            if (entry.post.mediaId != null) {
+                            if (entry.post.mediaUrl != null && entry.post.mediaType != null) {
                                 Spacer(Modifier.height(8.dp))
-                                Text("Media attached", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                RemoteSocialMedia(path = entry.post.mediaUrl, type = entry.post.mediaType, playbackActive = false, onOpenMedia = {
+                                    if (openingMediaPostId != entry.post.id) {
+                                        openingMediaPostId = entry.post.id
+                                        scope.launch {
+                                            val listed = FynxHomePostMediaClient.list(context, entry.post.id).getOrNull().orEmpty()
+                                            val viewerItems = listed.map { FynxPostViewerItem(it.id, it.mediaType, it.position, it.mediaUrl) }
+                                                .ifEmpty { listOf(FynxPostViewerItem(entry.post.mediaId ?: entry.post.id, entry.post.mediaType, 0, entry.post.mediaUrl)) }
+                                            mediaViewerPost = entry.post
+                                            mediaViewerItems = viewerItems
+                                            openingMediaPostId = null
+                                        }
+                                    }
+                                })
+                                if (openingMediaPostId == entry.post.id) Text("Opening media…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                             }
                             Spacer(Modifier.height(8.dp))
-                            Text(
-                                "View @${entry.post.authorUsername.removePrefix("@")} profile",
-                                color = MaterialTheme.colorScheme.primary,
-                                style = MaterialTheme.typography.labelLarge,
-                                modifier = Modifier
-                                    .clickable { onOpenAuthorProfile(entry.post.authorId) }
-                                    .padding(vertical = 4.dp)
-                            )
+                            Text("View @${entry.post.authorUsername.removePrefix("@")} profile", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clickable { onOpenAuthorProfile(entry.post.authorId) }.padding(vertical = 4.dp))
                         }
+                    }
+                }
+                if (hasMore) item(key = "saved_posts_load_more") {
+                    OutlinedButton(onClick = { loadMore() }, enabled = !loadingMore, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                        if (loadingMore) CircularProgressIndicator(Modifier.height(18.dp), strokeWidth = 2.dp) else Text("Load more saved posts")
                     }
                 }
             }
         }
+    }
+
+    val viewerPost = mediaViewerPost
+    if (viewerPost != null && mediaViewerItems.isNotEmpty()) {
+        FynxPostMediaViewer(
+            context = context, post = viewerPost, media = mediaViewerItems,
+            onDismiss = { mediaViewerPost = null; mediaViewerItems = emptyList() },
+            onPostChanged = { _, _, saved, _, _, _, _ ->
+                if (!saved) { posts = posts.filterNot { it.post.id == viewerPost.id }; nextOffset = (nextOffset - 1).coerceAtLeast(0); hasMore = true }
+            }
+        )
     }
 }

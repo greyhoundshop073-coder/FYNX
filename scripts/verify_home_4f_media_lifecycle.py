@@ -8,12 +8,16 @@ PANEL = ROOT / "app/src/main/java/com/fynx/app/ui/HomePanel.kt"
 LIFECYCLE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeLifecycle.kt"
 MEDIA_CACHE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxMediaCache.kt"
 DISCOVERY = ROOT / "backend/discoveryRoutes.js"
+SAVED_PANEL = ROOT / "app/src/main/java/com/fynx/app/ui/FynxSavedPostsPanel.kt"
+VIEWER = ROOT / "app/src/main/java/com/fynx/app/ui/FynxPostMediaViewer.kt"
 
 home = HOME.read_text(encoding="utf-8")
 panel = PANEL.read_text(encoding="utf-8")
 lifecycle = LIFECYCLE.read_text(encoding="utf-8")
 media_cache = MEDIA_CACHE.read_text(encoding="utf-8")
 discovery = DISCOVERY.read_text(encoding="utf-8")
+saved_panel = SAVED_PANEL.read_text(encoding="utf-8")
+viewer = VIEWER.read_text(encoding="utf-8")
 
 required_home = {
     "FynxMediaCache.getOrDownload": "real media cache/download path",
@@ -89,4 +93,38 @@ missing_saved = [token for token in required_saved if token not in discovery]
 if missing_saved:
     raise SystemExit("HOME 4F SAVED RED: missing " + ", ".join(missing_saved))
 
-print("HOME 4F MEDIA/LIFECYCLE GREEN: existing Home media, authenticated social-media cache paths, accessibility, theme, pull-to-refresh lifecycle, and durable Saved-post privacy/pagination boundaries are wired")
+required_saved_panel = [
+    'FynxHomePostMediaClient.list(context, entry.post.id)',
+    'RemoteSocialMedia(',
+    'mediaUrl = mediaId?.let { "/api/social/media/$it" }',
+    'hasMore',
+    'nextOffset',
+    'Load more saved posts',
+    'FynxPostMediaViewer(',
+    'FynxRemoteSocialClient.save(context, entry.post.id, false)',
+]
+missing_saved_panel = [token for token in required_saved_panel if token not in saved_panel]
+if missing_saved_panel:
+    raise SystemExit("HOME 4F SAVED RED: saved list media/pagination/state missing " + ", ".join(missing_saved_panel))
+
+required_viewer = [
+    'FynxRemoteSocialClient.interactionState(context, post.id)',
+    'onPostChanged(liked, likes, saved, savedCount, reposted, repostCount, comments)',
+    'if (saved) "Saved" else "Save"',
+    'if (reposted) "Reposted" else "Repost"',
+]
+missing_viewer = [token for token in required_viewer if token not in viewer]
+if missing_viewer:
+    raise SystemExit("HOME 4F VIEWER RED: media viewer interaction synchronization missing " + ", ".join(missing_viewer))
+
+required_media_recovery = [
+    'var mediaLoading by remember(path)',
+    'var mediaFailed by remember(path)',
+    'var reloadNonce by remember(path)',
+    'Text("Retry media")',
+]
+missing_media_recovery = [token for token in required_media_recovery if token not in home]
+if missing_media_recovery:
+    raise SystemExit("HOME 4F MEDIA RED: media loading/error/retry state missing " + ", ".join(missing_media_recovery))
+
+print("HOME 4F MEDIA/LIFECYCLE GREEN: account-scoped Home cache, Saved-post media and pagination, authoritative viewer interaction state, media retry/error handling, lifecycle safety, accessibility, theme, and privacy boundaries are wired")
