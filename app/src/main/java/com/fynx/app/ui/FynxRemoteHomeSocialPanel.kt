@@ -65,7 +65,7 @@ private const val FEED_REFRESH_DEBOUNCE_MS = 1000L
 private data class HomePeopleRecommendation(val username: String, val displayName: String, val verified: Boolean, val mutualFriends: Int, val reason: String, val photoId: String?)
 
 @Composable
-fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, initialPostId: String? = null, initialCommentId: String? = null, onInitialPostConsumed: () -> Unit = {}, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onOpenMarketplaceListing: (String) -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}, header: (@Composable () -> Unit)? = null) {
+fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: String, initialPostId: String? = null, initialCommentId: String? = null, onInitialPostConsumed: () -> Unit = {}, onOpenFindPeople: () -> Unit, onOpenMarketplace: () -> Unit = {}, onOpenMarketplaceListing: (String) -> Unit = {}, onCreatePost: () -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}, header: (@Composable () -> Unit)? = null, networkReady: Boolean? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val publishRefreshKey = FynxHomeLifecycleRefreshBus.currentVersion()
@@ -316,6 +316,22 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         feedRequestInFlight = true; lastFeedRequestAt = now
         scope.launch {
             loading = true
+            val activeNetworkReady = networkReady ?: (FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE)
+            if (!activeNetworkReady) {
+                val cachedPage = FynxRemoteSocialClient.cachedFeedPage(context)
+                if (posts.isEmpty() && cachedPage != null) {
+                    posts = cachedPage.posts
+                    hasMore = cachedPage.hasMore
+                    feedNextCursor = cachedPage.nextCursor
+                    interactionStates = emptyMap()
+                    reactionStates = emptyMap()
+                    postMedia = emptyMap()
+                }
+                error = if (posts.isEmpty()) "You're offline. Connect to a network to load your feed." else null
+                loading = false
+                feedRequestInFlight = false
+                return@launch
+            }
             val hadFreshCache = !forceRefresh && FynxRemoteSocialClient.hasCachedFeed(context)
             var cachedRevalidationStarted = false
             FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
@@ -348,6 +364,9 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
 
     LaunchedEffect(publishRefreshKey) {
         reload(forceRefresh = publishRefreshKey > 0)
+    }
+    LaunchedEffect(networkReady) {
+        if (networkReady == true) reload()
     }
     LaunchedEffect(posts, initialPostId, initialCommentId) {
         val target = initialPostId?.trim()?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
