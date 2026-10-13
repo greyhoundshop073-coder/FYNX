@@ -18,12 +18,12 @@ fun SecureMoneyVaultPanel() {
     var hideBalance by remember { mutableStateOf(true) }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Secure Money Vault 🔐", style = MaterialTheme.typography.headlineSmall)
-        Text("Protect private money information on this device.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Local Money Lock (Demo) 🔐", style = MaterialTheme.typography.headlineSmall)
+        Text("This demo only hides parts of this screen. It does not encrypt or protect your financial records.", color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Vault protection", style = MaterialTheme.typography.titleMedium)
+                Text("Local screen lock", style = MaterialTheme.typography.titleMedium)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(if (enabled) "PIN protection enabled" else "PIN protection disabled")
                     Switch(checked = enabled, onCheckedChange = {
@@ -45,7 +45,7 @@ fun SecureMoneyVaultPanel() {
                         } else message = "Incorrect PIN"
                     }) { Text("Unlock") }
                 } else {
-                    Text("Vault unlocked 🟢")
+                    Text("Screen unlocked 🟢")
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(if (hideBalance) "Balances hidden" else "Balances visible")
                         Switch(checked = !hideBalance, onCheckedChange = { hideBalance = !it })
@@ -71,7 +71,7 @@ fun SecureMoneyVaultPanel() {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 Text("Security note 🛡️", style = MaterialTheme.typography.titleMedium)
-                Text("This is a local UI protection layer. Real financial credentials, banking tokens, and production-grade secret storage should be added later with Android secure storage and proper authentication.", style = MaterialTheme.typography.bodySmall)
+                Text("Not secure storage: this screen does not protect real financial data, banking credentials, or payment tokens. Do not enter sensitive information here. A production vault requires authenticated access and Android Keystore-backed encryption before it can be described as secure.", style = MaterialTheme.typography.bodySmall)
             }
         }
     }
