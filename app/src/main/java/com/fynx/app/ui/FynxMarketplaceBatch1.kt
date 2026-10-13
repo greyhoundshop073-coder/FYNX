@@ -35,6 +35,7 @@ object FynxMarketplaceBatch1 {
         if (listing.description.trim().length < 5) add("Product description is required")
         if (listing.price <= 0.0) add("Price must be greater than zero")
         if (listing.currency.isBlank()) add("Currency is required")
+        else if (!FynxMarketplaceSellerFlowSupport.isSupportedCurrency(listing.currency)) add("Currency must be NGN or USD")
         if (listing.category.isBlank()) add("Category is required")
         if (listing.quantity < 0) add("Quantity cannot be negative")
         if (listing.media.isEmpty()) add("At least one product photo or video is required")

@@ -84,3 +84,51 @@ internal suspend fun verifyMarketplacePayment(
     }
     return Result.failure(lastFailure ?: IllegalStateException("Payment verification failed."))
 }
+
+internal suspend fun initializeMarketplaceCheckoutGroupPayment(
+    context: Context,
+    checkoutId: String,
+    customerEmail: String
+): Result<FynxMarketplacePayment> {
+    val email = customerEmail.trim()
+    if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) return Result.failure(IllegalArgumentException("Enter a valid email address."))
+    if (checkoutId.trim().isEmpty()) return Result.failure(IllegalArgumentException("A valid checkout is required."))
+    return FynxBackendClient.postJson(
+        context,
+        "/api/marketplace/checkout-groups/${Uri.encode(checkoutId.trim())}/payment",
+        JSONObject().put("email", email).toString()
+    ).mapCatching { raw ->
+        val o = JSONObject(raw)
+        val authorizationUrl = o.optString("authorizationUrl").trim()
+        val reference = o.optString("reference").trim()
+        val amountSubunit = o.optLong("amountSubunit", -1L)
+        val currency = o.optString("currency", "NGN").trim().uppercase()
+        require(authorizationUrl.startsWith("https://")) { "Payment provider returned an invalid checkout URL." }
+        require(reference.startsWith("FYNX-CHECKOUT-")) { "Payment provider returned an invalid checkout reference." }
+        require(amountSubunit > 0L) { "Payment provider returned an invalid amount." }
+        require(currency == "NGN" || currency == "USD") { "Payment provider returned an unsupported currency." }
+        FynxMarketplacePayment(authorizationUrl, o.optString("accessCode").takeIf { it.isNotBlank() }, reference, amountSubunit / 100.0, currency)
+    }
+}
+
+internal suspend fun verifyMarketplaceCheckoutGroupPayment(
+    context: Context,
+    reference: String
+): Result<String> {
+    val normalizedReference = reference.trim()
+    if (!normalizedReference.startsWith("FYNX-CHECKOUT-")) return Result.failure(IllegalArgumentException("A valid checkout payment reference is required."))
+    val encoded = Uri.encode(normalizedReference)
+    var lastFailure: Throwable? = null
+    repeat(3) { attempt ->
+        val result = FynxBackendClient.get(context, "/api/marketplace/checkout-groups/verify/$encoded").mapCatching { raw ->
+            val o = JSONObject(raw)
+            require(o.optBoolean("verified")) { "Payment has not been verified yet." }
+            require(o.optString("status").equals("PAID", ignoreCase = true)) { "Checkout payment is not complete yet." }
+            o.optString("status").ifBlank { "PAID" }
+        }
+        if (result.isSuccess) return result
+        lastFailure = result.exceptionOrNull()
+        if (attempt < 2) delay(1_000L * (attempt + 1))
+    }
+    return Result.failure(lastFailure ?: IllegalStateException("Checkout payment verification failed."))
+}
