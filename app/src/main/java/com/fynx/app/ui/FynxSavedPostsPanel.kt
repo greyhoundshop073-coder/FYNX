@@ -81,7 +81,7 @@ fun FynxSavedPostsPanel(onOpenAuthorProfile: (String) -> Unit = {}) {
     }
 
     LaunchedEffect(refreshToken) {
-        loading = posts.isEmpty()
+        loading = true
         error = null
         fetchPage(0)
             .onSuccess { (page, more) -> posts = page; nextOffset = page.size; hasMore = more; loading = false }

@@ -78,11 +78,11 @@ for source, needles in ((client, ('desired: Boolean? = null',)), (home, ('desire
 for needle in ('FynxRemoteProfileAvatar(','profilePhotoMediaId','post.authorDisplayName.ifBlank { post.authorUsername }','post.mediaUrl?.let'):
     require(home, needle, f"real Home identity/media surface {needle}")
 
-require(saved_panel, 'FynxBackendClient.get(context, "/api/social/saved?limit=50&offset=0")', "Saved Posts real backend retrieval")
+require(saved_panel, 'FynxBackendClient.get(context, "/api/social/saved?limit=50&offset=$offset")', "Saved Posts paginated backend retrieval")
 require(saved_panel, 'FynxRemoteSocialClient.save(context, entry.post.id, false)', "Saved Posts real unsave path")
 require(saved_panel, 'posts = posts.filterNot { it.post.id == entry.post.id }', "Saved Posts local reconciliation after unsave")
 require(saved_panel, 'var refreshToken by remember { mutableStateOf(0) }', "Saved Posts refresh state")
-require(saved_panel, 'IconButton(onClick = { refreshToken++ }, enabled = !loading)', "Saved Posts refresh control")
+require(saved_panel, 'IconButton(onClick = { refreshToken++ }, enabled = !loading && !loadingMore)', "Saved Posts refresh control")
 require(saved_panel, 'onOpenAuthorProfile(entry.post.authorId)', "Saved Posts author profile integration")
 require(saved_panel, '.clickable { onOpenAuthorProfile(entry.post.authorId) }', "Saved Posts clickable author profile control")
 require(saved_panel, 'import androidx.compose.foundation.clickable', "Saved Posts clickable interaction import")
