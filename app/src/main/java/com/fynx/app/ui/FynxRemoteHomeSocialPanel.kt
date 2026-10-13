@@ -980,26 +980,57 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
             }
         }
     }
-    if (fullscreen && file != null && onOpenMarketplace == null && onOpenMedia == null) {
+    if (fullscreen && file != null) {
         Dialog(onDismissRequest = { fullscreen = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
             Box(Modifier.fillMaxSize().background(Color.Black)) {
                 if (type == "video") {
                     var fullscreenVideoView by remember(file) { mutableStateOf<VideoView?>(null) }
+                    var fullscreenPlayer by remember(file) { mutableStateOf<MediaPlayer?>(null) }
+                    var fullscreenPlaying by remember(file) { mutableStateOf(false) }
+                    var fullscreenMuted by remember(file) { mutableStateOf(true) }
                     AndroidView(
                         factory = { ctx ->
                             FynxPassiveVideoView(ctx).apply {
                                 fullscreenVideoView = this
                                 layoutParams = ViewGroup.LayoutParams(-1, -1)
                                 setVideoPath(file!!.absolutePath)
-                                setOnPreparedListener { player -> player.isLooping = true; player.start() }
+                                setOnPreparedListener { player ->
+                                    fullscreenPlayer = player
+                                    player.isLooping = true
+                                    player.setVolume(0f, 0f)
+                                    player.start()
+                                    fullscreenPlaying = true
+                                }
+                                setOnCompletionListener { fullscreenPlaying = false }
                             }
                         },
                         modifier = Modifier.fillMaxSize()
                     )
+                    IconButton(
+                        onClick = {
+                            val view = fullscreenVideoView
+                            if (view != null) {
+                                if (fullscreenPlaying) { view.pause(); fullscreenPlaying = false }
+                                else { view.start(); fullscreenPlaying = true }
+                            }
+                        },
+                        modifier = Modifier.align(Alignment.Center).size(64.dp)
+                    ) {
+                        Icon(if (fullscreenPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (fullscreenPlaying) "Pause full-screen video" else "Play full-screen video", tint = Color.White, modifier = Modifier.size(42.dp))
+                    }
+                    IconButton(
+                        onClick = {
+                            fullscreenMuted = !fullscreenMuted
+                            runCatching { fullscreenPlayer?.setVolume(if (fullscreenMuted) 0f else 1f, if (fullscreenMuted) 0f else 1f) }
+                        },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+                    ) { Icon(if (fullscreenMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp, if (fullscreenMuted) "Unmute full-screen video" else "Mute full-screen video", tint = Color.White) }
                     DisposableEffect(file) {
                         onDispose {
-                            fullscreenVideoView?.stopPlayback()
+                            runCatching { fullscreenVideoView?.stopPlayback() }
                             fullscreenVideoView = null
+                            fullscreenPlayer = null
+                            fullscreenPlaying = false
                         }
                     }
                 } else {

@@ -123,6 +123,9 @@ required_media_recovery = [
     'var mediaFailed by remember(path)',
     'var reloadNonce by remember(path)',
     'Text("Retry media")',
+    'if (fullscreen && file != null)',
+    'Pause full-screen video',
+    'Unmute full-screen video',
 ]
 missing_media_recovery = [token for token in required_media_recovery if token not in home]
 if missing_media_recovery:
