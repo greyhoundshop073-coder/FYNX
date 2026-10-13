@@ -52,6 +52,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     val appConnectionState by appConnectionManager.state.collectAsState()
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf("Home") }
+    var navigationHistory by remember { mutableStateOf(listOf("Home")) }
+    var backNavigationRequested by remember { mutableStateOf(false) }
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
     var openGroup by remember { mutableStateOf<String?>(null) }
     var profileUser by remember { mutableStateOf<String?>(null) }
@@ -186,6 +188,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         }
     }
     LaunchedEffect(selected) {
+        if (backNavigationRequested) {
+            backNavigationRequested = false
+            navigationHistory = navigationHistory.dropLast(1).ifEmpty { listOf("Home") }
+        } else if (navigationHistory.lastOrNull() != selected) {
+            navigationHistory = (navigationHistory + selected).takeLast(30)
+        }
         if (selected != "Marketplace") marketplaceListingId = null
 
         // Deep-link commands are one-shot navigation intents. Once the user leaves
@@ -230,9 +238,18 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     BackHandler(enabled = profileUser != null) { profileUser = null }
     BackHandler(enabled = openChat != null) { openChat = null }
     BackHandler(enabled = openGroup != null && openChat == null) { openGroup = null }
-    BackHandler(enabled = openChat == null && openGroup == null && selected == "Contacts") { selected = "Chats" }
-    BackHandler(enabled = openChat == null && openGroup == null && selected == "Saved Posts") { selected = "Features" }
-    BackHandler(enabled = openChat == null && openGroup == null && selected != "Home" && selected != "Contacts" && selected != "Saved Posts") { selected = "Home" }
+    BackHandler(enabled = openChat == null && openGroup == null && selected == "Contacts") {
+        backNavigationRequested = true
+        selected = navigationHistory.getOrNull(navigationHistory.lastIndex - 1) ?: "Chats"
+    }
+    BackHandler(enabled = openChat == null && openGroup == null && selected == "Saved Posts") {
+        backNavigationRequested = true
+        selected = navigationHistory.getOrNull(navigationHistory.lastIndex - 1) ?: "Features"
+    }
+    BackHandler(enabled = openChat == null && openGroup == null && selected != "Home" && selected != "Contacts" && selected != "Saved Posts") {
+        backNavigationRequested = true
+        selected = navigationHistory.getOrNull(navigationHistory.lastIndex - 1) ?: "Home"
+    }
     if (profileUser != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { OtherUserProfilePanel(username = profileUser!!, onBack = { profileUser = null }, onOpenStatus = { statusUsername -> profileUser = null; statusOpenOwner = statusUsername; selected = "Stories" }, onMessage = { username -> openChatMarketplaceListingId = null; val normalized = username.trim().let { if (it.startsWith("@")) it else "@$it" }; openChat = FynxChatStore.loadPreviews(context).firstOrNull { it.username.equals(normalized, true) } ?: ChatPreview(normalized.removePrefix("@").ifBlank { "FYNX user" }, normalized, "Start a conversation", "Now"); FynxChatStore.savePreview(context, openChat!!); profileUser = null }) }; return }
     if (openChat != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { ConversationPanel(chat = openChat!!, marketplaceListingId = openChatMarketplaceListingId, onBack = { openChat = null; openChatMarketplaceListingId = null }, onOpenProfile = { profileUser = it; openChat = null }, onVoiceCall = { callTarget = openChat!!.username; callVideo = false; openChat = null; selected = "Calls" }, onVideoCall = { callTarget = openChat!!.username; callVideo = true; openChat = null; selected = "Calls" }) }; return }
     if (openGroup != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { FynxGroupConversationPanel(groupId = openGroup!!, currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", onBack = { openGroup = null }) }; return }
