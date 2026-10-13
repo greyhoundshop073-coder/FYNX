@@ -43,6 +43,7 @@ fun ReceiptsExpensePanel() {
     var date by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var search by remember { mutableStateOf("") }
+    var validationError by remember { mutableStateOf<String?>(null) }
     var records by remember(context) { mutableStateOf(loadReceiptRecords(context)) }
     var nextId by remember(context) { mutableLongStateOf((records.maxOfOrNull { it.id } ?: 0L) + 1L) }
 
@@ -67,12 +68,18 @@ fun ReceiptsExpensePanel() {
         OutlinedTextField(date, { date = it }, label = { Text("Date") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(note, { note = it }, label = { Text("Notes (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
+        validationError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         Button(onClick = {
             val value = amount.toDoubleOrNull()
-            if (title.isNotBlank() && category.isNotBlank() && value != null && value > 0 && date.isNotBlank()) {
+            when {
+                title.isBlank() || category.isBlank() -> validationError = "Enter a receipt name and category."
+                value == null || !value.isFinite() || value <= 0 -> validationError = "Enter a valid amount greater than zero."
+                !FynxMoneyStore.isValidLocalDate(date) -> validationError = "Use a valid date in YYYY-MM-DD format."
+                else -> {
                 records = records + ReceiptRecord(nextId++, title.trim(), category.trim(), value, date.trim(), note.trim())
                 saveReceiptRecords(context, records)
-                title = ""; category = ""; amount = ""; date = ""; note = ""
+                title = ""; category = ""; amount = ""; date = ""; note = ""; validationError = null
+                }
             }
         }) { Text("Save Record") }
         Spacer(Modifier.height(10.dp))
