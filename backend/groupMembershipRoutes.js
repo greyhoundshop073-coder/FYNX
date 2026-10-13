@@ -59,9 +59,12 @@ export function registerGroupMembershipRoutes({ app }) {
       if (!validId(groupId)) return res.status(400).json({ error: 'invalid group id' });
       const actor = await member(groupId, req.user.sub);
       if (!actor) return res.status(403).json({ error: 'group membership required' });
-      const settings = (await pool.query('SELECT add_members FROM fynx_groups WHERE id=$1 LIMIT 1', [groupId])).rows[0];
+      const settings = (await pool.query('SELECT add_members, approve_new_members FROM fynx_groups WHERE id=$1 LIMIT 1', [groupId])).rows[0];
       if (!canManageMembers(actor.role) && !settings?.add_members) {
         return res.status(403).json({ error: 'group member additions are disabled', code: 'GROUP_ADD_MEMBERS_DISABLED' });
+      }
+      if (!canManageMembers(actor.role) && settings?.approve_new_members) {
+        return res.status(403).json({ error: 'new members require admin approval', code: 'GROUP_APPROVAL_REQUIRED' });
       }
       const username = String(req.body?.username || '').trim().replace(/^@+/, '').slice(0, 32);
       if (!/^[A-Za-z0-9_]{2,32}$/.test(username)) return res.status(400).json({ error: 'valid username is required' });

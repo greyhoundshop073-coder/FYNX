@@ -307,7 +307,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     val prefs = remember(groupId) { FynxConversationPreferences.group(context, groupId) }
     val canSendMessages = canManageGroup || (remotePermissions?.sendMessages ?: prefs.getBoolean("send_messages", true))
     val canSendMedia = canManageGroup || (remotePermissions?.sendMedia ?: prefs.getBoolean("send_media", true))
-    val canAddMembers = canManageGroup || (remotePermissions?.addMembers ?: prefs.getBoolean("add_members", true))
+    val canAddMembers = canManageGroup || ((remotePermissions?.addMembers ?: prefs.getBoolean("add_members", true)) && remotePermissions?.approveNewMembers != true)
     LaunchedEffect(groupId, currentUsername) {
         if (!FynxBackendClient.hasAccessToken(context)) return@LaunchedEffect
         FynxGroupRemoteClient.loadPermissions(context, groupId).onSuccess { remotePermissions = it }
