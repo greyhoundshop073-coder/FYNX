@@ -3,6 +3,8 @@ package com.fynx.app.ui
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 data class FynxMoneyTransaction(
     val id: Long,
@@ -28,6 +30,11 @@ object FynxMoneyStore {
 
     private fun transactionsKey(context: Context) = "transactions_${accountKey(context)}"
     private fun accountsKey(context: Context) = "accounts_${accountKey(context)}"
+
+    /** Strict ISO date validation shared by local money trackers. */
+    fun isValidLocalDate(value: String): Boolean = runCatching {
+        LocalDate.parse(value.trim(), DateTimeFormatter.ISO_LOCAL_DATE)
+    }.isSuccess
 
     /** Account-scoped JSON storage for Money Center tools that are local trackers. */
     fun loadToolRecords(context: Context, tool: String): String =
