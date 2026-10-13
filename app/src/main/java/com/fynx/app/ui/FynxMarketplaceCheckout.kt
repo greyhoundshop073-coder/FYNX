@@ -100,7 +100,7 @@ internal suspend fun requestMarketplaceCheckoutQuote(
             fulfillmentMethod = q.optString("fulfillmentMethod"),
             subtotal = q.optDouble("subtotal"),
             deliveryFee = q.optDouble("deliveryFee"),
-            marketplaceFee = q.optDouble("marketplaceFeeBuyer"),
+            marketplaceFee = q.optDouble("marketplaceFee"),
             marketplaceFeeBuyer = q.optDouble("marketplaceFeeBuyer"),
             discountAmount = q.optDouble("discountAmount"),
             total = q.optDouble("total"),
