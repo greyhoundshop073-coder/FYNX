@@ -52,6 +52,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     val appConnectionState by appConnectionManager.state.collectAsState()
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf("Home") }
+    val currentSelected by rememberUpdatedState(selected)
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
     var openGroup by remember { mutableStateOf<String?>(null) }
     var profileUser by remember { mutableStateOf<String?>(null) }
@@ -61,6 +62,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var postOpenCommentId by remember { mutableStateOf<String?>(null) }
     var callTarget by remember { mutableStateOf<String?>(null) }
     var callVideo by remember { mutableStateOf(false) }
+    var pendingIncomingCall by remember { mutableStateOf<FynxRealtimeClient.Event.Call?>(null) }
     var marketplaceListingId by remember { mutableStateOf<String?>(null) }
     var marketplaceAiListingId by remember { mutableStateOf<String?>(null) }
     var openChatMarketplaceListingId by remember { mutableStateOf<String?>(null) }
@@ -92,6 +94,38 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         onDispose {
             appConnectionManager.stop()
             lifecycleOwner.lifecycle.removeObserver(appConnectionManager)
+        }
+    }
+
+    DisposableEffect(authSession.state, authSession.username) {
+        if (authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) {
+            // Keep a call-signaling socket alive while the user browses any screen.
+            // The dedicated Calls panel owns media/WebRTC once the invite is routed there.
+            val incomingCallListener = FynxRealtimeClient(
+                context = context,
+                onMessage = {},
+                onEvent = { event ->
+                    if (event is FynxRealtimeClient.Event.Call &&
+                        FynxIncomingCallRouting.shouldRouteInvite(
+                            signalType = event.signalType,
+                            currentScreen = currentSelected,
+                            hasPendingIncomingCall = pendingIncomingCall != null
+                        )
+                    ) {
+                        pendingIncomingCall = event
+                        callTarget = null
+                        callVideo = event.callType.equals("video", true)
+                        openChat = null
+                        openGroup = null
+                        profileUser = null
+                        selected = "Calls"
+                    }
+                }
+            )
+            incomingCallListener.connect()
+            onDispose { incomingCallListener.close() }
+        } else {
+            onDispose {}
         }
     }
 
@@ -562,7 +596,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             )
             "Share" -> FynxSharePanel()
             "Invite" -> FynxInvitePanel(code = inviteCode, onShare = { FynxShareActions.share(context, FynxShareActions.defaultPayload()) }, onBack = { selected = "Features" })
-            "Calls" -> FynxCallsPanel(initialName = callTarget, initialVideo = callVideo, initialOutgoing = callTarget != null)
+            "Calls" -> FynxCallsPanel(initialName = pendingIncomingCall?.fromUsername?.removePrefix("@")?.takeIf { it.isNotBlank() } ?: pendingIncomingCall?.fromUserId ?: callTarget, initialVideo = pendingIncomingCall?.callType?.equals("video", true) ?: callVideo, initialOutgoing = callTarget != null && pendingIncomingCall == null, initialIncomingCallId = pendingIncomingCall?.callId, initialIncomingUserId = pendingIncomingCall?.fromUserId, onIncomingCallConsumed = { callId -> if (pendingIncomingCall?.callId == callId) pendingIncomingCall = null })
             "To-Do" -> TodoPanel()
             "Privacy" -> FynxPrivacySettingsPanel(onBack = { selected = "Profile" })
             "Saved Posts" -> FynxSavedPostsPanel(onOpenAuthorProfile = { profileUser = it })

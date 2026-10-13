@@ -29,12 +29,12 @@ import org.webrtc.VideoTrack
 enum class FynxCallHistoryFilter { ALL, MISSED, VIDEO, VOICE }
 
 @Composable
-fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, initialOutgoing: Boolean = false) {
+fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, initialOutgoing: Boolean = false, initialIncomingCallId: String? = null, initialIncomingUserId: String? = null, onIncomingCallConsumed: (String) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var activeCall by remember { mutableStateOf(initialName?.removePrefix("@").orEmpty().ifBlank { initialName }) }
     var video by remember { mutableStateOf(initialVideo) }
-    var targetUserId by remember { mutableStateOf<String?>(null) }
+    var targetUserId by remember { mutableStateOf(initialIncomingUserId) }
     var targetUsername by remember { mutableStateOf(initialName?.removePrefix("@")?.trim()) }
     var endingCall by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -42,7 +42,20 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     var filter by remember { mutableStateOf(FynxCallHistoryFilter.ALL) }
     var realtimeState by remember { mutableStateOf(FynxRealtimeClient.State.DISCONNECTED) }
     var mediaConnected by remember { mutableStateOf(false) }
-    var session by remember { mutableStateOf<FynxCallSession?>(null) }
+    var session by remember {
+        mutableStateOf<FynxCallSession?>(
+            initialIncomingCallId?.let { callId ->
+                val incomingName = initialName?.removePrefix("@")?.trim().orEmpty().ifBlank { initialIncomingUserId.orEmpty() }
+                FynxCallSession(
+                    id = callId,
+                    callerUsername = incomingName,
+                    participantUsernames = listOf(incomingName),
+                    type = if (initialVideo) FynxCallType.VIDEO else FynxCallType.VOICE,
+                    state = FynxCallState.RINGING
+                )
+            }
+        )
+    }
     var localVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var pendingIncomingAccept by remember { mutableStateOf(false) }
@@ -182,6 +195,24 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 calls = FynxCallsStore.load(context)
             } else permissionLauncher.launch(required)
         }
+    }
+
+    LaunchedEffect(initialIncomingCallId) {
+        val callId = initialIncomingCallId ?: return@LaunchedEffect
+        val incomingName = initialName?.removePrefix("@")?.trim().orEmpty().ifBlank { initialIncomingUserId.orEmpty() }
+        FynxCallsStore.add(
+            context,
+            FynxCallRecord(
+                callId,
+                "@$incomingName",
+                if (initialVideo) "Video call" else "Voice call",
+                "Just now",
+                missed = true,
+                status = "Incoming"
+            )
+        )
+        calls = FynxCallsStore.load(context)
+        onIncomingCallConsumed(callId)
     }
 
     LaunchedEffect(initialName, initialOutgoing) { if (initialOutgoing && !initialName.isNullOrBlank()) beginOutgoing(initialName, initialVideo) }
