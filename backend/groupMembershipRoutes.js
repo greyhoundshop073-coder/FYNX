@@ -37,6 +37,7 @@ export function registerGroupMembershipRoutes({ app }) {
   const cleanUsername = value => String(value || '').trim().replace(/^@+/, '');
   const isManager = role => ['ADMIN', 'MODERATOR'].includes(String(role));
   const isAdmin = role => String(role) === 'ADMIN';
+  const canManageMembers = role => ['ADMIN', 'MODERATOR'].includes(String(role || '').toUpperCase());
 
   app.get('/api/groups/:groupId/members', auth, async (req, res) => {
     try {
@@ -48,6 +49,35 @@ export function registerGroupMembershipRoutes({ app }) {
     } catch (error) {
       console.error('group members list', error);
       return res.status(500).json({ error: 'group members lookup failed' });
+    }
+  });
+
+  app.post('/api/groups/:groupId/members', auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      const groupId = String(req.params?.groupId || '');
+      if (!validId(groupId)) return res.status(400).json({ error: 'invalid group id' });
+      const actor = await member(groupId, req.user.sub);
+      if (!actor) return res.status(403).json({ error: 'group membership required' });
+      const settings = (await pool.query('SELECT add_members FROM fynx_groups WHERE id=$1 LIMIT 1', [groupId])).rows[0];
+      if (!canManageMembers(actor.role) && !settings?.add_members) {
+        return res.status(403).json({ error: 'group member additions are disabled', code: 'GROUP_ADD_MEMBERS_DISABLED' });
+      }
+      const username = String(req.body?.username || '').trim().replace(/^@+/, '').slice(0, 32);
+      if (!/^[A-Za-z0-9_]{2,32}$/.test(username)) return res.status(400).json({ error: 'valid username is required' });
+      const target = (await pool.query('SELECT id, username FROM users WHERE lower(username)=lower($1) LIMIT 1', [username])).rows[0];
+      if (!target) return res.status(404).json({ error: 'FYNX user not found' });
+      if (String(target.id) === String(req.user.sub)) return res.status(400).json({ error: 'you are already in this group' });
+      const existing = (await pool.query(`SELECT u.username, m.role, m.created_at AS joined_at FROM fynx_group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=$1 AND m.user_id=$2 LIMIT 1`, [groupId, target.id])).rows[0];
+      if (existing) return res.json({ member: { username: existing.username, role: existing.role, joinedAt: new Date(existing.joined_at).getTime() }, alreadyMember: true });
+      const count = Number((await pool.query('SELECT COUNT(*) AS count FROM fynx_group_members WHERE group_id=$1', [groupId])).rows[0]?.count || 0);
+      if (count >= 500) return res.status(409).json({ error: 'group member limit reached' });
+      await pool.query(`INSERT INTO fynx_group_members(group_id, user_id, role) VALUES($1, $2, 'MEMBER') ON CONFLICT(group_id, user_id) DO NOTHING`, [groupId, target.id]);
+      const added = (await pool.query(`SELECT u.username, m.role, m.created_at AS joined_at FROM fynx_group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=$1 AND m.user_id=$2 LIMIT 1`, [groupId, target.id])).rows[0];
+      return res.status(201).json({ member: { username: added.username, role: added.role, joinedAt: new Date(added.joined_at).getTime() }, alreadyMember: false });
+    } catch (error) {
+      console.error('group member add', error);
+      return res.status(500).json({ error: 'group member could not be added' });
     }
   });
 
