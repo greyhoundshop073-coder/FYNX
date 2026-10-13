@@ -32,7 +32,7 @@ check("audience editor exposes all four supported audiences", 'FynxPostVisibilit
 check("audience update is owner-authorized and selected audience is friend-checked", "app.patch('/api/social/posts/:id',auth" in backend and 'WHERE id=$1 AND author_id=$2' in backend and "selected audience must contain your accepted friends" in backend)
 check("Home status row opens the exact tapped owner", 'onOpenStatusOwner(status.ownerUsername.removePrefix("@").trim())' in updates)
 check("Home post author status lookup filters by the tapped owner", 'filter { it.ownerUsername.equals(owner, true) }' in home and 'sortedBy { it.createdAtMillis }' in home)
-check("status open commands wait for initial load, then are consumed", 'LaunchedEffect(statuses, openOwnerUsername, openStatusId, loading)' in status and 'if (loading) return@LaunchedEffect' in status and 'onOpenCommandConsumed()' in status)
+check("status open commands remain pending during loading or fetch errors, then are consumed", 'LaunchedEffect(statuses, openOwnerUsername, openStatusId, loading, error)' in status and 'if (loading || error != null) return@LaunchedEffect' in status and 'onOpenCommandConsumed()' in status)
 check("active status ring is green on Home and Status surfaces", 'Color(0xFF22C55E)' in home and 'Color(0xFF22C55E)' in updates and 'Color(0xFF22C55E)' in status)
 check("all production feed/profile captions use the shared expandable component", 'FynxExpandableCaption' in home and 'FynxExpandableCaption' in profile and 'TextOverflow.Ellipsis' in caption and 'TextButton' in caption and '"More"' in caption)
 check("only the current user's audience icon is interactive", 'if (post.authorUsername.equals(currentUsername.removePrefix("@"), true)) IconButton' in home)
