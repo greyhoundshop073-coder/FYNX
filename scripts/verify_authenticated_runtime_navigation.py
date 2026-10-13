@@ -51,6 +51,17 @@ def wait_for_conversation_ui(name:str, timeout:float=12.0)->str:
         time.sleep(.5)
     return latest
 
+def wait_for_home_feed_settled(timeout:float=30.0)->str:
+    """Wait until the real Home feed has left its loading state before visual capture."""
+    deadline=time.monotonic()+timeout
+    latest=""
+    while time.monotonic()<deadline:
+        latest=dump_ui("authenticated-home-settle.xml")
+        if latest and find_control(latest,["Your feed"]) and not find_control(latest,["Loading Home feed"]):
+            return latest
+        time.sleep(.5)
+    return latest
+
 def capture_runtime_log(name:str):
     """Save app log context but report a crash only when logcat confirms one."""
     log_path=ROOT/name
@@ -508,6 +519,14 @@ def login():
         if (find_control(last_xml,["Open FYNX camera"])
                 and find_control(last_xml,["Chat"])
                 and find_control(last_xml,["Friends"])):
+            settled_xml=wait_for_home_feed_settled()
+            if settled_xml:
+                last_xml=settled_xml
+            if find_control(last_xml,["Loading Home feed"]):
+                (ROOT/"authenticated-home.xml").write_text(last_xml,encoding="utf-8")
+                screenshot("authenticated-home.png")
+                FAILURES.append("Home feed remained in loading state for 30 seconds after authenticated navigation")
+                return last_xml,"Home feed remained in loading state for 30 seconds after authenticated navigation"
             (ROOT/"authenticated-home.xml").write_text(last_xml,encoding="utf-8")
             screenshot("authenticated-home.png")
             return last_xml,""

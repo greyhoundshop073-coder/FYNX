@@ -33,6 +33,7 @@ required_home = {
     "player.release()": "audio resource release",
     "FynxRemoteProfileAvatar": "real author identity media",
     "MaterialTheme.colorScheme": "theme-aware Home presentation",
+    '"Loading Home feed"': "accessible Home loading state for runtime certification",
     'label = "Share"': "share accessibility action",
     'label = "Comment"': "comment accessibility action",
     'label = "Like"': "like accessibility action",
