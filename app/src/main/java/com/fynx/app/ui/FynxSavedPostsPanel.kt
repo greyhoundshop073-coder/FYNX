@@ -71,8 +71,8 @@ fun FynxSavedPostsPanel(onOpenAuthorProfile: (String) -> Unit = {}) {
                     text = o.optString("text"), visibility = o.optString("visibility"),
                     mediaId = mediaId, mediaType = mediaType,
                     mediaUrl = mediaId?.let { "/api/social/media/$it" },
-                    timestamp = o.optLong("timestamp"), likeCount = 0, commentCount = 0,
-                    likedByCurrentUser = false, followedByCurrentUser = false
+                    timestamp = o.optLong("timestamp"), likeCount = o.optInt("likeCount"), commentCount = o.optInt("commentCount"),
+                    likedByCurrentUser = o.optBoolean("likedByCurrentUser"), followedByCurrentUser = o.optBoolean("followedByCurrentUser")
                 )
                 if (post.id.isNotBlank() && post.id != "null") add(SavedPostEntry(post, o.optLong("savedAtMillis")))
             }
