@@ -5,12 +5,14 @@ const scalability = fs.readFileSync(new URL("./scalability.js", import.meta.url)
 const server = fs.readFileSync(new URL("./server.js", import.meta.url), "utf8");
 const notificationBootstrap = fs.readFileSync(new URL("./notificationBootstrap.js", import.meta.url), "utf8");
 const phase1Bootstrap = fs.readFileSync(new URL("./phase1FoundationBootstrap.js", import.meta.url), "utf8");
+const socialPostReactionBootstrap = fs.readFileSync(new URL("./socialPostReactionBootstrap.js", import.meta.url), "utf8");
 const checks = [
   ["rate-limit middleware is registered only after its configuration initializes", server.indexOf("const RATE_LIMITS =") < server.indexOf('app.use("/api/auth", rateLimit("auth", RATE_LIMITS.auth));') && server.indexOf("function rateLimit(bucket, limit)") < server.indexOf('app.use("/api/auth", rateLimit("auth", RATE_LIMITS.auth));')],
   ["health readiness rejects a missing or unavailable database", server.includes('res.status(database === "ready" ? 200 : 503).json({ ok: database === "ready", service: "fynx-backend", database });')],
   ["message schema SQL contains a real newline between ALTER statements", !server.includes("message_payload JSONB;\\n    ALTER TABLE messages ADD COLUMN IF NOT EXISTS reaction TEXT;") && server.includes("message_payload JSONB;\n    ALTER TABLE messages ADD COLUMN IF NOT EXISTS reaction TEXT;")],
   ["database schema initialization completes before the HTTP server listens", server.includes("await initDatabase();") && !server.includes('initDatabase().catch((error) => { console.error("database initialization failed", error); process.exitCode = 1; });') && server.indexOf("await initDatabase();") < server.indexOf('server.listen(PORT, "0.0.0.0"')],
   ["notification bootstrap avoids repeating already-applied replacements", notificationBootstrap.includes("if (source.includes(patch.replacement)) continue;") && notificationBootstrap.includes("source = source.replace(patch.marker, patch.replacement);")],
+  ["Home reaction-user lookup matches the reaction_type schema", socialPostReactionBootstrap.includes("r.reaction_type AS reaction") && socialPostReactionBootstrap.includes("r.reaction_type=$2") && !socialPostReactionBootstrap.includes("r.reaction=$2")],
   ["phase-one bootstrap contains valid idempotency cleanup instead of escaped source text", phase1Bootstrap.includes("source = source.replaceAll(") && !phase1Bootstrap.includes("\\\\nsource = source.replaceAll")],
   ["bounded retry helper", reliability.includes("retryWithBackoff") && reliability.includes("maxAttempts")],
   ["exponential backoff with jitter", reliability.includes("2 ** (attempt - 1)") && reliability.includes("Math.random")],
