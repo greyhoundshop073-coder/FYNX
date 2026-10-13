@@ -22,7 +22,6 @@ fun MoneyToolsPanel() {
 
     val income = entries.filter { it.type == "Income" }.sumOf { it.amount }
     val expenses = entries.filter { it.type == "Expense" }.sumOf { it.amount }
-    val net = income - expenses
     val accountsTotal = FynxMoneyStore.loadAccounts(context).sumOf { it.balance }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
