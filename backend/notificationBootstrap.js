@@ -9,6 +9,12 @@ async function patchOnce(fileName, patches) {
   let source = await readFile(filePath, "utf8");
   let changed = false;
   for (const patch of patches) {
+    // Several replacements intentionally retain their original marker as part
+    // of the expanded code. Check the complete replacement first so repeated
+    // prestart runs do not append duplicate imports, routes, or notifications.
+    if (source.includes(patch.replacement)) {
+      continue;
+    }
     if (source.includes(patch.marker)) {
       source = source.replace(patch.marker, patch.replacement);
       changed = true;
