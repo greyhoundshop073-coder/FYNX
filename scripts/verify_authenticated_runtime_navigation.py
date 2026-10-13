@@ -488,7 +488,16 @@ def login():
     _,x,y=user_control; run("adb","shell","input","tap",str(x),str(y)); time.sleep(.3)
     result=input_text(USERNAME)
     if result.returncode!=0: return xml,"adb input text failed for username"
+    run("adb","shell","input","keyevent","4"); time.sleep(.5)
     xml=dump_ui("authenticated-after-username.xml")
+    # Debug APKs intentionally expose a passwordless local UI-entry path when no
+    # local account is stored. Exercise that explicit affordance rather than
+    # incorrectly failing because the Password field is intentionally absent.
+    if find_control(xml,["Saved-device login for this debug APK"]):
+        home_xml=tap_control(xml,["Sign In"],"debug-saved-device-login",["Open FYNX camera","Chat","Friends"])
+        if home_xml and find_control(home_xml,["Open FYNX camera"]) and find_control(home_xml,["Chat"]) and find_control(home_xml,["Friends"]):
+            return home_xml,""
+        return home_xml or xml,"debug saved-device entry did not reach Home"
     pass_control=find_control(xml,["Password"])
     if not pass_control:
         fields=find_edit_fields(xml)
