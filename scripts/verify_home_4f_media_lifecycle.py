@@ -115,6 +115,7 @@ required_viewer = [
     'onPostChanged(liked, likes, saved, savedCount, reposted, repostCount, comments)',
     'if (saved) "Saved" else "Save"',
     'if (reposted) "Reposted" else "Repost"',
+    'BackHandler(enabled = !commentsOpen) { onDismiss() }',
 ]
 missing_viewer = [token for token in required_viewer if token not in viewer]
 if missing_viewer:
