@@ -42,6 +42,11 @@ require(store, "fun loadToolRecords(context: Context, tool: String): String", "l
 require(store, "fun saveToolRecords(context: Context, tool: String, rawJson: String)", "local tool record saving")
 require(store, "FynxAuthStore.accountStorageKey(context)", "account-scoped money storage")
 
+budget = read("app/src/main/java/com/fynx/app/ui/BudgetPlannerPanel.kt")
+require(budget, 'put("period", item.period)', "persisted budget period")
+require(budget, 'val visibleBudgets = budgets.filter { it.period == period }', "period-correct budget totals")
+require(budget, 'Text("Delete budget")', "budget record deletion")
+
 for relative_path, tool_key in (
     ("BillsPaymentPanel.kt", "bills"),
     ("BudgetPlannerPanel.kt", "budgets"),
