@@ -6,21 +6,45 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.Locale
 
 private data class ReceiptRecord(val id: Long, val title: String, val category: String, val amount: Double, val date: String, val note: String)
 
+private fun loadReceiptRecords(context: Context): List<ReceiptRecord> = runCatching {
+    val array = JSONArray(FynxMoneyStore.loadToolRecords(context, "receipts"))
+    buildList {
+        for (i in 0 until array.length()) {
+            val o = array.optJSONObject(i) ?: continue
+            val title = o.optString("title").trim()
+            val category = o.optString("category").trim()
+            val amount = o.optDouble("amount", Double.NaN)
+            if (title.isNotBlank() && category.isNotBlank() && amount.isFinite() && amount > 0) add(ReceiptRecord(o.optLong("id", i.toLong()), title, category, amount, o.optString("date"), o.optString("note")))
+        }
+    }
+}.getOrDefault(emptyList())
+
+private fun saveReceiptRecords(context: Context, records: List<ReceiptRecord>) {
+    val array = JSONArray()
+    records.forEach { item -> array.put(JSONObject().put("id", item.id).put("title", item.title).put("category", item.category).put("amount", item.amount).put("date", item.date).put("note", item.note)) }
+    FynxMoneyStore.saveToolRecords(context, "receipts", array.toString())
+}
+
 @Composable
 fun ReceiptsExpensePanel() {
+    val context = LocalContext.current
     var title by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var date by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var search by remember { mutableStateOf("") }
-    var nextId by remember { mutableLongStateOf(1L) }
-    var records by remember { mutableStateOf(emptyList<ReceiptRecord>()) }
+    var records by remember(context) { mutableStateOf(loadReceiptRecords(context)) }
+    var nextId by remember(context) { mutableLongStateOf((records.maxOfOrNull { it.id } ?: 0L) + 1L) }
 
     val filtered = records.filter { record ->
         search.isBlank() || listOf(record.title, record.category, record.date, record.note).any { it.contains(search, ignoreCase = true) }
@@ -47,6 +71,7 @@ fun ReceiptsExpensePanel() {
             val value = amount.toDoubleOrNull()
             if (title.isNotBlank() && category.isNotBlank() && value != null && value > 0 && date.isNotBlank()) {
                 records = records + ReceiptRecord(nextId++, title.trim(), category.trim(), value, date.trim(), note.trim())
+                saveReceiptRecords(context, records)
                 title = ""; category = ""; amount = ""; date = ""; note = ""
             }
         }) { Text("Save Record") }
