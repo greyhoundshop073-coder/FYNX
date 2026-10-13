@@ -51,6 +51,8 @@ export async function installSocialPostReactions() {
 
   app.get('/api/social/posts/:id/reaction-users', auth, async (req, res) => {
     try {
+      await ensureSocialSchema();
+      await ensureHomePostReactionSchema();
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || !(await visibleSocialPost(id, req.user.sub))) return res.status(404).json({ error: 'post not found' });
       const type = typeof req.query?.type === 'string' ? req.query.type.trim().toUpperCase() : '';
