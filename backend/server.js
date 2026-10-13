@@ -252,7 +252,7 @@ app.get("/ready", async (_req, res) => {
 app.get("/health", async (_req, res) => {
   let database = "not-configured";
   if (pool) { try { await pool.query("SELECT 1"); database = "ready"; } catch { database = "unavailable"; } }
-  res.status(database === "unavailable" ? 503 : 200).json({ ok: database !== "unavailable", service: "fynx-backend", database });
+  res.status(database === "ready" ? 200 : 503).json({ ok: database === "ready", service: "fynx-backend", database });
 });
 
 app.post("/api/auth/register", async (req, res) => {
@@ -781,7 +781,7 @@ registerMarketplaceCompletionRoutes({ app, pool, auth });
 if (pool) registerMoneyPlannerRoutes({ app, pool, auth });
 if (pool) registerMarketplaceAdvertisingRoutes({ app, pool, auth });
 
-initDatabase().catch((error) => { console.error("database initialization failed", error); process.exitCode = 1; });
+await initDatabase();
 
 const shutdown = async (signal) => {
   console.log(`[fynx-shutdown] ${signal}`);
