@@ -126,6 +126,7 @@ required_media_recovery = [
     'var reloadNonce by remember(path)',
     'Text("Retry media")',
     'if (fullscreen && file != null)',
+    'playbackActive = playbackActive && !fullscreen',
     'Pause full-screen video',
     'Unmute full-screen video',
 ]

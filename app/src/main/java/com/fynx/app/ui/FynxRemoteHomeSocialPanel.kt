@@ -963,7 +963,7 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
         Box(Modifier.fillMaxWidth().aspectRatio(videoAspectRatio)) {
             FynxFeedTextureVideo(
                 file = file!!,
-                playbackActive = playbackActive,
+                playbackActive = playbackActive && !fullscreen,
                 muted = muted,
                 onPlayingChanged = { playing = it },
                 onMutedChanged = { muted = it },
