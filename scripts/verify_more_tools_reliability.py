@@ -23,7 +23,7 @@ require(app, "navigationHistory.dropLast(1).ifEmpty { listOf(\"Home\") }", "safe
 extra = read("app/src/main/java/com/fynx/app/ui/FynxExtraToolsPanel.kt")
 require(extra, "FynxAuthStore.accountStorageKey(context)", "account-scoped Quick Notes")
 require(extra, "verticalScroll(rememberScrollState())", "scrollable Extra Tools screen")
-require(extra, "remove", "Quick Notes deletion affordance")
+require(extra, "notes.filterNot { it.id == note.id }", "Quick Notes deletion affordance")
 
 calendar = read("app/src/main/java/com/fynx/app/ui/CalendarPanel.kt")
 require(calendar, 'SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }', "strict calendar date validation")
