@@ -61,6 +61,8 @@ jobs:
           node --check notificationBootstrap.js
           node --check phase1FoundationBootstrap.js
           node --check realtimeIsolationBootstrap.js
+          node --check homeCommentsPrivacyBootstrap.js
+          node --check socialFeedBootstrap.js
           node --check socialPostReactionBootstrap.js
           node --check serverBootstrap.js
           node --check socialMultiMediaBootstrap.js
