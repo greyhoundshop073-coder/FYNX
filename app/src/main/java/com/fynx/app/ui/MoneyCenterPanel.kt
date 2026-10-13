@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -7,12 +8,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 private data class MoneySection(val key: String, val title: String, val description: String, val icon: String)
 
 @Composable
 fun MoneyCenterPanel() {
+    val context = LocalContext.current
     var selectedTool by remember { mutableStateOf<String?>(null) }
     val sections = listOf(
         MoneySection("Planner", "Money Planner", "Track income and expenses, set budgets, save toward goals and plan recurring costs", "🗓️"),
@@ -32,6 +35,8 @@ fun MoneyCenterPanel() {
         MoneySection("Currency", "Currency Converter", "Convert between currencies", "💱")
     )
 
+    BackHandler(enabled = selectedTool != null) { selectedTool = null }
+
     if (selectedTool != null) {
         Column(Modifier.fillMaxSize()) {
             TextButton(onClick = { selectedTool = null }) { Text("← Money Center") }
@@ -47,7 +52,13 @@ fun MoneyCenterPanel() {
                 "Subscriptions" -> SubscriptionsPanel()
                 "Receipts" -> ReceiptsExpensePanel()
                 "Insights" -> MoneyInsightsPanel()
-                "Spending Insights" -> SpendingInsightsPanel()
+                "Spending Insights" -> {
+                    val transactions = FynxMoneyStore.loadTransactions(context)
+                    SpendingInsightsPanel(
+                        income = transactions.filter { it.type == "Income" }.sumOf { it.amount },
+                        expenses = transactions.filter { it.type == "Expense" }.sumOf { it.amount }
+                    )
+                }
                 "Alerts" -> MoneyAlertsPanel()
                 "Vault" -> SecureMoneyVaultPanel()
                 "Currency" -> CurrencyConverterPanel()
