@@ -188,7 +188,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         }
     }
     LaunchedEffect(selected) {
-        if (backNavigationRequested) {
+        if (backNavigationRequested || (selected == "Features" && navigationHistory.lastOrNull() == "Saved Posts")) {
             backNavigationRequested = false
             navigationHistory = navigationHistory.dropLast(1).ifEmpty { listOf("Home") }
         } else if (navigationHistory.lastOrNull() != selected) {
@@ -242,10 +242,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         backNavigationRequested = true
         selected = navigationHistory.getOrNull(navigationHistory.lastIndex - 1) ?: "Chats"
     }
-    BackHandler(enabled = openChat == null && openGroup == null && selected == "Saved Posts") {
-        backNavigationRequested = true
-        selected = navigationHistory.getOrNull(navigationHistory.lastIndex - 1) ?: "Features"
-    }
+    BackHandler(enabled = openChat == null && openGroup == null && selected == "Saved Posts") { selected = "Features" }
     BackHandler(enabled = openChat == null && openGroup == null && selected != "Home" && selected != "Contacts" && selected != "Saved Posts") {
         backNavigationRequested = true
         selected = navigationHistory.getOrNull(navigationHistory.lastIndex - 1) ?: "Home"
