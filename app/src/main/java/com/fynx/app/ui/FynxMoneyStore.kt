@@ -29,6 +29,16 @@ object FynxMoneyStore {
     private fun transactionsKey(context: Context) = "transactions_${accountKey(context)}"
     private fun accountsKey(context: Context) = "accounts_${accountKey(context)}"
 
+    /** Account-scoped JSON storage for Money Center tools that are local trackers. */
+    fun loadToolRecords(context: Context, tool: String): String =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString("tool_${accountKey(context)}_${storageKey(tool)}", "[]") ?: "[]"
+
+    fun saveToolRecords(context: Context, tool: String, rawJson: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString("tool_${accountKey(context)}_${storageKey(tool)}", rawJson).apply()
+    }
+
     fun loadTransactions(context: Context): List<FynxMoneyTransaction> = runCatching {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(transactionsKey(context), "[]") ?: "[]"
         val array = JSONArray(raw)
