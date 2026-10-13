@@ -41,6 +41,7 @@ fun SubscriptionsPanel() {
     var amount by remember { mutableStateOf("") }
     var nextDate by remember { mutableStateOf("") }
     var frequency by remember { mutableStateOf("Monthly") }
+    var validationError by remember { mutableStateOf<String?>(null) }
     var payments by remember(context) { mutableStateOf(loadRecurringPayments(context)) }
     var nextId by remember(context) { mutableLongStateOf((payments.maxOfOrNull { it.id } ?: 0L) + 1L) }
 
@@ -63,12 +64,18 @@ fun SubscriptionsPanel() {
             listOf("Daily", "Weekly", "Monthly", "Yearly").forEach { option -> FilterChip(selected = frequency == option, onClick = { frequency = option }, label = { Text(option) }) }
         }
         Spacer(Modifier.height(6.dp))
+        validationError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         Button(onClick = {
             val value = amount.toDoubleOrNull()
-            if (name.isNotBlank() && value != null && value > 0 && nextDate.isNotBlank()) {
+            when {
+                name.isBlank() -> validationError = "Enter a subscription name."
+                value == null || !value.isFinite() || value <= 0 -> validationError = "Enter a valid amount greater than zero."
+                !FynxMoneyStore.isValidLocalDate(nextDate) -> validationError = "Use a valid date in YYYY-MM-DD format."
+                else -> {
                 payments = payments + RecurringPayment(nextId++, name.trim(), value, nextDate.trim(), frequency)
                 saveRecurringPayments(context, payments)
-                name = ""; amount = ""; nextDate = ""
+                name = ""; amount = ""; nextDate = ""; validationError = null
+                }
             }
         }) { Text("Add Recurring Payment") }
         Spacer(Modifier.height(10.dp))
