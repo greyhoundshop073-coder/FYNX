@@ -1,20 +1,50 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.BorderStroke
+import android.content.Context
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.*
+import org.json.JSONArray
+import org.json.JSONObject
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 private data class FynxQuickNote(val id: Long, val text: String)
+
+private fun quickNotesKey(context: Context): String {
+    val account = FynxAuthStore.accountStorageKey(context)?.trim()?.lowercase()
+        ?.map { c -> if (c.isLetterOrDigit()) c else '_' }?.joinToString("")?.take(80)
+        ?.ifBlank { "account" } ?: "signed_out"
+    return "quick_notes_$account"
+}
+
+private fun loadQuickNotes(context: Context): List<FynxQuickNote> = runCatching {
+    val raw = context.getSharedPreferences("fynx_extra_tools", Context.MODE_PRIVATE)
+        .getString(quickNotesKey(context), "[]") ?: "[]"
+    val array = JSONArray(raw)
+    List(array.length()) { index ->
+        val item = array.getJSONObject(index)
+        FynxQuickNote(item.getLong("id"), item.getString("text"))
+    }
+}.getOrDefault(emptyList())
+
+private fun saveQuickNotes(context: Context, notes: List<FynxQuickNote>) {
+    val array = JSONArray()
+    notes.forEach { array.put(JSONObject().put("id", it.id).put("text", it.text)) }
+    context.getSharedPreferences("fynx_extra_tools", Context.MODE_PRIVATE).edit()
+        .putString(quickNotesKey(context), array.toString()).apply()
+}
 
 private data class FynxGuideArticle(
     val title: String,
@@ -77,13 +107,14 @@ private val fynxGuideArticles = listOf(
 
 @Composable
 fun FynxExtraToolsPanel(onOpenCalendar: () -> Unit) {
-    var notes by remember { mutableStateOf(listOf<FynxQuickNote>()) }
+    val context = LocalContext.current
+    var notes by remember(context) { mutableStateOf(loadQuickNotes(context)) }
     var noteText by remember { mutableStateOf("") }
     var showNoteEditor by remember { mutableStateOf(false) }
     var openArticle by remember { mutableStateOf<FynxGuideArticle?>(null) }
 
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Extra Tools", style = MaterialTheme.typography.headlineSmall)
@@ -159,15 +190,21 @@ fun FynxExtraToolsPanel(onOpenCalendar: () -> Unit) {
 
         if (notes.isNotEmpty()) {
             Text("Recent notes", style = MaterialTheme.typography.titleMedium)
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(notes, key = { it.id }) { note ->
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                notes.forEach { note ->
                     Card(
                         Modifier.fillMaxWidth(),
                         shape = FynxDesign.CardShape,
                         colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
                         border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.4f))
                     ) {
-                        Text(note.text, Modifier.padding(16.dp))
+                        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(note.text, Modifier.weight(1f).padding(vertical = 16.dp))
+                            IconButton(onClick = {
+                                notes = notes.filterNot { it.id == note.id }
+                                saveQuickNotes(context, notes)
+                            }) { Icon(Icons.Default.Delete, contentDescription = "Delete note") }
+                        }
                     }
                 }
             }
@@ -203,6 +240,7 @@ fun FynxExtraToolsPanel(onOpenCalendar: () -> Unit) {
                     enabled = noteText.isNotBlank(),
                     onClick = {
                         notes = listOf(FynxQuickNote(System.currentTimeMillis(), noteText.trim())) + notes
+                        saveQuickNotes(context, notes)
                         noteText = ""
                         showNoteEditor = false
                     }
