@@ -18,9 +18,9 @@ protection = (ROOT / "backend/marketplaceProtection.js").read_text()
 transactions = (ROOT / "backend/marketplaceTransactions.js").read_text()
 
 checks = [
-    ("Marketplace uses backend-driven listings", "FynxRemoteSocialClient.listings" in panel),
+    ("Marketplace uses the paginated backend discovery flow with nearby fallback", "FynxRemoteSocialClient.marketplaceDiscoveryPage" in panel and "FynxRemoteSocialClient.nearbyMarketplaceListings" in panel and "FynxRemoteSocialClient.listings" in panel),
     ("Marketplace keeps stable listing IDs in UI keys", ("items(listings, key = { it.id })" in panel or "gridItems(listings, key = { it.id })" in panel)),
-    ("Marketplace seller profile opens through the existing profile callback", "onProfile = { onOpenProfile(listing.sellerUsername) }" in panel),
+    ("Marketplace listing seller opens the real seller-store dialog with contact and listing navigation", "onProfile = { sellerStoreUsername = listing.sellerUsername; selected = null }" in panel and "sellerStoreUsername?.let { username ->" in panel and "FynxMarketplaceSellerStoreDialog(" in panel and "onContact = { listing -> contactSeller(username, listing.id) }" in panel and "onOpenListing = { selected = it; sellerStoreUsername = null }" in panel),
     ("Marketplace contact seller uses the existing chat deep link", "FynxDeepLinkParser.chatAppLink" in panel and "Intent.ACTION_VIEW" in panel),
     ("Marketplace discovery has a dedicated backend route", "/api/marketplace/discovery" in discovery),
     ("Marketplace deep links have a canonical marketplace destination", "FynxDeepLinkDestination.Marketplace" in deep_link and "MARKETPLACE_PATH = \"/marketplace\"" in deep_link),
