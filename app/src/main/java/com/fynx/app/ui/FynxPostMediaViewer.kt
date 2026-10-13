@@ -65,7 +65,7 @@ fun FynxPostMediaViewer(
             .onFailure { cause -> error = cause.message ?: "Post interaction state could not be loaded." }
         busy = false
     }
-    BackHandler { onDismiss() }
+    BackHandler(enabled = !commentsOpen) { onDismiss() }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(Modifier.fillMaxSize(), color = Color.Black) {
             Column(Modifier.fillMaxSize()) {
