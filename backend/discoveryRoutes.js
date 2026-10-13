@@ -259,8 +259,10 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
         WHERE sp.user_id=$1 AND (${`p.author_id=$1 OR p.visibility='PUBLIC'`} OR (p.visibility='FRIENDS_ONLY' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$1) OR (f.user_id=$1 AND f.friend_id=p.author_id)) AND f.status='accepted')))
           AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$1))
         ORDER BY sp.created_at DESC LIMIT $2 OFFSET $3
-      `, [req.user.sub, limit, offset]);
-      return res.json({ posts: result.rows.map(row => ({ id:String(row.id), authorId:String(row.author_id), authorUsername:row.author_username, authorDisplayName:row.author_display_name, text:row.text, visibility:row.visibility, mediaId:row.media_id==null?null:String(row.media_id), mediaType:row.media_type||null, timestamp:Number(row.timestamp), savedAtMillis:new Date(row.saved_at).getTime(), likeCount:Number(row.like_count||0), commentCount:Number(row.comment_count||0), likedByCurrentUser:Boolean(row.liked_by_current_user), followedByCurrentUser:false })), hasMore: result.rows.length === limit });
+      `, [req.user.sub, limit + 1, offset]);
+      const hasMore = result.rows.length > limit;
+      const rows = hasMore ? result.rows.slice(0, limit) : result.rows;
+      return res.json({ posts: rows.map(row => ({ id:String(row.id), authorId:String(row.author_id), authorUsername:row.author_username, authorDisplayName:row.author_display_name, text:row.text, visibility:row.visibility, mediaId:row.media_id==null?null:String(row.media_id), mediaType:row.media_type||null, timestamp:Number(row.timestamp), savedAtMillis:new Date(row.saved_at).getTime(), likeCount:Number(row.like_count||0), commentCount:Number(row.comment_count||0), likedByCurrentUser:Boolean(row.liked_by_current_user), followedByCurrentUser:false })), hasMore });
     } catch (error) { console.error("saved social posts", error); return res.status(500).json({ error: "saved posts lookup failed" }); }
   });
 
