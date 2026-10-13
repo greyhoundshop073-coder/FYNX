@@ -15,6 +15,7 @@ This work is isolated to More/Features, Extra Tools, Calendar, To-Do, Calls entr
 4. Confirm the workflow uploads an APK from the exact final commit and records the SHA.
 5. Inspect runtime screenshots/UI hierarchy for navigation and changed More/Money Center screens.
 6. Verify on a device that the APK actually installs and that Quick Notes persist/delete, Calendar validation rejects invalid input, overdue tasks remain visible, local money records survive reopening/account switching, and visible/system Back both follow the route history.
+7. Confirm the existing Home interaction verifier checks the history-aware header back action without dropping the Saved Posts return-to-Features behavior.
 7. Keep the PR draft and unmerged until the user explicitly authorizes a merge.
 
 ## Known limits
