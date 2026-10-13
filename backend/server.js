@@ -32,10 +32,6 @@ app.use((req, res, next) => {
   if (req.method !== "GET" && req.method !== "HEAD") res.setHeader("Cache-Control", "no-store");
   next();
 });
-app.use("/api/auth", rateLimit("auth", RATE_LIMITS.auth));
-app.use("/api/assistant", rateLimit("assistant", RATE_LIMITS.assistant));
-app.use("/api/media", rateLimit("media", RATE_LIMITS.media));
-app.use("/api/messages", rateLimit("messages", RATE_LIMITS.messages));
 
 const PORT = Number(process.env.PORT || 10000);
 const JWT_SECRET = process.env.JWT_SECRET || "";
@@ -85,6 +81,12 @@ function rateLimit(bucket, limit) {
     return next();
   };
 }
+
+app.use("/api/auth", rateLimit("auth", RATE_LIMITS.auth));
+app.use("/api/assistant", rateLimit("assistant", RATE_LIMITS.assistant));
+app.use("/api/media", rateLimit("media", RATE_LIMITS.media));
+app.use("/api/messages", rateLimit("messages", RATE_LIMITS.messages));
+
 setInterval(() => {
   const cutoff = Date.now() - RATE_WINDOW_MS;
   for (const [key, value] of rateBuckets) if (value.startedAt < cutoff) rateBuckets.delete(key);
