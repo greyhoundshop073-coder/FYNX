@@ -19,6 +19,7 @@ app = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
 require(app, 'var navigationHistory by remember { mutableStateOf(listOf("Home")) }', "secondary navigation history")
 require(app, "navigationHistory = (navigationHistory + selected).takeLast(30)", "bounded navigation history")
 require(app, "navigationHistory.dropLast(1).ifEmpty { listOf(\"Home\") }", "safe navigation stack pop")
+require(app, 'else "Back to previous screen"', "visible secondary-screen back action follows navigation history")
 
 extra = read("app/src/main/java/com/fynx/app/ui/FynxExtraToolsPanel.kt")
 require(extra, "FynxAuthStore.accountStorageKey(context)", "account-scoped Quick Notes")
