@@ -29,14 +29,18 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}) {
     var message by remember { mutableStateOf<String?>(null) }
     var searchGeneration by remember { mutableIntStateOf(0) }
 
-    fun search() {
-        val q = query.trim()
+    fun search(searchQuery: String = query, expectedGeneration: Int? = null) {
+        val q = searchQuery.trim()
+        val generation = expectedGeneration ?: ++searchGeneration
+        if (generation != searchGeneration) return
         if (q.length < 2) {
-            people = emptyList(); listings = emptyList(); posts = emptyList()
+            people = emptyList()
+            listings = emptyList()
+            posts = emptyList()
+            loading = false
             message = if (q.isEmpty()) null else "Enter at least 2 characters to search FYNX."
             return
         }
-        val generation = ++searchGeneration
         scope.launch {
             loading = true
             message = null
@@ -66,18 +70,31 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}) {
 
     LaunchedEffect(query) {
         val q = query.trim()
+        // Invalidate in-flight requests immediately when the query changes, not
+        // after the debounce, so a slower old response cannot overwrite new input.
+        val generation = ++searchGeneration
         if (q.length < 2) {
-            if (q.isEmpty()) { people = emptyList(); listings = emptyList(); posts = emptyList(); message = null }
+            people = emptyList()
+            listings = emptyList()
+            posts = emptyList()
+            loading = false
+            message = if (q.isEmpty()) null else "Enter at least 2 characters to search FYNX."
             return@LaunchedEffect
         }
+        people = emptyList()
+        listings = emptyList()
+        posts = emptyList()
+        loading = true
+        message = null
         delay(350L)
-        search()
+        if (generation != searchGeneration) return@LaunchedEffect
+        search(q, generation)
     }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Search FYNX", style = MaterialTheme.typography.headlineSmall)
         Text("Find people, marketplace listings and recent social posts using real FYNX data.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-        OutlinedTextField(value = query, onValueChange = { query = it.take(120) }, modifier = Modifier.fillMaxWidth(), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") }, placeholder = { Text("Search people, posts or products") }, trailingIcon = { TextButton(onClick = ::search, enabled = query.trim().length >= 2) { Text("Search") } }, shape = FynxDesign.ControlShape)
+        OutlinedTextField(value = query, onValueChange = { query = it.take(120) }, modifier = Modifier.fillMaxWidth(), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") }, placeholder = { Text("Search people, posts or products") }, trailingIcon = { TextButton(onClick = { search() }, enabled = query.trim().length >= 2) { Text("Search") } }, shape = FynxDesign.ControlShape)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("All", "People", "Posts", "Marketplace").forEach { value -> FilterChip(selected = tab == value, onClick = { tab = value }, label = { Text(value) }) } }
         message?.let { Text(it, color = if (it.contains("failed", true) || it.contains("unavailable", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         if (loading) {

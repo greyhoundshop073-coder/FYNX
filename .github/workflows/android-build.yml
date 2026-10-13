@@ -98,6 +98,8 @@ jobs:
           python3 scripts/verify_network_transport_architecture.py
       - name: Verify group permission enforcement contract
         run: python3 scripts/verify_group_permissions_contract.py
+      - name: Verify universal search request-generation contract
+        run: python3 scripts/verify_universal_search_generation.py
       - name: Verify debug offline login and backend-independent APK contract
         run: python3 scripts/verify_debug_offline_login.py
       - name: Verify live production backend reachability
