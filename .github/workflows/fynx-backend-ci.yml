@@ -59,6 +59,10 @@ jobs:
           node --check marketplaceAdvertising.js
           node --check notificationPush.js
           node --check notificationBootstrap.js
+          node --check phase1FoundationBootstrap.js
+          node --check realtimeIsolationBootstrap.js
+          node --check serverBootstrap.js
+          node --check socialMultiMediaBootstrap.js
           node --check notificationDevices.js
           node --check verify-marketplace-ad-creative-identity.mjs
           node --check verify-marketplace-fulfillment-integrity.mjs
