@@ -42,6 +42,14 @@ if (!files.transactions.includes('export async function initializeMarketplaceTra
 if (!files.marketplaceSchema.includes('export function ensureMarketplaceSchemaForPool(pool)')) {
   throw new Error('Stage 15 verification failed: startup must use the canonical Marketplace listings schema');
 }
+if (!files.scalability.includes('void marketplaceStartupReady.then(async () =>') ||
+    files.scalability.indexOf('registerMarketplaceSettlementWorker({ jobs') < files.scalability.indexOf('void marketplaceStartupReady.then(async () =>')) {
+  throw new Error('Stage 15 verification failed: Marketplace workers must wait for schema readiness');
+}
+if (files.bootstrap.indexOf('await initializeMarketplaceSettlementSchema()') < 0 ||
+    files.bootstrap.indexOf('__fynxResolveMarketplaceStartupReady') < files.bootstrap.indexOf('await initializeMarketplaceSettlementSchema()')) {
+  throw new Error('Stage 15 verification failed: startup readiness must be released only after settlement schema initialization');
+}
 if (files.recovery.includes('timer.unref(); void runSafely();')) {
   throw new Error('Stage 15 verification failed: Batch 2 recovery must not query financial tables immediately before schema initialization');
 }
