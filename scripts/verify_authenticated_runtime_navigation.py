@@ -488,12 +488,27 @@ def login():
     _,x,y=user_control; run("adb","shell","input","tap",str(x),str(y)); time.sleep(.3)
     result=input_text(USERNAME)
     if result.returncode!=0: return xml,"adb input text failed for username"
+
+    # The username keyboard can cover the password field in the visible UI
+    # hierarchy. Dismiss only the keyboard, then wait for Compose/IME layout
+    # settlement before deciding that the password control is actually absent.
+    run("adb","shell","input","keyevent","4")
+    time.sleep(.8)
     xml=dump_ui("authenticated-after-username.xml")
     pass_control=find_control(xml,["Password"])
-    if not pass_control:
+    for attempt in range(8):
+        if pass_control:
+            break
         fields=find_edit_fields(xml)
-        if len(fields)<2: return xml,f"password control was not visible after username entry (edittexts found {len(fields)})"
-        pass_control=("password",fields[1][0],fields[1][1])
+        if len(fields)>=2:
+            pass_control=("password",fields[1][0],fields[1][1])
+            break
+        time.sleep(.5)
+        xml=dump_ui(f"authenticated-after-username-retry-{attempt+1}.xml")
+        pass_control=find_control(xml,["Password"])
+    if not pass_control:
+        screenshot("authenticated-password-control-missing.png")
+        return xml,f"password control was not visible after username entry and keyboard dismissal (edittexts found {len(find_edit_fields(xml))}); markers: {visible_marker_summary(xml)}"
     _,x,y=pass_control; run("adb","shell","input","tap",str(x),str(y)); time.sleep(.3)
     result=input_text(PASSWORD)
     if result.returncode!=0: return xml,"adb input text failed for password"
