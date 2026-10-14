@@ -3,6 +3,9 @@ import fs from "node:fs";
 const reliability = fs.readFileSync(new URL("./reliability.js", import.meta.url), "utf8");
 const scalability = fs.readFileSync(new URL("./scalability.js", import.meta.url), "utf8");
 const server = fs.readFileSync(new URL("./server.js", import.meta.url), "utf8");
+const statusSchema = fs.readFileSync(new URL("./statusSchema.js", import.meta.url), "utf8");
+const statusManagement = fs.readFileSync(new URL("./statusManagementRoutes.js", import.meta.url), "utf8");
+const statusInteraction = fs.readFileSync(new URL("./statusInteractionRoutes.js", import.meta.url), "utf8");
 const notificationBootstrap = fs.readFileSync(new URL("./notificationBootstrap.js", import.meta.url), "utf8");
 const phase1Bootstrap = fs.readFileSync(new URL("./phase1FoundationBootstrap.js", import.meta.url), "utf8");
 const socialPostReactionBootstrap = fs.readFileSync(new URL("./socialPostReactionBootstrap.js", import.meta.url), "utf8");
@@ -16,6 +19,7 @@ const checks = [
   ["database schema initialization completes before the HTTP server listens", server.includes("await initDatabase();") && !server.includes('initDatabase().catch((error) => { console.error("database initialization failed", error); process.exitCode = 1; });') && server.indexOf("await initDatabase();") < server.indexOf('server.listen(PORT, "0.0.0.0"')],
   ["official-user verification uses a separate parameterized query after the multi-statement schema batch", server.includes('await pool.query("UPDATE users SET verified = TRUE WHERE lower(username) = $1", [officialFynxUsername]);') && !server.includes("  `, [officialFynxUsername]);")],
   ["message-media foreign-key migration retains valid PostgreSQL dollar quoting", server.includes("DO $migration$ BEGIN ALTER TABLE messages ADD CONSTRAINT messages_media_fk") && server.includes("EXCEPTION WHEN duplicate_object THEN NULL; END $migration$;")],
+  ["Status schema initialization is shared by list, archive, delete, and interactions", server.includes("ensureStatusSchema(pool)") && statusManagement.includes("await ensureStatusSchema(pool)") && statusInteraction.includes("await ensureStatusSchema(pool)") && statusSchema.includes("CREATE TABLE IF NOT EXISTS statuses")],
   ["notification bootstrap avoids repeating already-applied replacements", notificationBootstrap.includes("if (source.includes(patch.replacement)) continue;") && notificationBootstrap.includes("source = source.replace(patch.marker, patch.replacement);")],
   ["Home reaction-user lookup matches the reaction_type schema", socialPostReactionBootstrap.includes("r.reaction_type AS reaction") && socialPostReactionBootstrap.includes("r.reaction_type=$2") && !socialPostReactionBootstrap.includes("r.reaction=$2")],
   ["phase-one bootstrap contains valid idempotency cleanup instead of escaped source text", phase1Bootstrap.includes("source = source.replaceAll(") && !phase1Bootstrap.includes("\\\\nsource = source.replaceAll")],
