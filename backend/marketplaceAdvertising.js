@@ -287,8 +287,9 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       const data = await response.json().catch(() => ({}));
       const paid = response.ok && data?.status === true && data?.data?.status === "success" && Number(data.data.amount) === Number(campaign.total_budget_kobo) && String(data.data.currency).toUpperCase() === "NGN";
       if (!paid) return res.status(409).json({ error: "payment has not been verified" });
-      await pool.query("UPDATE marketplace_ad_campaigns SET payment_status='paid', updated_at=NOW() WHERE id=$1 AND owner_id=$2", [id, auth.userId]);
-      return res.json({ paid: true, campaignId: String(id) });
+      const paidCampaign = await pool.query("UPDATE marketplace_ad_campaigns SET payment_status='paid', updated_at=NOW() WHERE id=$1 AND owner_id=$2 RETURNING *", [id, auth.userId]);
+      if (!paidCampaign.rowCount) return res.status(404).json({ error: "campaign not found" });
+      return res.json({ paid: true, campaign: paidCampaign.rows[0] });
     } catch { return res.status(502).json({ error: "advertising payment verification failed" }); }
   });
 
