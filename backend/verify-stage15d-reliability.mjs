@@ -3,6 +3,7 @@ import fs from "node:fs";
 const reliability = fs.readFileSync(new URL("./reliability.js", import.meta.url), "utf8");
 const scalability = fs.readFileSync(new URL("./scalability.js", import.meta.url), "utf8");
 const server = fs.readFileSync(new URL("./server.js", import.meta.url), "utf8");
+const serverBootstrap = fs.readFileSync(new URL("./serverBootstrap.js", import.meta.url), "utf8");
 const statusSchema = fs.readFileSync(new URL("./statusSchema.js", import.meta.url), "utf8");
 const statusManagement = fs.readFileSync(new URL("./statusManagementRoutes.js", import.meta.url), "utf8");
 const statusInteraction = fs.readFileSync(new URL("./statusInteractionRoutes.js", import.meta.url), "utf8");
@@ -16,6 +17,7 @@ const checks = [
   ["rate-limit middleware is registered only after its configuration initializes", server.indexOf("const RATE_LIMITS =") < server.indexOf('app.use("/api/auth", rateLimit("auth", RATE_LIMITS.auth));') && server.indexOf("function rateLimit(bucket, limit)") < server.indexOf('app.use("/api/auth", rateLimit("auth", RATE_LIMITS.auth));')],
   ["database readiness rejects a missing or unavailable database", server.includes('app.get("/ready", async (_req, res) => {') && server.includes('if (!pool) return res.status(503).json({ ok: false, service: "fynx-backend", database: "not-configured" });') && server.includes('try { await pool.query("SELECT 1"); return res.status(200).json({ ok: true, service: "fynx-backend", database: "ready" }); }') && server.includes('catch { return res.status(503).json({ ok: false, service: "fynx-backend", database: "unavailable" }); }')],
   ["HTTP liveness health endpoint does not depend on database readiness", server.includes('app.get("/health", (_req, res) => {') && server.includes('return res.status(200).json({ ok: true, service: "fynx-backend" });')],
+  ["realtime message visibility uses the canonical friendships schema", serverBootstrap.includes("f.user_id=$1 AND f.friend_id=$2") && serverBootstrap.includes("f.user_id=$2 AND f.friend_id=$1") && serverBootstrap.includes("f.status='accepted'") && !serverBootstrap.includes("f.requester_id") && !serverBootstrap.includes("f.addressee_id")],
   ["message schema SQL contains a real newline between ALTER statements", !server.includes("message_payload JSONB;\\n    ALTER TABLE messages ADD COLUMN IF NOT EXISTS reaction TEXT;") && server.includes("message_payload JSONB;\n    ALTER TABLE messages ADD COLUMN IF NOT EXISTS reaction TEXT;")],
   ["database schema initialization completes before the HTTP server listens", server.includes("await initDatabase();") && !server.includes('initDatabase().catch((error) => { console.error("database initialization failed", error); process.exitCode = 1; });') && server.indexOf("await initDatabase();") < server.indexOf('server.listen(PORT, "0.0.0.0"')],
   ["official-user verification uses a separate parameterized query after the multi-statement schema batch", server.includes('await pool.query("UPDATE users SET verified = TRUE WHERE lower(username) = $1", [officialFynxUsername]);') && !server.includes("  `, [officialFynxUsername]);")],
