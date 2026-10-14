@@ -44,6 +44,24 @@ import kotlinx.coroutines.delay
 private const val FYNX_PREVIEW_MODE = false
 private data class FynxNavItem(val key: String, val label: String, val icon: ImageVector)
 
+private fun fynxBackDestination(selected: String, notificationPreferencesOnly: Boolean): String =
+    when (selected) {
+        "Contacts" -> "Chats"
+        "Saved Posts", "Invite", "Gifts", "To-Do", "Share", "Announcements", "Admin" -> "Features"
+        "Privacy" -> "Profile"
+        "Notifications" -> if (notificationPreferencesOnly) "Profile" else "Home"
+        "Calendar" -> "Extra Tools"
+        "Money Tools" -> "Features"
+        "Stories", "Calls" -> "Home"
+        "Groups" -> "Chats"
+        "Business Account" -> "Features"
+        "Advertising" -> "Business Account"
+        "Advertising Dashboard" -> "Advertising"
+        "Advertising AI", "AI Creation", "AI Photo Editor" -> "AI"
+        "Seller Center" -> "Marketplace"
+        else -> "Home"
+    }
+
 @Composable
 fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     val context = LocalContext.current
@@ -264,9 +282,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     BackHandler(enabled = profileUser != null) { profileUser = null }
     BackHandler(enabled = openChat != null) { openChat = null }
     BackHandler(enabled = openGroup != null && openChat == null) { openGroup = null }
-    BackHandler(enabled = openChat == null && openGroup == null && selected == "Contacts") { selected = "Chats" }
-    BackHandler(enabled = openChat == null && openGroup == null && selected == "Saved Posts") { selected = "Features" }
-    BackHandler(enabled = openChat == null && openGroup == null && selected != "Home" && selected != "Contacts" && selected != "Saved Posts") { selected = "Home" }
+    BackHandler(
+        enabled = openChat == null && openGroup == null && selected !in mainNav.map { it.key }.toSet()
+    ) {
+        selected = fynxBackDestination(selected, notificationPreferencesOnly)
+        if (notificationPreferencesOnly) notificationPreferencesOnly = false
+    }
     if (profileUser != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { OtherUserProfilePanel(username = profileUser!!, onBack = { profileUser = null }, onOpenStatus = { statusUsername -> profileUser = null; statusOpenOwner = statusUsername; selected = "Stories" }, onMessage = { username -> openChatMarketplaceListingId = null; val normalized = username.trim().let { if (it.startsWith("@")) it else "@$it" }; openChat = FynxChatStore.loadPreviews(context).firstOrNull { it.username.equals(normalized, true) } ?: ChatPreview(normalized.removePrefix("@").ifBlank { "FYNX user" }, normalized, "Start a conversation", "Now"); FynxChatStore.savePreview(context, openChat!!); profileUser = null }) }; return }
     if (openChat != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { ConversationPanel(chat = openChat!!, marketplaceListingId = openChatMarketplaceListingId, onBack = { openChat = null; openChatMarketplaceListingId = null }, onOpenProfile = { profileUser = it; openChat = null }, onVoiceCall = { callTarget = openChat!!.username; callVideo = false; openChat = null; selected = "Calls" }, onVideoCall = { callTarget = openChat!!.username; callVideo = true; openChat = null; selected = "Calls" }) }; return }
     if (openGroup != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { FynxGroupConversationPanel(groupId = openGroup!!, currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", onBack = { openGroup = null }) }; return }
@@ -374,7 +395,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                             Icon(Icons.Default.CameraAlt, contentDescription = null)
                         }
                         BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
-                            IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
+                            IconButton(onClick = { notificationPreferencesOnly = false; selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
                         }
                     }
                 }
@@ -400,8 +421,19 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { selected = if (selected == "Saved Posts") "Features" else "Home" }, modifier = Modifier.semantics { contentDescription = if (selected == "Saved Posts") "Back to Features" else "Back to Home" }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, if (selected == "Saved Posts") "Back to Features" else "Back to Home")
+                    IconButton(
+                        onClick = {
+                            selected = fynxBackDestination(selected, notificationPreferencesOnly)
+                            if (notificationPreferencesOnly) notificationPreferencesOnly = false
+                        },
+                        modifier = Modifier.semantics {
+                            contentDescription = "Back to ${fynxBackDestination(selected, notificationPreferencesOnly)}"
+                        }
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back to ${fynxBackDestination(selected, notificationPreferencesOnly)}"
+                        )
                     }
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                         Text(
