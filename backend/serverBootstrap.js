@@ -30,7 +30,7 @@ source = source.replace(
 );
 
 source = source.replace('from "./socialRoutes.js";', 'from "./.fynx-runtime-socialRoutes.js";\nimport { registerDiscoveryRoutes } from "./discoveryRoutes.js";\nimport { registerBusinessRoutes } from "./businessRoutes.js";\nimport { startMarketplaceInspectionReconciliation } from "./marketplaceInspectionReconciliation.js";\nimport { registerMarketplacePaystackWebhook } from "./marketplacePaystackWebhook.js";\nimport { registerMarketplaceCheckoutRoutes } from "./marketplaceCheckout.js";\nimport { registerMarketplaceCheckoutOrderRoutes } from "./marketplaceCheckoutOrder.js";\nimport { registerMarketplaceShippingRoutes } from "./marketplaceShipping.js";');
-source = source.replace('import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";', 'import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";\nimport { initializeMarketplaceTransactionSchema } from "./marketplaceTransactions.js";\nimport { initializeMarketplaceSettlementSchema } from "./marketplaceSettlement.js";');
+source = source.replace('import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";', 'import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";\nimport { ensureMarketplaceSchemaForPool } from "./marketplaceSchema.js";\nimport { initializeMarketplaceTransactionSchema } from "./marketplaceTransactions.js";\nimport { initializeMarketplaceSettlementSchema } from "./marketplaceSettlement.js";');
 source = source.replace('registerSocialRoutes(app, { pool, auth, findUserByUsername });', 'registerSocialRoutes(app, { pool, auth, findUserByUsername });\nif (pool) registerDiscoveryRoutes({ app, pool, auth });\nif (pool) registerBusinessRoutes({ app, auth });\nif (pool) startMarketplaceInspectionReconciliation({ pool });\nif (pool) registerMarketplacePaystackWebhook({ app, pool });');
 source = source.replace(
   'registerMarketplaceCompletionRoutes({ app, pool, auth });',
@@ -109,7 +109,7 @@ source = source.replace(
 );
 source = source.replace(
   'await initDatabase();',
-  'await initDatabase();\nif (pool) { await initializeMarketplaceTransactionSchema(pool); await initializeMarketplaceSettlementSchema(); }'
+  'await initDatabase();\nif (pool) { await ensureMarketplaceSchemaForPool(pool); await initializeMarketplaceTransactionSchema(pool); await initializeMarketplaceSettlementSchema(); }'
 );
 await writeFile(runtimePath, source, "utf8");
 
