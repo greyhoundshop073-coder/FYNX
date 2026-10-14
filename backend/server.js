@@ -168,6 +168,179 @@ async function initDatabase() {
     CREATE INDEX IF NOT EXISTS ai_pending_message_actions_user_idx ON ai_pending_message_actions(user_id,status,created_at DESC);
     CREATE UNIQUE INDEX IF NOT EXISTS ai_pending_message_actions_one_pending_idx ON ai_pending_message_actions(user_id) WHERE status='pending';
   `);
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_photo_media_id BIGINT");
+  await pool.query(`DO $migration$ BEGIN ALTER TABLE users ADD CONSTRAINT users_profile_photo_media_fk FOREIGN KEY (profile_photo_media_id) REFERENCES message_media(id) ON DELETE SET NULL; EXCEPTION WHEN duplicate_object THEN NULL; END $migrationimport express from "express";
+// Profile-photo media follows profile visibility and block state.
+import http from "http";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import pg from "pg";
+import { WebSocketServer } from "ws";
+import { registerSocialRoutes } from "./socialRoutes.js";
+import { ensureStatusSchema } from "./statusSchema.js";
+import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";
+import { registerMarketplaceReputationRoutes } from "./marketplaceReputation.js";
+import { registerMarketplaceCompletionRoutes } from "./marketplaceCompletion.js";
+import { registerMoneyPlannerRoutes } from "./moneyPlanner.js";
+import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";
+import { registerTrustSafetyRoutes } from "./trustSafety.js";
+
+const { Pool } = pg;
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server, path: "/realtime" });
+
+// Keep the API deliberately strict: large media is uploaded separately and authenticated.
+app.disable("x-powered-by");
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Frame-Options", "DENY");
+  if (process.env.NODE_ENV === "production") res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  next();
+});
+app.use(express.json({ limit: "18mb", strict: true }));
+app.use((req, res, next) => {
+  if (req.method !== "GET" && req.method !== "HEAD") res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
+const PORT = Number(process.env.PORT || 10000);
+const JWT_SECRET = process.env.JWT_SECRET || "";
+const DATABASE_URL = process.env.DATABASE_URL || "";
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
+const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
+const pool = DATABASE_URL ? new Pool({
+  connectionString: DATABASE_URL,
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  max: Number(process.env.DB_POOL_MAX || 20),
+  min: Number(process.env.DB_POOL_MIN || 2),
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
+  statement_timeout: 15_000,
+  query_timeout: 20_000,
+  keepAlive: true
+}) : null;
+const clientsByUserId = new Map();
+const activeCalls = new Map();
+
+// Lightweight per-process abuse protection. Production deployments should also enforce
+// rate limits at the edge/load-balancer so limits remain effective across instances.
+const rateBuckets = new Map();
+const RATE_WINDOW_MS = 60_000;
+const RATE_LIMITS = { auth: 20, assistant: 20, media: 30, messages: 120, general: 240 };
+const MAX_RATE_BUCKETS = 20_000;
+const responseCache = new Map();
+const CACHE_TTL_MS = 15_000;
+function cacheGet(key) { const hit = responseCache.get(key); if (!hit || hit.expiresAt <= Date.now()) { responseCache.delete(key); return null; } return hit.value; }
+function cacheSet(key, value, ttl = CACHE_TTL_MS) { if (responseCache.size >= 1_000) { const first = responseCache.keys().next().value; if (first) responseCache.delete(first); } responseCache.set(key, { value, expiresAt: Date.now() + ttl }); }
+function rateLimit(bucket, limit) {
+  return (req, res, next) => {
+    const key = `${bucket}:${req.ip || req.socket.remoteAddress || "unknown"}:${req.user?.sub || "anonymous"}`;
+    if (!rateBuckets.has(key) && rateBuckets.size >= MAX_RATE_BUCKETS) return res.status(503).json({ error: "server is temporarily protecting capacity" });
+    const now = Date.now();
+    const current = rateBuckets.get(key);
+    if (!current || now - current.startedAt >= RATE_WINDOW_MS) {
+      rateBuckets.set(key, { startedAt: now, count: 1 });
+      return next();
+    }
+    current.count += 1;
+    if (current.count > limit) {
+      res.setHeader("Retry-After", "60");
+      return res.status(429).json({ error: "too many requests" });
+    }
+    return next();
+  };
+}
+
+app.use("/api/auth", rateLimit("auth", RATE_LIMITS.auth));
+app.use("/api/assistant", rateLimit("assistant", RATE_LIMITS.assistant));
+app.use("/api/media", rateLimit("media", RATE_LIMITS.media));
+app.use("/api/messages", rateLimit("messages", RATE_LIMITS.messages));
+
+setInterval(() => {
+  const cutoff = Date.now() - RATE_WINDOW_MS;
+  for (const [key, value] of rateBuckets) if (value.startedAt < cutoff) rateBuckets.delete(key);
+}, RATE_WINDOW_MS).unref();
+setInterval(() => { const now = Date.now(); for (const [key, value] of responseCache) if (value.expiresAt <= now) responseCache.delete(key); }, CACHE_TTL_MS).unref();
+
+async function initDatabase() {
+  if (!pool) return;
+  const officialFynxUsername = (process.env.FYNX_OFFICIAL_USERNAME || "fynx").trim().toLowerCase();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id BIGSERIAL PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      display_name TEXT NOT NULL DEFAULT '',
+      phone TEXT NOT NULL DEFAULT '',
+      verified BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
+    -- Preserve existing verification decisions; verification is updated separately below.
+    CREATE TABLE IF NOT EXISTS messages (
+      id BIGSERIAL PRIMARY KEY,
+      sender_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      recipient_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      text TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      delivered_at TIMESTAMPTZ,
+      read_at TIMESTAMPTZ,
+      edited BOOLEAN NOT NULL DEFAULT FALSE,
+      deleted BOOLEAN NOT NULL DEFAULT FALSE,
+      reply_to_id BIGINT REFERENCES messages(id) ON DELETE SET NULL
+    );
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_id BIGINT;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_type TEXT;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS voice_duration_ms BIGINT NOT NULL DEFAULT 0;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT NOT NULL DEFAULT 'text';
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_payload JSONB;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS reaction TEXT;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE;
+    CREATE TABLE IF NOT EXISTS message_media (
+      id BIGSERIAL PRIMARY KEY,
+      owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      mime_type TEXT NOT NULL,
+      data BYTEA NOT NULL,
+      byte_size INTEGER NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS message_media_owner_idx ON message_media (owner_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages (sender_id, recipient_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS messages_recipient_idx ON messages (recipient_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS messages_delivery_idx ON messages (recipient_id, delivered_at, created_at DESC);
+    CREATE TABLE IF NOT EXISTS message_poll_votes (message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, option_index INTEGER NOT NULL CHECK (option_index >= 0 AND option_index < 20), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (message_id, user_id));
+    CREATE INDEX IF NOT EXISTS message_poll_votes_message_idx ON message_poll_votes (message_id);
+    CREATE TABLE IF NOT EXISTS friendships (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      friend_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'accepted')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, friend_id)
+    );
+    CREATE INDEX IF NOT EXISTS friendships_user_idx ON friendships (user_id, status);
+    CREATE INDEX IF NOT EXISTS friendships_friend_idx ON friendships (friend_id, status);
+    CREATE TABLE IF NOT EXISTS blocks (
+      blocker_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      blocked_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (blocker_id, blocked_id),
+      CHECK (blocker_id <> blocked_id)
+    );
+    CREATE INDEX IF NOT EXISTS blocks_blocked_idx ON blocks (blocked_id);
+    CREATE TABLE IF NOT EXISTS ai_pending_message_actions (id UUID PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, recipient_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, message_text TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending','sent','cancelled','expired')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '10 minutes'), sent_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL);
+    CREATE INDEX IF NOT EXISTS ai_pending_message_actions_user_idx ON ai_pending_message_actions(user_id,status,created_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS ai_pending_message_actions_one_pending_idx ON ai_pending_message_actions(user_id) WHERE status='pending';
+  `);
+);
+  await pool.query("CREATE INDEX IF NOT EXISTS users_profile_photo_media_idx ON users(profile_photo_media_id) WHERE profile_photo_media_id IS NOT NULL");
   await pool.query("UPDATE users SET verified = TRUE WHERE lower(username) = $1", [officialFynxUsername]);
   await pool.query(`DO $migration$ BEGIN ALTER TABLE messages ADD CONSTRAINT messages_media_fk FOREIGN KEY (media_id) REFERENCES message_media(id) ON DELETE SET NULL; EXCEPTION WHEN duplicate_object THEN NULL; END $migration$;`);
 }
