@@ -434,7 +434,6 @@ fun SettingsPanel(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
             .padding(horizontal = 16.dp)
             .widthIn(max = 720.dp)
     ) {
@@ -718,7 +717,7 @@ private fun AppearanceSettingsPanel(
         Triple("Light", "Soft white surfaces with subtle FYNX blue accents", Color(0xFFF5F7FB)),
         Triple("Dark", "Deep navy surfaces with subtle blue reflections", Color(0xFF101827))
     )
-    Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 16.dp)) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back to settings") }
             Column(Modifier.weight(1f)) {
@@ -844,7 +843,7 @@ private fun AppearanceSettingsPanel(
 @Composable
 private fun LanguageSelectionPanel(onBack: () -> Unit) {
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 12.dp).statusBarsPadding()
+        Modifier.fillMaxSize().padding(horizontal = 12.dp)
     ) {
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("‹ Back") }
@@ -890,8 +889,7 @@ private fun AccountProfileSettingsPanel(
     var infoText by remember { mutableStateOf("") }
 
     Column(
-        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding().padding(horizontal = 16.dp)
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp)
     ) {
         Row(
             Modifier.fillMaxWidth().padding(vertical = 8.dp),
