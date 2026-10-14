@@ -1,4 +1,4 @@
-const BASE_URL = (process.env.FYNX_TEST_BACKEND_BASE_URL || "https://fynx-backend-testing-testing.up.railway.app").replace(/\\/$/, "");
+const BASE_URL = (process.env.FYNX_TEST_BACKEND_BASE_URL || "https://fynx-backend-testing-testing.up.railway.app").replace(/\/$/, "");
 if (!BASE_URL.startsWith("https://")) throw new Error("Isolated backend smoke test requires HTTPS");
 
 async function request(path, { method = "GET", token, body } = {}) {
@@ -22,7 +22,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const suffix = String(process.env.GITHUB_RUN_ID || Date.now()).replace(/\\D/g, "").slice(-10);
+const suffix = String(process.env.GITHUB_RUN_ID || Date.now()).replace(/\D/g, "").slice(-10);
 const password = `FynxSmoke-${suffix}-Strong!`;
 
 async function account(username) {
