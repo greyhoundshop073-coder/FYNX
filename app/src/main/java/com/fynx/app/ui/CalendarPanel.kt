@@ -15,6 +15,22 @@ import java.util.Calendar
 import java.util.Locale
 
 private val calendarFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+
+private fun isValidCalendarDate(value: String): Boolean {
+    return try {
+        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
+        val parsed = formatter.parse(value)
+        parsed != null && formatter.format(parsed) == value
+    } catch (_: Exception) { false }
+}
+
+private fun isValidCalendarTime(value: String): Boolean {
+    return try {
+        val formatter = SimpleDateFormat("HH:mm", Locale.US).apply { isLenient = false }
+        val parsed = formatter.parse(value)
+        parsed != null && formatter.format(parsed) == value
+    } catch (_: Exception) { false }
+}
 private const val PREFS = "fynx_calendar_events"
 
 data class FynxCalendarEvent(val id: Long, val title: String, val date: String, val time: String = "", val notes: String = "", val repeat: String = "None")
@@ -44,6 +60,7 @@ fun CalendarPanel() {
     var time by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
     var repeat by remember { mutableStateOf("None") }
+    var validationError by remember { mutableStateOf<String?>(null) }
     var events by remember { mutableStateOf(decode(c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(eventsKey(c), "") ?: "")) }
     var nextId by remember { mutableLongStateOf((events.maxOfOrNull { it.id } ?: 0) + 1) }
     var editing by remember { mutableStateOf<FynxCalendarEvent?>(null) }
@@ -93,17 +110,22 @@ fun CalendarPanel() {
             }
         }
         Text("Events for $selected", style = MaterialTheme.typography.titleMedium)
-        OutlinedTextField(title, { title = it }, label = { Text("Event title") }, singleLine = true, shape = FynxDesign.ControlShape, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(title, { title = it; validationError = null }, label = { Text("Event title") }, singleLine = true, shape = FynxDesign.ControlShape, modifier = Modifier.fillMaxWidth())
+        validationError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(time, { time = it }, label = { Text("Time") }, singleLine = true, shape = FynxDesign.ControlShape, modifier = Modifier.weight(1f))
+            OutlinedTextField(time, { time = it; validationError = null }, label = { Text("Time (24-hour, optional)") }, singleLine = true, shape = FynxDesign.ControlShape, modifier = Modifier.weight(1f))
             Button(onClick = {
                 val t = title.trim()
-                if (t.isNotEmpty()) {
-                    val e = FynxCalendarEvent(nextId++, t, selected, time.trim(), notes.trim(), repeat)
-                    events = events + e
-                    save(c, events)
-                    CalendarReminderScheduler.schedule(c, e)
-                    title = ""; time = ""; notes = ""; repeat = "None"
+                when {
+                    t.isEmpty() -> validationError = "Enter an event title."
+                    time.isNotBlank() && !isValidCalendarTime(time.trim()) -> validationError = "Use a valid 24-hour time, for example 09:30."
+                    else -> {
+                        val e = FynxCalendarEvent(nextId++, t, selected, time.trim(), notes.trim(), repeat)
+                        events = events + e
+                        save(c, events)
+                        CalendarReminderScheduler.schedule(c, e)
+                        title = ""; time = ""; notes = ""; repeat = "None"; validationError = null
+                    }
                 }
             }, shape = FynxDesign.ControlShape) { Text("Add") }
         }
@@ -138,16 +160,27 @@ private fun EventEditor(e: FynxCalendarEvent, onCancel: () -> Unit, onSave: (Fyn
     var time by remember(e) { mutableStateOf(e.time) }
     var notes by remember(e) { mutableStateOf(e.notes) }
     var repeat by remember(e) { mutableStateOf(e.repeat) }
+    var validationError by remember(e) { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             TextButton(onClick = onCancel, shape = FynxDesign.ControlShape) { Text("Cancel") }
             Text("Edit event", style = MaterialTheme.typography.titleLarge)
-            TextButton(onClick = { onSave(e.copy(title = title.trim().ifEmpty { e.title }, date = date.trim().ifEmpty { e.date }, time = time.trim(), notes = notes.trim(), repeat = repeat)) }, shape = FynxDesign.ControlShape) { Text("Save") }
+            TextButton(onClick = {
+                val cleanDate = date.trim()
+                val cleanTime = time.trim()
+                when {
+                    title.isBlank() -> validationError = "Enter an event title."
+                    !isValidCalendarDate(cleanDate) -> validationError = "Use a valid date in YYYY-MM-DD format."
+                    cleanTime.isNotBlank() && !isValidCalendarTime(cleanTime) -> validationError = "Use a valid 24-hour time, for example 09:30."
+                    else -> { validationError = null; onSave(e.copy(title = title.trim(), date = cleanDate, time = cleanTime, notes = notes.trim(), repeat = repeat)) }
+                }
+            }, shape = FynxDesign.ControlShape) { Text("Save") }
         }
         HorizontalDivider(color = FynxDesign.Outline)
-        OutlinedTextField(title, { title = it }, label = { Text("Event title") }, shape = FynxDesign.ControlShape, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(date, { date = it }, label = { Text("Date") }, shape = FynxDesign.ControlShape, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(time, { time = it }, label = { Text("Time") }, shape = FynxDesign.ControlShape, modifier = Modifier.fillMaxWidth())
+        validationError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        OutlinedTextField(title, { title = it; validationError = null }, label = { Text("Event title") }, shape = FynxDesign.ControlShape, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(date, { date = it; validationError = null }, label = { Text("Date (YYYY-MM-DD)") }, shape = FynxDesign.ControlShape, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(time, { time = it; validationError = null }, label = { Text("Time (24-hour, optional)") }, shape = FynxDesign.ControlShape, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(notes, { notes = it }, label = { Text("Details / notes") }, shape = FynxDesign.ControlShape, modifier = Modifier.fillMaxWidth(), minLines = 3)
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text("Repeat: $repeat", color = FynxDesign.TextSecondary)
