@@ -166,6 +166,10 @@ async function ensureSchema() {
   return schemaPromise;
 }
 
+export async function initializeMarketplaceSettlementSchema() {
+  return ensureSchema();
+}
+
 function publicPayoutAccount(row) {
   return {
     id: String(row.id),
