@@ -31,7 +31,7 @@ async function requestBinary(path, { token } = {}) {
   return { status: response.status, contentType: response.headers.get("content-type") || "", bytes };
 }
 
-const suffix = String(process.env.GITHUB_RUN_ID || Date.now()).replace(/\D/g, "").slice(-10);
+const suffix = String(Date.now()).replace(/\D/g, "").slice(-10);
 const password = `FynxSmoke-${suffix}-Strong!`;
 
 async function account(username) {
