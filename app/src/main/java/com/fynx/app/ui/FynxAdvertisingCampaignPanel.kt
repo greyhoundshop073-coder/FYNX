@@ -24,6 +24,7 @@ fun FynxAdvertisingCampaignPanel(currentUsername: String) {
     var headline by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
     var creativeType by remember { mutableStateOf("product") }
+    var creativeRef by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
     var interests by remember { mutableStateOf("") }
     var daily by remember { mutableStateOf(1000L) }
@@ -55,6 +56,11 @@ fun FynxAdvertisingCampaignPanel(currentUsername: String) {
                 FilterChip(selected = creativeType == type, onClick = { creativeType = type }, label = { Text(type.replaceFirstChar { it.uppercase() }) }, leadingIcon = { Icon(if (type == "business") Icons.Default.Storefront else Icons.Default.Campaign, null) })
             }
         }
+        if (creativeType != "product") {
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(creativeRef, { creativeRef = it.filter(Char::isDigit).take(20) }, Modifier.fillMaxWidth(), label = { Text(if (creativeType == "post") "Your post ID" else "Your business profile ID") }, singleLine = true)
+            Text("Use the numeric ID of content you own. The server verifies ownership before accepting the advert.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(headline, { headline = it.take(180) }, Modifier.fillMaxWidth(), label = { Text("Headline") }, singleLine = true)
         Spacer(Modifier.height(8.dp))
@@ -69,7 +75,7 @@ fun FynxAdvertisingCampaignPanel(currentUsername: String) {
         Text("Total budget: ₦" + (total / 100.0))
         Slider(value = total.toFloat(), onValueChange = { total = it.toLong().coerceAtLeast(daily) }, valueRange = 1000f..1000000f)
         Spacer(Modifier.height(8.dp))
-        Button(enabled = !loading && name.isNotBlank() && headline.isNotBlank() && total >= daily, onClick = {
+        Button(enabled = !loading && name.isNotBlank() && headline.isNotBlank() && total >= daily && (creativeType == "product" || creativeRef.toLongOrNull()?.let { it > 0 } == true), onClick = {
             loading = true; message = null
             val targeting = JSONObject().apply {
                 put("locations", JSONArray(location.split(',').map { it.trim() }.filter { it.isNotBlank() }))
@@ -77,6 +83,7 @@ fun FynxAdvertisingCampaignPanel(currentUsername: String) {
             }
             val payload = JSONObject().apply {
                 put("name", name.trim()); put("creativeType", creativeType); put("headline", headline.trim()); put("body", body.trim())
+                creativeRef.toLongOrNull()?.takeIf { it > 0 }?.let { put("creativeRef", it.toString()) }
                 put("targeting", targeting); put("dailyBudgetKobo", daily); put("totalBudgetKobo", total)
                 put("idempotencyKey", "android-" + System.currentTimeMillis())
             }
@@ -84,7 +91,7 @@ fun FynxAdvertisingCampaignPanel(currentUsername: String) {
                 FynxAdvertisingClient.createCampaign(context, payload)
                     .onSuccess { created ->
                         campaigns = listOf(created) + campaigns
-                        name = ""; headline = ""; body = ""
+                        name = ""; headline = ""; body = ""; creativeRef = ""
                         message = "Advert created as draft. Submit it for review below."
                     }.onFailure { message = it.message ?: "Unable to create advert." }
                 loading = false
