@@ -331,6 +331,18 @@ jobs:
             done
             test "$passed" -eq 1 || { echo "Isolated backend $endpoint check failed"; exit 1; }
           done
+      - name: Wait for the isolated backend social-post route to be deployed
+        run: |
+          set -euo pipefail
+          URL="https://fynx-backend-testing-testing.up.railway.app/api/social/posts"
+          for attempt in $(seq 1 18); do
+            status=$(curl --silent --show-error --max-time 15 -o /tmp/fynx-post-route.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' -d '{}') || status=000
+            if [ "$status" = "401" ]; then echo "Social post route is registered and authentication is enforced"; exit 0; fi
+            echo "Waiting for deployed social post route (HTTP $status, attempt $attempt/18)"
+            sleep 5
+          done
+          cat /tmp/fynx-post-route.json
+          exit 1
       - name: Smoke-test registration, image upload, private post, and direct messaging
         env:
           FYNX_TEST_BACKEND_BASE_URL: https://fynx-backend-testing-testing.up.railway.app
