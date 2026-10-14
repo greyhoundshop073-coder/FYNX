@@ -22,6 +22,15 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+async function requestBinary(path, { token } = {}) {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    headers: { Accept: "*/*", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    signal: AbortSignal.timeout(20_000),
+  });
+  const bytes = Buffer.from(await response.arrayBuffer());
+  return { status: response.status, contentType: response.headers.get("content-type") || "", bytes };
+}
+
 const suffix = String(process.env.GITHUB_RUN_ID || Date.now()).replace(/\D/g, "").slice(-10);
 const password = `FynxSmoke-${suffix}-Strong!`;
 
@@ -55,6 +64,14 @@ const upload = await request("/api/media", {
 assert(upload.status === 201 && upload.data.media?.id, `Image upload failed: HTTP ${upload.status} ${JSON.stringify(upload.data)}`);
 const mediaId = Number(upload.data.media.id);
 assert(Number.isSafeInteger(mediaId) && mediaId > 0, "Image upload returned an invalid media ID");
+
+const currentUser = await request("/api/me", { token: sender.accessToken });
+assert(currentUser.status === 200 && String(currentUser.data.user?.id) === String(sender.user?.id), `Authenticated /api/me failed: HTTP ${currentUser.status}`);
+
+const mediaDownload = await requestBinary(`/api/media/${mediaId}`, { token: sender.accessToken });
+assert(mediaDownload.status === 200, `Uploaded image download failed: HTTP ${mediaDownload.status}`);
+assert(mediaDownload.contentType.toLowerCase().includes("image/png"), `Uploaded image returned unexpected content type: ${mediaDownload.contentType}`);
+assert(mediaDownload.bytes.length > 30 && mediaDownload.bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])), "Downloaded media is not the original PNG payload");
 
 const post = await request("/api/social/posts", {
   method: "POST",
@@ -97,5 +114,13 @@ const message = await request("/api/messages", {
 const messageId = message.data.message?.id ?? message.data.id;
 assert(message.status === 201 && messageId, `Message send failed: HTTP ${message.status} ${JSON.stringify(message.data)}`);
 
-console.log("PASS: isolated backend health/readiness preflight was followed by registration, image upload, private image post, and direct message.");
+const senderHistory = await request(`/api/messages/${recipientName}`, { token: sender.accessToken });
+assert(senderHistory.status === 200 && Array.isArray(senderHistory.data.messages), `Sender message history failed: HTTP ${senderHistory.status}`);
+assert(senderHistory.data.messages.some((item) => String(item.id) === String(messageId) && item.text === `Isolated backend message ${suffix}`), "Sent message was not returned in sender conversation history");
+
+const recipientHistory = await request(`/api/messages/${senderName}`, { token: recipient.accessToken });
+assert(recipientHistory.status === 200 && Array.isArray(recipientHistory.data.messages), `Recipient message history failed: HTTP ${recipientHistory.status}`);
+assert(recipientHistory.data.messages.some((item) => String(item.id) === String(messageId) && item.text === `Isolated backend message ${suffix}`), "Recipient could not retrieve the delivered message");
+
+console.log("PASS: backend health/readiness, registration, authenticated identity, image upload/download integrity, private image post, direct message send, and sender/recipient history retrieval.");
 console.log(`Smoke records: media=${mediaId}, post=${post.data.postId}, message=${messageId}`);
