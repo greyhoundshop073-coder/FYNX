@@ -315,21 +315,23 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-provider: basic
-      - name: Verify isolated Railway backend health and database readiness
+      - name: Verify isolated Railway backend health and exact-commit database readiness
+        env:
+          EXPECTED_BACKEND_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           BASE_URL="https://fynx-backend-testing-testing.up.railway.app"
           for endpoint in health ready; do
             passed=0
-            for attempt in $(seq 1 12); do
-              if curl --fail --silent --show-error --max-time 15 "$BASE_URL/$endpoint" -o "/tmp/fynx-$endpoint.json" && node -e 'const fs=require("fs");const p=process.argv[1];const x=JSON.parse(fs.readFileSync("/tmp/fynx-"+p+".json","utf8"));if(x.ok!==true||x.service!=="fynx-backend"||(p==="ready"&&x.database!=="ready"))process.exit(1)' "$endpoint"; then
+            for attempt in $(seq 1 36); do
+              if curl --fail --silent --show-error --max-time 15 "$BASE_URL/$endpoint" -o "/tmp/fynx-$endpoint.json" && node -e 'const fs=require("fs");const p=process.argv[1];const x=JSON.parse(fs.readFileSync("/tmp/fynx-"+p+".json","utf8"));if(x.ok!==true||x.service!=="fynx-backend"||x.commit!==process.env.EXPECTED_BACKEND_SHA||(p==="ready"&&x.database!=="ready"))process.exit(1)' "$endpoint"; then
                 passed=1
                 break
               fi
-              echo "Waiting for isolated backend $endpoint readiness (attempt $attempt/12)"
+              echo "Waiting for isolated backend $endpoint to serve expected commit $EXPECTED_BACKEND_SHA and be ready (attempt $attempt/36)"
               sleep 5
             done
-            test "$passed" -eq 1 || { echo "Isolated backend $endpoint check failed"; exit 1; }
+            test "$passed" -eq 1 || { echo "Isolated backend $endpoint did not reach expected commit/readiness"; cat "/tmp/fynx-$endpoint.json" || true; exit 1; }
           done
       - name: Wait for the isolated backend social-post route to be deployed
         run: |

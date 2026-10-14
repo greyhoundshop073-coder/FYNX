@@ -248,16 +248,17 @@ function validateSignalPayload(signalType, body) {
 }
 
 app.get("/ready", async (_req, res) => {
-  if (!pool) return res.status(503).json({ ok: false, service: "fynx-backend", database: "not-configured" });
-  try { await pool.query("SELECT 1"); return res.status(200).json({ ok: true, service: "fynx-backend", database: "ready" }); }
-  catch { return res.status(503).json({ ok: false, service: "fynx-backend", database: "unavailable" }); }
+  const commit = process.env.RAILWAY_GIT_COMMIT_SHA || null;
+  if (!pool) return res.status(503).json({ ok: false, service: "fynx-backend", database: "not-configured", commit });
+  try { await pool.query("SELECT 1"); return res.status(200).json({ ok: true, service: "fynx-backend", database: "ready", commit }); }
+  catch { return res.status(503).json({ ok: false, service: "fynx-backend", database: "unavailable", commit }); }
 });
 
 // Liveness must report whether the HTTP process is running; database readiness is
 // checked separately by /ready so transient DB startup/connectivity does not cause
 // the platform to kill an otherwise-running process before diagnostics can be read.
 app.get("/health", (_req, res) => {
-  return res.status(200).json({ ok: true, service: "fynx-backend" });
+  return res.status(200).json({ ok: true, service: "fynx-backend", commit: process.env.RAILWAY_GIT_COMMIT_SHA || null });
 });
 
 app.post("/api/auth/register", async (req, res) => {
