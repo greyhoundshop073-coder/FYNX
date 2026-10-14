@@ -253,10 +253,11 @@ app.get("/ready", async (_req, res) => {
   catch { return res.status(503).json({ ok: false, service: "fynx-backend", database: "unavailable" }); }
 });
 
-app.get("/health", async (_req, res) => {
-  let database = "not-configured";
-  if (pool) { try { await pool.query("SELECT 1"); database = "ready"; } catch { database = "unavailable"; } }
-  res.status(database === "ready" ? 200 : 503).json({ ok: database === "ready", service: "fynx-backend", database });
+// Liveness must report whether the HTTP process is running; database readiness is
+// checked separately by /ready so transient DB startup/connectivity does not cause
+// the platform to kill an otherwise-running process before diagnostics can be read.
+app.get("/health", (_req, res) => {
+  return res.status(200).json({ ok: true, service: "fynx-backend" });
 });
 
 app.post("/api/auth/register", async (req, res) => {
