@@ -63,6 +63,19 @@ const post = await request("/api/social/posts", {
 });
 assert(post.status === 201 && post.data.postId, `Post creation failed: HTTP ${post.status} ${JSON.stringify(post.data)}`);
 
+const friendRequest = await request("/api/friends/request", {
+  method: "POST",
+  token: sender.accessToken,
+  body: { username: recipientName },
+});
+assert(friendRequest.status === 201 && friendRequest.data.request?.id, `Friend request failed: HTTP ${friendRequest.status} ${JSON.stringify(friendRequest.data)}`);
+const accepted = await request(`/api/friends/requests/${friendRequest.data.request.id}/accept`, {
+  method: "POST",
+  token: recipient.accessToken,
+  body: {},
+});
+assert(accepted.status === 200, `Friend request acceptance failed: HTTP ${accepted.status} ${JSON.stringify(accepted.data)}`);
+
 const message = await request("/api/messages", {
   method: "POST",
   token: sender.accessToken,
