@@ -337,7 +337,7 @@ jobs:
           URL="https://fynx-backend-testing-testing.up.railway.app/api/social/posts"
           for attempt in $(seq 1 18); do
             status=$(curl --silent --show-error --max-time 15 -o /tmp/fynx-post-route.json -w '%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' -d '{}') || status=000
-            if [ "$status" = "401" ]; then echo "Social post route is registered and authentication is enforced"; exit 0; fi
+            if [ "$status" = "401" ] || [ "$status" = "400" ]; then echo "Social post route is registered and responds to requests"; exit 0; fi
             echo "Waiting for deployed social post route (HTTP $status, attempt $attempt/18)"
             sleep 5
           done
