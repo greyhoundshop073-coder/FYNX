@@ -1,5 +1,6 @@
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
+import { ensureStatusSchema } from './statusSchema.js';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
@@ -28,6 +29,7 @@ export function registerStatusManagementRoutes({ app }) {
 
   app.get('/api/statuses/archive', auth, async (req, res) => {
     try {
+      await ensureStatusSchema(pool);
       const result = await pool.query(`
         SELECT s.id,s.owner_id,u.username,u.display_name,s.type,s.text,s.media_id,
                s.background_color,s.foreground_color,s.font,s.alignment,s.private_status,s.audience,
@@ -63,6 +65,7 @@ export function registerStatusManagementRoutes({ app }) {
 
   app.delete('/api/statuses/:statusId', auth, async (req, res) => {
     try {
+      await ensureStatusSchema(pool);
       const statusId = String(req.params?.statusId || '').trim();
       if (!/^[0-9a-f-]{36}$/i.test(statusId)) return res.status(400).json({ error: 'invalid status id' });
       const result = await pool.query(
