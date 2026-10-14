@@ -26,6 +26,13 @@ checks = {
     "runtime navigation verifier exists": "Navigation" in runtime and "check" in runtime.lower(),
     "Home panel remains connected": "FynxRemoteHomeSocialPanel" in home or "FynxHomeSocialHubPanel" in home,
 }
+app_shell_checks = {
+    "bottom navigation remains visible on every primary tab": 'if (!isKeyboardVisible && selected in mainNav.map { it.key })' in app,
+    "Home-only scroll hiding does not hide navigation on other tabs": 'visible = selected != "Home" || !homeChromeHidden' in app,
+    "Friends primary-tab header no longer acts as a fake Back button": 'IconButton(onClick = { selected = "Home" }, modifier = Modifier.semantics { contentDescription = "Back to Home" })' not in app,
+    "Chats, Marketplace and More use primary-tab headers without secondary Back arrows": 'selected in mainNav.map { it.key }' in app and '"Features" -> "More"' in app,
+}
+checks.update(app_shell_checks)
 failed = [name for name, ok in checks.items() if not ok]
 if failed:
     raise SystemExit("BADGE D RED: " + "; ".join(failed))
