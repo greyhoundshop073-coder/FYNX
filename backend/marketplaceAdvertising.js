@@ -111,6 +111,17 @@ function positiveInt(value, max = Number.MAX_SAFE_INTEGER) {
   return Number.isSafeInteger(number) && number >= 0 && number <= max ? number : null;
 }
 
+function validCampaignSchedule(startsAt, endsAt) {
+  if (startsAt !== null && startsAt !== undefined && startsAt !== "") {
+    if (typeof startsAt !== "string" || !Number.isFinite(Date.parse(startsAt))) return false;
+  }
+  if (endsAt !== null && endsAt !== undefined && endsAt !== "") {
+    if (typeof endsAt !== "string" || !Number.isFinite(Date.parse(endsAt))) return false;
+  }
+  if (startsAt && endsAt && Date.parse(startsAt) > Date.parse(endsAt)) return false;
+  return true;
+}
+
 async function validateCreativeReference(client, ownerId, creativeType, creativeRef) {
   if (typeof creativeRef !== "string" || !/^[0-9]+$/.test(creativeRef)) return false;
   const referenceId = positiveInt(creativeRef);
@@ -171,6 +182,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     const daily = positiveInt(dailyBudgetKobo);
     const total = positiveInt(totalBudgetKobo);
     if (!parsedTargeting || daily === null || total === null || daily < 1 || total < 1 || daily > total) return res.status(400).json({ error: "invalid advertising budget or targeting" });
+    if (!validCampaignSchedule(startsAt, endsAt)) return res.status(400).json({ error: "invalid campaign schedule: provide valid dates and ensure the end is not before the start" });
     if (idempotencyKey && (typeof idempotencyKey !== "string" || idempotencyKey.length > 120)) return res.status(400).json({ error: "invalid idempotency key" });
     const client = await pool.connect();
     try {
