@@ -301,7 +301,7 @@ jobs:
 
   isolated_backend_apk:
     name: Build APK connected to isolated Railway backend
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/backend-schema-sql-newline-20261013' }}
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/fix/backend-schema-sql-newline-20261013') || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'fix/backend-schema-sql-newline-20261013') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout exact branch commit
