@@ -16,6 +16,9 @@ android {
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         versionName = "1.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "local"}"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        val backendBaseUrl = providers.gradleProperty("fynxBackendBaseUrl").orElse(providers.environmentVariable("FYNX_BACKEND_BASE_URL")).orElse("").get().trim().trimEnd('/')
+        require(backendBaseUrl.isBlank() || backendBaseUrl.startsWith("https://")) { "FYNX backend override must use HTTPS" }
+        buildConfigField("String", "FYNX_BACKEND_BASE_URL", "\"${backendBaseUrl}\"")
     }
 
     compileOptions {
@@ -27,7 +30,7 @@ android {
         jvmTarget = "17"
         freeCompilerArgs += "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi"
     }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
 }
 
 dependencies {
