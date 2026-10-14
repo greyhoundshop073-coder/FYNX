@@ -109,7 +109,7 @@ source = source.replace(
 );
 source = source.replace(
   'await initDatabase();',
-  'await initDatabase();\nif (pool) { await ensureMarketplaceSchemaForPool(pool); await initializeMarketplaceTransactionSchema(pool); await initializeMarketplaceSettlementSchema(); }'
+  'await initDatabase();\nif (pool) { await ensureMarketplaceSchemaForPool(pool); await initializeMarketplaceTransactionSchema(pool); await initializeMarketplaceSettlementSchema(); }\nif (typeof globalThis["__fynxResolveMarketplaceStartupReady"] === "function") globalThis["__fynxResolveMarketplaceStartupReady"]();'
 );
 await writeFile(runtimePath, source, "utf8");
 
