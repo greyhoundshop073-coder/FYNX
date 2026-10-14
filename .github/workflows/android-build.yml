@@ -331,6 +331,10 @@ jobs:
             done
             test "$passed" -eq 1 || { echo "Isolated backend $endpoint check failed"; exit 1; }
           done
+      - name: Smoke-test registration, image upload, private post, and direct messaging
+        env:
+          FYNX_TEST_BACKEND_BASE_URL: https://fynx-backend-testing-testing.up.railway.app
+        run: node scripts/smoke_test_isolated_backend.mjs
       - name: Build APK with isolated test backend only
         run: ./gradlew assembleDebug -PfynxBackendBaseUrl=https://fynx-backend-testing-testing.up.railway.app --no-daemon --build-cache
       - name: Verify test APK and record checksum
