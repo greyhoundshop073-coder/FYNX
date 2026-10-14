@@ -44,7 +44,14 @@ class FynxNetworkRecoveryContractTest {
         val original = FynxBackendClient.baseUrl(context)
         try {
             FynxBackendClient.configureBaseUrl(context, "https://example.invalid///")
-            assertEquals("https://example.invalid", FynxBackendClient.baseUrl(context))
+            val buildOverride = BuildConfig.FYNX_BACKEND_BASE_URL.trim().trimEnd('/')
+            if (buildOverride.isNotBlank()) {
+                // A packaged backend override intentionally outranks persisted
+                // settings, so an isolated-backend APK must retain its target.
+                assertEquals(buildOverride, FynxBackendClient.baseUrl(context))
+            } else {
+                assertEquals("https://example.invalid", FynxBackendClient.baseUrl(context))
+            }
         } finally {
             FynxBackendClient.configureBaseUrl(context, original)
         }
