@@ -105,6 +105,10 @@ await writeFile(runtimeSocialPath, social, "utf8");
 // of leaving Android clients connected to a server that cannot serve real data.
 source = source.replace(
   'initDatabase().catch((error) => { console.error("database initialization failed", error); process.exitCode = 1; });',
+  'await initDatabase();'
+);
+source = source.replace(
+  'await initDatabase();',
   'await initDatabase();\nif (pool) { await initializeMarketplaceTransactionSchema(pool); await initializeMarketplaceSettlementSchema(); }'
 );
 await writeFile(runtimePath, source, "utf8");
