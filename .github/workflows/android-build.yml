@@ -315,6 +315,22 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-provider: basic
+      - name: Verify isolated Railway backend health and database readiness
+        run: |
+          set -euo pipefail
+          BASE_URL="https://fynx-backend-testing-testing.up.railway.app"
+          for endpoint in health ready; do
+            passed=0
+            for attempt in $(seq 1 12); do
+              if curl --fail --silent --show-error --max-time 15 "$BASE_URL/$endpoint" -o "/tmp/fynx-$endpoint.json" && node -e 'const fs=require("fs");const p=process.argv[1];const x=JSON.parse(fs.readFileSync("/tmp/fynx-"+p+".json","utf8"));if(x.ok!==true||x.service!=="fynx-backend"||(p==="ready"&&x.database!=="ready"))process.exit(1)' "$endpoint"; then
+                passed=1
+                break
+              fi
+              echo "Waiting for isolated backend $endpoint readiness (attempt $attempt/12)"
+              sleep 5
+            done
+            test "$passed" -eq 1 || { echo "Isolated backend $endpoint check failed"; exit 1; }
+          done
       - name: Build APK with isolated test backend only
         run: ./gradlew assembleDebug -PfynxBackendBaseUrl=https://fynx-backend-testing-testing.up.railway.app --no-daemon --build-cache
       - name: Verify test APK and record checksum
