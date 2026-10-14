@@ -41,6 +41,8 @@ required = [
 ]
 check("cross-layer integration files all exist", all((ROOT / p).is_file() for p in required))
 check("authenticated app state gates the live UI", "FynxAuthGate" in app and "AuthState.SIGNED_IN" in app)
+check("guest entry is restricted to debug APKs", "FLAG_DEBUGGABLE" in app and "&& !debugBuild" in app)
+check("debug guest session remains clearly marked and sign-in is reachable", 'AuthSession(AuthState.SIGNED_IN, "preview")' in app and '"Sign In" -> FynxAuthGate' in app and '"Sign In", "Sign In / Create Account"' in app)
 check("HTTP client is the shared authenticated backend path", "FynxBackendClient" in app and "Authorization" in client and "Bearer" in client)
 check("realtime client is account-bound", "currentAccountKey()" in realtime and "belongsToCurrentAccount" in realtime and "hasAccessToken" in realtime)
 check("logout/session clearing remains connected", "FynxSecureTokenStore" in auth and "clear" in auth)
