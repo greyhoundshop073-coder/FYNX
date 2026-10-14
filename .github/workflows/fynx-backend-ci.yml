@@ -73,6 +73,7 @@ jobs:
           node --check groupInviteRoutes.js
           node --check groupContentRoutes.js
           node --check statusManagementRoutes.js
+          node --check statusSchema.js
           node --check statusInteractionRoutes.js
           node --check notificationPreferences.js
           node --check notificationDevices.js
