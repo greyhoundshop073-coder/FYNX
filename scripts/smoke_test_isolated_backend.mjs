@@ -76,6 +76,19 @@ const accepted = await request(`/api/friends/requests/${friendRequest.data.reque
 });
 assert(accepted.status === 200, `Friend request acceptance failed: HTTP ${accepted.status} ${JSON.stringify(accepted.data)}`);
 
+const senderFollowsRecipient = await request(`/api/social/follow/${recipientName}`, {
+  method: "POST",
+  token: sender.accessToken,
+  body: {},
+});
+assert(senderFollowsRecipient.status === 201, `Sender follow failed: HTTP ${senderFollowsRecipient.status} ${JSON.stringify(senderFollowsRecipient.data)}`);
+const recipientFollowsSender = await request(`/api/social/follow/${senderName}`, {
+  method: "POST",
+  token: recipient.accessToken,
+  body: {},
+});
+assert(recipientFollowsSender.status === 201, `Mutual follow failed: HTTP ${recipientFollowsSender.status} ${JSON.stringify(recipientFollowsSender.data)}`);
+
 const message = await request("/api/messages", {
   method: "POST",
   token: sender.accessToken,
