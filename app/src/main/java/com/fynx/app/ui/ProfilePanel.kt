@@ -711,11 +711,12 @@ private fun AppearanceSettingsPanel(
     var messageStyle by remember { mutableStateOf(FynxPreferencesStore.loadSettingsMessageStyle(context)) }
     var chooseFontSize by remember { mutableStateOf(false) }
     var chooseMessageStyle by remember { mutableStateOf(false) }
+    // Keep the global Appearance choices aligned with the three agreed options.
+    // Legacy stored values remain readable by the theme runtime, but are not offered as new choices.
     val themes = listOf(
         Triple("System", "System Default", Color(0xFF64748B)),
         Triple("Light", "Soft white surfaces with subtle FYNX blue accents", Color(0xFFF5F7FB)),
-        Triple("Dark", "Deep navy surfaces with subtle blue reflections", Color(0xFF101827)),
-        Triple("Black AMOLED", "True black surfaces, white text, blue selection", Color.Black)
+        Triple("Dark", "Deep navy surfaces with subtle blue reflections", Color(0xFF101827))
     )
     Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 16.dp)) {
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -756,7 +757,7 @@ private fun AppearanceSettingsPanel(
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
-                                if (value == "System") "System Default" else if (value == "Black AMOLED") "AMOLED" else value,
+                                if (value == "System") "System Default" else value,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
                             )
