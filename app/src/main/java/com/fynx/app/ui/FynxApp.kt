@@ -47,10 +47,13 @@ private data class FynxNavItem(val key: String, val label: String, val icon: Ima
 private fun fynxBackDestination(selected: String, notificationPreferencesOnly: Boolean): String =
     when (selected) {
         "Contacts" -> "Chats"
-        "Saved Posts", "Invite" -> "Features"
+        "Saved Posts", "Invite", "Gifts", "To-Do", "Share", "Announcements", "Admin" -> "Features"
         "Privacy" -> "Profile"
         "Notifications" -> if (notificationPreferencesOnly) "Profile" else "Home"
         "Calendar" -> "Extra Tools"
+        "Money Tools" -> "Features"
+        "Stories", "Calls" -> "Home"
+        "Groups" -> "Chats"
         "Business Account" -> "Features"
         "Advertising" -> "Business Account"
         "Advertising Dashboard" -> "Advertising"
@@ -392,7 +395,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                             Icon(Icons.Default.CameraAlt, contentDescription = null)
                         }
                         BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
-                            IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
+                            IconButton(onClick = { notificationPreferencesOnly = false; selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
                         }
                     }
                 }
