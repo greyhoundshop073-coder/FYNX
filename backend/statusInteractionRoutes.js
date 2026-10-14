@@ -2,6 +2,7 @@ import pg from 'pg';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'node:crypto';
 import { queueFynxNotification } from './notificationPush.js';
+import { ensureStatusSchema } from './statusSchema.js';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
@@ -23,6 +24,7 @@ async function ensureSchema() {
   if (!pool) return;
   if (!schemaReady) {
     schemaReady = (async () => {
+      await ensureStatusSchema(pool);
       await pool.query(`
         CREATE TABLE IF NOT EXISTS status_views (
           status_id UUID NOT NULL REFERENCES statuses(id) ON DELETE CASCADE,
