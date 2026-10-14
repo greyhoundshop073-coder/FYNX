@@ -109,7 +109,7 @@ async function initDatabase() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
-    UPDATE users SET verified = FALSE;
+    -- Preserve existing verification decisions; only ensure the official FYNX account is verified.
     UPDATE users SET verified = TRUE WHERE lower(username) = $1;
     CREATE TABLE IF NOT EXISTS messages (
       id BIGSERIAL PRIMARY KEY,
