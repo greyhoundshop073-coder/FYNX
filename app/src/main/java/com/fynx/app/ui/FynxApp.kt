@@ -406,11 +406,32 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { selected = "Home" }, modifier = Modifier.semantics { contentDescription = "Back to Home" }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to Home")
-                    }
+                    Spacer(Modifier.size(48.dp))
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                         Text("Friends", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                    }
+                    Spacer(Modifier.size(48.dp))
+                }
+            } else if (selected in mainNav.map { it.key }) {
+                Row(
+                    Modifier.fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Spacer(Modifier.size(48.dp))
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        Text(
+                            when (selected) {
+                                "Chats" -> "Chats"
+                                "Marketplace" -> "Marketplace"
+                                "Features" -> "More"
+                                else -> selected
+                            },
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge
+                        )
                     }
                     Spacer(Modifier.size(48.dp))
                 }
@@ -467,9 +488,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             // Stay above the system navigation area, but do not follow the IME.
             // When the keyboard opens, the whole surface disappears so no Home
             // post/content is covered. It reappears when the keyboard closes.
-            if (!isKeyboardVisible && selected == "Home") {
+            if (!isKeyboardVisible && selected in mainNav.map { it.key }) {
                 AnimatedVisibility(
-                    visible = !homeChromeHidden,
+                    visible = selected != "Home" || !homeChromeHidden,
                     enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                     exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
                 ) {
