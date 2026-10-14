@@ -347,6 +347,20 @@ jobs:
         env:
           FYNX_TEST_BACKEND_BASE_URL: https://fynx-backend-testing-testing.up.railway.app
         run: node scripts/smoke_test_isolated_backend.mjs
+      - name: Enable KVM for isolated-backend Android runtime test
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          test -e /dev/kvm
+      - name: Verify Android app connects to isolated Railway backend
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7_pro
+          script: ./gradlew connectedDebugAndroidTest -PfynxBackendBaseUrl=https://fynx-backend-testing-testing.up.railway.app --no-daemon --build-cache
       - name: Build APK with isolated test backend only
         run: ./gradlew assembleDebug -PfynxBackendBaseUrl=https://fynx-backend-testing-testing.up.railway.app --no-daemon --build-cache
       - name: Verify test APK and record checksum
