@@ -29,7 +29,7 @@ for needle, label in [
     ('const fynxRealtimeMessagingCanSend = async (senderId, targetId)', "shared message authorization helper"),
     ('fynxRealtimeMessagingBlocks(senderId, targetId)', "mutual block enforcement"),
     ('messages_visibility', "message visibility policy"),
-    ("f.status='ACCEPTED'", "accepted friendship requirement"),
+    ("f.status='accepted'", "accepted friendship requirement"),
     ('conversation unavailable', "HTTP authorization failure"),
     ('fynxRealtimeMessagingAttach(socket, userId)', "authenticated realtime attachment"),
     ('body.type === "typing"', "typing handling"),
