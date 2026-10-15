@@ -23,6 +23,8 @@ required = [
     'DEFAULT_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"',
     'requiresAuthentication = !isPublicAuthPath(path)',
     'FynxSecureTokenStore',
+    'val sessionExpiredEvents: SharedFlow<Unit> = mutableSessionExpiredEvents',
+    'handleUnauthorized(context, requestToken)',
     'normalized.contains("onrender.com", ignoreCase = true)',
 ]
 for needle in required:
