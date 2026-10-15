@@ -7,6 +7,7 @@ const firstUsername = `fynxprobe_${suffix}`.slice(0, 32);
 const secondUsername = `fynxprobe2_${suffix}`.slice(0, 32);
 let firstToken = "";
 let postId = "";
+let keepPostForDiagnosis = false;
 
 async function request(path, { method = "GET", token, body } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -52,6 +53,10 @@ try {
   if (String(me.user?.username || "").toLowerCase() !== firstUsername) {
     throw new Error("authenticated identity did not match the registered account");
   }
+  const secondMe = await request("/api/me", { token: second.accessToken });
+  if (String(secondMe.user?.username || "").toLowerCase() !== secondUsername) {
+    throw new Error("second authenticated identity did not match the second registered account");
+  }
 
   const created = await request("/api/social/posts", {
     method: "POST",
@@ -74,11 +79,15 @@ try {
   const firstFeed = await feedContains(firstToken, postId);
   if (!firstFeed.found) throw new Error(`post creator could not read its own post after scanning ${firstFeed.postsSeen} feed entries`);
   const secondFeed = await feedContains(second.accessToken, postId);
-  if (!secondFeed.found) throw new Error(`second user could not see the first user's PUBLIC post after scanning ${secondFeed.postsSeen} feed entries`);
+  if (!secondFeed.found) {
+    keepPostForDiagnosis = true;
+    console.error("Cross-user feed diagnostic identifiers:", JSON.stringify({ firstUsername, secondUsername, postId, creatorFeedEntries: firstFeed.postsSeen, secondFeedEntries: secondFeed.postsSeen }));
+    throw new Error(`second user could not see the first user's PUBLIC post after scanning ${secondFeed.postsSeen} feed entries`);
+  }
 
-  console.log("PASS: Railway test backend readiness, two-account registration, login, token identity, public post creation, and cross-user feed visibility.");
+  console.log("PASS: Railway test backend readiness, two-account registration, login, both token identities, public post creation, and cross-user feed visibility.");
 } finally {
-  if (postId && firstToken) {
+  if (postId && firstToken && !keepPostForDiagnosis) {
     await request(`/api/social/posts/${encodeURIComponent(postId)}`, { method: "DELETE", token: firstToken }).catch(() => {});
   }
 }
