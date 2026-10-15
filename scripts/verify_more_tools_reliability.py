@@ -18,8 +18,8 @@ def require(source: str, expected: str, label: str) -> None:
 app = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
 require(app, 'var navigationHistory by remember { mutableStateOf(listOf("Home")) }', "secondary navigation history")
 require(app, "navigationHistory = (navigationHistory + selected).takeLast(30)", "bounded navigation history")
-require(app, "navigationHistory.dropLast(1).ifEmpty { listOf(\"Home\") }", "safe navigation stack pop")
-require(app, 'else "Back to previous screen"', "visible secondary-screen back action follows navigation history")
+require(app, "navigationHistory = (navigationHistory.dropLast(1).filterNot { it == selected } + selected).ifEmpty { listOf(\\"Home\\") }", "safe contextual navigation stack pop")
+require(app, 'contentDescription = "Back to ${fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)}"', "visible secondary-screen back action names its contextual parent")
 
 extra = read("app/src/main/java/com/fynx/app/ui/FynxExtraToolsPanel.kt")
 require(extra, "FynxAuthStore.accountStorageKey(context)", "account-scoped Quick Notes")
