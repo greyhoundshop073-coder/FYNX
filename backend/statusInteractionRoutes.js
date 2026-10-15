@@ -189,15 +189,19 @@ export function registerStatusInteractionRoutes({ app }) {
       else {
         await pool.query('INSERT INTO status_likes(status_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [id, req.user.sub]);
         if (String(status.owner_id) !== String(req.user.sub)) {
-          await queueFynxNotification(pool, {
-            userId: status.owner_id,
-            type: 'REACTION',
-            title: 'New Status like',
-            message: `${req.user.username || 'Someone'} liked your Status.`,
-            targetId: id,
-            sourceUsername: req.user.username || null,
-            route: `fynx://status/${id}`
-          });
+          try {
+            await queueFynxNotification(pool, {
+              userId: status.owner_id,
+              type: 'REACTION',
+              title: 'New Status like',
+              message: `${req.user.username || 'Someone'} liked your Status.`,
+              targetId: id,
+              sourceUsername: req.user.username || null,
+              route: `fynx://status/${id}`
+            });
+          } catch (error) {
+            console.error('status like notification', error);
+          }
         }
       }
       return res.json({ liked: !existing.rows[0] });
@@ -223,15 +227,19 @@ export function registerStatusInteractionRoutes({ app }) {
       await pool.query(`INSERT INTO status_reactions(status_id,user_id,reaction) VALUES($1,$2,$3)
         ON CONFLICT(status_id,user_id) DO UPDATE SET reaction=EXCLUDED.reaction, created_at=NOW()`, [id, req.user.sub, reaction]);
       if (String(status.owner_id) !== String(req.user.sub)) {
-        await queueFynxNotification(pool, {
-          userId: status.owner_id,
-          type: 'REACTION',
-          title: 'New Status reaction',
-          message: `${req.user.username || 'Someone'} reacted ${reaction} to your Status.`,
-          targetId: id,
-          sourceUsername: req.user.username || null,
-          route: `fynx://status/${id}`
-        });
+        try {
+          await queueFynxNotification(pool, {
+            userId: status.owner_id,
+            type: 'REACTION',
+            title: 'New Status reaction',
+            message: `${req.user.username || 'Someone'} reacted ${reaction} to your Status.`,
+            targetId: id,
+            sourceUsername: req.user.username || null,
+            route: `fynx://status/${id}`
+          });
+        } catch (error) {
+          console.error('status reaction notification', error);
+        }
       }
       return res.json({ reaction });
     } catch (error) {
