@@ -59,7 +59,7 @@ object FynxBackendClient {
                 normalized != null &&
                 normalized != PRODUCTION_BASE_URL &&
                 normalized != "https://ai-creative-studio-572v.onrender.com"
-            if (safeExplicitOverride) return normalized
+            if (safeExplicitOverride) return checkNotNull(normalized)
             if (normalized != DEBUG_TEST_BASE_URL || !explicitlyConfigured) {
                 prefs.edit()
                     .putString(KEY_BASE_URL, DEBUG_TEST_BASE_URL)
