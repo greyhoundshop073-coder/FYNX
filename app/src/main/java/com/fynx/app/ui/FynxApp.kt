@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 
 private const val FYNX_PREVIEW_MODE = false
 private data class FynxNavItem(val key: String, val label: String, val icon: ImageVector)
@@ -250,6 +251,14 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         if (selected != "Stories") {
             statusOpenOwner = null
             statusOpenId = null
+        }
+    }
+    LaunchedEffect(Unit) {
+        FynxBackendClient.sessionExpiredEvents.collect {
+            if (!FYNX_PREVIEW_MODE) {
+                FynxAuthStore.clear(context)
+                authSession = AuthSession()
+            }
         }
     }
     LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context); notifications = FynxNotificationStore.load(context) }
