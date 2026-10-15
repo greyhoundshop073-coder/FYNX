@@ -419,9 +419,11 @@ app.get("/api/statuses", auth, async (req, res) => {
     await statusSchema();
     const result = await pool.query(`SELECT s.id,s.owner_id,u.username,u.display_name,s.type,s.text,s.media_id,s.background_color,s.foreground_color,s.font,s.alignment,s.private_status,s.audience,s.voice_duration_ms,s.music_catalogue_id,s.music_title,s.music_artist,s.music_duration_ms,EXTRACT(EPOCH FROM s.created_at)*1000 AS created_at,EXTRACT(EPOCH FROM s.expires_at)*1000 AS expires_at
       FROM statuses s JOIN users u ON u.id=s.owner_id
-      WHERE s.expires_at > NOW() AND (s.owner_id=$1 OR s.audience='EVERYONE' OR (s.audience='FRIENDS' AND EXISTS(
-        SELECT 1 FROM friendships f WHERE ((f.user_id=s.owner_id AND f.friend_id=$1) OR (f.user_id=$1 AND f.friend_id=s.owner_id)) AND f.status='accepted'
-      ))) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=s.owner_id) OR (b.blocker_id=s.owner_id AND b.blocked_id=$1))
+      WHERE s.expires_at > NOW() AND (s.owner_id=$1 OR (
+        (s.audience='EVERYONE' OR (s.audience='FRIENDS' AND EXISTS(
+          SELECT 1 FROM friendships f WHERE ((f.user_id=s.owner_id AND f.friend_id=$1) OR (f.user_id=$1 AND f.friend_id=s.owner_id)) AND f.status='accepted'
+        ))) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=s.owner_id) OR (b.blocker_id=s.owner_id AND b.blocked_id=$1))
+      ))
       ORDER BY s.created_at DESC LIMIT 200`, [req.user.sub]);
     return res.json({ statuses: result.rows.map(row => ({ id:String(row.id), ownerUsername:row.username, ownerDisplayName:row.display_name, type:row.type, text:row.text || null, mediaId:row.media_id == null ? null : String(row.media_id), mediaUrl:row.media_id == null ? null : `/api/media/${row.media_id}`, backgroundColor:Number(row.background_color), foregroundColor:Number(row.foreground_color), font:row.font, alignment:Number(row.alignment), privateStatus:Boolean(row.private_status), audience:row.audience || (row.private_status ? 'FRIENDS' : 'EVERYONE'), voiceDurationMs:Number(row.voice_duration_ms), musicCatalogueId:row.music_catalogue_id == null ? null : Number(row.music_catalogue_id), musicTitle:row.music_title || null, musicArtist:row.music_artist || null, musicDurationMs:Number(row.music_duration_ms || 0), createdAtMillis:Number(row.created_at), expiresAtMillis:Number(row.expires_at) })) });
   } catch (error) { console.error("statuses", error); return res.status(500).json({ error:"status lookup failed" }); }
