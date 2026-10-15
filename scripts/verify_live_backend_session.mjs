@@ -28,10 +28,12 @@ async function request(path, { method = "GET", token, body } = {}) {
 }
 
 const health = await request("/health");
+console.log("Backend /health:", JSON.stringify(health));
 if (health?.ok !== true || health?.service !== "fynx-backend" || health?.database !== "ready") {
   throw new Error(`Backend health is not ready: ${JSON.stringify(health)}`);
 }
 const ready = await request("/ready");
+console.log("Backend /ready:", JSON.stringify(ready));
 if (ready?.ok !== true || ready?.database !== "ready") {
   throw new Error(`Backend readiness is not ready: ${JSON.stringify(ready)}`);
 }
