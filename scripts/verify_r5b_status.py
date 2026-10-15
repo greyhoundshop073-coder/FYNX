@@ -58,6 +58,7 @@ require('Status viewer details client parses API response','suspend fun viewers(
 require('Status owner can open viewer list from view count','FynxStatusClient.viewers(context, status.id)' in timeline and 'showViewers = true' in timeline and 'Text("Status viewers"' in timeline)
 require('Status viewer list shows reaction or like','viewer.reaction != null' in timeline and 'viewer.liked' in timeline and 'viewedAtMillis' in timeline)
 require('voice Status supports recording again after preview','Text("Record again")' in mature and 'beginMatureVoiceRecording(' in mature and 'Text("Delete")' in mature)
+require('voice Status supports pause/resume without counting paused time','recordingPaused' in mature and 'recorder?.pause()' in mature and 'recorder?.resume()' in mature and 'accumulatedRecordingMs' in mature and 'if (!recordingPaused)' in mature)
 require('client supports likes','FynxStatusClient.toggleLike(context, status.id)' in timeline)
 require('client supports emoji reactions','FynxStatusClient.react(context, status.id, emoji)' in timeline)
 require('client supports replies','FynxStatusClient.reply(context, status.id, body)' in timeline)
