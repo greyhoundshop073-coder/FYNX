@@ -114,6 +114,19 @@ try {
   if (postId) await request(`/api/social/posts/${encodeURIComponent(postId)}`, { method: "DELETE", token });
 }
 
+// Verify the backend accepts the app's FRIENDS_ONLY visibility enum as well.
+let friendsPostId = "";
+try {
+  const post = await request("/api/social/posts", {
+    method: "POST", token,
+    body: { text: `FYNX friends-only network smoke ${Date.now()}`, visibility: "FRIENDS_ONLY" }
+  });
+  friendsPostId = String(post?.postId || "");
+  if (!/^\\d+$/.test(friendsPostId)) throw new Error("Friends-only post response did not include a valid postId.");
+} finally {
+  if (friendsPostId) await request(`/api/social/posts/${encodeURIComponent(friendsPostId)}`, { method: "DELETE", token });
+}
+
 // FYNX's configured message privacy requires a mutual follow relationship.
 await request(`/api/social/follow/${encodeURIComponent(recipient.username)}`, {
   method: "POST", token, body: {}
