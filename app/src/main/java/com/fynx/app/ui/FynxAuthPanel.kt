@@ -198,7 +198,30 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                         // feed, status, chat and Marketplace APIs can authenticate this session.
                                         busy = true
                                         error = null
-                                        scope.launch { finish(FynxRemoteAuthClient.login(context, requestedUsername, password), allowOfflineEntry = true) }
+                                        scope.launch {
+                                            val loginResult = FynxRemoteAuthClient.login(context, requestedUsername, password)
+                                            // Older debug APKs could create a local-only account before the
+                                            // server auth path was wired. If that exact saved local account is
+                                            // absent on the server, migrate it once using the password the user
+                                            // just entered. This path is debug-only because savedLocalUsername
+                                            // is only available through localDebugAccountForLogin().
+                                            val connectedResult = if (
+                                                savedLocalUsername != null &&
+                                                loginResult.isFailure &&
+                                                FynxBackendClient.isUnauthorizedFailure(loginResult.exceptionOrNull()!!)
+                                            ) {
+                                                FynxRemoteAuthClient.register(
+                                                    context,
+                                                    FynxAuthStore.storedDisplayName(context) ?: savedLocalUsername,
+                                                    savedLocalUsername,
+                                                    FynxAuthStore.storedPhone(context).orEmpty(),
+                                                    password
+                                                )
+                                            } else {
+                                                loginResult
+                                            }
+                                            finish(connectedResult, allowOfflineEntry = true)
+                                        }
                                     }
                                 }
                             }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Signing in…" else "Sign In") }
