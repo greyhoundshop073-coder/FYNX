@@ -197,7 +197,8 @@ fun FynxStatusTimelinePanel(
             ownerStatuses.indexOfFirst { it.id == initial.id }.coerceAtLeast(0),
             username,
             { selected = null },
-            { selected = null; refreshKey++ }
+            { selected = null; refreshKey++ },
+            onOpenMessage
         )
     }
 
@@ -363,7 +364,8 @@ private fun FynxStatusStoryViewer(
     startIndex: Int,
     viewerUsername: String,
     onDismiss: () -> Unit,
-    onDeleted: () -> Unit
+    onDeleted: () -> Unit,
+    onOpenMessage: (String) -> Unit
 ) {
     if (statuses.isEmpty()) return
     val context = androidx.compose.ui.platform.LocalContext.current
