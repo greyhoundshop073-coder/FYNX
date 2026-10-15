@@ -395,6 +395,20 @@ private fun FynxStatusStoryViewer(
         }
     }
 
+    fun loadViewers() {
+        viewers = emptyList()
+        viewersLoading = true
+        viewersError = null
+        scope.launch {
+            FynxStatusClient.viewers(context, status.id)
+                .onSuccess { viewers = it; viewersLoading = false }
+                .onFailure {
+                    viewersError = it.message ?: "Unable to load viewers."
+                    viewersLoading = false
+                }
+        }
+    }
+
     fun movePrevious() {
         if (index > 0) index-- else onDismiss()
     }
@@ -668,13 +682,7 @@ private fun FynxStatusStoryViewer(
                             ) {
                                 TextButton(onClick = {
                                     showViewers = true
-                                    viewersLoading = true
-                                    viewersError = null
-                                    scope.launch {
-                                        FynxStatusClient.viewers(context, status.id)
-                                            .onSuccess { viewers = it; viewersLoading = false }
-                                            .onFailure { viewersError = it.message ?: "Unable to load viewers."; viewersLoading = false }
-                                    }
+                                    loadViewers()
                                 }) { Text("Views  ${interactions.viewCount}", color = Color.White, style = MaterialTheme.typography.labelLarge) }
                                 Text("Likes  ${interactions.likeCount}", color = Color.White, style = MaterialTheme.typography.labelLarge)
                             }
@@ -794,9 +802,20 @@ private fun FynxStatusStoryViewer(
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Text("Status viewers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                            Text("${viewers.size} people viewed this Status", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                when {
+                                    viewersLoading -> "Loading viewer details…"
+                                    viewersError != null -> "Viewer details could not be loaded."
+                                    else -> "${viewers.size} people viewed this Status"
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                             if (viewersLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                            viewersError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                            viewersError?.let { error ->
+                                Text(error, color = MaterialTheme.colorScheme.error)
+                                TextButton(onClick = { loadViewers() }) { Text("Try again") }
+                            }
                             if (!viewersLoading && viewers.isEmpty() && viewersError == null) {
                                 Text("No viewer details yet.", modifier = Modifier.padding(vertical = 16.dp))
                             } else {
