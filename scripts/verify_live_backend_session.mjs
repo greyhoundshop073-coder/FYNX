@@ -1,7 +1,7 @@
 const BASE_URL = (process.env.FYNX_BACKEND_BASE_URL || "https://fynx-backend-testing-testing.up.railway.app").replace(/\/$/, "");
 const USERNAME = (process.env.FYNX_E2E_USERNAME || "").trim();
 const PASSWORD = process.env.FYNX_E2E_PASSWORD || "";
-const CHAT_TARGET = (process.env.FYNX_E2E_CHAT_TARGET || "").trim().replace(/^@+/, "").toLowerCase();
+let chatTarget = (process.env.FYNX_E2E_CHAT_TARGET || "").trim().replace(/^@+/, "").toLowerCase();
 const TIMEOUT_MS = 30_000;
 
 if (!BASE_URL.startsWith("https://")) throw new Error("FYNX backend smoke test requires HTTPS.");
@@ -68,12 +68,24 @@ try {
   if (postId) await request(`/api/social/posts/${encodeURIComponent(postId)}`, { method: "DELETE", token });
 }
 
-if (CHAT_TARGET) {
+if (!chatTarget) {
+  // Prefer an existing isolated smoke account; never message an arbitrary real user.
+  try {
+    const search = await request("/api/users/search?q=fynxsmoke&mode=username", { token });
+    chatTarget = (Array.isArray(search?.users) ? search.users : [])
+      .map(user => String(user?.username || "").replace(/^@+/, "").trim().toLowerCase())
+      .find(name => name.startsWith("fynxsmoke_") && name !== String(loggedInUser.username).toLowerCase()) || "";
+  } catch {
+    chatTarget = "";
+  }
+}
+
+if (chatTarget) {
   let messageId = "";
   try {
     const sent = await request("/api/messages", {
       method: "POST", token,
-      body: { recipientUsername: CHAT_TARGET, text: `FYNX live network smoke ${Date.now()}` }
+      body: { recipientUsername: chatTarget, text: `FYNX live network smoke ${Date.now()}` }
     });
     messageId = String(sent?.message?.id || "");
     if (!/^\d+$/.test(messageId)) throw new Error("Send-message response did not include a valid message ID.");
@@ -82,7 +94,7 @@ if (CHAT_TARGET) {
   }
   console.log("PASS: authenticated login, token validation, feed/status/Marketplace reads, post create/delete, and message send/delete.");
 } else {
-  console.log("WARN: FYNX_E2E_CHAT_TARGET is not configured; message send was not exercised.");
+  console.log("WARN: no isolated FYNX smoke recipient was found; message send was not exercised.");
   console.log("PASS: authenticated login, token validation, feed/status/Marketplace reads, and post create/delete.");
 }
 console.log(`LIVE FYNX BACKEND SESSION GREEN: ${BASE_URL}`);
