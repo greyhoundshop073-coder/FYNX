@@ -59,6 +59,7 @@ require('Status owner can open viewer list from view count','FynxStatusClient.vi
 require('Status viewer list shows reaction or like','viewer.reaction != null' in timeline and 'viewer.liked' in timeline and 'viewedAtMillis' in timeline)
 require('voice Status supports recording again after preview','Text("Record again")' in mature and 'beginMatureVoiceRecording(' in mature and 'Text("Delete")' in mature)
 require('voice Status supports pause/resume without counting paused time','recordingPaused' in mature and 'recorder?.pause()' in mature and 'recorder?.resume()' in mature and 'accumulatedRecordingMs' in mature and 'if (!recordingPaused)' in mature)
+require('Status video preview does not restart on unrelated recomposition','view.tag != uri.toString()' in mature and 'player.isLooping = true; player.start()' in mature and 'Caption and toolbar recompositions must not restart a selected video.' in mature)
 require('client supports likes','FynxStatusClient.toggleLike(context, status.id)' in timeline)
 require('client supports emoji reactions','FynxStatusClient.react(context, status.id, emoji)' in timeline)
 require('client supports replies','FynxStatusClient.reply(context, status.id, body)' in timeline)
