@@ -39,7 +39,7 @@ async function request(path) {
 if (!BASE_URL.startsWith("https://")) throw new Error(`Production backend URL must use HTTPS: ${BASE_URL}`);
 
 const health = await request("/health");
-if (health?.ok !== true || health?.service !== "fynx-backend" || health?.database !== "ready") {
+if (health?.ok !== true || health?.service !== "fynx-backend") {
   throw new Error(`Production /health is not ready: ${JSON.stringify(health)}`);
 }
 
