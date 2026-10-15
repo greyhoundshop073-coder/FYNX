@@ -9,6 +9,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.runBlocking
 
 /**
  * Final regression coverage for the production connectivity contract.
@@ -84,6 +85,24 @@ class FynxNetworkRecoveryContractTest {
                 .putString("base_url", originalUrl)
                 .putBoolean("base_url_explicit", originalExplicit)
                 .commit()
+        }
+    }
+
+    @Test
+    fun debugAndroidRuntimeCanReachLiveRailwayBackend() = runBlocking {
+        val original = FynxBackendClient.baseUrl(context)
+        try {
+            val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+            if (isDebuggable) {
+                FynxBackendClient.configureBaseUrl(context, "https://fynx-backend-testing-testing.up.railway.app")
+                val result = FynxBackendClient.health(context)
+                assertTrue(
+                    "Android runtime could not reach Railway backend: ${result.exceptionOrNull()?.message}",
+                    result.isSuccess
+                )
+            }
+        } finally {
+            FynxBackendClient.configureBaseUrl(context, original)
         }
     }
 
