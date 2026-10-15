@@ -3,6 +3,7 @@ package com.fynx.app
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.fynx.app.ui.FynxBackendClient
+import com.fynx.app.ui.FynxRemoteAuthClient
 import com.fynx.app.ui.FynxCallTransportHardening
 import com.fynx.app.ui.FynxAuthStore
 import com.fynx.app.ui.FynxSecureTokenStore
