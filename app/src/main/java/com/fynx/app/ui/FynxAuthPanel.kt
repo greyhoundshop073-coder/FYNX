@@ -187,7 +187,26 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                         // account remains available only if this request fails for a network reason.
                                         busy = true
                                         error = null
-                                        scope.launch { finish(FynxRemoteAuthClient.login(context, requestedUsername, password), allowOfflineEntry = true) }
+                                        scope.launch {
+                                            val login = FynxRemoteAuthClient.login(context, requestedUsername, password)
+                                            val savedUsername = FynxAuthStore.storedUsername(context)?.trim()
+                                            val canMigrateLocalAccount = login.isFailure &&
+                                                FynxBackendClient.isHttpStatusFailure(login.exceptionOrNull(), 401) &&
+                                                !savedUsername.isNullOrBlank() &&
+                                                savedUsername.equals(requestedUsername, ignoreCase = true)
+                                            if (canMigrateLocalAccount) {
+                                                // One-time bridge for accounts created by older debug APKs:
+                                                // provision the same saved username on the shared backend using
+                                                // the password the user just supplied. Existing server accounts
+                                                // cannot be overwritten; registration will reject a collision.
+                                                val displayName = FynxAuthStore.storedDisplayName(context).orEmpty()
+                                                    .ifBlank { requestedUsername }
+                                                val phone = FynxAuthStore.storedPhone(context).orEmpty()
+                                                finish(FynxRemoteAuthClient.register(context, displayName, requestedUsername, phone, password))
+                                            } else {
+                                                finish(login, allowOfflineEntry = true)
+                                            }
+                                        }
                                     }
                                 }
                             }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Signing in…" else "Sign In") }
