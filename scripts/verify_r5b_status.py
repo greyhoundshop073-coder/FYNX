@@ -54,6 +54,8 @@ require('authenticated status reactions','/reaction' in interactions and 'status
 require('authenticated status replies','/reply' in interactions and 'status_replies' in interactions)
 require('Status reply history and private-chat message commit atomically','transactionClient = await pool.connect()' in interactions and "transactionClient.query('BEGIN')" in interactions and "transactionClient.query('COMMIT')" in interactions and "transactionClient.query('ROLLBACK')" in interactions and 'INSERT INTO status_replies' in interactions and 'INSERT INTO messages' in interactions)
 require('Status reply delivery failures do not report a saved reply as failed',"console.error('status reply message broadcast', error)" in interactions and "console.error('status reply notification', error)" in interactions)
+require('Status like notification failures do not reverse a committed like response',"console.error('status like notification', error)" in interactions and 'await queueFynxNotification(pool' in interactions)
+require('Status reaction notification failures do not report committed reactions as failed',"console.error('status reaction notification', error)" in interactions and 'ON CONFLICT(status_id,user_id) DO UPDATE SET reaction=EXCLUDED.reaction' in interactions)
 require('client sends audience','put("audience", status.audience.name)' in client)
 require('client supports deletion','FynxBackendClient.delete(context, "/api/statuses/${statusId.trim()}")' in client)
 require('client supports views','FynxStatusClient.markViewed(context, status.id)' in timeline and '/interactions' in client)
