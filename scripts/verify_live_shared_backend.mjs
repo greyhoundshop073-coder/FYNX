@@ -65,6 +65,11 @@ try {
   });
   postId = String(created.postId || created.id || created.post?.id || "");
   if (!postId) throw new Error("post creation did not return a post ID");
+  if (created.visibility !== "PUBLIC") {
+    keepPostForDiagnosis = true;
+    console.error("Create response visibility diagnostic:", JSON.stringify({ firstUsername, secondUsername, postId, requestedVisibility: "PUBLIC", returnedVisibility: created.visibility ?? null }));
+    throw new Error(`public post request was stored as ${created.visibility ?? "unknown visibility"}`);
+  }
 
   async function feedContains(token, expectedPostId) {
     const pageSize = 50;
