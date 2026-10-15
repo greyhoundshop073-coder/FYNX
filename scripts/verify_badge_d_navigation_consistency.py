@@ -25,6 +25,11 @@ checks = {
     "existing journey gate remains wired": "verify_fynx_journey.py" in read(".github/workflows/android-build.yml"),
     "runtime navigation verifier exists": "Navigation" in runtime and "check" in runtime.lower(),
     "Home panel remains connected": "FynxRemoteHomeSocialPanel" in home or "FynxHomeSocialHubPanel" in home,
+    "secondary navigation uses explicit contextual parent destinations": "private fun fynxBackDestination(" in app and '"Contacts" -> "Chats"' in app and '"Seller Center" -> "Marketplace"' in app,
+    "bottom navigation remains visible on every primary tab": 'if (!isKeyboardVisible && selected in mainNav.map { it.key })' in app,
+    "Home-only scroll hiding does not hide navigation on other tabs": 'visible = selected != "Home" || !homeChromeHidden' in app,
+    "Friends primary-tab header no longer acts as a fake Back button": 'IconButton(onClick = { selected = "Home" }, modifier = Modifier.semantics { contentDescription = "Back to Home" })' not in app,
+    "Friends panel does not duplicate the app-shell header": 'Text("Friends", modifier = Modifier.weight(1f)' not in read("app/src/main/java/com/fynx/app/ui/FriendsPanel.kt"),
 }
 failed = [name for name, ok in checks.items() if not ok]
 if failed:
