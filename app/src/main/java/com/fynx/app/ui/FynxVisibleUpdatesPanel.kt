@@ -143,8 +143,7 @@ fun FynxVisibleUpdatesPanel(
                             if (own != null) { { onOpenStatusOwner(current) } } else { onCreateStatus },
                             own?.second ?: 0,
                             ownerPhotoIds[current],
-                            isOwn = true,
-                            onAddClick = onCreateStatus
+                            isOwn = true
                         )
                     }
                     items(grouped.filterNot { it.first.ownerUsername.equals(currentUsername, true) }, key = { it.first.ownerUsername }) { (status, count) ->
@@ -193,7 +192,7 @@ fun FynxVisibleUpdatesPanel(
 }
 
 @Composable
-private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: String, active: Boolean, onClick: () -> Unit, statusCount: Int = 0, profilePhotoMediaId: String? = null, isOwn: Boolean = false, onAddClick: () -> Unit = {}) {
+private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: String, active: Boolean, onClick: () -> Unit, statusCount: Int = 0, profilePhotoMediaId: String? = null, isOwn: Boolean = false) {
     val context = LocalContext.current
     var bitmap by remember(status?.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
     LaunchedEffect(status?.id, status?.contentUri, status?.type) {
