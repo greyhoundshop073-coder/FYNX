@@ -8,6 +8,7 @@ const secondUsername = `fynxprobe2_${suffix}`.slice(0, 32);
 let firstToken = "";
 let secondTokenForCleanup = "";
 let postId = "";
+let privatePostId = "";
 let keepPostForDiagnosis = false;
 let statusId = "";
 const createdListingIds = [];
@@ -97,6 +98,19 @@ try {
 
   // Verify real authenticated media upload and binary retrieval before exercising media-backed features.
   const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/gU8AAAAASUVORK5CYII=";
+  // Privacy boundary: ONLY_ME content must remain visible to its owner and hidden from the second account.
+  const privatePost = await request("/api/social/posts", {
+    method: "POST",
+    token: firstToken,
+    body: { text: `FYNX private isolation ${suffix}`, visibility: "ONLY_ME" },
+  });
+  privatePostId = String(privatePost.postId || privatePost.id || privatePost.post?.id || "");
+  if (!privatePostId || privatePost.visibility !== "ONLY_ME") throw new Error("private post creation did not preserve ONLY_ME visibility");
+  const ownerPrivateFeed = await feedContains(firstToken, privatePostId);
+  if (!ownerPrivateFeed.found) throw new Error("owner could not see their own ONLY_ME post");
+  const otherPrivateFeed = await feedContains(second.accessToken, privatePostId);
+  if (otherPrivateFeed.found) throw new Error("ONLY_ME post leaked into the second account's feed");
+
   const media = await request("/api/media", {
     method: "POST",
     token: firstToken,
@@ -277,7 +291,7 @@ try {
     throw new Error("Smart Marketplace Buy Together quote failed to combine two NGN items and fee totals");
   }
 
-  console.log("PASS: Railway live backend readiness, registration/login/token identity, public feed, media upload, direct messaging in both histories, Status interactions and Status-to-Chat reply, seller-to-buyer listing discovery, single-item checkout quote/order/cancellation, and two-item Buy Together quote.");
+  console.log("PASS: Railway live backend readiness, registration/login/token identity, public feed and ONLY_ME privacy isolation, media upload, direct messaging in both histories, Status interactions and Status-to-Chat reply, seller-to-buyer listing discovery, single-item checkout quote/order/cancellation, and two-item Buy Together quote.");
 
 
 } finally {
@@ -289,6 +303,7 @@ try {
       await request(`/api/marketplace/listings/${encodeURIComponent(listingId)}`, { method: "DELETE", token: firstToken }).catch(() => {});
     }
     if (statusId) await request(`/api/statuses/${encodeURIComponent(statusId)}`, { method: "DELETE", token: firstToken }).catch(() => {});
+    if (privatePostId) await request(`/api/social/posts/${encodeURIComponent(privatePostId)}`, { method: "DELETE", token: firstToken }).catch(() => {});
     if (postId && !keepPostForDiagnosis) await request(`/api/social/posts/${encodeURIComponent(postId)}`, { method: "DELETE", token: firstToken }).catch(() => {});
   }
 }
