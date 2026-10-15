@@ -26,7 +26,7 @@ object FynxBackendClient {
     private const val PREFS = "fynx_backend"
     private const val KEY_BASE_URL = "base_url"
     private const val LEGACY_ACCESS_TOKEN = "access_token"
-    private const val PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"
+    private const val PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"
     private const val MAX_IDEMPOTENT_RETRIES = 2
     private const val RETRY_DELAY_MS = 750L
     private const val NETWORK_VALIDATION_WAIT_MS = 6_000L
