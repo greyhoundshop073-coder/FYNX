@@ -58,7 +58,7 @@ try {
     token: firstToken,
     body: { text: `FYNX shared-feed smoke ${suffix}`, visibility: "PUBLIC" },
   });
-  postId = String(created.id || created.post?.id || "");
+  postId = String(created.postId || created.id || created.post?.id || "");
   if (!postId) throw new Error("post creation did not return a post ID");
 
   const feed = await request("/api/social/feed?limit=50", { token: second.accessToken });
