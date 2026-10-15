@@ -3,6 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BOOTSTRAP = (ROOT / "backend" / "serverBootstrap.js").read_text(encoding="utf-8")
 ISOLATION = (ROOT / "backend" / "realtimeIsolationBootstrap.js").read_text(encoding="utf-8")
+PHASE1 = (ROOT / "backend" / "phase1FoundationBootstrap.js").read_text(encoding="utf-8")
 
 # serverBootstrap contains a JavaScript template literal that generates the
 # runtime server. Its embedded packet strings are escaped in the source file.
@@ -33,6 +34,12 @@ for needle, label in [
     ("if (!pool || !fynxRealtimeMessagingValidUserId(targetId) || targetId === senderId) return false;", "invalid/self target guard"),
 ]:
     require(BOOTSTRAP_CHECK, needle, label)
+
+# Startup must generate the same canonical privacy and mutual-follow policy.
+require(PHASE1, "privacy_settings WHERE user_id=$1", "startup privacy uses canonical settings table")
+require(PHASE1, "social_follows WHERE follower_id=$1 AND followed_id=$2", "startup authorization uses mutual follows")
+require(PHASE1, "visibility === \"Nobody\"", "startup respects Nobody message privacy")
+require(PHASE1, "visibility === \"Everyone\"", "startup respects Everyone message privacy")
 
 # SQL authorization must bind state changes to the authenticated recipient.
 require(BOOTSTRAP_CHECK, "id=ANY($1::bigint[]) AND recipient_id=$2", "read receipts recipient binding")
