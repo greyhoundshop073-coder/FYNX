@@ -44,6 +44,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun FynxStatusTimelinePanel(
@@ -63,6 +66,7 @@ fun FynxStatusTimelinePanel(
     var refreshKey by remember { mutableIntStateOf(0) }
     var viewerDisplayName by remember(username) { mutableStateOf(username) }
     val scope = rememberCoroutineScope()
+    fun normalizedOwner(value: String): String = value.removePrefix("@").trim().lowercase()
 
     LaunchedEffect(username) {
         if (username.isNotBlank()) {
@@ -98,18 +102,18 @@ fun FynxStatusTimelinePanel(
         val targetStatus = openStatusId?.trim()?.takeIf { it.isNotBlank() }?.let { id ->
             statuses.firstOrNull { it.id == id && !it.isExpired() }
         } ?: openOwnerUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }?.let { target ->
-            statuses.filterNot(FynxStatus::isExpired).filter { it.ownerUsername.equals(target, true) }.maxByOrNull { it.createdAtMillis }
+            statuses.filterNot(FynxStatus::isExpired).filter { normalizedOwner(it.ownerUsername) == normalizedOwner(target) }.maxByOrNull { it.createdAtMillis }
         }
         if (targetStatus != null) selected = targetStatus
         onOpenCommandConsumed()
     }
 
     val visibleStatuses = statuses.filterNot(FynxStatus::isExpired)
-    val latestByOwner = visibleStatuses.groupBy { it.ownerUsername }
+    val latestByOwner = visibleStatuses.groupBy { normalizedOwner(it.ownerUsername) }
         .mapNotNull { (_, values) -> values.maxByOrNull { it.createdAtMillis } }
         .sortedByDescending { it.createdAtMillis }
-    val myStatus = latestByOwner.firstOrNull { it.ownerUsername.equals(username, true) }
-    val recentUpdates = latestByOwner.filterNot { it.ownerUsername.equals(username, true) }
+    val myStatus = latestByOwner.firstOrNull { normalizedOwner(it.ownerUsername) == normalizedOwner(username) }
+    val recentUpdates = latestByOwner.filterNot { normalizedOwner(it.ownerUsername) == normalizedOwner(username) }
     var menuOpen by remember { mutableStateOf(false) }
     var archiveOpen by remember { mutableStateOf(false) }
     var archivedStatuses by remember { mutableStateOf<List<FynxStatus>>(emptyList()) }
@@ -186,7 +190,7 @@ fun FynxStatusTimelinePanel(
     }
 
     selected?.let { initial ->
-        val ownerStatuses = visibleStatuses.filter { it.ownerUsername.equals(initial.ownerUsername, true) }.sortedBy { it.createdAtMillis }
+        val ownerStatuses = visibleStatuses.filter { normalizedOwner(it.ownerUsername) == normalizedOwner(initial.ownerUsername) }.sortedBy { it.createdAtMillis }
         FynxStatusStoryViewer(
             ownerStatuses,
             ownerStatuses.indexOfFirst { it.id == initial.id }.coerceAtLeast(0),
@@ -373,6 +377,10 @@ private fun FynxStatusStoryViewer(
     var replyFocused by remember { mutableStateOf(false) }
     val replyPaused = replyFocused || WindowInsets.isImeVisible
     var showReactionPicker by remember { mutableStateOf(false) }
+    var showViewers by remember { mutableStateOf(false) }
+    var viewers by remember(statuses, startIndex) { mutableStateOf<List<FynxStatusViewer>>(emptyList()) }
+    var viewersLoading by remember(statuses, startIndex) { mutableStateOf(false) }
+    var viewersError by remember(statuses, startIndex) { mutableStateOf<String?>(null) }
     var showReplyEmojiPicker by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val status = statuses.getOrNull(index) ?: return
@@ -652,14 +660,29 @@ private fun FynxStatusStoryViewer(
                                 }
                             }
                         }
+                        if (status.ownerUsername.equals(viewerUsername, true)) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(18.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(onClick = {
+                                    showViewers = true
+                                    viewersLoading = true
+                                    viewersError = null
+                                    scope.launch {
+                                        FynxStatusClient.viewers(context, status.id)
+                                            .onSuccess { viewers = it; viewersLoading = false }
+                                            .onFailure { viewersError = it.message ?: "Unable to load viewers."; viewersLoading = false }
+                                    }
+                                }) { Text("Views  ${interactions.viewCount}", color = Color.White, style = MaterialTheme.typography.labelLarge) }
+                                Text("Likes  ${interactions.likeCount}", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
                         Row(
                             Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Counts remain available to accessibility/interaction state without being rendered on the viewer bar.
-                            Spacer(Modifier.size(0.dp).semantics {
-                                contentDescription = "Status views ${interactions.viewCount}, likes ${interactions.likeCount}"
-                            })
                             OutlinedTextField(
                                 value = replyText,
                                 onValueChange = { replyText = it.take(1000) },
@@ -757,6 +780,45 @@ private fun FynxStatusStoryViewer(
                         }
                         interactionError?.let { Text(it, color = Color(0xFFFF8A80), style = MaterialTheme.typography.labelSmall) }
                         deleteError?.let { Text(it, color = Color(0xFFFF8A80), style = MaterialTheme.typography.labelSmall) }
+                    }
+                }
+
+                if (showViewers) {
+                    ModalBottomSheet(
+                        onDismissRequest = { showViewers = false },
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ) {
+                        Column(
+                            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text("Status viewers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                            Text("${viewers.size} people viewed this Status", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (viewersLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                            viewersError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                            if (!viewersLoading && viewers.isEmpty() && viewersError == null) {
+                                Text("No viewer details yet.", modifier = Modifier.padding(vertical = 16.dp))
+                            } else {
+                                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                                    items(viewers, key = { it.username }) { viewer ->
+                                        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.size(42.dp)) {
+                                                Box(contentAlignment = Alignment.Center) { Text(viewer.displayName.trim().firstOrNull()?.uppercase() ?: "?", fontWeight = FontWeight.SemiBold) }
+                                            }
+                                            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                                                Text(viewer.displayName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1)
+                                                Text("@${viewer.username} · ${SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(viewer.viewedAtMillis))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            if (viewer.reaction != null) Text(viewer.reaction, fontSize = 22.sp)
+                                            else if (viewer.liked) Icon(Icons.Default.Favorite, "Liked", tint = MaterialTheme.colorScheme.error)
+                                        }
+                                        HorizontalDivider()
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(16.dp))
+                        }
                     }
                 }
 

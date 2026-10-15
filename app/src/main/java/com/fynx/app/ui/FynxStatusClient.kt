@@ -8,6 +8,14 @@ import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.io.File
 
+data class FynxStatusViewer(
+    val username: String,
+    val displayName: String,
+    val viewedAtMillis: Long,
+    val reaction: String?,
+    val liked: Boolean
+)
+
 data class FynxStatusInteractions(
     val viewCount: Int = 0,
     val likeCount: Int = 0,
@@ -123,8 +131,47 @@ object FynxStatusClient {
         )
     }
 
-    suspend fun markViewed(context: Context, statusId: String): Result<Unit> = runCatching {
-        FynxBackendClient.postJson(context, "/api/statuses/${statusId.trim()}/view", "{}").getOrThrow()
+    suspend fun viewers(context: Context, statusId: String): Result<List<FynxStatusViewer>> = runCatching {
+        val raw = FynxBackendClient.get(context, "/api/statuses/${statusId.trim()}/viewers").getOrThrow()
+        val items = JSONObject(raw).getJSONArray("viewers")
+        buildList {
+            for (i in 0 until items.length()) {
+                val item = items.getJSONObject(i)
+                add(FynxStatusViewer(
+                    username = item.optString("username"),
+                    displayName = item.optString("displayName").ifBlank { item.optString("username") },
+                    viewedAtMillis = item.optLong("viewedAtMillis"),
+                    reaction = item.optString("reaction").ifBlank { null },
+                    liked = item.optBoolean("liked")
+                ))
+            }
+        }
+    }
+
+    private const val VIEWED_STATUS_IDS = "fynx_viewed_status_ids"
+
+    fun viewedStatusIds(context: Context): Set<String> =
+        context.getSharedPreferences("fynx_status_views", Context.MODE_PRIVATE)
+            .getStringSet(VIEWED_STATUS_IDS, emptySet())
+            ?.toSet()
+            .orEmpty()
+
+    private fun rememberViewed(context: Context, statusId: String) {
+        val id = statusId.trim()
+        if (id.isBlank()) return
+        val prefs = context.getSharedPreferences("fynx_status_views", Context.MODE_PRIVATE)
+        val updated = prefs.getStringSet(VIEWED_STATUS_IDS, emptySet()).orEmpty().toMutableSet()
+        updated.add(id)
+        prefs.edit().putStringSet(VIEWED_STATUS_IDS, updated).apply()
+    }
+
+    suspend fun markViewed(context: Context, statusId: String): Result<Unit> {
+        rememberViewed(context, statusId)
+        // Notify Home immediately so the seen/unseen ring recomposes when a story is opened.
+        FynxHomeLifecycleRefreshBus.request(context)
+        return runCatching {
+            FynxBackendClient.postJson(context, "/api/statuses/${statusId.trim()}/view", "{}").getOrThrow()
+        }
     }
 
     suspend fun toggleLike(context: Context, statusId: String): Result<Boolean> = runCatching {
