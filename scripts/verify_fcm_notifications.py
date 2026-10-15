@@ -54,6 +54,7 @@ check("notification rows show timestamps", 'formatNotificationTimestamp(notifica
 check("notification fallback routing is type-specific", 'FynxNotificationType.MESSAGE' in read("app/src/main/java/com/fynx/app/ui/FynxApp.kt") and '"fynx://chat/"' in read("app/src/main/java/com/fynx/app/ui/FynxApp.kt") and 'FynxNotificationType.GROUP' in read("app/src/main/java/com/fynx/app/ui/FynxApp.kt"))
 check("follow notification channel", '"FRIEND_REQUEST", "FOLLOW", "STORY"' in service)
 check("backend starts through notification bootstrap", 'node notificationBootstrap.js' in package)
+check("notification startup patches are idempotent", "if (source.includes(patch.replacement)) continue;" in bootstrap)
 check("server-side secrets are not APK dependencies", 'FIREBASE_SERVICE_ACCOUNT_JSON' not in read("app/build.gradle.kts"))
 check("backend aggregates repeated social notifications", "AGGREGATABLE_TYPES = new Set(['REACTION','COMMENT'])" in read("backend/notificationPreferences.js") and "aggregateNotifications" in read("backend/notificationPreferences.js"))
 check("aggregation counts distinct related posts and actors", "new Set(group.rows.map(row => String(row.target_id)).filter(Boolean))" in read("backend/notificationPreferences.js") and "new Set(group.rows.map(row => String(row.source_username || '').trim()).filter(Boolean))" in read("backend/notificationPreferences.js") and "other" in read("backend/notificationPreferences.js"))
