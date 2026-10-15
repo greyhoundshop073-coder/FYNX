@@ -9,6 +9,9 @@ async function patchOnce(fileName, patches) {
   let source = await readFile(filePath, "utf8");
   let changed = false;
   for (const patch of patches) {
+    // Startup hooks can be invoked more than once in a single deployment.
+    // Skip an already-applied replacement before matching its still-present marker.
+    if (source.includes(patch.replacement)) continue;
     if (source.includes(patch.marker)) {
       source = source.replace(patch.marker, patch.replacement);
       changed = true;
