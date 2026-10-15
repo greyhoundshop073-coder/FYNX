@@ -106,7 +106,7 @@ let postId = "";
 try {
   const post = await request("/api/social/posts", {
     method: "POST", token,
-    body: { text: `FYNX live network smoke ${Date.now()}`, visibility: "FRIENDS_ONLY" }
+    body: { text: `FYNX live network smoke ${Date.now()}`, visibility: "ONLY_ME" }
   });
   postId = String(post?.postId || "");
   if (!/^\d+$/.test(postId)) throw new Error("Create-post response did not include a valid postId.");
