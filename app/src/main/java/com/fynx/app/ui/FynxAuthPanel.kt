@@ -207,6 +207,8 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                             // is only available through localDebugAccountForLogin().
                                             val connectedResult = if (
                                                 savedLocalUsername != null &&
+                                                FynxAuthStore.hasAccount(context) &&
+                                                FynxAuthStore.storedUsername(context).equals(requestedUsername, ignoreCase = true) &&
                                                 loginResult.isFailure &&
                                                 FynxBackendClient.isUnauthorizedFailure(loginResult.exceptionOrNull()!!)
                                             ) {
