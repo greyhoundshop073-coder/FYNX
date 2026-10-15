@@ -17,7 +17,7 @@ on:
       - ".maestro/**"
       - "visual-baselines/**"
   pull_request:
-    branches: ["main"]
+    branches: ["main", "integration/fynx-single-apk-20261013"]
     paths:
       - "app/**"
       - "backend/**"

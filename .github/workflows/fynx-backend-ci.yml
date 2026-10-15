@@ -2,10 +2,9 @@ name: FYNX Backend CI
 
 on:
   push:
-    branches: [ "main" ]
     paths: ["backend/**", "scripts/**", ".github/workflows/fynx-backend-ci.yml"]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "integration/fynx-single-apk-20261013" ]
     paths: ["backend/**", "scripts/**", ".github/workflows/fynx-backend-ci.yml"]
   workflow_dispatch:
     inputs:
