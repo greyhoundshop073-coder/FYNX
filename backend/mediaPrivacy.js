@@ -127,6 +127,13 @@ export function installMediaPrivacyGuard(app) {
                 )
               )
           )
+          OR EXISTS (
+            SELECT 1
+            FROM statuses expired_status
+            WHERE expired_status.media_id = mm.id
+              AND expired_status.expires_at <= NOW()
+              AND expired_status.owner_id <> $2
+          )
           AND NOT EXISTS (
             SELECT 1
             FROM users u
