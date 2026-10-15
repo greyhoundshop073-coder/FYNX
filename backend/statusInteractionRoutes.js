@@ -244,6 +244,7 @@ export function registerStatusInteractionRoutes({ app }) {
   });
 
   app.post('/api/statuses/:statusId/reaction', auth, async (req, res) => {
+    let transactionClient;
     try {
       await ensureSchema();
       const id = statusId(req);
@@ -251,20 +252,43 @@ export function registerStatusInteractionRoutes({ app }) {
       if (!reaction || reaction.length > 32) return res.status(400).json({ error: 'invalid reaction' });
       const status = await visibleStatus(id, req.user.sub);
       if (!status) return res.status(404).json({ error: 'status not found or not visible' });
-      const existing = await pool.query('SELECT reaction FROM status_reactions WHERE status_id=$1 AND user_id=$2', [id, req.user.sub]);
-      if (existing.rows[0]?.reaction === reaction) {
-        await pool.query('DELETE FROM status_reactions WHERE status_id=$1 AND user_id=$2', [id, req.user.sub]);
-        return res.json({ reaction: null });
+
+      // Serialize reaction toggles for this user/status pair, just like likes.
+      // Otherwise two rapid taps can both observe the old reaction and defeat
+      // the tap-to-remove behavior.
+      transactionClient = await pool.connect();
+      await transactionClient.query('BEGIN');
+      await transactionClient.query(
+        'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2::text))',
+        [id, req.user.sub]
+      );
+      const existing = await transactionClient.query(
+        'SELECT reaction FROM status_reactions WHERE status_id=$1 AND user_id=$2',
+        [id, req.user.sub]
+      );
+      const nextReaction = existing.rows[0]?.reaction === reaction ? null : reaction;
+      if (nextReaction === null) {
+        await transactionClient.query(
+          'DELETE FROM status_reactions WHERE status_id=$1 AND user_id=$2',
+          [id, req.user.sub]
+        );
+      } else {
+        await transactionClient.query(`INSERT INTO status_reactions(status_id,user_id,reaction) VALUES($1,$2,$3)
+          ON CONFLICT(status_id,user_id) DO UPDATE SET reaction=EXCLUDED.reaction, created_at=NOW()`,
+          [id, req.user.sub, nextReaction]
+        );
       }
-      await pool.query(`INSERT INTO status_reactions(status_id,user_id,reaction) VALUES($1,$2,$3)
-        ON CONFLICT(status_id,user_id) DO UPDATE SET reaction=EXCLUDED.reaction, created_at=NOW()`, [id, req.user.sub, reaction]);
-      if (String(status.owner_id) !== String(req.user.sub)) {
+      await transactionClient.query('COMMIT');
+      transactionClient.release();
+      transactionClient = null;
+
+      if (nextReaction !== null && String(status.owner_id) !== String(req.user.sub)) {
         try {
           await queueFynxNotification(pool, {
             userId: status.owner_id,
             type: 'REACTION',
             title: 'New Status reaction',
-            message: `${req.user.username || 'Someone'} reacted ${reaction} to your Status.`,
+            message: `${req.user.username || 'Someone'} reacted ${nextReaction} to your Status.`,
             targetId: id,
             sourceUsername: req.user.username || null,
             route: `fynx://status/${id}`
@@ -273,8 +297,14 @@ export function registerStatusInteractionRoutes({ app }) {
           console.error('status reaction notification', error);
         }
       }
-      return res.json({ reaction });
+      return res.json({ reaction: nextReaction });
     } catch (error) {
+      if (transactionClient) {
+        try { await transactionClient.query('ROLLBACK'); } catch (rollbackError) {
+          console.error('status reaction rollback', rollbackError);
+        }
+        transactionClient.release();
+      }
       console.error('status reaction', error);
       return res.status(500).json({ error: 'status reaction failed' });
     }
