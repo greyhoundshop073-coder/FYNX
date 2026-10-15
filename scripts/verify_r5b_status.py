@@ -53,6 +53,7 @@ require('status interactions route wiring','registerStatusInteractionRoutes({ ap
 require('status interaction tables','status_views' in interactions and 'status_likes' in interactions and 'status_reactions' in interactions and 'status_replies' in interactions)
 require('status interaction user ids match users','viewer_id BIGINT NOT NULL REFERENCES users(id)' in interactions and 'user_id BIGINT NOT NULL REFERENCES users(id)' in interactions and 'sender_id BIGINT NOT NULL REFERENCES users(id)' in interactions)
 require('status interaction visibility guard','expires_at > NOW()' in interactions and 'friendships' in interactions and 'blocks' in interactions)
+require('Status deletion rejects malformed UUID grouping before database query', 'if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(statusId))' in management)
 require('Status interaction routes reject malformed UUID grouping before database queries', 'const validId = id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)' in interactions)
 require('authenticated status view','app.post(\'/api/statuses/:statusId/view\'' in interactions and 'jwt.verify(token, JWT_SECRET)' in interactions)
 require('authenticated status like','/like' in interactions and 'status_likes' in interactions)
