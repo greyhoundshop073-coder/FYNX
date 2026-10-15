@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import pg from "pg";
 import { WebSocketServer } from "ws";
 import { registerSocialRoutes } from "./socialRoutes.js";
+import { ensureStatusSchema } from "./statusSchema.js";
 import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";
 import { registerMarketplaceReputationRoutes } from "./marketplaceReputation.js";
 import { registerMarketplaceCompletionRoutes } from "./marketplaceCompletion.js";
@@ -32,10 +33,6 @@ app.use((req, res, next) => {
   if (req.method !== "GET" && req.method !== "HEAD") res.setHeader("Cache-Control", "no-store");
   next();
 });
-app.use("/api/auth", rateLimit("auth", RATE_LIMITS.auth));
-app.use("/api/assistant", rateLimit("assistant", RATE_LIMITS.assistant));
-app.use("/api/media", rateLimit("media", RATE_LIMITS.media));
-app.use("/api/messages", rateLimit("messages", RATE_LIMITS.messages));
 
 const PORT = Number(process.env.PORT || 10000);
 const JWT_SECRET = process.env.JWT_SECRET || "";
@@ -85,6 +82,12 @@ function rateLimit(bucket, limit) {
     return next();
   };
 }
+
+app.use("/api/auth", rateLimit("auth", RATE_LIMITS.auth));
+app.use("/api/assistant", rateLimit("assistant", RATE_LIMITS.assistant));
+app.use("/api/media", rateLimit("media", RATE_LIMITS.media));
+app.use("/api/messages", rateLimit("messages", RATE_LIMITS.messages));
+
 setInterval(() => {
   const cutoff = Date.now() - RATE_WINDOW_MS;
   for (const [key, value] of rateBuckets) if (value.startedAt < cutoff) rateBuckets.delete(key);
@@ -107,8 +110,7 @@ async function initDatabase() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
-    UPDATE users SET verified = FALSE;
-    UPDATE users SET verified = TRUE WHERE lower(username) = $1;
+    -- Preserve existing verification decisions; verification is updated separately below.
     CREATE TABLE IF NOT EXISTS messages (
       id BIGSERIAL PRIMARY KEY,
       sender_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -127,7 +129,8 @@ async function initDatabase() {
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_type TEXT;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS voice_duration_ms BIGINT NOT NULL DEFAULT 0;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT NOT NULL DEFAULT 'text';
-    ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_payload JSONB;\n    ALTER TABLE messages ADD COLUMN IF NOT EXISTS reaction TEXT;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_payload JSONB;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS reaction TEXT;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE;
     CREATE TABLE IF NOT EXISTS message_media (
       id BIGSERIAL PRIMARY KEY,
@@ -164,8 +167,14 @@ async function initDatabase() {
     CREATE TABLE IF NOT EXISTS ai_pending_message_actions (id UUID PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, recipient_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, message_text TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending','sent','cancelled','expired')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '10 minutes'), sent_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL);
     CREATE INDEX IF NOT EXISTS ai_pending_message_actions_user_idx ON ai_pending_message_actions(user_id,status,created_at DESC);
     CREATE UNIQUE INDEX IF NOT EXISTS ai_pending_message_actions_one_pending_idx ON ai_pending_message_actions(user_id) WHERE status='pending';
-  `, [officialFynxUsername]);
-  await pool.query(`DO $$ BEGIN ALTER TABLE messages ADD CONSTRAINT messages_media_fk FOREIGN KEY (media_id) REFERENCES message_media(id) ON DELETE SET NULL; EXCEPTION WHEN duplicate_object THEN NULL; END $$;`);
+  `);
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_photo_media_id BIGINT");
+  await pool.query("DO $migration$ BEGIN ALTER TABLE users ADD CONSTRAINT users_profile_photo_media_fk FOREIGN KEY (profile_photo_media_id) REFERENCES message_media(id) ON DELETE SET NULL; EXCEPTION WHEN duplicate_object THEN NULL; END $migration$;");
+  await pool.query("CREATE INDEX IF NOT EXISTS users_profile_photo_media_idx ON users(profile_photo_media_id) WHERE profile_photo_media_id IS NOT NULL");
+  await pool.query("CREATE TABLE IF NOT EXISTS privacy_settings (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, profile_visibility TEXT NOT NULL DEFAULT 'My friends', online_visibility TEXT NOT NULL DEFAULT 'My friends', posts_visibility TEXT NOT NULL DEFAULT 'My friends', status_visibility TEXT NOT NULL DEFAULT 'My friends', profile_photo_visibility TEXT NOT NULL DEFAULT 'My friends', messages_visibility TEXT NOT NULL DEFAULT 'My friends', updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), CHECK(profile_visibility IN ('Everyone', 'My friends', 'Nobody')), CHECK(online_visibility IN ('Everyone', 'My friends', 'Nobody')), CHECK(posts_visibility IN ('Everyone', 'My friends', 'Nobody')), CHECK(status_visibility IN ('Everyone', 'My friends', 'Nobody')), CHECK(profile_photo_visibility IN ('Everyone', 'My friends', 'Nobody')), CHECK(messages_visibility IN ('Everyone', 'My friends', 'Nobody')))");
+  await ensureStatusSchema(pool);
+  await pool.query("UPDATE users SET verified = TRUE WHERE lower(username) = $1", [officialFynxUsername]);
+  await pool.query(`DO $migration$ BEGIN ALTER TABLE messages ADD CONSTRAINT messages_media_fk FOREIGN KEY (media_id) REFERENCES message_media(id) ON DELETE SET NULL; EXCEPTION WHEN duplicate_object THEN NULL; END $migration$;`);
 }
 
 function requireConfig(name, value) { if (!value) throw new Error(`${name} is not configured.`); }
@@ -244,15 +253,17 @@ function validateSignalPayload(signalType, body) {
 }
 
 app.get("/ready", async (_req, res) => {
-  if (!pool) return res.status(503).json({ ok: false, service: "fynx-backend", database: "not-configured" });
-  try { await pool.query("SELECT 1"); return res.status(200).json({ ok: true, service: "fynx-backend", database: "ready" }); }
-  catch { return res.status(503).json({ ok: false, service: "fynx-backend", database: "unavailable" }); }
+  const commit = process.env.RAILWAY_GIT_COMMIT_SHA || null;
+  if (!pool) return res.status(503).json({ ok: false, service: "fynx-backend", database: "not-configured", commit });
+  try { await pool.query("SELECT 1"); return res.status(200).json({ ok: true, service: "fynx-backend", database: "ready", commit }); }
+  catch { return res.status(503).json({ ok: false, service: "fynx-backend", database: "unavailable", commit }); }
 });
 
-app.get("/health", async (_req, res) => {
-  let database = "not-configured";
-  if (pool) { try { await pool.query("SELECT 1"); database = "ready"; } catch { database = "unavailable"; } }
-  res.status(database === "ready" ? 200 : 503).json({ ok: database === "ready", service: "fynx-backend", database });
+// Liveness must report whether the HTTP process is running; database readiness is
+// checked separately by /ready so transient DB startup/connectivity does not cause
+// the platform to kill an otherwise-running process before diagnostics can be read.
+app.get("/health", (_req, res) => {
+  return res.status(200).json({ ok: true, service: "fynx-backend", commit: process.env.RAILWAY_GIT_COMMIT_SHA || null });
 });
 
 app.post("/api/auth/register", async (req, res) => {
@@ -375,44 +386,7 @@ app.post("/api/media", auth, async (req, res) => {
   } catch (error) { console.error("media upload", error); return res.status(500).json({ error: "media upload failed" }); }
 });
 
-const statusSchema = async () => {
-  await pool.query(`CREATE TABLE IF NOT EXISTS statuses (
-    id UUID PRIMARY KEY,
-    owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    type TEXT NOT NULL CHECK (type IN ('TEXT','PHOTO','VIDEO','VOICE')),
-    text TEXT NOT NULL DEFAULT '',
-    media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL,
-    background_color BIGINT NOT NULL DEFAULT 4279308561,
-    foreground_color BIGINT NOT NULL DEFAULT 4294967295,
-    font TEXT NOT NULL DEFAULT 'CLASSIC',
-    alignment INTEGER NOT NULL DEFAULT 1 CHECK (alignment BETWEEN 0 AND 2),
-    private_status BOOLEAN NOT NULL DEFAULT FALSE,
-    audience TEXT NOT NULL DEFAULT 'EVERYONE' CHECK (audience IN ('EVERYONE','FRIENDS','ONLY_ME')),
-    voice_duration_ms BIGINT NOT NULL DEFAULT 0,
-    music_catalogue_id BIGINT,
-    music_title TEXT,
-    music_artist TEXT,
-    music_duration_ms BIGINT NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    expires_at TIMESTAMPTZ NOT NULL
-  );
-  `);
-  await pool.query("ALTER TABLE statuses ADD COLUMN IF NOT EXISTS audience TEXT");
-  await pool.query("UPDATE statuses SET audience = CASE WHEN private_status THEN 'FRIENDS' ELSE 'EVERYONE' END WHERE audience IS NULL");
-  await pool.query("ALTER TABLE statuses ALTER COLUMN audience SET DEFAULT 'EVERYONE'");
-  await pool.query("ALTER TABLE statuses ALTER COLUMN audience SET NOT NULL");
-  await pool.query(`DO $$ BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'statuses_audience_check') THEN
-      ALTER TABLE statuses ADD CONSTRAINT statuses_audience_check CHECK (audience IN ('EVERYONE','FRIENDS','ONLY_ME'));
-    END IF;
-  END $$;`);
-  await pool.query("ALTER TABLE statuses ADD COLUMN IF NOT EXISTS music_catalogue_id BIGINT");
-  await pool.query("ALTER TABLE statuses ADD COLUMN IF NOT EXISTS music_title TEXT");
-  await pool.query("ALTER TABLE statuses ADD COLUMN IF NOT EXISTS music_artist TEXT");
-  await pool.query("ALTER TABLE statuses ADD COLUMN IF NOT EXISTS music_duration_ms BIGINT NOT NULL DEFAULT 0");
-  await pool.query("CREATE INDEX IF NOT EXISTS statuses_owner_idx ON statuses(owner_id,created_at DESC)");
-  await pool.query("CREATE INDEX IF NOT EXISTS statuses_expiry_idx ON statuses(expires_at)");
-};
+const statusSchema = async () => ensureStatusSchema(pool);
 
 app.get("/api/statuses", auth, async (req, res) => {
   try {
@@ -465,7 +439,68 @@ app.get("/api/media/:id", auth, async (req, res) => {
   try {
     const mediaId = Number(req.params.id);
     if (!Number.isInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: "invalid media id" });
-    const result = await pool.query(`SELECT mm.mime_type, mm.data FROM message_media mm LEFT JOIN messages m ON m.media_id = mm.id WHERE mm.id = $1 AND (mm.owner_id = $2 OR m.sender_id = $2 OR m.recipient_id = $2 OR EXISTS (SELECT 1 FROM users u LEFT JOIN privacy_settings ps ON ps.user_id = u.id WHERE u.id = mm.owner_id AND u.profile_photo_media_id = mm.id AND (u.id = $2 OR COALESCE(ps.profile_visibility, 'My friends') = 'Everyone' OR (COALESCE(ps.profile_visibility, 'My friends') = 'My friends' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id = u.id AND f.friend_id = $2) OR (f.user_id = $2 AND f.friend_id = u.id)) AND f.status = 'accepted')) AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $2 AND b.blocked_id = u.id) OR (b.blocked_id = $2 AND b.blocker_id = u.id))) OR EXISTS (SELECT 1 FROM statuses s WHERE s.media_id = mm.id AND s.expires_at > NOW() AND (s.owner_id = $2 OR s.audience = 'EVERYONE' OR (s.audience = 'FRIENDS' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id = s.owner_id AND f.friend_id = $2) OR (f.user_id = $2 AND f.friend_id = s.owner_id)) AND f.status = 'accepted'))) AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $2 AND b.blocked_id = s.owner_id) OR (b.blocker_id = s.owner_id AND b.blocked_id = $2)))) ORDER BY m.id DESC LIMIT 1`, [mediaId, req.user.sub]);
+    const result = await pool.query(`
+      SELECT mm.mime_type, mm.data
+      FROM message_media mm
+      WHERE mm.id = $1
+        AND (
+          mm.owner_id = $2
+          OR EXISTS (
+            SELECT 1 FROM messages m
+            WHERE m.media_id = mm.id
+              AND (m.sender_id = $2 OR m.recipient_id = $2)
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM users u
+            LEFT JOIN privacy_settings ps ON ps.user_id = u.id
+            WHERE u.id = mm.owner_id
+              AND u.profile_photo_media_id = mm.id
+              AND (
+                u.id = $2
+                OR COALESCE(ps.profile_visibility, 'My friends') = 'Everyone'
+                OR (
+                  COALESCE(ps.profile_visibility, 'My friends') = 'My friends'
+                  AND EXISTS (
+                    SELECT 1 FROM friendships f
+                    WHERE ((f.user_id = u.id AND f.friend_id = $2)
+                      OR (f.user_id = $2 AND f.friend_id = u.id))
+                      AND f.status = 'accepted'
+                  )
+                )
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM blocks b
+                WHERE (b.blocker_id = $2 AND b.blocked_id = u.id)
+                   OR (b.blocked_id = $2 AND b.blocker_id = u.id)
+              )
+          )
+          OR EXISTS (
+            SELECT 1 FROM statuses s
+            WHERE s.media_id = mm.id
+              AND s.expires_at > NOW()
+              AND (
+                s.owner_id = $2
+                OR s.audience = 'EVERYONE'
+                OR (
+                  s.audience = 'FRIENDS'
+                  AND EXISTS (
+                    SELECT 1 FROM friendships f
+                    WHERE ((f.user_id = s.owner_id AND f.friend_id = $2)
+                      OR (f.user_id = $2 AND f.friend_id = s.owner_id))
+                      AND f.status = 'accepted'
+                  )
+                )
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM blocks b
+                WHERE (b.blocker_id = $2 AND b.blocked_id = s.owner_id)
+                   OR (b.blocker_id = s.owner_id AND b.blocked_id = $2)
+              )
+          )
+        )
+      LIMIT 1
+    `, [mediaId, req.user.sub]);
     if (!result.rows[0]) return res.status(404).json({ error: "media not found" });
     res.set("Cache-Control", "private, max-age=3600");
     res.type(result.rows[0].mime_type);

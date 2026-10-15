@@ -59,6 +59,34 @@ jobs:
           node --check marketplaceAdvertising.js
           node --check notificationPush.js
           node --check notificationBootstrap.js
+          node --check phase1FoundationBootstrap.js
+          node --check realtimeIsolationBootstrap.js
+          node --check homeCommentsPrivacyBootstrap.js
+          node --check socialFeedBootstrap.js
+          node --check socialPostReactionBootstrap.js
+          node --check serverBootstrap.js
+          node --check socialMultiMediaBootstrap.js
+          node --check scalability.js
+          node --check followRoutes.js
+          node --check groupRoutes.js
+          node --check groupMembershipRoutes.js
+          node --check groupInviteRoutes.js
+          node --check groupContentRoutes.js
+          node --check statusManagementRoutes.js
+          node --check statusSchema.js
+          node --check statusInteractionRoutes.js
+          node --check notificationPreferences.js
+          node --check notificationDevices.js
+          node --check privacyRoutes.js
+          node --check profileRoutes.js
+          node --check r6gIntegrationRoutes.js
+          node --check businessRoutes.js
+          node --check discoveryRoutes.js
+          node --check marketplacePaystackWebhook.js
+          node --check marketplaceCheckout.js
+          node --check marketplaceCheckoutOrder.js
+          node --check marketplaceShipping.js
+          node --check marketplaceInspectionReconciliation.js
           node --check notificationDevices.js
           node --check verify-marketplace-ad-creative-identity.mjs
           node --check verify-marketplace-fulfillment-integrity.mjs

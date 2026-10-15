@@ -1,5 +1,6 @@
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
+import { ensureStatusSchema } from './statusSchema.js';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
@@ -28,6 +29,7 @@ export function registerStatusManagementRoutes({ app }) {
 
   app.get('/api/statuses/archive', auth, async (req, res) => {
     try {
+      await ensureStatusSchema(pool);
       const result = await pool.query(`
         SELECT s.id,s.owner_id,u.username,u.display_name,s.type,s.text,s.media_id,
                s.background_color,s.foreground_color,s.font,s.alignment,s.private_status,s.audience,
@@ -45,7 +47,7 @@ export function registerStatusManagementRoutes({ app }) {
           id:String(row.id), ownerUsername:row.username, ownerDisplayName:row.display_name,
           type:row.type, text:row.text || null,
           mediaId:row.media_id == null ? null : String(row.media_id),
-          mediaUrl:row.media_id == null ? null : \`/api/media/\${row.media_id}\`,
+          mediaUrl:row.media_id == null ? null : `/api/media/${row.media_id}`,
           backgroundColor:Number(row.background_color), foregroundColor:Number(row.foreground_color),
           font:row.font, alignment:Number(row.alignment), privateStatus:Boolean(row.private_status),
           audience:row.audience || (row.private_status ? 'FRIENDS' : 'EVERYONE'),
@@ -63,6 +65,7 @@ export function registerStatusManagementRoutes({ app }) {
 
   app.delete('/api/statuses/:statusId', auth, async (req, res) => {
     try {
+      await ensureStatusSchema(pool);
       const statusId = String(req.params?.statusId || '').trim();
       if (!/^[0-9a-f-]{36}$/i.test(statusId)) return res.status(400).json({ error: 'invalid status id' });
       const result = await pool.query(

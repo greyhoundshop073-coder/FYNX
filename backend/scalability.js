@@ -37,6 +37,10 @@ import { installPeopleResponseHardening } from "./peopleResponseHardening.js";
 import { registerR6GIntegrationRoutes } from "./r6gIntegrationRoutes.js";
 
 installPresencePrivacyGuard();
+
+let resolveMarketplaceStartupReady;
+const marketplaceStartupReady = new Promise((resolve) => { resolveMarketplaceStartupReady = resolve; });
+globalThis.__fynxResolveMarketplaceStartupReady = resolveMarketplaceStartupReady;
 const originalCreateServer = http.createServer;
 http.createServer = function fynxCreateServer(...args) {
   const app = args[0];
@@ -116,10 +120,14 @@ http.createServer = function fynxCreateServer(...args) {
   globalThis.__fynxJobHandlers=globalThis.__fynxJobHandlers||{};
   const jobs=createBackgroundJobQueue({logger:console});
   globalThis.__fynxBackgroundJobs=jobs;
-  registerMarketplaceSettlementWorker({ jobs, logger: console });
-  registerMarketplacePaymentExpiryWorker({ logger: console });
-  registerMarketplaceInspectionExpiryWorker({ logger: console });
-  registerMarketplaceBatch2FinalHardening({ logger: console });
-  void jobs.start().catch(error=>console.error("[fynx-jobs] startup failed",error?.message||error));
+  // Workers issue SQL immediately when registered. Start them only after the
+  // server bootstrap has initialized foundational, listing, order, and settlement schemas.
+  void marketplaceStartupReady.then(async () => {
+    registerMarketplaceSettlementWorker({ jobs, logger: console });
+    registerMarketplacePaymentExpiryWorker({ logger: console });
+    registerMarketplaceInspectionExpiryWorker({ logger: console });
+    registerMarketplaceBatch2FinalHardening({ logger: console });
+    await jobs.start();
+  }).catch(error => console.error("[fynx-jobs] startup failed", error?.message || error));
   return server;
 };

@@ -9,6 +9,9 @@ async function patchOnce(fileName, patches) {
   let source = await readFile(filePath, "utf8");
   let changed = false;
   for (const patch of patches) {
+    // Bootstrap replacements preserve their original marker. Check the full
+    // replacement first so a repeated prestart cannot duplicate route wiring.
+    if (source.includes(patch.replacement)) continue;
     if (source.includes(patch.marker)) {
       source = source.replace(patch.marker, patch.replacement);
       changed = true;

@@ -1,10 +1,13 @@
 import crypto from 'node:crypto';
 import { inspectTrustSafetyText } from './trustSafety.js';
 
-export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
-  let schemaPromise;
-  const ensureMarketplaceTransactionSchema = async () => {
-    if (!schemaPromise) schemaPromise = pool.query(`
+const transactionSchemaPromises = new WeakMap();
+
+export async function initializeMarketplaceTransactionSchema(pool) {
+  if (!pool || typeof pool.query !== 'function') throw new Error('Marketplace transaction schema requires the application database pool');
+  let schemaPromise = transactionSchemaPromises.get(pool);
+  if (!schemaPromise) {
+    schemaPromise = pool.query(`
       ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS reserved_quantity INTEGER NOT NULL DEFAULT 0 CHECK (reserved_quantity >= 0);
       CREATE TABLE IF NOT EXISTS marketplace_orders (id UUID PRIMARY KEY,buyer_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,seller_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,listing_id BIGINT NOT NULL REFERENCES marketplace_listings(id) ON DELETE RESTRICT,quantity INTEGER NOT NULL CHECK (quantity > 0),unit_price NUMERIC(14,2) NOT NULL CHECK (unit_price > 0),delivery_fee NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (delivery_fee >= 0),total_amount NUMERIC(14,2) NOT NULL CHECK (total_amount > 0),currency TEXT NOT NULL,product_snapshot JSONB NOT NULL,status TEXT NOT NULL CHECK (status IN ('PAYMENT_PENDING','PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED','DISPUTED','CANCELLED','REFUNDED')),payment_reference TEXT,tracking_reference TEXT,shipped_at TIMESTAMPTZ,delivered_at TIMESTAMPTZ,inspection_deadline TIMESTAMPTZ,completed_at TIMESTAMPTZ,cancelled_at TIMESTAMPTZ,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
       ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS product_subtotal NUMERIC(14,2);
@@ -41,9 +44,17 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       CREATE TABLE IF NOT EXISTS marketplace_order_evidence (id BIGSERIAL PRIMARY KEY,order_id UUID NOT NULL REFERENCES marketplace_orders(id) ON DELETE CASCADE,submitted_by BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,kind TEXT NOT NULL CHECK (kind IN ('PHOTO','VIDEO','DOCUMENT','MESSAGE_REFERENCE','TRACKING_REFERENCE','NOTE')),value TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
       CREATE INDEX IF NOT EXISTS marketplace_order_evidence_order_idx ON marketplace_order_evidence (order_id, created_at ASC);
       CREATE TABLE IF NOT EXISTS fynx_account_safety (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,message_safety BOOLEAN NOT NULL DEFAULT TRUE,marketplace_safety BOOLEAN NOT NULL DEFAULT TRUE,login_alerts BOOLEAN NOT NULL DEFAULT TRUE,account_status TEXT NOT NULL DEFAULT 'ACTIVE',status_note TEXT NOT NULL DEFAULT '',CHECK(account_status IN ('ACTIVE','LIMITED','LOCKED')));
-    `).catch((error) => { schemaPromise = undefined; throw error; });
-    return schemaPromise;
-  };
+    `).catch((error) => {
+      transactionSchemaPromises.delete(pool);
+      throw error;
+    });
+    transactionSchemaPromises.set(pool, schemaPromise);
+  }
+  return schemaPromise;
+}
+
+export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
+  const ensureMarketplaceTransactionSchema = () => initializeMarketplaceTransactionSchema(pool);
   const parsePositiveInt = (value) => { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : null; };
   const parseUuid = (value) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value.trim()) ? value.trim() : null;
   const isParticipant = (order, userId) => String(order.buyer_id) === String(userId) || String(order.seller_id) === String(userId);

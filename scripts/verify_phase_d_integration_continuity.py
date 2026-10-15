@@ -19,6 +19,8 @@ deep_link = read("app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt")
 share = read("app/src/main/java/com/fynx/app/ui/FynxShare.kt")
 marketplace = read("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt")
 marketplace_transactions = read("backend/marketplaceTransactions.js")
+advertising_panel = read("app/src/main/java/com/fynx/app/ui/FynxAdvertisingCampaignPanel.kt")
+advertising_backend = read("backend/marketplaceAdvertising.js")
 ai_security = read("scripts/verify_ai_security.py")
 workflow = read(".github/workflows/android-build.yml")
 
@@ -33,6 +35,8 @@ required = [
     "app/src/main/java/com/fynx/app/ui/FynxShare.kt",
     "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt",
     "app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt",
+    "app/src/main/java/com/fynx/app/ui/FynxAdvertisingCampaignPanel.kt",
+    "backend/marketplaceAdvertising.js",
     "backend/server.js",
     "backend/realtimeIsolationBootstrap.js",
     "backend/mediaPrivacy.js",
@@ -41,6 +45,8 @@ required = [
 ]
 check("cross-layer integration files all exist", all((ROOT / p).is_file() for p in required))
 check("authenticated app state gates the live UI", "FynxAuthGate" in app and "AuthState.SIGNED_IN" in app)
+check("guest entry is restricted to debug APKs", "FLAG_DEBUGGABLE" in app and "&& !debugBuild" in app)
+check("debug guest session remains clearly marked and sign-in is reachable", 'AuthSession(AuthState.SIGNED_IN, "preview")' in app and '"Sign In" -> FynxAuthGate' in app and '"Sign In", "Sign In / Create Account"' in app)
 check("HTTP client is the shared authenticated backend path", "FynxBackendClient" in app and "Authorization" in client and "Bearer" in client)
 check("realtime client is account-bound", "currentAccountKey()" in realtime and "belongsToCurrentAccount" in realtime and "hasAccessToken" in realtime)
 check("logout/session clearing remains connected", "FynxSecureTokenStore" in auth and "clear" in auth)
@@ -49,6 +55,7 @@ check("deep links are shared through the same parser", "FynxDeepLinkParser" in s
 check("deep links reach live app destinations", all(x in app for x in ["FynxDeepLinkDestination.Profile", "FynxDeepLinkDestination.Chat", "FynxDeepLinkDestination.Group", "FynxDeepLinkDestination.Marketplace", "FynxDeepLinkDestination.Stories", "FynxDeepLinkDestination.Money"]))
 # The production Marketplace entry point is FynxMarketplacePanel. The compatibility wrapper is not audited for implementation ownership.
 check("marketplace UI uses remote data and protected transactions", "FynxRemoteSocialClient.listings" in marketplace and "FynxMarketplaceCheckoutDialog" in marketplace and "marketplace_orders" in marketplace_transactions)
+check("post and business ad creatives can provide canonical owned-content references", 'if (creativeType != "product")' in advertising_panel and 'put("creativeRef"' in advertising_panel and "creativeType !== \"product\" && !creativeRef" in advertising_backend and "validateCreativeReference" in advertising_backend)
 check("AI integration remains behind the existing security gate", "verify_ai_security.py" in workflow and "OPENAI_API_KEY" in ai_security and "authenticate(req)" in ai_security and "secret" not in ai_security.lower())
 journey_step = workflow.find("python3 scripts/verify_fynx_journey.py")
 production_step = workflow.find("python3 scripts/verify_fynx_production.py")

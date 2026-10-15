@@ -5,8 +5,10 @@ package = (ROOT / "backend/package.json").read_text()
 bootstrap = (ROOT / "backend/socialFeedBootstrap.js").read_text()
 realtime = (ROOT / "backend/realtimeIsolationBootstrap.js").read_text()
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt").read_text()
+social_routes = (ROOT / "backend/socialRoutes.js").read_text()
 
 checks = [
+    ("social post route is active code and not swallowed by a literal newline escape", "\n  app.post('/api/social/posts'" in social_routes and "\\n  app.post('/api/social/posts'" not in social_routes),
     ("production start uses preloaded realtime isolation entrypoint", '"start": "node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js"' in package),
     ("realtime entrypoint installs the feed before server startup", 'await installSocialFeed();' in realtime and 'import("./serverBootstrap.js")' in realtime),
     ("feed bootstrap patches the real social route source", 'socialRoutes.js' in bootstrap and 'writeFile(socialPath' in bootstrap),

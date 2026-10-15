@@ -239,6 +239,10 @@ export function registerMarketplaceBatch2FinalHardening({ logger = console } = {
   installPaystackTimeoutGuard();
   if (!pool) return;
   const run = async () => { await recoverPaymentWithoutLocalReference({ logger }); await reconcilePendingRefunds({ logger }); await reconcileRefundRecovery({ logger }); await reconcilePostSuccessPayoutReversals({ logger }); await auditCompletedRecovery({ logger }); };
-  const timer = setInterval(() => { void run(); }, 30_000); timer.unref(); void run();
+  // Recovery tables are created lazily by the settlement route schema initializer.
+  // Keep a missing/unavailable schema from becoming an unhandled rejection that crashes startup;
+  // retry on the next interval after the schema is initialized.
+  const runSafely = () => run().catch(error => logger.error('[fynx-marketplace] Batch 2 recovery pass deferred; schema/database may not be ready', error?.message || error));
+  const timer = setInterval(() => { void runSafely(); }, 30_000); timer.unref();
   logger.log(`[fynx-marketplace] Batch 2 final hardening active; Paystack timeout=${PAYSTACK_TIMEOUT_MS}ms`);
 }
