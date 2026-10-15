@@ -18,7 +18,7 @@ checks = {
     "legacy display name can be reused for safe account migration": "fun storedDisplayName(context: Context)" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAuthStore.kt").read_text(encoding="utf-8"),
     "persisted signed-in sessions require a real backend token": "stored.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)" in app and "debugOfflineSession" not in app,
     "debug login requires an Android debuggable build": "ApplicationInfo.FLAG_DEBUGGABLE" in auth and "if (!isDebuggable || requestedUsername.isBlank()) return null" in auth,
-    "login attempts backend authentication before any offline fallback": "FynxRemoteAuthClient.login(context, requestedUsername, password), allowOfflineEntry = true" in auth and "Offline debug access is available only if the server cannot be reached." in auth,
+    "login attempts backend authentication before any offline fallback": "val login = FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth and "finish(login, allowOfflineEntry = true)" in auth and "Offline debug access is available only if the server cannot be reached." in auth,
     "offline fallback requires a recognized network failure": "allowOfflineEntry && isLoginNetworkFailure(failure)" in auth,
     "network fallback reuses the debug-only local-account guard": "localDebugAccountForLogin(context, username)" in auth,
     "release and invalid-credential paths do not receive an unconditional local session": "if (allowOfflineEntry) {" not in auth and "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth,
