@@ -138,7 +138,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
            + GREATEST(0, 72-EXTRACT(EPOCH FROM (NOW()-l.created_at))/3600.0)) AS discovery_score
         FROM marketplace_listings l JOIN users u ON u.id=l.seller_id
         WHERE ${where.join(" AND ")}
-        ORDER BY discovery_score DESC,l.created_at DESC LIMIT ${params.length - 1} OFFSET ${params.length}
+        ORDER BY discovery_score DESC,l.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}
       `, params);
       const hasMore = result.rows.length > limit;
       const rows = hasMore ? result.rows.slice(0, limit) : result.rows;
