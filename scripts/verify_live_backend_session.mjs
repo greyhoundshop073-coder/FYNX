@@ -122,7 +122,7 @@ try {
     body: { text: `FYNX friends-only network smoke ${Date.now()}`, visibility: "FRIENDS_ONLY" }
   });
   friendsPostId = String(post?.postId || "");
-  if (!/^\\d+$/.test(friendsPostId)) throw new Error("Friends-only post response did not include a valid postId.");
+  if (!/^\d+$/.test(friendsPostId)) throw new Error("Friends-only post response did not include a valid postId.");
 } finally {
   if (friendsPostId) await request(`/api/social/posts/${encodeURIComponent(friendsPostId)}`, { method: "DELETE", token });
 }
@@ -144,6 +144,10 @@ try {
   });
   messageId = String(sent?.message?.id || "");
   if (!/^\d+$/.test(messageId)) throw new Error("Send-message response did not include a valid message ID.");
+  const recipientHistory = await request(`/api/messages/${encodeURIComponent(sender.username)}`, { token: recipientToken });
+  if (!Array.isArray(recipientHistory?.messages) || !recipientHistory.messages.some(item => String(item?.id) === messageId)) {
+    throw new Error("Sent message was not visible in the recipient's authenticated history.");
+  }
 } finally {
   if (messageId) await request(`/api/messages/${encodeURIComponent(messageId)}`, { method: "DELETE", token });
 }
