@@ -3,6 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 auth = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+remote_auth = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteAuthClient.kt").read_text(encoding="utf-8")
 
 checks = {
     "debug login requires an Android debuggable build": "ApplicationInfo.FLAG_DEBUGGABLE" in auth and "if (!isDebuggable || requestedUsername.isBlank()) return null" in auth,
@@ -10,7 +11,7 @@ checks = {
     "offline fallback requires a recognized network failure": "allowOfflineEntry && isLoginNetworkFailure(failure)" in auth,
     "network fallback reuses the debug-only local-account guard": "localDebugAccountForLogin(context, username)" in auth,
     "saved debug login can authenticate with a server password": 'FynxAuthField(password, { password = it }, "Password"' in auth and "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth,
-    "saved local-only debug accounts can migrate to a real server token": "FynxRemoteAuthClient.register(" in auth and "FynxBackendClient.isUnauthorizedFailure(loginResult.exceptionOrNull()!!)" in auth and "savedLocalUsername != null" in auth,
+    "saved local-only debug accounts can migrate to a real server token": "FynxRemoteAuthClient.connectSavedAccount(context, password)" in auth and "FynxAuthStore.hasAccount(context)" in remote_auth and "FynxBackendClient.isUnauthorizedFailure(failure)" in remote_auth,
     "release and invalid-credential paths do not receive an unconditional local session": "if (allowOfflineEntry) {" not in auth and "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth,
     "live-backend probe is separately opt-in and not required for feature-branch APK runtime": "run_live_backend_probe:" in workflow and "inputs.run_live_backend_probe == true" in workflow and "github.ref == 'refs/heads/main'" in workflow and "if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]')) }}" not in workflow,
     "explicit live-backend probe remains available when deliberately requested": "inputs.run_live_backend_probe == true" in workflow and "github.ref == 'refs/heads/main'" in workflow and "run: node scripts/verify_production_backend_reachability.mjs" in workflow,
