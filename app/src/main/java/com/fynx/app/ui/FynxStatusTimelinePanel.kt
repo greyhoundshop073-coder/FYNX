@@ -99,7 +99,7 @@ fun FynxStatusTimelinePanel(
         val targetStatus = openStatusId?.trim()?.takeIf { it.isNotBlank() }?.let { id ->
             statuses.firstOrNull { it.id == id && !it.isExpired() }
         } ?: openOwnerUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }?.let { target ->
-            statuses.filterNot(FynxStatus::isExpired).filter { it.ownerUsername.equals(target, true) }.maxByOrNull { it.createdAtMillis }
+            statuses.filterNot(FynxStatus::isExpired).filter { normalizedOwner(it.ownerUsername) == normalizedOwner(target) }.maxByOrNull { it.createdAtMillis }
         }
         if (targetStatus != null) selected = targetStatus
         onOpenCommandConsumed()
