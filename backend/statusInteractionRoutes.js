@@ -143,6 +143,11 @@ export function registerStatusInteractionRoutes({ app }) {
         LEFT JOIN status_reactions r ON r.status_id=v.status_id AND r.user_id=v.viewer_id
         LEFT JOIN status_likes l ON l.status_id=v.status_id AND l.user_id=v.viewer_id
         WHERE v.status_id=$1
+          AND NOT EXISTS (
+            SELECT 1 FROM blocks b
+            WHERE (b.blocker_id=$2 AND b.blocked_id=u.id)
+               OR (b.blocker_id=u.id AND b.blocked_id=$2)
+          )
         ORDER BY v.viewed_at DESC
         LIMIT 500
       `, [id]);

@@ -68,6 +68,7 @@ require('client sends audience','put("audience", status.audience.name)' in clien
 require('client supports deletion','FynxBackendClient.delete(context, "/api/statuses/${statusId.trim()}")' in client)
 require('client supports views','FynxStatusClient.markViewed(context, status.id)' in timeline and '/interactions' in client)
 require('owner Status viewers endpoint is owner-only and excludes expired Status','/api/statuses/:statusId/viewers' in interactions and 'owner_id=$2 AND expires_at > NOW()' in interactions)
+require('Status viewer identity list excludes accounts blocked in either direction','AND NOT EXISTS (' in interactions and 'b.blocker_id=$2 AND b.blocked_id=u.id' in interactions and 'b.blocker_id=u.id AND b.blocked_id=$2' in interactions)
 require('owner Status viewers include each viewer reaction and like','LEFT JOIN status_reactions r' in interactions and 'LEFT JOIN status_likes l' in interactions and 'viewedAtMillis:' in interactions and 'liked: Boolean(row.liked)' in interactions)
 require('Status viewer details client parses API response','suspend fun viewers(context: Context, statusId: String)' in client and 'getJSONArray("viewers")' in client and 'FynxStatusViewer(' in client)
 require('Status owner can open viewer list from view count','FynxStatusClient.viewers(context, status.id)' in timeline and 'showViewers = true' in timeline and 'Text("Status viewers"' in timeline)
