@@ -10,8 +10,8 @@ from pathlib import Path
 
 ROOT=Path("fynx-runtime-screenshots"); ROOT.mkdir(parents=True,exist_ok=True)
 PACKAGE="com.fynx.app"
-USERNAME=os.environ.get("FYNX_E2E_USERNAME","").strip()
-PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
+USERNAME=(os.environ.get("FYNX_RUNTIME_USERNAME") or os.environ.get("FYNX_E2E_USERNAME","")).strip()
+PASSWORD=os.environ.get("FYNX_RUNTIME_PASSWORD") or os.environ.get("FYNX_E2E_PASSWORD","")
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
 
