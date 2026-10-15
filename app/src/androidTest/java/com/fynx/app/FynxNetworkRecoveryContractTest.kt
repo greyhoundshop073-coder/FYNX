@@ -110,6 +110,59 @@ class FynxNetworkRecoveryContractTest {
     }
 
     @Test
+    fun androidRuntimeAuthenticatesAndLoadsProtectedBackendFeatures() = runBlocking {
+        val appPrefs = context.getSharedPreferences("fynx_backend", Context.MODE_PRIVATE)
+        val originalBaseUrl = appPrefs.getString("base_url", null)
+        val originalExplicit = appPrefs.getBoolean("base_url_explicit", false)
+        val originalLegacyToken = appPrefs.getString("access_token", null)
+        val originalSecureToken = FynxSecureTokenStore.load(context)
+        val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (!isDebuggable) return@runBlocking
+        try {
+            FynxBackendClient.configureBaseUrl(context, "https://fynx-backend-testing-testing.up.railway.app")
+            val suffix = System.currentTimeMillis().toString()
+            val username = "fynx_ci_net_$suffix"
+            val password = "FynxNetCheck-$suffix-Aa9!"
+            val registered = FynxRemoteAuthClient.register(
+                context,
+                "FYNX Network Runtime Check",
+                username,
+                "",
+                password
+            )
+            assertTrue(
+                "Android could not register a test identity with the live backend: ${registered.exceptionOrNull()?.message}",
+                registered.isSuccess
+            )
+            val account = registered.getOrThrow()
+            assertTrue("Backend returned an empty access token", account.token.isNotBlank())
+            FynxSecureTokenStore.save(context, account.token)
+
+            val identity = FynxBackendClient.get(context, "/api/me")
+            assertTrue("Authenticated /api/me failed: ${identity.exceptionOrNull()?.message}", identity.isSuccess)
+
+            listOf(
+                "/api/social/feed",
+                "/api/statuses",
+                "/api/marketplace/discovery"
+            ).forEach { path ->
+                val response = FynxBackendClient.get(context, path)
+                assertTrue(
+                    "Authenticated Android request failed for $path: ${response.exceptionOrNull()?.message}",
+                    response.isSuccess
+                )
+            }
+        } finally {
+            FynxSecureTokenStore.save(context, originalSecureToken)
+            appPrefs.edit().putBoolean("base_url_explicit", originalExplicit)
+                .also { editor ->
+                    if (originalBaseUrl == null) editor.remove("base_url") else editor.putString("base_url", originalBaseUrl)
+                    if (originalLegacyToken == null) editor.remove("access_token") else editor.putString("access_token", originalLegacyToken)
+                }.commit()
+        }
+    }
+
+    @Test
     fun tokenlessBackend401DoesNotSignOutSavedDebugSession() = runBlocking {
         val appPrefs = context.getSharedPreferences("fynx_backend", Context.MODE_PRIVATE)
         val authPrefs = context.getSharedPreferences("fynx_auth", Context.MODE_PRIVATE)
