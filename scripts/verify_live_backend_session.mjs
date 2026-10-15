@@ -114,13 +114,11 @@ try {
   if (postId) await request(`/api/social/posts/${encodeURIComponent(postId)}`, { method: "DELETE", token });
 }
 
-// Establish a test-only friendship so the backend's messaging privacy rules are respected.
-const friendRequest = await request("/api/friends/request", {
-  method: "POST", token, body: { username: recipient.username }
+// FYNX's configured message privacy requires a mutual follow relationship.
+await request(`/api/social/follow/${encodeURIComponent(recipient.username)}`, {
+  method: "POST", token, body: {}
 });
-const friendRequestId = String(friendRequest?.request?.id || "");
-if (!/^\d+$/.test(friendRequestId)) throw new Error("Friend request response did not include a valid request ID.");
-await request(`/api/friends/requests/${encodeURIComponent(friendRequestId)}/accept`, {
+await request(`/api/social/follow/${encodeURIComponent(sender.username)}`, {
   method: "POST", token: recipientToken, body: {}
 });
 
