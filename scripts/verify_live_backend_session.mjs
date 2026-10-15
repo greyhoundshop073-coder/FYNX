@@ -69,7 +69,9 @@ if (ready?.ok !== true || ready?.service !== "fynx-backend" || ready?.database !
 const sender = makeAccount("Sender", "a");
 const recipient = makeAccount("Recipient", "b");
 await registerAccount(sender);
-await registerAccount(recipient);
+const recipientRegistration = await registerAccount(recipient);
+const recipientToken = String(recipientRegistration?.accessToken || "");
+if (!recipientToken) throw new Error("Recipient test account returned no access token.");
 
 const login = await request("/api/auth/login", {
   method: "POST", body: { username: sender.username, password: sender.password }
@@ -111,6 +113,16 @@ try {
 } finally {
   if (postId) await request(`/api/social/posts/${encodeURIComponent(postId)}`, { method: "DELETE", token });
 }
+
+// Establish a test-only friendship so the backend's messaging privacy rules are respected.
+const friendRequest = await request("/api/friends/request", {
+  method: "POST", token, body: { username: recipient.username }
+});
+const friendRequestId = String(friendRequest?.request?.id || "");
+if (!/^\\d+$/.test(friendRequestId)) throw new Error("Friend request response did not include a valid request ID.");
+await request(`/api/friends/requests/${encodeURIComponent(friendRequestId)}/accept`, {
+  method: "POST", token: recipientToken, body: {}
+});
 
 // Exercise a real authenticated message write between isolated smoke accounts, then delete it.
 let messageId = "";
