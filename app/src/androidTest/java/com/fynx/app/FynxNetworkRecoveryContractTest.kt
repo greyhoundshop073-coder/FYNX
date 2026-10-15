@@ -63,6 +63,31 @@ class FynxNetworkRecoveryContractTest {
     }
 
     @Test
+    fun staleUnmarkedBackendOverrideMigratesToRailwayForDebugBuilds() {
+        val prefs = context.getSharedPreferences("fynx_backend", Context.MODE_PRIVATE)
+        val originalUrl = FynxBackendClient.baseUrl(context)
+        val originalExplicit = prefs.getBoolean("base_url_explicit", false)
+        try {
+            prefs.edit()
+                .putString("base_url", "https://fynx-ai-backend.onrender.com")
+                .putBoolean("base_url_explicit", false)
+                .commit()
+
+            val resolved = FynxBackendClient.baseUrl(context)
+            val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+            if (isDebuggable) {
+                assertEquals("https://fynx-backend-testing-testing.up.railway.app", resolved)
+                assertEquals(resolved, prefs.getString("base_url", null))
+            }
+        } finally {
+            prefs.edit()
+                .putString("base_url", originalUrl)
+                .putBoolean("base_url_explicit", originalExplicit)
+                .commit()
+        }
+    }
+
+    @Test
     fun networkAvailabilityContractDoesNotRequireValidatedCapability() {
         // The production client exposes availability independently of Android's
         // VALIDATED bit; the call transport shares this same contract.
