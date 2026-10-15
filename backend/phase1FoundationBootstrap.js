@@ -15,8 +15,8 @@ const replacement = `const fynxRealtimeMessagingCanSend = async (senderId, targe
   const visibility = String(result.rows[0]?.messages_visibility || "My friends");
   if (visibility === "Nobody") return false;
   if (visibility === "Everyone") return true;
-  const mutualFollow = await pool.query("SELECT 1 WHERE EXISTS (SELECT 1 FROM social_follows WHERE follower_id=$1 AND followed_id=$2) AND EXISTS (SELECT 1 FROM social_follows WHERE follower_id=$2 AND followed_id=$1) LIMIT 1", [senderId, targetId]);
-  return Boolean(mutualFollow.rowCount);
+  const friendship = await pool.query("SELECT 1 FROM friendships f WHERE ((f.user_id=$1 AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=$1)) AND f.status='accepted' LIMIT 1", [senderId, targetId]);
+  return Boolean(friendship.rowCount);
 };
 `;
 
