@@ -101,6 +101,8 @@ fun FynxMatureStatusComposerPanel(
     var recording by remember { mutableStateOf(false) }
     var recordingStarted by remember { mutableLongStateOf(0L) }
     var elapsed by remember { mutableLongStateOf(0L) }
+    var accumulatedRecordingMs by remember { mutableLongStateOf(0L) }
+    var recordingPaused by remember { mutableStateOf(false) }
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var recordingFile by remember { mutableStateOf<File?>(null) }
     var showColors by remember { mutableStateOf(false) }
@@ -119,12 +121,16 @@ fun FynxMatureStatusComposerPanel(
         }
     }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true; error = null }, onError = { message -> error = message }) else error = "Microphone permission is required for a voice Status."
+        if (granted) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false; recording = true; error = null }, onError = { message -> error = message }) else error = "Microphone permission is required for a voice Status."
     }
-    LaunchedEffect(recording, recordingStarted) {
+    LaunchedEffect(recording, recordingStarted, recordingPaused) {
         while (recording) {
-            elapsed = System.currentTimeMillis() - recordingStarted
-            if (elapsed >= FYNX_STATUS_MAX_VOICE_DURATION_MS) stopMatureVoiceRecording(recorder, recordingFile) { uri, message -> if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."; recorder = null; recordingFile = null; recording = false; type = FynxStatusType.VOICE }
+            if (!recordingPaused) {
+                elapsed = accumulatedRecordingMs + (System.currentTimeMillis() - recordingStarted).coerceAtLeast(0L)
+                if (elapsed >= FYNX_STATUS_MAX_VOICE_DURATION_MS) {
+                    stopMatureVoiceRecording(recorder, recordingFile) { uri, message -> if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."; recorder = null; recordingFile = null; recording = false; recordingPaused = false; accumulatedRecordingMs = 0L; type = FynxStatusType.VOICE }
+                }
+            }
             delay(200)
         }
     }
@@ -301,7 +307,7 @@ fun FynxMatureStatusComposerPanel(
                             item { MatureStatusModeButton(Icons.Default.TextFields, "Text", type == FynxStatusType.TEXT, !recording && !publishing) { type = FynxStatusType.TEXT; mediaUri = null; showColors = false; error = null } }
                             item { MatureStatusModeButton(Icons.Default.Photo, "Photo", type == FynxStatusType.PHOTO || type == FynxStatusType.VIDEO, !recording && !publishing) { pickMedia.launch(arrayOf("image/*", "video/*")) } }
                             item { MatureStatusModeButton(Icons.Default.CameraAlt, "Camera", false, !recording && !publishing) { cameraOpen = true; showColors = false; showTools = false; error = null } }
-                            item { MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording) { type = FynxStatusType.VOICE; showColors = false; error = null; if (mediaUri == null) if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true }, onError = { message -> error = message }) else micPermission.launch(Manifest.permission.RECORD_AUDIO) } }
+                            item { MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording) { type = FynxStatusType.VOICE; showColors = false; error = null; if (mediaUri == null) if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false; recording = true }, onError = { message -> error = message }) else micPermission.launch(Manifest.permission.RECORD_AUDIO) } }
                         }
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -348,10 +354,28 @@ fun FynxMatureStatusComposerPanel(
                                         if (type == FynxStatusType.VOICE) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                             if (recording) {
-                                FilledTonalButton(onClick = { stopMatureVoiceRecording(recorder, recordingFile) { uri, message -> if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."; recorder = null; recordingFile = null; recording = false } }) {
-                                    Icon(Icons.Default.Stop, "Stop")
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Stop • ${formatMatureTime(elapsed)}")
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    OutlinedButton(onClick = {
+                                        if (recordingPaused) {
+                                            runCatching { recorder?.resume() }.onSuccess {
+                                                recordingStarted = System.currentTimeMillis()
+                                                recordingPaused = false
+                                            }.onFailure { error = it.message ?: "Could not resume recording." }
+                                        } else {
+                                            elapsed = accumulatedRecordingMs + (System.currentTimeMillis() - recordingStarted).coerceAtLeast(0L)
+                                            runCatching { recorder?.pause() }.onSuccess {
+                                                accumulatedRecordingMs = elapsed
+                                                recordingPaused = true
+                                            }.onFailure { error = it.message ?: "Could not pause recording." }
+                                        }
+                                    }, enabled = !publishing) {
+                                        Text(if (recordingPaused) "Resume" else "Pause")
+                                    }
+                                    FilledTonalButton(onClick = { stopMatureVoiceRecording(recorder, recordingFile) { uri, message -> if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."; recorder = null; recordingFile = null; recording = false; recordingPaused = false; accumulatedRecordingMs = 0L } }) {
+                                        Icon(Icons.Default.Stop, "Stop")
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Stop • ${formatMatureTime(elapsed)}")
+                                    }
                                 }
                             } else if (mediaUri != null) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -370,7 +394,7 @@ fun FynxMatureStatusComposerPanel(
                                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                                                 beginMatureVoiceRecording(
                                                     context,
-                                                    onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true },
+                                                    onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false; recording = true },
                                                     onError = { message -> error = message }
                                                 )
                                             } else micPermission.launch(Manifest.permission.RECORD_AUDIO)
