@@ -155,13 +155,7 @@ export function installMediaPrivacyGuard(app) {
                 )
               )
           )
-          OR EXISTS (
-            SELECT 1
-            FROM statuses expired_status
-            WHERE expired_status.media_id = mm.id
-              AND expired_status.expires_at <= NOW()
-              AND expired_status.owner_id <> $2
-          )) AS blocked_message_media
+          ) AS blocked_message_media
         FROM message_media mm
         WHERE mm.id = $1
         LIMIT 1`, [mediaId, userId]);
