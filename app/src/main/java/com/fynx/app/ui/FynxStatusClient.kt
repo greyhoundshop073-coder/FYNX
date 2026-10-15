@@ -8,6 +8,14 @@ import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.io.File
 
+data class FynxStatusViewer(
+    val username: String,
+    val displayName: String,
+    val viewedAtMillis: Long,
+    val reaction: String?,
+    val liked: Boolean
+)
+
 data class FynxStatusInteractions(
     val viewCount: Int = 0,
     val likeCount: Int = 0,
@@ -121,6 +129,23 @@ object FynxStatusClient {
             viewCount=o.optInt("viewCount"), likeCount=o.optInt("likeCount"), replyCount=o.optInt("replyCount"),
             reactionCounts=counts, likedByMe=o.optBoolean("likedByMe"), myReaction=o.optString("myReaction").ifBlank { null }
         )
+    }
+
+    suspend fun viewers(context: Context, statusId: String): Result<List<FynxStatusViewer>> = runCatching {
+        val raw = FynxBackendClient.get(context, "/api/statuses/${statusId.trim()}/viewers").getOrThrow()
+        val items = JSONObject(raw).getJSONArray("viewers")
+        buildList {
+            for (i in 0 until items.length()) {
+                val item = items.getJSONObject(i)
+                add(FynxStatusViewer(
+                    username = item.optString("username"),
+                    displayName = item.optString("displayName").ifBlank { item.optString("username") },
+                    viewedAtMillis = item.optLong("viewedAtMillis"),
+                    reaction = item.optString("reaction").ifBlank { null },
+                    liked = item.optBoolean("liked")
+                ))
+            }
+        }
     }
 
     private const val VIEWED_STATUS_IDS = "fynx_viewed_status_ids"
