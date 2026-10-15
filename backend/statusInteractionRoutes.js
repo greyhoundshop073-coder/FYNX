@@ -179,33 +179,65 @@ export function registerStatusInteractionRoutes({ app }) {
   });
 
   app.post('/api/statuses/:statusId/like', auth, async (req, res) => {
+    let transactionClient;
     try {
       await ensureSchema();
       const id = statusId(req);
       const status = await visibleStatus(id, req.user.sub);
       if (!status) return res.status(404).json({ error: 'status not found or not visible' });
-      const existing = await pool.query('SELECT 1 FROM status_likes WHERE status_id=$1 AND user_id=$2 LIMIT 1', [id, req.user.sub]);
-      if (existing.rows[0]) await pool.query('DELETE FROM status_likes WHERE status_id=$1 AND user_id=$2', [id, req.user.sub]);
-      else {
-        await pool.query('INSERT INTO status_likes(status_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [id, req.user.sub]);
-        if (String(status.owner_id) !== String(req.user.sub)) {
-          try {
-            await queueFynxNotification(pool, {
-              userId: status.owner_id,
-              type: 'REACTION',
-              title: 'New Status like',
-              message: `${req.user.username || 'Someone'} liked your Status.`,
-              targetId: id,
-              sourceUsername: req.user.username || null,
-              route: `fynx://status/${id}`
-            });
-          } catch (error) {
-            console.error('status like notification', error);
-          }
+
+      // Serialize toggles for this user/status pair. Without a lock, two rapid
+      // requests can both read "not liked" and both report a like was added.
+      transactionClient = await pool.connect();
+      await transactionClient.query('BEGIN');
+      await transactionClient.query(
+        'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2::text))',
+        [id, req.user.sub]
+      );
+      const existing = await transactionClient.query(
+        'SELECT 1 FROM status_likes WHERE status_id=$1 AND user_id=$2 LIMIT 1',
+        [id, req.user.sub]
+      );
+      const liked = !existing.rows[0];
+      if (!liked) {
+        await transactionClient.query(
+          'DELETE FROM status_likes WHERE status_id=$1 AND user_id=$2',
+          [id, req.user.sub]
+        );
+      } else {
+        await transactionClient.query(
+          'INSERT INTO status_likes(status_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING',
+          [id, req.user.sub]
+        );
+      }
+      await transactionClient.query('COMMIT');
+      transactionClient.release();
+      transactionClient = null;
+
+      // Notifications are best-effort and happen only after the toggle commits.
+      if (liked && String(status.owner_id) !== String(req.user.sub)) {
+        try {
+          await queueFynxNotification(pool, {
+            userId: status.owner_id,
+            type: 'REACTION',
+            title: 'New Status like',
+            message: `${req.user.username || 'Someone'} liked your Status.`,
+            targetId: id,
+            sourceUsername: req.user.username || null,
+            route: `fynx://status/${id}`
+          });
+        } catch (error) {
+          console.error('status like notification', error);
         }
       }
-      return res.json({ liked: !existing.rows[0] });
+      return res.json({ liked });
     } catch (error) {
+      if (transactionClient) {
+        try { await transactionClient.query('ROLLBACK'); } catch (rollbackError) {
+          console.error('status like rollback', rollbackError);
+        }
+        transactionClient.release();
+      }
       console.error('status like', error);
       return res.status(500).json({ error: 'status like failed' });
     }
