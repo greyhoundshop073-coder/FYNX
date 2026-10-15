@@ -8,6 +8,9 @@ const secondUsername = `fynxprobe2_${suffix}`.slice(0, 32);
 let firstToken = "";
 let postId = "";
 let keepPostForDiagnosis = false;
+let statusId = "";
+const createdListingIds = [];
+const createdOrderIds = [];
 
 async function request(path, { method = "GET", token, body } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -115,7 +118,7 @@ try {
   });
 
   // Exercise the live Status lifecycle and the Status-reply -> private Chat bridge.
-  const statusId = randomUUID();
+  statusId = randomUUID();
   const statusText = `FYNX live Status ${suffix}`;
   const createdStatus = await request("/api/statuses", {
     method: "POST",
@@ -195,6 +198,7 @@ try {
   });
   const listingId = String(listingResponse.listing?.id || "");
   if (!listingId) throw new Error("marketplace listing creation did not return a listing ID");
+  createdListingIds.push(listingId);
   const sellerListings = await request("/api/marketplace/my-listings", { token: firstToken });
   if (!Array.isArray(sellerListings.listings) || !sellerListings.listings.some((item) => String(item.id) === listingId && item.title === listingTitle)) {
     throw new Error("seller could not retrieve the listing they created");
@@ -207,13 +211,82 @@ try {
   if (!Array.isArray(sellerDiscovery.listings) || sellerDiscovery.listings.some((item) => String(item.id) === listingId)) {
     throw new Error("marketplace discovery incorrectly returned the seller's own listing");
   }
-  await request(`/api/marketplace/listings/${encodeURIComponent(listingId)}`, { method: "DELETE", token: firstToken });
+  // Prove single-item quote/order persistence and cancellation without leaving reserved inventory behind.
+  const singleQuote = await request("/api/marketplace/checkout/quote", {
+    method: "POST",
+    token: second.accessToken,
+    body: { listingId: Number(listingId), quantity: 1, fulfillmentMethod: "PICKUP" },
+  });
+  if (!singleQuote.quote?.id || singleQuote.quote.currency !== "NGN" || Number(singleQuote.quote.total) <= 0) {
+    throw new Error("single-item Marketplace checkout quote did not return a valid NGN total");
+  }
+  const singleOrder = await request("/api/marketplace/checkout/order", {
+    method: "POST",
+    token: second.accessToken,
+    body: { listingId: Number(listingId), quantity: 1, fulfillmentMethod: "PICKUP", buyerNote: `FYNX live checkout ${suffix}` },
+  });
+  const singleOrderId = String(singleOrder.order?.id || "");
+  if (!singleOrderId || singleOrder.order?.status !== "PAYMENT_PENDING" || Number(singleOrder.order?.buyerTotal) <= 0) {
+    throw new Error("single-item Marketplace checkout did not create a protected payment-pending order");
+  }
+  createdOrderIds.push(singleOrderId);
+  const cancelledOrder = await request(`/api/marketplace/orders/${encodeURIComponent(singleOrderId)}/cancel`, {
+    method: "POST",
+    token: second.accessToken,
+    body: {},
+  });
+  if (cancelledOrder.order?.status !== "CANCELLED") throw new Error("unpaid Marketplace order could not be cancelled and released");
 
-  await request(`/api/statuses/${encodeURIComponent(statusId)}`, { method: "DELETE", token: firstToken });
-  console.log("PASS: Railway live backend readiness, registration/login/token identity, public feed, media upload, direct messaging in both histories, Status creation/view/like/reaction/reply plus Chat bridge, and seller-to-buyer Marketplace listing discovery.");
+  // Exercise the Smart Marketplace Buy Together quote with two distinct listings in one NGN cart.
+  const secondListingTitle = `FYNX Live Listing Two ${suffix}`;
+  const secondListingResponse = await request("/api/marketplace/listings", {
+    method: "POST",
+    token: firstToken,
+    body: {
+      storeName: "FYNX Live Test Store",
+      title: secondListingTitle,
+      description: `Second live cart item ${suffix}`,
+      price: 1300,
+      currency: "NGN",
+      category: "Electronics",
+      condition: "NEW",
+      quantity: 2,
+      location: "Port Harcourt",
+      deliveryAvailable: true,
+      pickupAvailable: true,
+      deliveryFee: 75,
+      mediaIds: [Number(mediaId)],
+    },
+  });
+  const secondListingId = String(secondListingResponse.listing?.id || "");
+  if (!secondListingId) throw new Error("second Marketplace listing for Buy Together did not get created");
+  createdListingIds.push(secondListingId);
+  const multiQuote = await request("/api/marketplace/checkout/multi-quote", {
+    method: "POST",
+    token: second.accessToken,
+    body: {
+      items: [
+        { listingId: Number(listingId), quantity: 1, fulfillmentMethod: "PICKUP" },
+        { listingId: Number(secondListingId), quantity: 1, fulfillmentMethod: "PICKUP" },
+      ],
+    },
+  });
+  if (Number(multiQuote.quote?.itemCount) !== 2 || multiQuote.quote?.currency !== "NGN" || Number(multiQuote.quote?.total) <= Number(multiQuote.quote?.subtotal)) {
+    throw new Error("Smart Marketplace Buy Together quote failed to combine two NGN items and fee totals");
+  }
+
+  console.log("PASS: Railway live backend readiness, registration/login/token identity, public feed, media upload, direct messaging in both histories, Status interactions and Status-to-Chat reply, seller-to-buyer listing discovery, single-item checkout quote/order/cancellation, and two-item Buy Together quote.");
+
 
 } finally {
-  if (postId && firstToken && !keepPostForDiagnosis) {
-    await request(`/api/social/posts/${encodeURIComponent(postId)}`, { method: "DELETE", token: firstToken }).catch(() => {});
+  if (firstToken) {
+    for (const orderId of createdOrderIds) {
+      await request(`/api/marketplace/orders/${encodeURIComponent(orderId)}/cancel`, { method: "POST", token: secondTokenForCleanup, body: {} }).catch(() => {});
+    }
+    for (const listingId of createdListingIds) {
+      await request(`/api/marketplace/listings/${encodeURIComponent(listingId)}`, { method: "DELETE", token: firstToken }).catch(() => {});
+    }
+    if (statusId) await request(`/api/statuses/${encodeURIComponent(statusId)}`, { method: "DELETE", token: firstToken }).catch(() => {});
+    if (postId && !keepPostForDiagnosis) await request(`/api/social/posts/${encodeURIComponent(postId)}`, { method: "DELETE", token: firstToken }).catch(() => {});
   }
 }
