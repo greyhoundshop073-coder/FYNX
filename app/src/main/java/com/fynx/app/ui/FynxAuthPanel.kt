@@ -199,28 +199,10 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                         busy = true
                                         error = null
                                         scope.launch {
-                                            val loginResult = FynxRemoteAuthClient.login(context, requestedUsername, password)
-                                            // Older debug APKs could create a local-only account before the
-                                            // server auth path was wired. If that exact saved local account is
-                                            // absent on the server, migrate it once using the password the user
-                                            // just entered. This path is debug-only because savedLocalUsername
-                                            // is only available through localDebugAccountForLogin().
-                                            val connectedResult = if (
-                                                savedLocalUsername != null &&
-                                                FynxAuthStore.hasAccount(context) &&
-                                                FynxAuthStore.storedUsername(context).equals(requestedUsername, ignoreCase = true) &&
-                                                loginResult.isFailure &&
-                                                FynxBackendClient.isUnauthorizedFailure(loginResult.exceptionOrNull()!!)
-                                            ) {
-                                                FynxRemoteAuthClient.register(
-                                                    context,
-                                                    FynxAuthStore.storedDisplayName(context) ?: savedLocalUsername,
-                                                    savedLocalUsername,
-                                                    FynxAuthStore.storedPhone(context).orEmpty(),
-                                                    password
-                                                )
+                                            val connectedResult = if (savedLocalUsername != null && FynxAuthStore.hasAccount(context)) {
+                                                FynxRemoteAuthClient.connectSavedAccount(context, password)
                                             } else {
-                                                loginResult
+                                                FynxRemoteAuthClient.login(context, requestedUsername, password)
                                             }
                                             finish(connectedResult, allowOfflineEntry = true)
                                         }
