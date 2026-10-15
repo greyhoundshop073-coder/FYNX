@@ -44,6 +44,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun FynxStatusTimelinePanel(
@@ -374,6 +377,10 @@ private fun FynxStatusStoryViewer(
     var replyFocused by remember { mutableStateOf(false) }
     val replyPaused = replyFocused || WindowInsets.isImeVisible
     var showReactionPicker by remember { mutableStateOf(false) }
+    var showViewers by remember { mutableStateOf(false) }
+    var viewers by remember(statuses, startIndex) { mutableStateOf<List<FynxStatusViewer>>(emptyList()) }
+    var viewersLoading by remember(statuses, startIndex) { mutableStateOf(false) }
+    var viewersError by remember(statuses, startIndex) { mutableStateOf<String?>(null) }
     var showReplyEmojiPicker by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val status = statuses.getOrNull(index) ?: return
@@ -659,7 +666,16 @@ private fun FynxStatusStoryViewer(
                                 horizontalArrangement = Arrangement.spacedBy(18.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Views  ${interactions.viewCount}", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                                TextButton(onClick = {
+                                    showViewers = true
+                                    viewersLoading = true
+                                    viewersError = null
+                                    scope.launch {
+                                        FynxStatusClient.viewers(context, status.id)
+                                            .onSuccess { viewers = it; viewersLoading = false }
+                                            .onFailure { viewersError = it.message ?: "Unable to load viewers."; viewersLoading = false }
+                                    }
+                                }) { Text("Views  ${interactions.viewCount}", color = Color.White, style = MaterialTheme.typography.labelLarge) }
                                 Text("Likes  ${interactions.likeCount}", color = Color.White, style = MaterialTheme.typography.labelLarge)
                             }
                         }
@@ -764,6 +780,45 @@ private fun FynxStatusStoryViewer(
                         }
                         interactionError?.let { Text(it, color = Color(0xFFFF8A80), style = MaterialTheme.typography.labelSmall) }
                         deleteError?.let { Text(it, color = Color(0xFFFF8A80), style = MaterialTheme.typography.labelSmall) }
+                    }
+                }
+
+                if (showViewers) {
+                    ModalBottomSheet(
+                        onDismissRequest = { showViewers = false },
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ) {
+                        Column(
+                            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text("Status viewers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                            Text("${viewers.size} people viewed this Status", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (viewersLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                            viewersError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                            if (!viewersLoading && viewers.isEmpty() && viewersError == null) {
+                                Text("No viewer details yet.", modifier = Modifier.padding(vertical = 16.dp))
+                            } else {
+                                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                                    items(viewers, key = { it.username }) { viewer ->
+                                        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.size(42.dp)) {
+                                                Box(contentAlignment = Alignment.Center) { Text(viewer.displayName.trim().firstOrNull()?.uppercase() ?: "?", fontWeight = FontWeight.SemiBold) }
+                                            }
+                                            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                                                Text(viewer.displayName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1)
+                                                Text("@${viewer.username} · ${SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(viewer.viewedAtMillis))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            if (viewer.reaction != null) Text(viewer.reaction, fontSize = 22.sp)
+                                            else if (viewer.liked) Icon(Icons.Default.Favorite, "Liked", tint = MaterialTheme.colorScheme.error)
+                                        }
+                                        HorizontalDivider()
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(16.dp))
+                        }
                     }
                 }
 
