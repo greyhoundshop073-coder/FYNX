@@ -23,7 +23,7 @@ def contains_remote_audio_renderer(source):
 
 checks=[]
 def require(label, condition): checks.append((label, bool(condition)))
-server=read('backend/server.js'); status_list=server[server.indexOf('app.get("/api/statuses"'):server.indexOf('app.post("/api/statuses"')]; management=read('backend/statusManagementRoutes.js'); scale=read('backend/scalability.js'); interactions=read('backend/statusInteractionRoutes.js')
+server=read('backend/server.js'); status_list=server[server.index('app.get("/api/statuses"'):server.index('app.post("/api/statuses"')]; management=read('backend/statusManagementRoutes.js'); scale=read('backend/scalability.js'); interactions=read('backend/statusInteractionRoutes.js')
 client=read('app/src/main/java/com/fynx/app/ui/FynxStatusClient.kt'); foundation=read('app/src/main/java/com/fynx/app/ui/FynxStatusFoundation.kt')
 composer=read('app/src/main/java/com/fynx/app/ui/FynxStatusComposerPanel.kt'); mature=read('app/src/main/java/com/fynx/app/ui/FynxMatureStatusComposerPanel.kt')
 timeline=read('app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt'); hub=read('app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt'); stories=read('app/src/main/java/com/fynx/app/ui/StoriesPanel.kt')
