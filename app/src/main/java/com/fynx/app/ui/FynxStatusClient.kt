@@ -123,8 +123,28 @@ object FynxStatusClient {
         )
     }
 
-    suspend fun markViewed(context: Context, statusId: String): Result<Unit> = runCatching {
-        FynxBackendClient.postJson(context, "/api/statuses/${statusId.trim()}/view", "{}").getOrThrow()
+    private const val VIEWED_STATUS_IDS = "fynx_viewed_status_ids"
+
+    fun viewedStatusIds(context: Context): Set<String> =
+        context.getSharedPreferences("fynx_status_views", Context.MODE_PRIVATE)
+            .getStringSet(VIEWED_STATUS_IDS, emptySet())
+            ?.toSet()
+            .orEmpty()
+
+    private fun rememberViewed(context: Context, statusId: String) {
+        val id = statusId.trim()
+        if (id.isBlank()) return
+        val prefs = context.getSharedPreferences("fynx_status_views", Context.MODE_PRIVATE)
+        val updated = prefs.getStringSet(VIEWED_STATUS_IDS, emptySet()).orEmpty().toMutableSet()
+        updated.add(id)
+        prefs.edit().putStringSet(VIEWED_STATUS_IDS, updated).apply()
+    }
+
+    suspend fun markViewed(context: Context, statusId: String): Result<Unit> {
+        rememberViewed(context, statusId)
+        return runCatching {
+            FynxBackendClient.postJson(context, "/api/statuses/${statusId.trim()}/view", "{}").getOrThrow()
+        }
     }
 
     suspend fun toggleLike(context: Context, statusId: String): Result<Boolean> = runCatching {
