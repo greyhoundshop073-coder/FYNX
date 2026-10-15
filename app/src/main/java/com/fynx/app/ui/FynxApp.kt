@@ -44,6 +44,27 @@ import kotlinx.coroutines.delay
 private const val FYNX_PREVIEW_MODE = false
 private data class FynxNavItem(val key: String, val label: String, val icon: ImageVector)
 
+private fun fynxBackDestination(
+    selected: String,
+    notificationPreferencesOnly: Boolean,
+    navigationHistory: List<String>
+): String = when (selected) {
+    "Contacts" -> "Chats"
+    "Saved Posts", "Invite", "Gifts", "To-Do", "Share", "Announcements", "Admin" -> "Features"
+    "Privacy" -> "Profile"
+    "Notifications" -> if (notificationPreferencesOnly) "Profile" else "Home"
+    "Calendar" -> "Extra Tools"
+    "Money Tools" -> "Features"
+    "Stories", "Calls" -> "Home"
+    "Groups" -> "Chats"
+    "Business Account" -> "Features"
+    "Advertising" -> "Business Account"
+    "Advertising Dashboard" -> "Advertising"
+    "Advertising AI", "AI Creation", "AI Photo Editor" -> "AI"
+    "Seller Center" -> "Marketplace"
+    else -> navigationHistory.getOrNull(navigationHistory.lastIndex - 1) ?: "Home"
+}
+
 @Composable
 fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     val context = LocalContext.current
@@ -275,14 +296,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     BackHandler(enabled = profileUser != null) { profileUser = null }
     BackHandler(enabled = openChat != null) { openChat = null }
     BackHandler(enabled = openGroup != null && openChat == null) { openGroup = null }
-    BackHandler(enabled = openChat == null && openGroup == null && selected == "Contacts") {
+    BackHandler(enabled = openChat == null && openGroup == null && selected !in mainNav.map { it.key }.toSet()) {
         backNavigationRequested = true
-        selected = navigationHistory.getOrNull(navigationHistory.lastIndex - 1) ?: "Chats"
-    }
-    BackHandler(enabled = openChat == null && openGroup == null && selected == "Saved Posts") { selected = "Features" }
-    BackHandler(enabled = openChat == null && openGroup == null && selected != "Home" && selected != "Contacts" && selected != "Saved Posts") {
-        backNavigationRequested = true
-        selected = navigationHistory.getOrNull(navigationHistory.lastIndex - 1) ?: "Home"
+        selected = fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)
+        if (notificationPreferencesOnly) notificationPreferencesOnly = false
     }
     if (profileUser != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { OtherUserProfilePanel(username = profileUser!!, onBack = { profileUser = null }, onOpenStatus = { statusUsername -> profileUser = null; statusOpenOwner = statusUsername; selected = "Stories" }, onMessage = { username -> openChatMarketplaceListingId = null; val normalized = username.trim().let { if (it.startsWith("@")) it else "@$it" }; openChat = FynxChatStore.loadPreviews(context).firstOrNull { it.username.equals(normalized, true) } ?: ChatPreview(normalized.removePrefix("@").ifBlank { "FYNX user" }, normalized, "Start a conversation", "Now"); FynxChatStore.savePreview(context, openChat!!); profileUser = null }) }; return }
     if (openChat != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { ConversationPanel(chat = openChat!!, marketplaceListingId = openChatMarketplaceListingId, onBack = { openChat = null; openChatMarketplaceListingId = null }, onOpenProfile = { profileUser = it; openChat = null }, onVoiceCall = { callTarget = openChat!!.username; callVideo = false; openChat = null; selected = "Calls" }, onVideoCall = { callTarget = openChat!!.username; callVideo = true; openChat = null; selected = "Calls" }) }; return }
@@ -391,7 +408,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                             Icon(Icons.Default.CameraAlt, contentDescription = null)
                         }
                         BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
-                            IconButton(onClick = { selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
+                            IconButton(onClick = { notificationPreferencesOnly = false; selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
                         }
                     }
                 }
@@ -402,11 +419,32 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { selected = "Home" }, modifier = Modifier.semantics { contentDescription = "Back to Home" }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back to Home")
-                    }
+                    Spacer(Modifier.size(48.dp))
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                         Text("Friends", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                    }
+                    Spacer(Modifier.size(48.dp))
+                }
+            } else if (selected in mainNav.map { it.key }) {
+                Row(
+                    Modifier.fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Spacer(Modifier.size(48.dp))
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        Text(
+                            when (selected) {
+                                "Chats" -> "Chats"
+                                "Marketplace" -> "Marketplace"
+                                "Features" -> "More"
+                                else -> selected
+                            },
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge
+                        )
                     }
                     Spacer(Modifier.size(48.dp))
                 }
@@ -419,20 +457,17 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 ) {
                     IconButton(
                         onClick = {
-                            if (selected == "Saved Posts") {
-                                selected = "Features"
-                            } else {
-                                backNavigationRequested = true
-                                selected = navigationHistory.getOrNull(navigationHistory.lastIndex - 1) ?: "Home"
-                            }
+                            backNavigationRequested = true
+                            selected = fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)
+                            if (notificationPreferencesOnly) notificationPreferencesOnly = false
                         },
                         modifier = Modifier.semantics {
-                            contentDescription = if (selected == "Saved Posts") "Back to Features" else "Back to previous screen"
+                            contentDescription = "Back to ${fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)}"
                         }
                     ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            if (selected == "Saved Posts") "Back to Features" else "Back to previous screen"
+                            contentDescription = "Back to ${fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)}"
                         )
                     }
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
@@ -467,9 +502,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             // Stay above the system navigation area, but do not follow the IME.
             // When the keyboard opens, the whole surface disappears so no Home
             // post/content is covered. It reappears when the keyboard closes.
-            if (!isKeyboardVisible && selected == "Home") {
+            if (!isKeyboardVisible && selected in mainNav.map { it.key }) {
                 AnimatedVisibility(
-                    visible = !homeChromeHidden,
+                    visible = selected != "Home" || !homeChromeHidden,
                     enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                     exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
                 ) {
