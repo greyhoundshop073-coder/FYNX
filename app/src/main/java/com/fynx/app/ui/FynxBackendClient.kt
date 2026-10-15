@@ -23,6 +23,7 @@ import org.json.JSONObject
 object FynxBackendClient {
     private const val PREFS = "fynx_backend"
     private const val KEY_BASE_URL = "base_url"
+    private const val KEY_BASE_URL_EXPLICIT = "base_url_explicit"
     private const val LEGACY_ACCESS_TOKEN = "access_token"
     private const val PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"
     private const val DEBUG_TEST_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"
@@ -43,8 +44,38 @@ object FynxBackendClient {
     data class DownloadedMedia(val contentType: String?, val byteCount: Long)
 
     fun availability(context: Context): FynxBackendAvailability = if (baseUrl(context).isBlank()) FynxBackendAvailability.DISABLED else FynxBackendAvailability.CONFIGURED
-    fun baseUrl(context: Context): String { val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE); val stored = prefs.getString(KEY_BASE_URL, null)?.trim()?.trimEnd('/'); val normalized = stored?.trimEnd('/')?.takeIf { it.isNotBlank() }; val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0; if (normalized == "https://ai-creative-studio-572v.onrender.com" || (isDebuggable && normalized == PRODUCTION_BASE_URL)) { prefs.edit().remove(KEY_BASE_URL).apply(); return if (isDebuggable) DEBUG_TEST_BASE_URL else PRODUCTION_BASE_URL }; return normalized ?: if (isDebuggable) DEBUG_TEST_BASE_URL else PRODUCTION_BASE_URL }
-    fun configureBaseUrl(context: Context, value: String) { val normalized = value.trim().trimEnd('/'); require(normalized.isBlank() || normalized.startsWith("https://")) { "FYNX backend must use HTTPS." }; context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_BASE_URL, normalized).apply() }
+    fun baseUrl(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val stored = prefs.getString(KEY_BASE_URL, null)?.trim()?.trimEnd('/')
+        val normalized = stored?.trimEnd('/')?.takeIf { it.isNotBlank() }
+        val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
+        if (isDebuggable) {
+            // Older APKs could persist a stale backend URL across upgrades. Only honor a
+            // debug override when this version explicitly configured it; migrate legacy
+            // unmarked values to the active Railway testing service.
+            val explicitlyConfigured = prefs.getBoolean(KEY_BASE_URL_EXPLICIT, false)
+            val safeExplicitOverride = explicitlyConfigured &&
+                normalized != null &&
+                normalized != PRODUCTION_BASE_URL &&
+                normalized != "https://ai-creative-studio-572v.onrender.com"
+            if (safeExplicitOverride) return normalized
+            if (normalized != DEBUG_TEST_BASE_URL || !explicitlyConfigured) {
+                prefs.edit()
+                    .putString(KEY_BASE_URL, DEBUG_TEST_BASE_URL)
+                    .putBoolean(KEY_BASE_URL_EXPLICIT, false)
+                    .apply()
+            }
+            return DEBUG_TEST_BASE_URL
+        }
+
+        if (normalized == "https://ai-creative-studio-572v.onrender.com") {
+            prefs.edit().remove(KEY_BASE_URL).apply()
+            return PRODUCTION_BASE_URL
+        }
+        return normalized ?: PRODUCTION_BASE_URL
+    }
+    fun configureBaseUrl(context: Context, value: String) { val normalized = value.trim().trimEnd('/'); require(normalized.isBlank() || normalized.startsWith("https://")) { "FYNX backend must use HTTPS." }; context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_BASE_URL, normalized).putBoolean(KEY_BASE_URL_EXPLICIT, true).apply() }
     fun saveAccessToken(context: Context, token: String?) { if (token.isNullOrBlank()) { FynxAuthStore.clear(context); return }; FynxSecureTokenStore.save(context, token) }
     fun accessToken(context: Context): String? = FynxSecureTokenStore.load(context) ?: migrateLegacyAccessToken(context)
     fun hasAccessToken(context: Context): Boolean = accessToken(context) != null
