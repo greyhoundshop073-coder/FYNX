@@ -23,7 +23,7 @@ def contains_remote_audio_renderer(source):
 
 checks=[]
 def require(label, condition): checks.append((label, bool(condition)))
-server=read('backend/server.js'); management=read('backend/statusManagementRoutes.js'); scale=read('backend/scalability.js'); interactions=read('backend/statusInteractionRoutes.js')
+server=read('backend/server.js'); status_list=server[server.indexOf('app.get("/api/statuses"'):server.indexOf('app.post("/api/statuses"')]; management=read('backend/statusManagementRoutes.js'); scale=read('backend/scalability.js'); interactions=read('backend/statusInteractionRoutes.js')
 client=read('app/src/main/java/com/fynx/app/ui/FynxStatusClient.kt'); foundation=read('app/src/main/java/com/fynx/app/ui/FynxStatusFoundation.kt')
 composer=read('app/src/main/java/com/fynx/app/ui/FynxStatusComposerPanel.kt'); mature=read('app/src/main/java/com/fynx/app/ui/FynxMatureStatusComposerPanel.kt')
 timeline=read('app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt'); hub=read('app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt'); stories=read('app/src/main/java/com/fynx/app/ui/StoriesPanel.kt')
@@ -32,6 +32,9 @@ remote_media=read('app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt'); camer
 media_privacy=read('backend/mediaPrivacy.js')
 
 require('backend Status schema + expiry','CREATE TABLE IF NOT EXISTS statuses' in server and 'expires_at TIMESTAMPTZ NOT NULL' in server)
+require('Status timeline returns public EVERYONE statuses without requiring a follow',\"s.audience='EVERYONE'\" in status_list and \"s.owner_id=$1 OR (\" in status_list and \"s.expires_at > NOW()\" in status_list)
+require('FRIENDS Status visibility requires an accepted friendship and both-direction block exclusion',\"s.audience='FRIENDS' AND EXISTS(\" in status_list and \"f.status='accepted'\" in status_list and 'b.blocker_id=$1 AND b.blocked_id=s.owner_id' in status_list and 'b.blocker_id=s.owner_id AND b.blocked_id=$1' in status_list)
+require('ONLY_ME Status is not shared through the non-owner timeline visibility clause',\"s.audience='ONLY_ME'\" not in status_list and \"s.owner_id=$1 OR (\" in status_list)
 require('backend media ownership','message_media' in server and 'owner_id=$2' in server)
 require('Status creation validates media MIME against PHOTO/VIDEO/VOICE type','SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2' in server and 'mimeType.startsWith("image/")' in server and 'mimeType.startsWith("video/")' in server and 'mimeType.startsWith("audio/")' in server and 'media type does not match status type' in server)
 require('Text Status rejects attached media instead of silently publishing it','type==="TEXT" && (!text || mediaId != null)' in server)
