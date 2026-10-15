@@ -107,3 +107,12 @@ The owner explicitly requires the current FYNX test-login experience to remain e
 - Keep any test/offline bypass limited to the existing intended test/debug scope; do not expose a test bypass in production/release builds or weaken real-account security.
 - Before touching any authentication/login/session code, stop and ask the user. This rule applies to every future ChatGPT session/branch.
 - A successful test login is not permission to alter its behavior. If a CI test cannot stay authenticated, fix the test journey/state setup without changing the user-approved login contract.
+
+## 2026-10-15 — Canonical combined-candidate runtime checkpoint
+
+The canonical integration branch has now received the focused backend-readiness, group/offline-chat isolation, active-profile, and contextual-navigation changes. Fast build, test, lint, and source-gate checks passed on the combined integration candidate at commit `8a5cfaa0a7067fef6dd44af706858f2d66a882e6`.
+
+This checkpoint intentionally triggers a fresh full build and Android instrumentation run on the canonical integration branch. The combined candidate is not runtime-certified until that run completes successfully and the resulting exact-commit APK artifact is available. The live production backend probe remains separate and opt-in; the full APK/runtime gate must not depend on live backend availability.
+
+Do not call the feature set complete solely because source gates or fast CI pass. Record the final full commit SHA, workflow run, exact APK artifact, and whether emulator screenshots/UI hierarchy were captured before handing an APK to the owner.
+
