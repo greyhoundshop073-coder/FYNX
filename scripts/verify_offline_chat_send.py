@@ -12,6 +12,7 @@ checks = [
     ("outbox is durable", "SharedPreferences" in outbox and "fun enqueue" in outbox),
     ("outbox storage is namespaced to the current account", "FynxAuthStore.accountStorageKey(context)" in outbox and "PREFS_PREFIX + encodedAccount" in outbox),
     ("outbox refuses to queue without an account identity", "fun enqueue(context: Context, item: Item): Boolean" in outbox and "val name = preferencesName(context) ?: return false" in outbox),
+    ("outbox does not resurrect JSON nulls as literal reply/media IDs", 'takeIf { it.isNotBlank() && it != "null" }' in outbox),
     ("sendText does not claim queued success if account-scoped persistence is unavailable", "if (!FynxOfflineOutbox.enqueue(context, item)) return result" in production),
     ("sync does not recursively requeue", "allowOfflineQueue = false" in sync),
     ("successful sync replaces pending local message", "FynxChatStore.replaceMessage" in sync),
