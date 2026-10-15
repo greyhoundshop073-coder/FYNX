@@ -98,6 +98,62 @@ export function installMediaPrivacyGuard(app) {
                 WHERE (b.blocker_id = $2 AND b.blocked_id = CASE WHEN m.sender_id = $2 THEN m.recipient_id ELSE m.sender_id END)
                    OR (b.blocked_id = $2 AND b.blocker_id = CASE WHEN m.sender_id = $2 THEN m.recipient_id ELSE m.sender_id END)
               )
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM statuses s
+            WHERE s.media_id = mm.id
+              AND s.expires_at > NOW()
+              AND (
+                s.owner_id = $2
+                OR (
+                  (
+                    s.audience = 'EVERYONE'
+                    OR (
+                      s.audience = 'FRIENDS'
+                      AND EXISTS (
+                        SELECT 1 FROM friendships f
+                        WHERE ((f.user_id = s.owner_id AND f.friend_id = $2)
+                          OR (f.user_id = $2 AND f.friend_id = s.owner_id))
+                          AND f.status = 'accepted'
+                      )
+                    )
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM blocks sb
+                    WHERE (sb.blocker_id = $2 AND sb.blocked_id = s.owner_id)
+                      OR (sb.blocker_id = s.owner_id AND sb.blocked_id = $2)
+                  )
+                )
+              )
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM users u
+            LEFT JOIN privacy_settings ps ON ps.user_id = u.id
+            WHERE u.profile_photo_media_id = mm.id
+              AND (
+                u.id = $2
+                OR (
+                  (
+                    COALESCE(ps.profile_visibility, 'My friends') = 'Everyone'
+                    OR (
+                      COALESCE(ps.profile_visibility, 'My friends') = 'My friends'
+                      AND EXISTS (
+                        SELECT 1 FROM friendships pf
+                        WHERE ((pf.user_id = u.id AND pf.friend_id = $2)
+                          OR (pf.user_id = $2 AND pf.friend_id = u.id))
+                          AND pf.status = 'accepted'
+                      )
+                    )
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM blocks pb
+                    WHERE (pb.blocker_id = $2 AND pb.blocked_id = u.id)
+                      OR (pb.blocker_id = u.id AND pb.blocked_id = $2)
+                  )
+                )
+              )
           ) AS blocked_message_media
         FROM message_media mm
         WHERE mm.id = $1
