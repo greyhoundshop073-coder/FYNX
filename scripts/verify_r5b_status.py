@@ -37,7 +37,7 @@ require('backend Status privacy','private_status' in server and 'expires_at > NO
 require('Status owner retains access despite block relationships',"s.owner_id=$1 OR (" in server and "s.owner_id=$2 OR (" in interactions and 'AND NOT EXISTS(SELECT 1 FROM blocks b' in server and 'AND NOT EXISTS (' in interactions)
 require('backend Status media authorization','EXISTS (SELECT 1 FROM statuses s WHERE s.media_id = mm.id' in server and "s.audience = 'EVERYONE'" in server and "s.audience = 'FRIENDS'" in server and "f.status = 'accepted'" in server and "blocks b" in server)
 require('backend status media expires before delivery','s.expires_at > NOW()' in server)
-require('backend status media blocked-user denial',"s.owner_id = $2 OR s.audience = 'EVERYONE' OR (s.audience = 'FRIENDS' AND EXISTS" in server and "AND NOT EXISTS (SELECT 1 FROM blocks b" in server)
+require('backend Status media owner bypasses block denial but other viewers remain block-filtered',"s.owner_id = $2 OR ((s.audience = 'EVERYONE' OR (s.audience = 'FRIENDS' AND EXISTS" in server and "AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $2 AND b.blocked_id = s.owner_id) OR (b.blocker_id = s.owner_id AND b.blocked_id = $2)))" in server)
 require('owner-only Status deletion','DELETE FROM statuses WHERE id=$1 AND owner_id=$2' in management)
 require('owner Status archive',"/api/statuses/archive" in management and "expires_at <= NOW()" in management and "req.user.sub" in management and "suspend fun archive" in client and "Status archive" in timeline)
 require('management route authentication','jwt.verify(token, JWT_SECRET)' in management)
