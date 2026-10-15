@@ -100,6 +100,7 @@ await request("/api/marketplace/discovery", { token });
 await request("/api/marketplace/discovery?category=Electronics", { token });
 await request("/api/marketplace/discovery?location=Lagos", { token });
 await request(`/api/messages/${encodeURIComponent(loggedInUser.username)}`, { token });
+await request("/api/notifications", { token });
 
 // Exercise a real authenticated post write and remove it immediately.
 let postId = "";
@@ -127,11 +128,13 @@ try {
   if (friendsPostId) await request(`/api/social/posts/${encodeURIComponent(friendsPostId)}`, { method: "DELETE", token });
 }
 
-// FYNX's configured message privacy requires a mutual follow relationship.
-await request(`/api/social/follow/${encodeURIComponent(recipient.username)}`, {
-  method: "POST", token, body: {}
+// Messaging uses the canonical accepted-friendship schema and respects the configured privacy rule.
+const friendRequest = await request("/api/friends/request", {
+  method: "POST", token, body: { username: recipient.username }
 });
-await request(`/api/social/follow/${encodeURIComponent(sender.username)}`, {
+const friendRequestId = String(friendRequest?.request?.id || "");
+if (!/^\\d+$/.test(friendRequestId)) throw new Error("Friend request did not return a valid request ID.");
+await request(`/api/friends/requests/${encodeURIComponent(friendRequestId)}/accept`, {
   method: "POST", token: recipientToken, body: {}
 });
 
@@ -152,5 +155,5 @@ try {
   if (messageId) await request(`/api/messages/${encodeURIComponent(messageId)}`, { method: "DELETE", token });
 }
 
-console.log("PASS: registration, login, token validation, feed/status/Marketplace reads, post create/delete, and message send/delete.");
+console.log("PASS: registration, login, token validation, feed/status/Marketplace reads, post create/delete, notification retrieval, friendship acceptance, and message send/delete.");
 console.log(`LIVE FYNX BACKEND SESSION GREEN: ${BASE_URL}`);
