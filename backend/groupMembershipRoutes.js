@@ -19,6 +19,57 @@ export function registerGroupMembershipRoutes({ app }) {
   let schemaPromise;
   const ensureSchema = async () => {
     if (!schemaPromise) schemaPromise = pool.query(`
+      -- This route must be safe when it is the first group endpoint hit after a
+      -- fresh database setup. Do not assume groupRoutes' lazy schema has run.
+      CREATE TABLE IF NOT EXISTS fynx_groups (
+        id TEXT PRIMARY KEY,
+        owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        visibility TEXT NOT NULL DEFAULT 'PRIVATE',
+        group_photo_media_id BIGINT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      ALTER TABLE fynx_groups ADD COLUMN IF NOT EXISTS group_photo_media_id BIGINT;
+      CREATE TABLE IF NOT EXISTS fynx_group_members (
+        group_id TEXT NOT NULL REFERENCES fynx_groups(id) ON DELETE CASCADE,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role TEXT NOT NULL DEFAULT 'MEMBER',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY(group_id,user_id)
+      );
+      CREATE TABLE IF NOT EXISTS fynx_group_messages (
+        id TEXT PRIMARY KEY,
+        group_id TEXT NOT NULL REFERENCES fynx_groups(id) ON DELETE CASCADE,
+        sender_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        text TEXT NOT NULL DEFAULT '',
+        attachment_media_id BIGINT,
+        attachment_type TEXT,
+        reply_to_id TEXT,
+        reaction TEXT,
+        edited_at TIMESTAMPTZ,
+        deleted_at TIMESTAMPTZ,
+        pinned BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      ALTER TABLE fynx_group_messages ADD COLUMN IF NOT EXISTS reply_to_id TEXT;
+      ALTER TABLE fynx_group_messages ADD COLUMN IF NOT EXISTS reaction TEXT;
+      ALTER TABLE fynx_group_messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
+      ALTER TABLE fynx_group_messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+      ALTER TABLE fynx_group_messages ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE;
+      CREATE TABLE IF NOT EXISTS fynx_account_safety (
+        user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        message_safety BOOLEAN NOT NULL DEFAULT TRUE,
+        marketplace_safety BOOLEAN NOT NULL DEFAULT TRUE,
+        login_alerts BOOLEAN NOT NULL DEFAULT TRUE,
+        account_status TEXT NOT NULL DEFAULT 'ACTIVE',
+        status_note TEXT NOT NULL DEFAULT '',
+        CHECK(account_status IN ('ACTIVE','LIMITED','LOCKED'))
+      );
+      CREATE INDEX IF NOT EXISTS fynx_group_members_user_idx ON fynx_group_members(user_id,group_id);
+      CREATE INDEX IF NOT EXISTS fynx_group_messages_group_idx ON fynx_group_messages(group_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS fynx_group_messages_media_idx ON fynx_group_messages(attachment_media_id);
       ALTER TABLE fynx_groups ADD COLUMN IF NOT EXISTS send_messages BOOLEAN NOT NULL DEFAULT TRUE;
       ALTER TABLE fynx_groups ADD COLUMN IF NOT EXISTS send_media BOOLEAN NOT NULL DEFAULT TRUE;
       ALTER TABLE fynx_groups ADD COLUMN IF NOT EXISTS add_members BOOLEAN NOT NULL DEFAULT TRUE;
