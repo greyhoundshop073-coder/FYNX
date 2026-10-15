@@ -186,13 +186,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                 val savedLocalUsername = localDebugAccountForLogin(context, requestedUsername)
                                 when {
                                     requestedUsername.isBlank() -> error = "Enter your username."
-                                    savedLocalUsername != null && password.isBlank() -> {
-                                        // Preserve the existing immediate, backend-independent debug login.
-                                        FynxAuthStore.save(context, savedLocalUsername)
-                                        error = null
-                                        onAuthenticated(savedLocalUsername)
-                                    }
-                                    password.isBlank() -> error = "Enter your password to connect to the FYNX server, or leave it blank for saved-device debug login."
+                                    password.isBlank() -> error = "Enter your password to connect to the FYNX server. A local-only session cannot load server-backed features."
                                     else -> {
                                         // When a password is supplied, obtain a real server token so protected
                                         // feed, status, chat and Marketplace APIs can authenticate this session.
@@ -204,7 +198,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                             } else {
                                                 FynxRemoteAuthClient.login(context, requestedUsername, password)
                                             }
-                                            finish(connectedResult, allowOfflineEntry = true)
+                                            finish(connectedResult)
                                         }
                                     }
                                 }
