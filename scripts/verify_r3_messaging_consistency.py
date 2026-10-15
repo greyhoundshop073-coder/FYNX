@@ -21,7 +21,8 @@ for needle, label in [
     ("fynxRealtimeMessagingBlocks(senderId, targetId)", "mutual block check"),
     ("messages_visibility", "message visibility policy"),
     ("privacy_settings WHERE user_id=$1", "recipient message privacy uses canonical settings table"),
-    ("social_follows WHERE follower_id=$1 AND followed_id=$2", "mutual-follow requirement uses canonical follow table"),
+    ("friendships f WHERE ((f.user_id=$1 AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=$1))", "accepted-friendship requirement uses canonical friendships table"),
+    ("f.status='accepted'", "messaging requires an accepted friendship"),
     ("const fynxRealtimeMessagingRead = async (userId, ids)", "read helper"),
     ("recipient_id=$2", "recipient-bound message state update"),
     ("const fynxRealtimeMessagingAck = async (userId, id)", "ACK helper"),
@@ -35,9 +36,9 @@ for needle, label in [
 ]:
     require(BOOTSTRAP_CHECK, needle, label)
 
-# Startup must apply the same canonical privacy and mutual-follow policy.
+# Startup must apply the same canonical privacy and accepted-friendship policy.
 require(PHASE1, "privacy_settings WHERE user_id=$1", "startup privacy uses canonical settings table")
-require(PHASE1, "social_follows WHERE follower_id=$1 AND followed_id=$2", "startup authorization uses mutual follows")
+require(PHASE1, "friendships f WHERE ((f.user_id=$1 AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=$1))", "startup authorization uses accepted friendships")
 require(PHASE1, "visibility === \"Nobody\"", "startup respects Nobody message privacy")
 require(PHASE1, "visibility === \"Everyone\"", "startup respects Everyone message privacy")
 
