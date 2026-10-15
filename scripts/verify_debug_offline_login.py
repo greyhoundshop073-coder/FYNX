@@ -12,6 +12,7 @@ checks = {
     "debug APK defaults to the active Railway test backend": "https://fynx-backend-testing-testing.up.railway.app" in backend and "return normalized ?: if (isDebuggable) DEBUG_TEST_BASE_URL else PRODUCTION_BASE_URL" in backend,
     "Android login and registration parse the server token contract": all(x in remote_auth for x in ['"/api/auth/login"', '"/api/auth/register"', 'json.getJSONObject("user")', 'json.getString("accessToken")']),
     "backend login and registration return the token and expected user fields": all(x in server for x in ['app.post("/api/auth/register"', 'app.post("/api/auth/login"', 'accessToken: issueToken(user)', 'display_name: user.display_name']),
+    "login/register 401 is reported as credential rejection, not expired session": "if (requiresAuthentication) {" in backend and "throw FynxHttpException(status, response)" in backend,
     "persisted signed-in sessions require a real backend token": "stored.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)" in app and "debugOfflineSession" not in app,
     "debug login requires an Android debuggable build": "ApplicationInfo.FLAG_DEBUGGABLE" in auth and "if (!isDebuggable || requestedUsername.isBlank()) return null" in auth,
     "login attempts backend authentication before any offline fallback": "FynxRemoteAuthClient.login(context, requestedUsername, password), allowOfflineEntry = true" in auth and "Offline debug access is available only if the server cannot be reached." in auth,
