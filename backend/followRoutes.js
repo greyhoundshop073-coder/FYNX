@@ -63,6 +63,29 @@ export function registerFollowRoutes({ app }) {
     [a, b]
   )).rowCount);
 
+  // Batch relationship check used by Status viewers so DM is offered only for mutual follows.
+  app.post("/api/social/mutual-follows", auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      const requested = Array.isArray(req.body?.usernames) ? req.body.usernames : [];
+      const usernames = [...new Set(requested.map(value => String(value || "").trim().toLowerCase().replace(/^@+/, "")).filter(value => value.length > 0 && value.length <= 32))].slice(0, 500);
+      if (usernames.length === 0) return res.json({ mutualFollowUsernames: [] });
+      const result = await pool.query(`
+        SELECT LOWER(u.username) AS username
+        FROM users u
+        WHERE LOWER(u.username) = ANY($1::text[])
+          AND EXISTS (SELECT 1 FROM social_follows f WHERE f.follower_id = $2 AND f.followed_id = u.id)
+          AND EXISTS (SELECT 1 FROM social_follows f WHERE f.follower_id = u.id AND f.followed_id = $2)
+          AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $2 AND b.blocked_id = u.id) OR (b.blocker_id = u.id AND b.blocked_id = $2))
+      `, [usernames, String(req.followUser.sub)]);
+      res.set("Cache-Control", "no-store");
+      return res.json({ mutualFollowUsernames: result.rows.map(row => row.username) });
+    } catch (error) {
+      console.error("social mutual follows", error);
+      return res.status(500).json({ error: "mutual follow check failed" });
+    }
+  });
+
   app.post("/api/social/follow/:username", auth, async (req, res) => {
     try {
       await ensureSchema();

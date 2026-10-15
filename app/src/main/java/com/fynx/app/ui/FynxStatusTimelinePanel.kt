@@ -54,7 +54,8 @@ fun FynxStatusTimelinePanel(
     onCreateClick: () -> Unit = {},
     openOwnerUsername: String? = null,
     openStatusId: String? = null,
-    onOpenCommandConsumed: () -> Unit = {}
+    onOpenCommandConsumed: () -> Unit = {},
+    onOpenMessage: (String) -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val auth = remember(context) { FynxAuthStore.load(context) }
@@ -381,6 +382,7 @@ private fun FynxStatusStoryViewer(
     var viewers by remember(statuses, startIndex) { mutableStateOf<List<FynxStatusViewer>>(emptyList()) }
     var viewersLoading by remember(statuses, startIndex) { mutableStateOf(false) }
     var viewersError by remember(statuses, startIndex) { mutableStateOf<String?>(null) }
+    var mutualFollowUsernames by remember(statuses, startIndex) { mutableStateOf<Set<String>>(emptySet()) }
     var showReplyEmojiPicker by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val status = statuses.getOrNull(index) ?: return
@@ -397,11 +399,17 @@ private fun FynxStatusStoryViewer(
 
     fun loadViewers() {
         viewers = emptyList()
+        mutualFollowUsernames = emptySet()
         viewersLoading = true
         viewersError = null
         scope.launch {
             FynxStatusClient.viewers(context, status.id)
-                .onSuccess { viewers = it; viewersLoading = false }
+                .onSuccess { loaded ->
+                    viewers = loaded
+                    viewersLoading = false
+                    FynxStatusClient.mutualFollowUsernames(context, loaded.map { it.username })
+                        .onSuccess { mutualFollowUsernames = it }
+                }
                 .onFailure {
                     viewersError = it.message ?: "Unable to load viewers."
                     viewersLoading = false
@@ -831,6 +839,12 @@ private fun FynxStatusStoryViewer(
                                             }
                                             if (viewer.reaction != null) Text(viewer.reaction, fontSize = 22.sp)
                                             else if (viewer.liked) Icon(Icons.Default.Favorite, "Liked", tint = MaterialTheme.colorScheme.error)
+                                            if (viewer.username.lowercase() in mutualFollowUsernames) {
+                                                TextButton(onClick = {
+                                                    showViewers = false
+                                                    onOpenMessage(viewer.username)
+                                                }) { Text("Message") }
+                                            }
                                         }
                                         HorizontalDivider()
                                     }

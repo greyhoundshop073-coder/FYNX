@@ -604,7 +604,34 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "Features" -> FynxFeaturesPanel(isAdmin = adminRole != null, onSelect = { if (it != "Admin" || adminRole != null) selected = it })
             "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
             "Calendar" -> CalendarPanel()
-            "Stories" -> FynxStatusHubPanel(openOwnerUsername = statusOpenOwner, openStatusId = statusOpenId, onOpenCommandConsumed = { statusOpenOwner = null; statusOpenId = null })
+            "Stories" -> FynxStatusHubPanel(
+                openOwnerUsername = statusOpenOwner,
+                openStatusId = statusOpenId,
+                onOpenCommandConsumed = { statusOpenOwner = null; statusOpenId = null },
+                onOpenMessage = { username ->
+                    val normalized = username.removePrefix("@").trim()
+                    if (normalized.isNotBlank()) scope.launch {
+                        val local = FynxChatStore.loadPreviews(context).firstOrNull {
+                            it.username.removePrefix("@").equals(normalized, true)
+                        }
+                        val remote = if (local == null) FynxSocialClient.searchUsers(context, normalized).getOrNull()
+                            ?.firstOrNull { it.username.removePrefix("@").equals(normalized, true) } else null
+                        val chat = local ?: remote?.let { user ->
+                            ChatPreview(
+                                name = user.displayName.ifBlank { normalized },
+                                username = "@${user.username.removePrefix("@")}",
+                                lastMessage = "Start a conversation",
+                                time = "Now",
+                                avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
+                            )
+                        } ?: ChatPreview(normalized, "@$normalized", "Start a conversation", "Now")
+                        FynxChatStore.savePreview(context, chat)
+                        openGroup = null
+                        profileUser = null
+                        openChat = chat
+                    }
+                }
+            )
             "Gifts" -> GiftsPanel()
             "Groups" -> FynxGroupsPanel(currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", onOpenGroup = { openGroup = it })
             "Notifications" -> NotificationPanel(

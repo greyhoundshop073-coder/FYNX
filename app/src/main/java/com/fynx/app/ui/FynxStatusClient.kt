@@ -131,6 +131,15 @@ object FynxStatusClient {
         )
     }
 
+    suspend fun mutualFollowUsernames(context: Context, usernames: List<String>): Result<Set<String>> = runCatching {
+        val normalized = usernames.map { it.removePrefix("@").trim().lowercase() }.filter { it.isNotBlank() && it.length <= 32 }.distinct().take(500)
+        if (normalized.isEmpty()) return@runCatching emptySet()
+        val body = JSONObject().put("usernames", org.json.JSONArray(normalized)).toString()
+        val raw = FynxBackendClient.postJson(context, "/api/social/mutual-follows", body).getOrThrow()
+        val items = JSONObject(raw).getJSONArray("mutualFollowUsernames")
+        buildSet { for (i in 0 until items.length()) add(items.getString(i).lowercase()) }
+    }
+
     suspend fun viewers(context: Context, statusId: String): Result<List<FynxStatusViewer>> = runCatching {
         val raw = FynxBackendClient.get(context, "/api/statuses/${statusId.trim()}/viewers").getOrThrow()
         val items = JSONObject(raw).getJSONArray("viewers")
