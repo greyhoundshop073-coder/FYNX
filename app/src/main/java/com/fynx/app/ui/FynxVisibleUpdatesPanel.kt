@@ -157,7 +157,7 @@ fun FynxVisibleUpdatesPanel(
                             onCreateStatus = onCreateStatus
                         )
                     }
-                    items(grouped.filterNot { it.first.ownerUsername.equals(currentUsername, true) }, key = { it.first.ownerUsername }) { (status, count) ->
+                    items(grouped.filterNot { it.first.ownerUsername.removePrefix("@").trim().equals(current, ignoreCase = true) }, key = { it.first.ownerUsername.removePrefix("@").trim().lowercase() }) { (status, count) ->
                         FynxStatusPreviewCircle(status, status.ownerUsername, status.ownerDisplayName.ifBlank { status.ownerUsername }, status.ownerUsername.removePrefix("@").trim().lowercase() in unseenOwners, { onOpenStatusOwner(status.ownerUsername.removePrefix("@").trim()) }, count, ownerPhotoIds[status.ownerUsername.removePrefix("@").trim().lowercase()])
                     }
                 }
