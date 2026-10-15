@@ -473,33 +473,35 @@ fun FynxMatureStatusComposerPanel(
 }
 @Composable private fun MatureStatusModeButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) { Column(horizontalAlignment = Alignment.CenterHorizontally) { IconButton(onClick = onClick, enabled = enabled) { Icon(icon, label, tint = if (selected) Color.White else Color.White.copy(alpha = .65f), modifier = Modifier.size(28.dp)) }; Text(label, color = Color.White.copy(alpha = if (enabled && selected) 1f else .45f), style = MaterialTheme.typography.labelSmall) } }
 @Composable private fun MatureStatusMedia(uri: Uri, video: Boolean, modifier: Modifier) {
+    val mediaKey = "${if (video) "video" else "image"}:$uri"
     AndroidView(
         modifier = modifier,
         factory = { context ->
             if (video) {
                 VideoView(context).apply {
                     layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                    tag = uri.toString()
-                    setVideoURI(uri)
+                    tag = mediaKey
                     setOnPreparedListener { player -> player.isLooping = true; player.start() }
+                    setVideoURI(uri)
                 }
             } else {
                 ImageView(context).apply {
                     scaleType = ImageView.ScaleType.FIT_CENTER
-                    tag = uri.toString()
+                    tag = mediaKey
                     setImageURI(uri)
                 }
             }
         },
         update = { view ->
-            // Caption and toolbar recompositions must not restart a selected video.
-            if (view.tag != uri.toString()) {
-                view.tag = uri.toString()
+            // Only reset the native view when the selected media or its type changes.
+            // Caption, toolbar, and other Compose recompositions must not restart playback.
+            if (view.tag != mediaKey) {
+                view.tag = mediaKey
                 if (view is VideoView) {
-                    view.setVideoURI(uri)
                     view.setOnPreparedListener { player -> player.isLooping = true; player.start() }
-                } else {
-                    (view as ImageView).setImageURI(uri)
+                    view.setVideoURI(uri)
+                } else if (view is ImageView) {
+                    view.setImageURI(uri)
                 }
             }
         }
