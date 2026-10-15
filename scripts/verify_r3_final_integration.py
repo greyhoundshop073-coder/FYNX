@@ -30,7 +30,7 @@ for needle, label in [
     ('fynxRealtimeMessagingBlocks(senderId, targetId)', "mutual block enforcement"),
     ('messages_visibility', "message visibility policy"),
     ('privacy_settings WHERE user_id=$1', "recipient message privacy uses canonical settings table"),
-    ('social_follows WHERE follower_id=$1 AND followed_id=$2', "mutual-follow requirement uses canonical follow table"),
+    ("friendships f WHERE ((f.user_id=$1 AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=$1))", "accepted-friendship requirement uses canonical friendships table"),
     ('conversation unavailable', "HTTP authorization failure"),
     ('fynxRealtimeMessagingAttach(socket, userId)', "authenticated realtime attachment"),
     ('body.type === "typing"', "typing handling"),
