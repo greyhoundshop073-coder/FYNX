@@ -30,14 +30,6 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: "18mb", strict: true }));
 app.use((req, res, next) => {
-  if (req.method === "POST" && req.path === "/api/social/posts" && String(req.body?.text || "").startsWith("FYNX shared-feed smoke ")) {
-    let rawBodyVisibility = null;
-    try { rawBodyVisibility = JSON.parse(req.rawBody?.toString("utf8") || "{}").visibility ?? null; } catch {}
-    console.info("[fynx-shared-feed-after-json]", JSON.stringify({ rawBodyVisibility, parsedVisibility: req.body?.visibility ?? null }));
-  }
-  next();
-});
-app.use((req, res, next) => {
   if (req.method !== "GET" && req.method !== "HEAD") res.setHeader("Cache-Control", "no-store");
   next();
 });
@@ -191,7 +183,6 @@ function issueToken(user) {
   return jwt.sign({ sub: String(user.id), username: user.username }, JWT_SECRET, { expiresIn: "30d" });
 }
 function auth(req, res, next) {
-  if (req.method === "POST" && req.path === "/api/social/posts" && String(req.body?.text || "").startsWith("FYNX shared-feed smoke ")) console.info("[fynx-shared-feed-auth]", JSON.stringify({ visibility: req.body?.visibility ?? null }));
   const header = req.get("authorization") || "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token || !JWT_SECRET) return res.status(401).json({ error: "authentication required" });
