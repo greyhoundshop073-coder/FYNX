@@ -70,7 +70,7 @@ export function registerStatusInteractionRoutes({ app }) {
     catch { return res.status(401).json({ error: 'invalid or expired token' }); }
   };
   const statusId = req => String(req.params?.statusId || '').trim();
-  const validId = id => /^[0-9a-f-]{36}$/i.test(id);
+  const validId = id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
   async function visibleStatus(id, userId) {
     if (!validId(id)) return null;
