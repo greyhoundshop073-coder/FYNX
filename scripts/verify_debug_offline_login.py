@@ -5,9 +5,13 @@ auth = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt").read_text(e
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 backend = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt").read_text(encoding="utf-8")
 app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
+remote_auth = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteAuthClient.kt").read_text(encoding="utf-8")
+server = (ROOT / "backend/server.js").read_text(encoding="utf-8")
 
 checks = {
     "debug APK defaults to the active Railway test backend": "https://fynx-backend-testing-testing.up.railway.app" in backend and "return normalized ?: if (isDebuggable) DEBUG_TEST_BASE_URL else PRODUCTION_BASE_URL" in backend,
+    "Android login and registration parse the server token contract": all(x in remote_auth for x in ['"/api/auth/login"', '"/api/auth/register"', 'json.getJSONObject("user")', 'json.getString("accessToken")']),
+    "backend login and registration return the token and expected user fields": all(x in server for x in ['app.post("/api/auth/register"', 'app.post("/api/auth/login"', 'accessToken: issueToken(user)', 'display_name: user.display_name']),
     "persisted signed-in sessions require a real backend token": "stored.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)" in app and "debugOfflineSession" not in app,
     "debug login requires an Android debuggable build": "ApplicationInfo.FLAG_DEBUGGABLE" in auth and "if (!isDebuggable || requestedUsername.isBlank()) return null" in auth,
     "login attempts backend authentication before any offline fallback": "FynxRemoteAuthClient.login(context, requestedUsername, password), allowOfflineEntry = true" in auth and "Offline debug access is available only if the server cannot be reached." in auth,
