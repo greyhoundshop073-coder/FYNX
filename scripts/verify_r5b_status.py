@@ -38,6 +38,7 @@ require('backend Status media authorization','EXISTS (SELECT 1 FROM statuses s W
 require('backend status media expires before delivery','s.expires_at > NOW()' in server)
 require('backend status media blocked-user denial',"s.owner_id = $2 OR s.audience = 'EVERYONE' OR (s.audience = 'FRIENDS' AND EXISTS" in server and "AND NOT EXISTS (SELECT 1 FROM blocks b" in server)
 require('owner-only Status deletion','DELETE FROM statuses WHERE id=$1 AND owner_id=$2' in management)
+require('status media URL uses valid template syntax','mediaUrl:row.media_id == null ? null : `/api/media/${row.media_id}`' in management and '\\`/api/media/\\${row.media_id}\\`' not in management)
 require('owner Status archive',"/api/statuses/archive" in management and "expires_at <= NOW()" in management and "req.user.sub" in management and "suspend fun archive" in client and "Status archive" in timeline)
 require('management route authentication','jwt.verify(token, JWT_SECRET)' in management)
 require('management route production wiring','registerStatusManagementRoutes({ app });' in scale and './statusManagementRoutes.js' in scale)
