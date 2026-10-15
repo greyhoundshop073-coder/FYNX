@@ -108,6 +108,11 @@ fun FynxVisibleUpdatesPanel(
     val current = currentUsername.removePrefix("@").trim().lowercase()
     val activeStatuses = statuses
         .filter { it.expiresAtMillis <= 0L || it.expiresAtMillis > System.currentTimeMillis() }
+    val viewedStatusIds = FynxStatusClient.viewedStatusIds(context)
+    val unseenOwners = activeStatuses
+        .groupBy { it.ownerUsername.removePrefix("@").trim().lowercase() }
+        .filterValues { ownerStatuses -> ownerStatuses.any { it.id !in viewedStatusIds } }
+        .keys
     val grouped = activeStatuses.groupBy { it.ownerUsername }
         .mapNotNull { (_, list) -> list.maxByOrNull { it.createdAtMillis }?.let { it to list.size } }
     val own = grouped.firstOrNull { it.first.ownerUsername.equals(currentUsername, true) }
@@ -139,7 +144,7 @@ fun FynxVisibleUpdatesPanel(
                             own?.first,
                             currentUsername.ifBlank { "You" },
                             "Your status",
-                            true,
+                            false,
                             if (own != null) { { onOpenStatusOwner(current) } } else { onCreateStatus },
                             own?.second ?: 0,
                             ownerPhotoIds[current],
@@ -148,7 +153,7 @@ fun FynxVisibleUpdatesPanel(
                         )
                     }
                     items(grouped.filterNot { it.first.ownerUsername.equals(currentUsername, true) }, key = { it.first.ownerUsername }) { (status, count) ->
-                        FynxStatusPreviewCircle(status, status.ownerUsername, status.ownerDisplayName.ifBlank { status.ownerUsername }, true, { onOpenStatusOwner(status.ownerUsername.removePrefix("@").trim()) }, count, ownerPhotoIds[status.ownerUsername.removePrefix("@").trim().lowercase()])
+                        FynxStatusPreviewCircle(status, status.ownerUsername, status.ownerDisplayName.ifBlank { status.ownerUsername }, status.ownerUsername.removePrefix("@").trim().lowercase() in unseenOwners, { onOpenStatusOwner(status.ownerUsername.removePrefix("@").trim()) }, count, ownerPhotoIds[status.ownerUsername.removePrefix("@").trim().lowercase()])
                     }
                 }
             }
