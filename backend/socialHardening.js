@@ -65,7 +65,7 @@ export function installSocialHardening(app) {
         return res.status(400).json({ error: "post content is required" });
       }
       if (text.length > 4000) return res.status(413).json({ error: "post text is too long" });
-      if (!["PUBLIC", "FRIENDS", "ONLY_ME"].includes(visibility)) {
+      if (!["PUBLIC", "FRIENDS", "FRIENDS_ONLY", "SELECTED_PEOPLE", "ONLY_ME"].includes(visibility)) {
         return res.status(400).json({ error: "invalid post visibility" });
       }
       if (mediaId != null && mediaId !== "") {

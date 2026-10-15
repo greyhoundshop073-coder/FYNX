@@ -43,6 +43,11 @@ jobs:
         run: |
           node --check server.js
           node --check socialRoutes.js
+          node --check serverBootstrap.js
+          node --check phase1FoundationBootstrap.js
+          node --check realtimeIsolationBootstrap.js
+          node --check statusManagementRoutes.js
+          node --check socialHardening.js
           node --check verify-marketplace-price-watch.mjs
           node --check profileRoutes.js
           node --check marketplaceTransactions.js

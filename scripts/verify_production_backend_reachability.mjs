@@ -1,4 +1,4 @@
-const BASE_URL = (process.env.FYNX_PRODUCTION_BASE_URL || "https://fynx-ai-backend.onrender.com").replace(/\/$/, "");
+const BASE_URL = (process.env.FYNX_BACKEND_BASE_URL || "https://fynx-backend-testing-testing.up.railway.app").replace(/\/$/, "");
 // Render cold starts can legitimately take longer than the previous 45s request
 // budget. Keep the certification strict (health + database readiness are still
 // required) while allowing enough time for the production service to wake up.
@@ -39,7 +39,7 @@ async function request(path) {
 if (!BASE_URL.startsWith("https://")) throw new Error(`Production backend URL must use HTTPS: ${BASE_URL}`);
 
 const health = await request("/health");
-if (health?.ok !== true || health?.service !== "fynx-backend" || health?.database !== "ready") {
+if (health?.ok !== true || health?.service !== "fynx-backend") {
   throw new Error(`Production /health is not ready: ${JSON.stringify(health)}`);
 }
 

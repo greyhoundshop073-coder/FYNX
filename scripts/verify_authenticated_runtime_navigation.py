@@ -10,8 +10,8 @@ from pathlib import Path
 
 ROOT=Path("fynx-runtime-screenshots"); ROOT.mkdir(parents=True,exist_ok=True)
 PACKAGE="com.fynx.app"
-USERNAME=os.environ.get("FYNX_E2E_USERNAME","").strip()
-PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
+USERNAME=(os.environ.get("FYNX_RUNTIME_USERNAME") or os.environ.get("FYNX_E2E_USERNAME","")).strip()
+PASSWORD=os.environ.get("FYNX_RUNTIME_PASSWORD") or os.environ.get("FYNX_E2E_PASSWORD","")
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
 
@@ -358,7 +358,7 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
 
 def backend_real_chat_target()->str:
     """Find an existing FYNX user without creating test accounts or application data."""
-    base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-ai-backend.onrender.com").rstrip("/")
+    base=os.environ.get("FYNX_BACKEND_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
     try:
         login_body=json.dumps({"username":USERNAME,"password":PASSWORD}).encode("utf-8")
         login_req=urllib.request.Request(
