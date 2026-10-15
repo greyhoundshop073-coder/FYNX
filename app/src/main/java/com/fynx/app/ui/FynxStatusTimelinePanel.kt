@@ -652,14 +652,20 @@ private fun FynxStatusStoryViewer(
                                 }
                             }
                         }
+                        if (status.ownerUsername.equals(viewerUsername, true)) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(18.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Views  ${interactions.viewCount}", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                                Text("Likes  ${interactions.likeCount}", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
                         Row(
                             Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Counts remain available to accessibility/interaction state without being rendered on the viewer bar.
-                            Spacer(Modifier.size(0.dp).semantics {
-                                contentDescription = "Status views ${interactions.viewCount}, likes ${interactions.likeCount}"
-                            })
                             OutlinedTextField(
                                 value = replyText,
                                 onValueChange = { replyText = it.take(1000) },
