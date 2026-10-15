@@ -214,14 +214,13 @@ private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: St
                 }
             }
             if (isOwn) {
-                Box(
-                    Modifier.align(Alignment.BottomEnd).requiredSize(25.dp)
+                IconButton(
+                    onClick = onCreateStatus,
+                    modifier = Modifier.align(Alignment.BottomEnd).requiredSize(25.dp)
                         .background(MaterialTheme.colorScheme.primary, CircleShape)
                         .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
                         .clip(CircleShape)
-                        .clickable(onClick = onAddClick)
-                        .semantics { contentDescription = "Create your status" },
-                    contentAlignment = Alignment.Center
+                        .semantics { contentDescription = "Create your status" }
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(17.dp))
                 }
