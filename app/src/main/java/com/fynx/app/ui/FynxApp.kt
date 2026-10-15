@@ -248,7 +248,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             navigationHistory = listOf(selected)
         } else if (backNavigationRequested) {
             backNavigationRequested = false
-            navigationHistory = navigationHistory.dropLast(1).ifEmpty { listOf("Home") }
+            navigationHistory = (navigationHistory.dropLast(1).filterNot { it == selected } + selected).ifEmpty { listOf("Home") }
         } else if (navigationHistory.lastOrNull() != selected) {
             navigationHistory = (navigationHistory + selected).takeLast(30)
         }
