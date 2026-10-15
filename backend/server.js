@@ -7,7 +7,6 @@ import pg from "pg";
 import { WebSocketServer } from "ws";
 import { registerSocialRoutes } from "./socialRoutes.js";
 import { ensureStatusSchema } from "./statusSchema.js";
-import { registerStatusInteractionRoutes } from "./statusInteractionRoutes.js";
 import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";
 import { registerMarketplaceReputationRoutes } from "./marketplaceReputation.js";
 import { registerMarketplaceCompletionRoutes } from "./marketplaceCompletion.js";
@@ -816,7 +815,6 @@ registerMarketplaceReputationRoutes({ app, pool, auth });
 registerMarketplaceCompletionRoutes({ app, pool, auth });
 if (pool) registerMoneyPlannerRoutes({ app, pool, auth });
 if (pool) registerMarketplaceAdvertisingRoutes({ app, pool, auth });
-if (pool) registerStatusInteractionRoutes({ app });
 
 await initDatabase();
 
