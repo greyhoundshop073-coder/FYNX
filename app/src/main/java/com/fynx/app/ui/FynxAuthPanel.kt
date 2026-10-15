@@ -171,11 +171,14 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                             FynxAuthField(username, { username = it.replace(" ", "").removePrefix("@") }, "Username", "@")
                             Spacer(Modifier.height(10.dp))
                             if (localDebugLoginAvailable) {
-                                Text("Saved-device login for this debug APK", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
-                            } else {
-                                FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
-                                Spacer(Modifier.height(10.dp))
+                                Text(
+                                    "Saved-device login is available. Enter your password to connect this session to the FYNX server.",
+                                    color = Color.White.copy(alpha = .72f),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                             }
+                            FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
+                            Spacer(Modifier.height(10.dp))
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                             Spacer(Modifier.height(14.dp))
                             Button(onClick = {
@@ -183,14 +186,16 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                 val savedLocalUsername = localDebugAccountForLogin(context, requestedUsername)
                                 when {
                                     requestedUsername.isBlank() -> error = "Enter your username."
-                                    savedLocalUsername != null -> {
-                                        // Use the saved-device path immediately: no remote request or timeout.
+                                    savedLocalUsername != null && password.isBlank() -> {
+                                        // Preserve the existing immediate, backend-independent debug login.
                                         FynxAuthStore.save(context, savedLocalUsername)
                                         error = null
                                         onAuthenticated(savedLocalUsername)
                                     }
-                                    password.isBlank() -> error = "Enter your username and password."
+                                    password.isBlank() -> error = "Enter your password to connect to the FYNX server, or leave it blank for saved-device debug login."
                                     else -> {
+                                        // When a password is supplied, obtain a real server token so protected
+                                        // feed, status, chat and Marketplace APIs can authenticate this session.
                                         busy = true
                                         error = null
                                         scope.launch { finish(FynxRemoteAuthClient.login(context, requestedUsername, password), allowOfflineEntry = true) }
