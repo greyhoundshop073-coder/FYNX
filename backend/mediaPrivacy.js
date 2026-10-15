@@ -87,7 +87,7 @@ export function installMediaPrivacyGuard(app) {
     try {
       const result = await pool.query(`
         SELECT mm.owner_id,
-          EXISTS (
+          (EXISTS (
             SELECT 1
             FROM messages m
             WHERE m.media_id = mm.id
@@ -127,13 +127,6 @@ export function installMediaPrivacyGuard(app) {
                 )
               )
           )
-          OR EXISTS (
-            SELECT 1
-            FROM statuses expired_status
-            WHERE expired_status.media_id = mm.id
-              AND expired_status.expires_at <= NOW()
-              AND expired_status.owner_id <> $2
-          )
           AND NOT EXISTS (
             SELECT 1
             FROM users u
@@ -161,7 +154,14 @@ export function installMediaPrivacyGuard(app) {
                   )
                 )
               )
-          ) AS blocked_message_media
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM statuses expired_status
+            WHERE expired_status.media_id = mm.id
+              AND expired_status.expires_at <= NOW()
+              AND expired_status.owner_id <> $2
+          )) AS blocked_message_media
         FROM message_media mm
         WHERE mm.id = $1
         LIMIT 1`, [mediaId, userId]);
