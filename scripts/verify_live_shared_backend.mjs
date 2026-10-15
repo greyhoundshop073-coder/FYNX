@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
 const baseUrl = (process.env.FYNX_TEST_BACKEND_URL || "https://fynx-backend-testing-testing.up.railway.app").replace(/\/+$/, "");
 const suffix = `${Date.now().toString(36)}${randomBytes(4).toString("hex")}`;
@@ -114,6 +114,47 @@ try {
     body: {},
   });
 
+  // Exercise the live Status lifecycle and the Status-reply -> private Chat bridge.
+  const statusId = randomUUID();
+  const statusText = `FYNX live Status ${suffix}`;
+  const createdStatus = await request("/api/statuses", {
+    method: "POST",
+    token: firstToken,
+    body: {
+      id: statusId,
+      type: "TEXT",
+      text: statusText,
+      audience: "EVERYONE",
+      backgroundColor: 4279308561,
+      foregroundColor: 4294967295,
+      font: "CLASSIC",
+      alignment: 1,
+    },
+  });
+  if (String(createdStatus.status?.id || "") !== statusId) throw new Error("Status creation did not return the requested Status ID");
+  const secondStatuses = await request("/api/statuses", { token: second.accessToken });
+  if (!Array.isArray(secondStatuses.statuses) || !secondStatuses.statuses.some((item) => String(item.id) === statusId && item.text === statusText)) {
+    throw new Error("second account could not see the public Status");
+  }
+  await request(`/api/statuses/${encodeURIComponent(statusId)}/view`, { method: "POST", token: second.accessToken, body: {} });
+  await request(`/api/statuses/${encodeURIComponent(statusId)}/like`, { method: "POST", token: second.accessToken, body: {} });
+  await request(`/api/statuses/${encodeURIComponent(statusId)}/reaction`, { method: "POST", token: second.accessToken, body: { reaction: "🔥" } });
+  const statusReplyText = `FYNX live Status reply ${suffix}`;
+  const statusReply = await request(`/api/statuses/${encodeURIComponent(statusId)}/reply`, {
+    method: "POST",
+    token: second.accessToken,
+    body: { body: statusReplyText },
+  });
+  if (statusReply.sent !== true || statusReply.deliveredToChat !== true) throw new Error("Status reply did not bridge into the owner's Chat");
+  const statusInteractions = await request(`/api/statuses/${encodeURIComponent(statusId)}/interactions`, { token: firstToken });
+  if (Number(statusInteractions.viewCount) < 1 || Number(statusInteractions.likeCount) !== 1 || Number(statusInteractions.replyCount) !== 1 || statusInteractions.reactionCounts?.["🔥"] !== 1) {
+    throw new Error("Status view/like/reaction/reply counts did not persist as expected");
+  }
+  const bridgedReplyHistory = await request(`/api/messages/${encodeURIComponent(firstUsername)}`, { token: second.accessToken });
+  if (!Array.isArray(bridgedReplyHistory.messages) || !bridgedReplyHistory.messages.some((item) => item.text === statusReplyText)) {
+    throw new Error("Status reply was not persisted in the owner's normal Chat history");
+  }
+
   const messageText = `FYNX live cross-user message ${suffix}`;
   const message = await request("/api/messages", {
     method: "POST",
@@ -168,7 +209,8 @@ try {
   }
   await request(`/api/marketplace/listings/${encodeURIComponent(listingId)}`, { method: "DELETE", token: firstToken });
 
-  console.log("PASS: Railway live backend readiness, registration/login/token identity, public post and cross-user feed, authenticated media upload, accepted-friend direct messaging and both conversation histories, and seller-to-buyer Marketplace listing discovery.");
+  await request(`/api/statuses/${encodeURIComponent(statusId)}`, { method: "DELETE", token: firstToken });
+  console.log("PASS: Railway live backend readiness, registration/login/token identity, public feed, media upload, direct messaging in both histories, Status creation/view/like/reaction/reply plus Chat bridge, and seller-to-buyer Marketplace listing discovery.");
 
 } finally {
   if (postId && firstToken && !keepPostForDiagnosis) {
