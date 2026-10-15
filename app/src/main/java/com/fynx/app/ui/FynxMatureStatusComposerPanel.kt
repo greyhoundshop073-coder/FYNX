@@ -356,10 +356,29 @@ fun FynxMatureStatusComposerPanel(
                             } else if (mediaUri != null) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     FynxRemoteAudio(mediaUri.toString(), Modifier.fillMaxWidth().padding(horizontal = 24.dp), elapsed.coerceAtLeast(1_000L))
-                                    OutlinedButton(onClick = { mediaUri = null; elapsed = 0L; error = null }, enabled = !publishing) {
-                                    Icon(Icons.Default.Close, "Clear voice")
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Clear voice")
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        OutlinedButton(onClick = { mediaUri = null; elapsed = 0L; error = null }, enabled = !publishing) {
+                                            Icon(Icons.Default.Close, "Clear voice")
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Delete")
+                                        }
+                                        Button(onClick = {
+                                            mediaUri = null
+                                            elapsed = 0L
+                                            error = null
+                                            type = FynxStatusType.VOICE
+                                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                                beginMatureVoiceRecording(
+                                                    context,
+                                                    onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true },
+                                                    onError = { message -> error = message }
+                                                )
+                                            } else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                                        }, enabled = !publishing) {
+                                            Icon(Icons.Default.Mic, "Record again")
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Record again")
+                                        }
                                     }
                                 }
                             } else {
