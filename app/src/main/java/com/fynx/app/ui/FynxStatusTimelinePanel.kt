@@ -63,6 +63,7 @@ fun FynxStatusTimelinePanel(
     var refreshKey by remember { mutableIntStateOf(0) }
     var viewerDisplayName by remember(username) { mutableStateOf(username) }
     val scope = rememberCoroutineScope()
+    fun normalizedOwner(value: String): String = value.removePrefix("@").trim().lowercase()
 
     LaunchedEffect(username) {
         if (username.isNotBlank()) {
@@ -105,11 +106,11 @@ fun FynxStatusTimelinePanel(
     }
 
     val visibleStatuses = statuses.filterNot(FynxStatus::isExpired)
-    val latestByOwner = visibleStatuses.groupBy { it.ownerUsername }
+    val latestByOwner = visibleStatuses.groupBy { normalizedOwner(it.ownerUsername) }
         .mapNotNull { (_, values) -> values.maxByOrNull { it.createdAtMillis } }
         .sortedByDescending { it.createdAtMillis }
-    val myStatus = latestByOwner.firstOrNull { it.ownerUsername.equals(username, true) }
-    val recentUpdates = latestByOwner.filterNot { it.ownerUsername.equals(username, true) }
+    val myStatus = latestByOwner.firstOrNull { normalizedOwner(it.ownerUsername) == normalizedOwner(username) }
+    val recentUpdates = latestByOwner.filterNot { normalizedOwner(it.ownerUsername) == normalizedOwner(username) }
     var menuOpen by remember { mutableStateOf(false) }
     var archiveOpen by remember { mutableStateOf(false) }
     var archivedStatuses by remember { mutableStateOf<List<FynxStatus>>(emptyList()) }
@@ -186,7 +187,7 @@ fun FynxStatusTimelinePanel(
     }
 
     selected?.let { initial ->
-        val ownerStatuses = visibleStatuses.filter { it.ownerUsername.equals(initial.ownerUsername, true) }.sortedBy { it.createdAtMillis }
+        val ownerStatuses = visibleStatuses.filter { normalizedOwner(it.ownerUsername) == normalizedOwner(initial.ownerUsername) }.sortedBy { it.createdAtMillis }
         FynxStatusStoryViewer(
             ownerStatuses,
             ownerStatuses.indexOfFirst { it.id == initial.id }.coerceAtLeast(0),
