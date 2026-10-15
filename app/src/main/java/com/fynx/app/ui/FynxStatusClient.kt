@@ -127,7 +127,7 @@ object FynxStatusClient {
         if (reactionObject != null) reactionObject.keys().forEach { key -> counts[key] = reactionObject.optInt(key, 0) }
         FynxStatusInteractions(
             viewCount=o.optInt("viewCount"), likeCount=o.optInt("likeCount"), replyCount=o.optInt("replyCount"),
-            reactionCounts=counts, likedByMe=o.optBoolean("likedByMe"), myReaction=o.optString("myReaction").ifBlank { null }
+            reactionCounts=counts, likedByMe=o.optBoolean("likedByMe"), myReaction=if (o.isNull("myReaction")) null else o.optString("myReaction").ifBlank { null }
         )
     }
 
@@ -182,7 +182,7 @@ object FynxStatusClient {
     suspend fun react(context: Context, statusId: String, reaction: String): Result<String?> = runCatching {
         val body = JSONObject().put("reaction", reaction).toString()
         val raw = FynxBackendClient.postJson(context, "/api/statuses/${statusId.trim()}/reaction", body).getOrThrow()
-        JSONObject(raw).optString("reaction").ifBlank { null }
+        JSONObject(raw).let { response -> if (response.isNull("reaction")) null else response.optString("reaction").ifBlank { null } }
     }
 
     suspend fun reply(context: Context, statusId: String, body: String): Result<Unit> = runCatching {
