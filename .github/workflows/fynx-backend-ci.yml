@@ -204,3 +204,9 @@ jobs:
         continue-on-error: true
         working-directory: .
         run: node scripts/verify_production_backend_reachability.mjs
+      - name: Verify live testing backend shared-user flow
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'fix/android-online-first-login-20261015' }}
+        working-directory: .
+        env:
+          FYNX_TEST_BACKEND_URL: https://fynx-backend-testing-testing.up.railway.app
+        run: node scripts/verify_live_shared_backend.mjs
