@@ -4,6 +4,7 @@ import android.media.MediaMetadataRetriever
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +45,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -133,20 +135,17 @@ fun FynxVisibleUpdatesPanel(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     item {
-                        Row(Modifier.width(146.dp), verticalAlignment = Alignment.CenterVertically) {
-                            FynxStatusPreviewCircle(
-                                own?.first,
-                                currentUsername.ifBlank { "You" },
-                                "Your status",
-                                true,
-                                if (own != null) { { onOpenStatusOwner(current) } } else { onCreateStatus },
-                                own?.second ?: 0,
-                                ownerPhotoIds[current]
-                            )
-                            IconButton(onClick = onCreateStatus, modifier = Modifier.requiredSize(44.dp).background(MaterialTheme.colorScheme.primary, CircleShape).semantics { contentDescription = "Create your status" }) {
-                                Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(17.dp))
-                            }
-                        }
+                        FynxStatusPreviewCircle(
+                            own?.first,
+                            currentUsername.ifBlank { "You" },
+                            "Your status",
+                            true,
+                            if (own != null) { { onOpenStatusOwner(current) } } else { onCreateStatus },
+                            own?.second ?: 0,
+                            ownerPhotoIds[current],
+                            isOwn = true,
+                            onAddClick = onCreateStatus
+                        )
                     }
                     items(grouped.filterNot { it.first.ownerUsername.equals(currentUsername, true) }, key = { it.first.ownerUsername }) { (status, count) ->
                         FynxStatusPreviewCircle(status, status.ownerUsername, status.ownerDisplayName.ifBlank { status.ownerUsername }, true, { onOpenStatusOwner(status.ownerUsername.removePrefix("@").trim()) }, count, ownerPhotoIds[status.ownerUsername.removePrefix("@").trim().lowercase()])
@@ -194,7 +193,7 @@ fun FynxVisibleUpdatesPanel(
 }
 
 @Composable
-private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: String, active: Boolean, onClick: () -> Unit, statusCount: Int = 0, profilePhotoMediaId: String? = null) {
+private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: String, active: Boolean, onClick: () -> Unit, statusCount: Int = 0, profilePhotoMediaId: String? = null, isOwn: Boolean = false, onAddClick: () -> Unit = {}) {
     val context = LocalContext.current
     var bitmap by remember(status?.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
     LaunchedEffect(status?.id, status?.contentUri, status?.type) {
@@ -202,9 +201,30 @@ private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: St
         if (status != null && !status.contentUri.isNullOrBlank()) bitmap = withContext(Dispatchers.IO) { runCatching { val cached = FynxMediaCache.getOrDownload(context, status.contentUri!!, if (status.type == FynxStatusType.VIDEO) "video" else "image"); when { cached == null -> null; status.type == FynxStatusType.VIDEO -> MediaMetadataRetriever().run { setDataSource(cached.absolutePath); val frame = getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC); release(); frame }; status.type == FynxStatusType.PHOTO -> android.graphics.BitmapFactory.decodeFile(cached.absolutePath); else -> null } }.getOrNull() }
     }
     Column(Modifier.width(82.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        IconButton(onClick = onClick, modifier = Modifier.requiredSize(72.dp).semantics { contentDescription = label }) {
-            androidx.compose.foundation.layout.Box(Modifier.size(66.dp).background(if (status?.type == FynxStatusType.TEXT) Color(status.textStyle.backgroundColor) else FynxDesign.SurfaceRaised, CircleShape).border(3.dp, if (active) Color(0xFF22C55E) else FynxDesign.Outline, CircleShape).clip(CircleShape), contentAlignment = Alignment.Center) {
-                when { bitmap != null -> androidx.compose.foundation.Image(bitmap!!.asImageBitmap(), "Status media preview", Modifier.fillMaxWidth(), contentScale = ContentScale.Crop); status?.type == FynxStatusType.TEXT -> Text(status.text.orEmpty().take(20), color = Color(status.textStyle.foregroundColor), style = MaterialTheme.typography.labelSmall, maxLines = 3); status?.type == FynxStatusType.VIDEO -> Icon(Icons.Default.PlayArrow, "Video status", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp)); status?.type == FynxStatusType.VOICE -> Icon(Icons.Default.Mic, "Voice status", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp)); profilePhotoMediaId != null -> FynxRemoteProfileAvatar(profilePhotoMediaId, name, Modifier.size(60.dp).clip(CircleShape), ownerUsername = status?.ownerUsername); else -> FynxAvatar(name, Modifier.size(60.dp).clip(CircleShape), ownerUsername = status?.ownerUsername) }
+        Box(Modifier.requiredSize(78.dp), contentAlignment = Alignment.Center) {
+            IconButton(onClick = onClick, modifier = Modifier.requiredSize(76.dp).semantics { contentDescription = label }) {
+                Box(
+                    Modifier.size(70.dp)
+                        .background(if (status?.type == FynxStatusType.TEXT) Color(status.textStyle.backgroundColor) else FynxDesign.SurfaceRaised, CircleShape)
+                        .border(3.dp, if (active) Brush.sweepGradient(listOf(Color(0xFFE1306C), Color(0xFF22C55E), Color(0xFFE1306C))) else Brush.sweepGradient(listOf(FynxDesign.Outline, FynxDesign.Outline)), CircleShape)
+                        .clip(CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when { bitmap != null -> androidx.compose.foundation.Image(bitmap!!.asImageBitmap(), "Status media preview", Modifier.fillMaxWidth(), contentScale = ContentScale.Crop); status?.type == FynxStatusType.TEXT -> Text(status.text.orEmpty().take(20), color = Color(status.textStyle.foregroundColor), style = MaterialTheme.typography.labelSmall, maxLines = 3); status?.type == FynxStatusType.VIDEO -> Icon(Icons.Default.PlayArrow, "Video status", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp)); status?.type == FynxStatusType.VOICE -> Icon(Icons.Default.Mic, "Voice status", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp)); profilePhotoMediaId != null -> FynxRemoteProfileAvatar(profilePhotoMediaId, name, Modifier.size(64.dp).clip(CircleShape), ownerUsername = status?.ownerUsername); else -> FynxAvatar(name, Modifier.size(64.dp).clip(CircleShape), ownerUsername = status?.ownerUsername) }
+                }
+            }
+            if (isOwn) {
+                Box(
+                    Modifier.align(Alignment.BottomEnd).requiredSize(25.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                        .clip(CircleShape)
+                        .clickable(onClick = onAddClick)
+                        .semantics { contentDescription = "Create your status" },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(17.dp))
+                }
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) { Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1); if (statusCount > 1) Text(" • $statusCount", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
