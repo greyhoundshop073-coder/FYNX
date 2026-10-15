@@ -3,9 +3,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 auth = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+app_state = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
 
 checks = {
     "debug login requires an Android debuggable build": "ApplicationInfo.FLAG_DEBUGGABLE" in auth and "if (!isDebuggable || requestedUsername.isBlank()) return null" in auth,
+    "saved local debug sessions without a server token return to authentication": "stored.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)" in app_state and "debugOfflineSession" not in app_state,
     "login always shows the password field": 'FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)' in auth and "Saved-device login for this debug APK" not in auth,
     "online login requests a server token before entering the app": "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth and "FynxAuthStore.save(context, savedLocalUsername)" not in auth,
     "offline fallback requires a recognized network failure": "allowOfflineEntry && isLoginNetworkFailure(failure)" in auth,
