@@ -23,6 +23,7 @@ required = [
     'DEFAULT_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"',
     'requiresAuthentication = !isPublicAuthPath(path)',
     'FynxSecureTokenStore',
+    'normalized.contains("onrender.com", ignoreCase = true)',
 ]
 for needle in required:
     if needle not in backend:

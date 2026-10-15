@@ -50,7 +50,7 @@ env:
   GOOGLE_CLOUD_PROJECT: fynx-f0868
   FYNX_WIF_PROVIDER: projects/742276831502/locations/global/workloadIdentityPools/fynx-github-actions/providers/fynx-github
   FYNX_GCP_SERVICE_ACCOUNT: fynx-github-actions@fynx-f0868.iam.gserviceaccount.com
-  FYNX_PRODUCTION_BASE_URL: https://fynx-ai-backend.onrender.com
+  FYNX_BACKEND_BASE_URL: https://fynx-backend-testing-testing.up.railway.app
 
 jobs:
   build:
@@ -104,7 +104,7 @@ jobs:
         run: python3 scripts/verify_incoming_call_routing.py
       - name: Verify debug offline login and backend-independent APK contract
         run: python3 scripts/verify_debug_offline_login.py
-      - name: Verify live production backend reachability
+      - name: Verify configured Railway backend reachability
         # This optional remote-service probe does not validate local APK compilation or UI.
         # Run it only for explicit full-runtime dispatches or [home-cert] pushes; normal APK
         # builds remain server-independent while Backend CI reports live service availability.
