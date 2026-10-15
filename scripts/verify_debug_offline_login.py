@@ -13,8 +13,8 @@ checks = {
     "offline fallback requires a recognized network failure": "allowOfflineEntry && isLoginNetworkFailure(failure)" in auth,
     "network fallback reuses the debug-only local-account guard": "localDebugAccountForLogin(context, username)" in auth,
     "release and invalid-credential paths do not receive an unconditional local session": "if (allowOfflineEntry) {" not in auth and "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth,
-    "ordinary APK builds skip the optional live-backend probe": "if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]')) }}" in workflow,
-    "explicit full-runtime and home-cert runs retain the probe": "inputs.full_runtime == 'true'" in workflow and "[home-cert]" in workflow and "run: node scripts/verify_production_backend_reachability.mjs" in workflow,
+    "network-fix branch requires live backend authentication and write-path checks": "github.ref == 'refs/heads/fix/network-auth-railway-main-20261015'" in workflow and "node scripts/verify_live_backend_session.mjs" in workflow and "continue-on-error: true" not in workflow,
+    "explicit full-runtime and home-cert runs retain the live probe": "inputs.full_runtime == 'true'" in workflow and "[home-cert]" in workflow and "node scripts/verify_production_backend_reachability.mjs" in workflow,
 }
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
