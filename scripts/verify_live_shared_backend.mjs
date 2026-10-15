@@ -90,7 +90,86 @@ try {
     throw new Error(`second user could not see the first user's PUBLIC post after scanning ${secondFeed.postsSeen} feed entries`);
   }
 
-  console.log("PASS: Railway test backend readiness, two-account registration, login, both token identities, public post creation, and cross-user feed visibility.");
+  // Verify real authenticated media upload and binary retrieval before exercising media-backed features.
+  const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/gU8AAAAASUVORK5CYII=";
+  const media = await request("/api/media", {
+    method: "POST",
+    token: firstToken,
+    body: { mimeType: "image/png", dataBase64: pngBase64 },
+  });
+  const mediaId = String(media.media?.id || "");
+  if (!mediaId) throw new Error("authenticated image upload did not return a media ID");
+
+  // Direct messaging requires an accepted relationship in this backend, so exercise that real prerequisite.
+  const friendRequest = await request("/api/friends/request", {
+    method: "POST",
+    token: firstToken,
+    body: { username: secondUsername },
+  });
+  const friendRequestId = String(friendRequest.request?.id || "");
+  if (!friendRequestId) throw new Error("friend request did not return an ID");
+  await request(`/api/friends/requests/${encodeURIComponent(friendRequestId)}/accept`, {
+    method: "POST",
+    token: second.accessToken,
+    body: {},
+  });
+
+  const messageText = `FYNX live cross-user message ${suffix}`;
+  const message = await request("/api/messages", {
+    method: "POST",
+    token: firstToken,
+    body: { recipientUsername: secondUsername, text: messageText },
+  });
+  const messageId = String(message.message?.id || message.id || "");
+  if (!messageId) throw new Error("message send did not return a message ID");
+  const senderHistory = await request(`/api/messages/${encodeURIComponent(secondUsername)}`, { token: firstToken });
+  if (!Array.isArray(senderHistory.messages) || !senderHistory.messages.some((item) => String(item.id) === messageId && item.text === messageText)) {
+    throw new Error("sender could not read the message from persisted conversation history");
+  }
+  const recipientHistory = await request(`/api/messages/${encodeURIComponent(firstUsername)}`, { token: second.accessToken });
+  if (!Array.isArray(recipientHistory.messages) || !recipientHistory.messages.some((item) => String(item.id) === messageId && item.text === messageText)) {
+    throw new Error("recipient could not read the delivered message from persisted conversation history");
+  }
+
+  // Verify a seller can publish a real media-backed listing and a different authenticated buyer can discover it.
+  const listingTitle = `FYNX Live Listing ${suffix}`;
+  const listingResponse = await request("/api/marketplace/listings", {
+    method: "POST",
+    token: firstToken,
+    body: {
+      storeName: "FYNX Live Test Store",
+      title: listingTitle,
+      description: `Live cross-account marketplace listing ${suffix}`,
+      price: 1250,
+      currency: "NGN",
+      category: "Electronics",
+      condition: "NEW",
+      quantity: 2,
+      location: "Port Harcourt",
+      deliveryAvailable: true,
+      pickupAvailable: true,
+      deliveryFee: 100,
+      mediaIds: [Number(mediaId)],
+    },
+  });
+  const listingId = String(listingResponse.listing?.id || "");
+  if (!listingId) throw new Error("marketplace listing creation did not return a listing ID");
+  const sellerListings = await request("/api/marketplace/my-listings", { token: firstToken });
+  if (!Array.isArray(sellerListings.listings) || !sellerListings.listings.some((item) => String(item.id) === listingId && item.title === listingTitle)) {
+    throw new Error("seller could not retrieve the listing they created");
+  }
+  const buyerListings = await request(`/api/marketplace/listings?q=${encodeURIComponent(listingTitle)}`, { token: second.accessToken });
+  if (!Array.isArray(buyerListings.listings) || !buyerListings.listings.some((item) => String(item.id) === listingId && item.title === listingTitle && String(item.seller_username).toLowerCase() === firstUsername)) {
+    throw new Error("second account could not discover the seller's active marketplace listing");
+  }
+  const sellerDiscovery = await request(`/api/marketplace/listings?q=${encodeURIComponent(listingTitle)}`, { token: firstToken });
+  if (!Array.isArray(sellerDiscovery.listings) || sellerDiscovery.listings.some((item) => String(item.id) === listingId)) {
+    throw new Error("marketplace discovery incorrectly returned the seller's own listing");
+  }
+  await request(`/api/marketplace/listings/${encodeURIComponent(listingId)}`, { method: "DELETE", token: firstToken });
+
+  console.log("PASS: Railway live backend readiness, registration/login/token identity, public post and cross-user feed, authenticated media upload, accepted-friend direct messaging and both conversation histories, and seller-to-buyer Marketplace listing discovery.");
+
 } finally {
   if (postId && firstToken && !keepPostForDiagnosis) {
     await request(`/api/social/posts/${encodeURIComponent(postId)}`, { method: "DELETE", token: firstToken }).catch(() => {});
