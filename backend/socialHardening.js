@@ -57,7 +57,6 @@ export function installSocialHardening(app) {
 
     if (req.method === "POST" && path === "/api/social/posts") {
       const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
-      if (text.startsWith("FYNX shared-feed smoke ")) { let rawBodyVisibility = null; try { rawBodyVisibility = JSON.parse(req.rawBody?.toString("utf8") || "{}").visibility ?? null; } catch {} console.info("[fynx-shared-feed-hardening]", JSON.stringify({ rawBodyVisibility, parsedVisibility: req.body?.visibility ?? null })); }
       const visibility = typeof req.body?.visibility === "string" ? req.body.visibility.trim().toUpperCase() : "";
       const mediaId = req.body?.mediaId;
       const mediaType = req.body?.mediaType == null ? "" : String(req.body.mediaType).trim().toLowerCase();
