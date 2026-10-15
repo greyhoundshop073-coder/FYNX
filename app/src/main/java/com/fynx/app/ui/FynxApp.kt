@@ -624,11 +624,15 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                                 time = "Now",
                                 avatarUri = user.profilePhotoMediaId?.trim()?.takeIf { it.isNotBlank() }?.let { "/api/media/$it" }
                             )
-                        } ?: ChatPreview(normalized, "@$normalized", "Start a conversation", "Now")
-                        FynxChatStore.savePreview(context, chat)
-                        openGroup = null
-                        profileUser = null
-                        openChat = chat
+                        }
+                        // Do not manufacture a conversation when lookup fails (for example,
+                        // while the backend is unavailable). Only navigate to a verified user.
+                        if (chat != null) {
+                            FynxChatStore.savePreview(context, chat)
+                            openGroup = null
+                            profileUser = null
+                            openChat = chat
+                        }
                     }
                 }
             )

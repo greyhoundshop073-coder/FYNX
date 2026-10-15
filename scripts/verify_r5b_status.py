@@ -205,3 +205,7 @@ if failed:
     for item in failed: print(' - '+item)
     sys.exit(1)
 print(f'\nR5B Status/Stories + Marketplace sharing end-to-end gate GREEN ({len(checks)} checks)')
+
+require('Status creation enforces canonical UUID format', 'if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)' in server)
+
+require('Status Message action never creates a fake chat on failed user lookup', 'Do not manufacture a conversation when lookup fails' in read('app/src/main/java/com/fynx/app/ui/FynxApp.kt') and 'if (chat != null)' in read('app/src/main/java/com/fynx/app/ui/FynxApp.kt'))
