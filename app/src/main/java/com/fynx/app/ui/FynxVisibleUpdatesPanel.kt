@@ -113,9 +113,14 @@ fun FynxVisibleUpdatesPanel(
         .groupBy { it.ownerUsername.removePrefix("@").trim().lowercase() }
         .filterValues { ownerStatuses -> ownerStatuses.any { it.id !in viewedStatusIds } }
         .keys
-    val grouped = activeStatuses.groupBy { it.ownerUsername }
-        .mapNotNull { (_, list) -> list.maxByOrNull { it.createdAtMillis }?.let { it to list.size } }
-    val own = grouped.firstOrNull { it.first.ownerUsername.equals(currentUsername, true) }
+    // Normalize owner identity before grouping so "@name", "name", and case-only
+    // variants cannot produce duplicate bubbles or hide the signed-in user's own status.
+    val grouped = activeStatuses
+        .groupBy { it.ownerUsername.removePrefix("@").trim().lowercase() }
+        .mapNotNull { (_, list) -> list.maxByOrNull { it.createdAtMillis }?.let { latest -> latest to list.size } }
+    val own = grouped.firstOrNull {
+        it.first.ownerUsername.removePrefix("@").trim().equals(current, ignoreCase = true)
+    }
 
     Column(
         Modifier.fillMaxWidth(),
