@@ -86,6 +86,8 @@ Before saying done or starting another area, answer:
 
 ## Canonical references
 
+- FYNX_CANONICAL_APK.md — cross-chat canonical integration branch, artifact naming, and APK handoff rules.
+
 This standard works together with:
 - FYNX_BUILD_PLAN.md
 - docs/FYNX_REALITY_AUDIT_CODEX_INSTRUCTIONS.md
