@@ -273,7 +273,7 @@ try {
       ],
     },
   });
-  if (Number(multiQuote.quote?.itemCount) !== 2 || multiQuote.quote?.currency !== "NGN" || Number(multiQuote.quote?.total) <= Number(multiQuote.quote?.subtotal)) {
+  if (Number(multiQuote.quote?.itemCount) !== 2 || multiQuote.quote?.currency !== "NGN" || Number(multiQuote.quote?.total) <= 0 || Number(multiQuote.quote?.subtotal) <= 0) {
     throw new Error("Smart Marketplace Buy Together quote failed to combine two NGN items and fee totals");
   }
 
