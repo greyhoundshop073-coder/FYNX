@@ -99,8 +99,14 @@ await request("/api/statuses", { token });
 await request("/api/marketplace/discovery", { token });
 await request("/api/marketplace/discovery?category=Electronics", { token });
 await request("/api/marketplace/discovery?location=Lagos", { token });
+await request("/api/marketplace/orders", { token });
 await request(`/api/messages/${encodeURIComponent(loggedInUser.username)}`, { token });
-await request("/api/notifications", { token });
+const notificationResult = await request("/api/notifications", { token });
+if (!Array.isArray(notificationResult?.notifications)) throw new Error("Notifications endpoint returned an invalid payload.");
+const notificationPreferences = await request("/api/notification-preferences", { token });
+if (!notificationPreferences?.preferences || typeof notificationPreferences.preferences !== "object") {
+  throw new Error("Notification preferences endpoint returned an invalid payload.");
+}
 
 // Exercise a real authenticated post write and remove it immediately.
 let postId = "";
@@ -133,7 +139,7 @@ const friendRequest = await request("/api/friends/request", {
   method: "POST", token, body: { username: recipient.username }
 });
 const friendRequestId = String(friendRequest?.request?.id || "");
-if (!/^\\d+$/.test(friendRequestId)) throw new Error("Friend request did not return a valid request ID.");
+if (!/^\d+$/.test(friendRequestId)) throw new Error("Friend request did not return a valid request ID.");
 await request(`/api/friends/requests/${encodeURIComponent(friendRequestId)}/accept`, {
   method: "POST", token: recipientToken, body: {}
 });
@@ -155,5 +161,5 @@ try {
   if (messageId) await request(`/api/messages/${encodeURIComponent(messageId)}`, { method: "DELETE", token });
 }
 
-console.log("PASS: registration, login, token validation, feed/status/Marketplace reads, post create/delete, notification retrieval, friendship acceptance, and message send/delete.");
+console.log("PASS: registration, login, token validation, feed/status/Marketplace reads, post create/delete, notification preferences/list, Marketplace discovery/orders, accepted friendship, and message send/delete.");
 console.log(`LIVE FYNX BACKEND SESSION GREEN: ${BASE_URL}`);
