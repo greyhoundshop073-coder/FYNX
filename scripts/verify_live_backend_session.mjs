@@ -95,6 +95,8 @@ if (String(me?.user?.id) !== String(loggedInUser.id) ||
 await request("/api/social/feed", { token });
 await request("/api/statuses", { token });
 await request("/api/marketplace/discovery", { token });
+await request("/api/marketplace/discovery?category=Electronics", { token });
+await request("/api/marketplace/discovery?location=Lagos", { token });
 await request(`/api/messages/${encodeURIComponent(loggedInUser.username)}`, { token });
 
 // Exercise a real authenticated post write and remove it immediately.
