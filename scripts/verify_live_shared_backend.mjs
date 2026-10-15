@@ -6,6 +6,7 @@ const password = randomBytes(24).toString("base64url");
 const firstUsername = `fynxprobe_${suffix}`.slice(0, 32);
 const secondUsername = `fynxprobe2_${suffix}`.slice(0, 32);
 let firstToken = "";
+let secondTokenForCleanup = "";
 let postId = "";
 let keepPostForDiagnosis = false;
 let statusId = "";
@@ -44,6 +45,7 @@ try {
     method: "POST",
     body: { displayName: "FYNX Network Probe Two", username: secondUsername, phone: "", password },
   });
+  secondTokenForCleanup = second.accessToken || "";
   if (!firstToken || !second.accessToken) throw new Error("registration did not return both access tokens");
 
   const login = await request("/api/auth/login", {
