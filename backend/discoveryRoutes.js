@@ -128,8 +128,8 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       const params = [req.user.sub];
       const where = ["l.active=TRUE", "l.quantity>0", "l.seller_id<>$1", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')"];
       if (q) { params.push(`%${q}%`); const n=params.length; where.push(`(l.title ILIKE $${n} OR l.description ILIKE $${n} OR u.username ILIKE $${n} OR u.display_name ILIKE $${n})`); }
-      if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category=${params.length}`); }
-      if (location) { params.push(`%${location}%`); where.push(`l.location ILIKE ${params.length}`); }
+      if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category=$${params.length}`); }
+      if (location) { params.push(`%${location}%`); where.push(`l.location ILIKE $${params.length}`); }
       params.push(limit + 1, offset);
       const result = await pool.query(`
         SELECT l.id,l.seller_id,u.username seller_username,u.display_name seller_display_name,l.store_name,l.title,l.description,l.price,l.currency,l.category,l.condition,l.quantity,l.location,l.delivery_available,l.pickup_available,l.delivery_fee,l.media_ids,l.created_at,
