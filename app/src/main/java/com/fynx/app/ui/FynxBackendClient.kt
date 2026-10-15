@@ -50,6 +50,7 @@ object FynxBackendClient {
     fun hasAccessToken(context: Context): Boolean = accessToken(context) != null
     fun isNetworkAvailable(context: Context): Boolean = hasNetwork(context)
     fun isUnauthorizedFailure(error: Throwable): Boolean = generateSequence(error) { it.cause }.any { it is FynxUnauthorizedException }
+    fun isHttpStatusFailure(error: Throwable?, status: Int): Boolean = generateSequence(error) { it.cause }.any { it is FynxHttpException && it.status == status }
     suspend fun health(context: Context): Result<String> = get(context, "/health")
     suspend fun get(context: Context, path: String): Result<String> = request(context, "GET", path, null)
     suspend fun postJson(context: Context, path: String, body: String): Result<String> = request(context, "POST", path, body)
