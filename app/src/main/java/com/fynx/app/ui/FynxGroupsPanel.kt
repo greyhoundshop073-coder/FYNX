@@ -297,6 +297,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     val replySwipeOffsets = remember { mutableStateMapOf<String, Float>() }
     var syncMessage by remember { mutableStateOf<String?>(null) }
     var remotePermissions by remember(groupId) { mutableStateOf<FynxGroupRemoteClient.RemotePermissions?>(null) }
+    var permissionLoadError by remember(groupId) { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -305,12 +306,26 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     val isAdmin = myRole == FynxGroupRole.ADMIN
     val canManageGroup = FynxGroupsBatch3.canManage(myRole)
     val prefs = remember(groupId) { FynxConversationPreferences.group(context, groupId) }
-    val canSendMessages = canManageGroup || (remotePermissions?.sendMessages ?: prefs.getBoolean("send_messages", true))
-    val canSendMedia = canManageGroup || (remotePermissions?.sendMedia ?: prefs.getBoolean("send_media", true))
-    val canAddMembers = canManageGroup || ((remotePermissions?.addMembers ?: prefs.getBoolean("add_members", true)) && remotePermissions?.approveNewMembers != true)
+    val hasRemoteAccessToken = FynxBackendClient.hasAccessToken(context)
+    val canSendMessages = canManageGroup || if (hasRemoteAccessToken) remotePermissions?.sendMessages == true else prefs.getBoolean("send_messages", true)
+    val canSendMedia = canManageGroup || if (hasRemoteAccessToken) remotePermissions?.sendMedia == true else prefs.getBoolean("send_media", true)
+    val canAddMembers = canManageGroup || if (hasRemoteAccessToken) {
+        remotePermissions?.addMembers == true && remotePermissions?.approveNewMembers != true
+    } else {
+        prefs.getBoolean("add_members", true)
+    }
     LaunchedEffect(groupId, currentUsername) {
-        if (!FynxBackendClient.hasAccessToken(context)) return@LaunchedEffect
-        FynxGroupRemoteClient.loadPermissions(context, groupId).onSuccess { remotePermissions = it }
+        if (!FynxBackendClient.hasAccessToken(context)) {
+            remotePermissions = null
+            permissionLoadError = null
+            return@LaunchedEffect
+        }
+        FynxGroupRemoteClient.loadPermissions(context, groupId)
+            .onSuccess { remotePermissions = it; permissionLoadError = null }
+            .onFailure {
+                remotePermissions = null
+                permissionLoadError = it.message ?: "Group permissions could not be loaded. Reconnect and retry."
+            }
     }
     val senderAvatarUris = remember(groupId) { mutableStateMapOf<String, String?>() }
     val messageListState = rememberLazyListState()
@@ -375,7 +390,12 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 if (FynxBackendClient.hasAccessToken(context)) {
                     refreshGroupMessages(showError = false)
                     if (FynxBackendClient.hasAccessToken(context)) {
-                        FynxGroupRemoteClient.loadPermissions(context, groupId).onSuccess { remotePermissions = it }
+                        FynxGroupRemoteClient.loadPermissions(context, groupId)
+                            .onSuccess { remotePermissions = it; permissionLoadError = null }
+                            .onFailure {
+                                remotePermissions = null
+                                permissionLoadError = it.message ?: "Group permissions could not be loaded. Reconnect and retry."
+                            }
                     }
                 }
             }
@@ -462,6 +482,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 }
             }
         }
+        permissionLoadError?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         syncMessage?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         if (!canSendMessages) Text("Only admins can send messages in this group.", Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
