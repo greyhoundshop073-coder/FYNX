@@ -27,13 +27,13 @@ async function request(path, { method = "GET", token, body } = {}) {
 }
 
 function makeAccount(label, suffix) {
-  const stamp = Date.now().toString(36);
-  const random = randomBytes(5).toString("hex");
+  const random = randomBytes(8).toString("hex");
+  const phoneDigits = String(randomBytes(4).readUInt32BE(0) % 100_000_000).padStart(8, "0");
   return {
-    username: `fynxnet_${stamp}_${random}_${suffix}`,
+    username: `fynxnet_${random}_${suffix}`,
     password: randomBytes(24).toString("base64url"),
     displayName: `FYNX Network Smoke ${label}`,
-    phone: `+1555${Date.now().toString().slice(-8)}`
+    phone: `+1555${phoneDigits}`
   };
 }
 
@@ -66,9 +66,8 @@ if (ready?.ok !== true || ready?.service !== "fynx-backend" || ready?.database !
 
 // Use newly registered isolated test accounts. Existing E2E credentials may belong to
 // another environment and must not be assumed to exist in this testing database.
-const suffix = randomBytes(5).toString("hex");
-const sender = makeAccount("Sender", `a${suffix}`);
-const recipient = makeAccount("Recipient", `b${suffix}`);
+const sender = makeAccount("Sender", "a");
+const recipient = makeAccount("Recipient", "b");
 await registerAccount(sender);
 await registerAccount(recipient);
 
