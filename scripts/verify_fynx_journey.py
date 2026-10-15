@@ -51,7 +51,7 @@ required_files = [
 check("all core journey integration files exist", all((ROOT / p).is_file() for p in required_files))
 check("authenticated app gate exists", "FynxAuthGate" in app and "AuthState.SIGNED_IN" in app)
 check("profile to chat and call navigation exists", "ConversationPanel" in app and "onVoiceCall" in app and "onVideoCall" in app)
-check("default messaging privacy enforces mutual follow", "messages_visibility" in privacy_backend and "social_follows WHERE follower_id=$1 AND followed_id=$2" in privacy_backend and "you must both follow each other to send a message" in privacy_backend)
+check("default messaging privacy enforces accepted friendship", "messages_visibility" in privacy_backend and "areFriends(req.user.sub,recipientId)" in privacy_backend and "friendships WHERE ((user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)) AND status='accepted'" in privacy_backend and "you must be friends with this user to send a message" in privacy_backend)
 check("calls panel has permission recovery and realtime events", "RequestMultiplePermissions" in calls and "realtimeClient.connect()" in calls and '"invite"' in calls)
 check("calls panel cleans media on terminal paths", "mediaEngine.disconnect()" in calls and "FynxCallsStore.updateStatus" in calls)
 check("incoming call permission recovery completes acceptance", "pendingIncomingAccept" in calls and "sendCallAccept" in calls and "permissionLauncher.launch(required)" in calls)
