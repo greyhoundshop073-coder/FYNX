@@ -60,6 +60,7 @@ jobs:
       BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
       FYNX_E2E_USERNAME: ${{ secrets.FYNX_E2E_USERNAME }}
       FYNX_E2E_PASSWORD: ${{ secrets.FYNX_E2E_PASSWORD }}
+      FYNX_E2E_CHAT_TARGET: ${{ secrets.FYNX_E2E_CHAT_TARGET }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -104,13 +105,13 @@ jobs:
         run: python3 scripts/verify_incoming_call_routing.py
       - name: Verify debug offline login and backend-independent APK contract
         run: python3 scripts/verify_debug_offline_login.py
-      - name: Verify configured Railway backend reachability
-        # This optional remote-service probe does not validate local APK compilation or UI.
-        # Run it only for explicit full-runtime dispatches or [home-cert] pushes; normal APK
-        # builds remain server-independent while Backend CI reports live service availability.
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]')) }}
-        continue-on-error: true
-        run: node scripts/verify_production_backend_reachability.mjs
+      - name: Verify live Railway backend and authenticated network paths
+        # Make live auth and real write-path verification mandatory on the network-fix branch.
+        # Other ordinary branch pushes remain isolated; full-runtime certification also runs it.
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && (github.ref == 'refs/heads/fix/network-auth-railway-main-20261015' || contains(github.event.head_commit.message, '[home-cert]'))) || (github.event_name == 'pull_request' && github.head_ref == 'fix/network-auth-railway-main-20261015') }}
+        run: |
+          node scripts/verify_production_backend_reachability.mjs
+          node scripts/verify_live_backend_session.mjs
       - name: Verify consolidated FCM notification phase
         run: python3 scripts/verify_fcm_notifications.py
       - name: Verify notifications and settings integration
