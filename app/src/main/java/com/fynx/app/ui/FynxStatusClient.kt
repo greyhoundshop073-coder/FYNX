@@ -142,6 +142,8 @@ object FynxStatusClient {
 
     suspend fun markViewed(context: Context, statusId: String): Result<Unit> {
         rememberViewed(context, statusId)
+        // Notify Home immediately so the seen/unseen ring recomposes when a story is opened.
+        FynxHomeLifecycleRefreshBus.request(context)
         return runCatching {
             FynxBackendClient.postJson(context, "/api/statuses/${statusId.trim()}/view", "{}").getOrThrow()
         }
