@@ -119,7 +119,7 @@ const friendRequest = await request("/api/friends/request", {
   method: "POST", token, body: { username: recipient.username }
 });
 const friendRequestId = String(friendRequest?.request?.id || "");
-if (!/^\\d+$/.test(friendRequestId)) throw new Error("Friend request response did not include a valid request ID.");
+if (!/^\d+$/.test(friendRequestId)) throw new Error("Friend request response did not include a valid request ID.");
 await request(`/api/friends/requests/${encodeURIComponent(friendRequestId)}/accept`, {
   method: "POST", token: recipientToken, body: {}
 });
