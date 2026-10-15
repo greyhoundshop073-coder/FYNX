@@ -3,10 +3,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 auth = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+backend = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt").read_text(encoding="utf-8")
+app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
+remote_auth = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteAuthClient.kt").read_text(encoding="utf-8")
+server = (ROOT / "backend/server.js").read_text(encoding="utf-8")
 
 checks = {
+    "debug APK defaults to the active Railway test backend": "https://fynx-backend-testing-testing.up.railway.app" in backend and "return normalized ?: if (isDebuggable) DEBUG_TEST_BASE_URL else PRODUCTION_BASE_URL" in backend,
+    "Android login and registration parse the server token contract": all(x in remote_auth for x in ['"/api/auth/login"', '"/api/auth/register"', 'json.getJSONObject("user")', 'json.getString("accessToken")']),
+    "backend login and registration return the token and expected user fields": all(x in server for x in ['app.post("/api/auth/register"', 'app.post("/api/auth/login"', 'accessToken: issueToken(user)', 'display_name: user.display_name']),
+    "login/register 401 is reported as credential rejection, not expired session": "if (requiresAuthentication) {" in backend and "throw FynxHttpException(status, response)" in backend,
+    "legacy local accounts migrate to the shared backend only after a real 401": "FynxBackendClient.isHttpStatusFailure(login.exceptionOrNull(), 401)" in auth and "savedUsername.equals(requestedUsername, ignoreCase = true)" in auth and "FynxRemoteAuthClient.register(context, displayName, requestedUsername, phone, password)" in auth,
+    "HTTP status matching is exposed without leaking private transport exceptions": "fun isHttpStatusFailure(error: Throwable?, status: Int)" in backend and "it is FynxHttpException && it.status == status" in backend,
+    "legacy display name can be reused for safe account migration": "fun storedDisplayName(context: Context)" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAuthStore.kt").read_text(encoding="utf-8"),
+    "persisted signed-in sessions require a real backend token": "stored.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)" in app and "debugOfflineSession" not in app,
     "debug login requires an Android debuggable build": "ApplicationInfo.FLAG_DEBUGGABLE" in auth and "if (!isDebuggable || requestedUsername.isBlank()) return null" in auth,
-    "saved-device login is immediate and does not wait for the backend": "val savedLocalUsername = localDebugAccountForLogin(context, requestedUsername)" in auth and "FynxAuthStore.save(context, savedLocalUsername)" in auth,
+    "login attempts backend authentication before any offline fallback": "val login = FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth and "finish(login, allowOfflineEntry = true)" in auth and "Offline debug access is available only if the server cannot be reached." in auth,
     "offline fallback requires a recognized network failure": "allowOfflineEntry && isLoginNetworkFailure(failure)" in auth,
     "network fallback reuses the debug-only local-account guard": "localDebugAccountForLogin(context, username)" in auth,
     "release and invalid-credential paths do not receive an unconditional local session": "if (allowOfflineEntry) {" not in auth and "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth,

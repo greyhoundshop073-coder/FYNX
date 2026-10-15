@@ -120,6 +120,46 @@ export function registerStatusInteractionRoutes({ app }) {
     }
   });
 
+  // Only the Status owner may see the identities behind their view/reaction counts.
+  app.get('/api/statuses/:statusId/viewers', auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      const id = statusId(req);
+      if (!validId(id)) return res.status(400).json({ error: 'invalid status id' });
+      const owner = await pool.query(
+        'SELECT owner_id FROM statuses WHERE id=$1 AND owner_id=$2 AND expires_at > NOW() LIMIT 1',
+        [id, req.user.sub]
+      );
+      if (!owner.rows[0]) return res.status(404).json({ error: 'status not found or not owned by this account' });
+      const result = await pool.query(`
+        SELECT u.username, u.display_name,
+               v.viewed_at,
+               COALESCE(r.reaction, NULL) AS reaction,
+               (l.user_id IS NOT NULL) AS liked
+        FROM status_views v
+        JOIN users u ON u.id=v.viewer_id
+        LEFT JOIN status_reactions r ON r.status_id=v.status_id AND r.user_id=v.viewer_id
+        LEFT JOIN status_likes l ON l.status_id=v.status_id AND l.user_id=v.viewer_id
+        WHERE v.status_id=$1
+        ORDER BY v.viewed_at DESC
+        LIMIT 500
+      `, [id]);
+      return res.json({
+        statusId: id,
+        viewers: result.rows.map(row => ({
+          username: row.username,
+          displayName: row.display_name || row.username,
+          viewedAtMillis: new Date(row.viewed_at).getTime(),
+          reaction: row.reaction || null,
+          liked: Boolean(row.liked)
+        }))
+      });
+    } catch (error) {
+      console.error('status viewers read', error);
+      return res.status(500).json({ error: 'status viewers unavailable' });
+    }
+  });
+
   app.post('/api/statuses/:statusId/view', auth, async (req, res) => {
     try {
       await ensureSchema();

@@ -29,6 +29,9 @@ export async function ensureMarketplaceShippingSchema(pool) {
     ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS shipping_method TEXT NOT NULL DEFAULT 'SELLER_ARRANGED';
     ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS shipping_note TEXT NOT NULL DEFAULT '';
     ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS shipping_fee_policy TEXT NOT NULL DEFAULT 'FLAT_BASE';
+    ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS fulfillment_method TEXT NOT NULL DEFAULT 'DELIVERY' CHECK (fulfillment_method IN ('DELIVERY','PICKUP'));
+    ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS shipping_address JSONB;
+    ALTER TABLE marketplace_orders ADD COLUMN IF NOT EXISTS buyer_note TEXT NOT NULL DEFAULT '';
     CREATE TABLE IF NOT EXISTS marketplace_shipping_coverage (
       id BIGSERIAL PRIMARY KEY,
       listing_id BIGINT NOT NULL REFERENCES marketplace_listings(id) ON DELETE CASCADE,
