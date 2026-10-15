@@ -316,12 +316,6 @@ private fun FynxAddStatusPanel(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FynxStatusToolPill(
-                    icon = Icons.Default.Notes,
-                    label = "Text",
-                    onClick = onText,
-                    modifier = Modifier.weight(1f)
-                )
-                FynxStatusToolPill(
                     icon = Icons.Default.MusicNote,
                     label = "Music",
                     onClick = onMusic,
@@ -333,15 +327,21 @@ private fun FynxAddStatusPanel(
                     onClick = { layoutMode = true; selectionMode = true; selectedMediaUris = emptySet() },
                     modifier = Modifier.weight(1f)
                 )
+                FynxStatusToolPill(
+                    icon = Icons.Default.Mic,
+                    label = "Voice",
+                    onClick = onVoice,
+                    modifier = Modifier.weight(1f)
+                )
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center
             ) {
                 FynxStatusToolPill(
-                    icon = Icons.Default.Mic,
-                    label = "Voice",
-                    onClick = onVoice,
+                    icon = Icons.Default.Notes,
+                    label = "Text",
+                    onClick = onText,
                     modifier = Modifier.widthIn(min = 120.dp, max = 180.dp)
                 )
             }
