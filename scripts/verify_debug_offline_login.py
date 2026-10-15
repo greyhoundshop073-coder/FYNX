@@ -12,6 +12,7 @@ checks = {
     "online login requests a server token before entering the app": "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth and "FynxAuthStore.save(context, savedLocalUsername)" not in auth,
     "offline fallback requires a recognized network failure": "allowOfflineEntry && isLoginNetworkFailure(failure)" in auth,
     "network fallback reuses the debug-only local-account guard": "localDebugAccountForLogin(context, username)" in auth,
+    "expired backend sessions return the app to authentication": "FynxBackendClient.sessionExpiredEvents.collect" in app_state and "authSession = AuthSession()" in app_state,
     "release and invalid-credential paths do not receive an unconditional local session": "if (allowOfflineEntry) {" not in auth and "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth,
     "network-fix branch requires live backend authentication and write-path checks": "github.ref == 'refs/heads/fix/network-auth-railway-main-20261015'" in workflow and "node scripts/verify_live_backend_session.mjs" in workflow and "continue-on-error: true" not in workflow,
     "explicit full-runtime and home-cert runs retain the live probe": "inputs.full_runtime == 'true'" in workflow and "[home-cert]" in workflow and "node scripts/verify_production_backend_reachability.mjs" in workflow,
