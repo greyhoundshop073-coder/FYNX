@@ -108,7 +108,7 @@ jobs:
         # This optional remote-service probe does not validate local APK compilation or UI.
         # Run it only for explicit full-runtime dispatches or [home-cert] pushes; normal APK
         # builds remain server-independent while Backend CI reports live service availability.
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'upgrade/status-ui-polish-20261015')) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]')) }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]')) }}
         continue-on-error: true
         run: node scripts/verify_production_backend_reachability.mjs
       - name: Verify consolidated FCM notification phase
