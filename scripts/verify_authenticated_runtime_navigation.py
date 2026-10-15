@@ -590,14 +590,14 @@ if install.returncode!=0:
     report.append("- "+install.stdout.strip().replace("\n"," | ")); raise SystemExit(1)
 
 xml,error=login()
-if error: FAILURES.append("real account sign-in: "+error)
+if error:
+    FAILURES.append(("debug offline/saved-device entry: " if LOCAL_DEBUG_LOGIN_USED else "real account sign-in: ") + error)
+elif find_control(xml,["Sign In"]) and find_control(xml,["Create Account"]):
+    FAILURES.append("authentication did not leave the login gate")
+elif LOCAL_DEBUG_LOGIN_USED:
+    report.append("- PASS debug offline/saved-device entry opened Home (not counted as server authentication)")
 else:
-    if find_control(xml,["Sign In"]) and find_control(xml,["Create Account"]): FAILURES.append("authentication did not leave the login gate")
-    else:
-    if LOCAL_DEBUG_LOGIN_USED:
-        report.append("- PASS debug offline/saved-device entry opened Home (not counted as server authentication)")
-    else:
-        report.append("- PASS real account authenticated through the FYNX login flow")
+    report.append("- PASS real account authenticated through the FYNX login flow")
 
 if not FAILURES:
     # Capture the real Settings home from the authenticated running APK.
