@@ -95,6 +95,7 @@ require('remote video renderer','VideoView(ctx)' in remote_media and 'setVideoPa
 require('remote audio renderer',contains_remote_audio_renderer(remote_media))
 require('media privacy guard installed','app.use("/api/media", mediaGuard)' in media_privacy)
 require('media privacy blocks message media','blocked_message_media' in media_privacy and 'return res.status(403).json({ error: "media unavailable" })' in media_privacy)
+require('media privacy guard preserves separately authorized Status media','FROM statuses s' in media_privacy and 's.expires_at > NOW()' in media_privacy and "s.audience = 'EVERYONE'" in media_privacy and 'FROM users u' in media_privacy and 'profile_visibility' in media_privacy)
 
 require('legacy composer real image preview','ImageView' in composer and 'setImageURI' in composer)
 require('legacy composer real video preview','VideoView' in composer and 'setVideoURI' in composer)
