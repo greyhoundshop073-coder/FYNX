@@ -4,9 +4,11 @@ ROOT = Path(__file__).resolve().parents[1]
 auth = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 app_state = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
+backend_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt").read_text(encoding="utf-8")
 
 checks = {
     "saved local debug sessions without a server token return to authentication": "stored.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)" in app_state and "debugOfflineSession" not in app_state,
+    "APK defaults to the live isolated Railway testing backend": 'DEFAULT_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"' in backend_client and "onrender.com" in backend_client,
     "login always shows the password field": 'FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)' in auth and "Saved-device login for this debug APK" not in auth,
     "online login requests a server token before entering the app": "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth and "FynxAuthStore.save(context, savedLocalUsername)" not in auth,
     "network failures never create a tokenless local session": "allowOfflineEntry" not in auth and "localDebugAccountForLogin" not in auth and "isLoginNetworkFailure" not in auth and "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth,
