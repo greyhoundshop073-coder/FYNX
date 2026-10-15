@@ -33,6 +33,7 @@ media_privacy=read('backend/mediaPrivacy.js')
 
 require('backend Status schema + expiry','CREATE TABLE IF NOT EXISTS statuses' in server and 'expires_at TIMESTAMPTZ NOT NULL' in server)
 require('backend media ownership','message_media' in server and 'owner_id=$2' in server)
+require('Status creation validates media MIME against PHOTO/VIDEO/VOICE type','SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2' in server and 'mimeType.startsWith("image/")' in server and 'mimeType.startsWith("video/")' in server and 'mimeType.startsWith("audio/")' in server and 'media type does not match status type' in server)
 require('backend Status privacy','private_status' in server and 'expires_at > NOW()' in server)
 require('Status owner retains access despite block relationships',"s.owner_id=$1 OR (" in server and "s.owner_id=$2 OR (" in interactions and 'AND NOT EXISTS(SELECT 1 FROM blocks b' in server and 'AND NOT EXISTS (' in interactions)
 require('backend Status media authorization','EXISTS (SELECT 1 FROM statuses s WHERE s.media_id = mm.id' in server and "s.audience = 'EVERYONE'" in server and "s.audience = 'FRIENDS'" in server and "f.status = 'accepted'" in server and "blocks b" in server)
