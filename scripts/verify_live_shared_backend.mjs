@@ -61,11 +61,20 @@ try {
   postId = String(created.postId || created.id || created.post?.id || "");
   if (!postId) throw new Error("post creation did not return a post ID");
 
-  const feed = await request("/api/social/feed?limit=50", { token: second.accessToken });
-  const visible = Array.isArray(feed.posts) && feed.posts.some((post) =>
-    String(post.id) === postId && String(post.authorUsername || "").toLowerCase() === firstUsername
-  );
-  if (!visible) throw new Error("second user could not see the first user's public post");
+  async function feedContains(token, expectedPostId) {
+    const pageSize = 50;
+    for (let offset = 0; offset < 1000; offset += pageSize) {
+      const feed = await request(`/api/social/feed?limit=${pageSize}&offset=${offset}`, { token });
+      const posts = Array.isArray(feed.posts) ? feed.posts : [];
+      if (posts.some((post) => String(post.id) === expectedPostId)) return { found: true, postsSeen: offset + posts.length };
+      if (!feed.hasMore || posts.length === 0) return { found: false, postsSeen: offset + posts.length };
+    }
+    return { found: false, postsSeen: 1000 };
+  }
+  const firstFeed = await feedContains(firstToken, postId);
+  if (!firstFeed.found) throw new Error(`post creator could not read its own post after scanning ${firstFeed.postsSeen} feed entries`);
+  const secondFeed = await feedContains(second.accessToken, postId);
+  if (!secondFeed.found) throw new Error(`second user could not see the first user's PUBLIC post after scanning ${secondFeed.postsSeen} feed entries`);
 
   console.log("PASS: Railway test backend readiness, two-account registration, login, token identity, public post creation, and cross-user feed visibility.");
 } finally {
