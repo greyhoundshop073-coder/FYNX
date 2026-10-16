@@ -704,8 +704,24 @@ if not FAILURES:
                                                 time.sleep(1.0)
                                                 caption_keyboard = dump_ui("status-voice-caption-keyboard.xml")
                                                 screenshot("status-voice-caption-keyboard.png")
-                                                if caption_keyboard and find_control(caption_keyboard, ["Voice caption test"]):
-                                                    report.append("- PASS Voice caption accepts typed text with the keyboard open; captured status-voice-caption-keyboard.png")
+                                                typed_caption = find_control(caption_keyboard, ["Voice caption test"]) if caption_keyboard else None
+                                                if typed_caption:
+                                                    # Check actual screen bounds, not just source layout: the caption editor
+                                                    # must move down into the keyboard-adjacent half of the screen.
+                                                    try:
+                                                        caption_node = _find_control_node(ET.fromstring(caption_keyboard), ["voice caption test"])
+                                                        caption_bounds = caption_node.attrib.get("bounds", "") if caption_node is not None else ""
+                                                        left_top, right_bottom = caption_bounds.split("][", 1)
+                                                        _, caption_top = map(int, left_top.strip("[]").split(","))
+                                                        size_text = run("adb", "shell", "wm", "size").stdout
+                                                        size_match = re.search(r"(?:Physical|Override) size:\\s*(\\d+)x(\\d+)", size_text)
+                                                        screen_height = int(size_match.group(2)) if size_match else 2400
+                                                        if caption_top > screen_height * 0.40:
+                                                            report.append("- PASS Voice caption accepts typed text and its field is positioned in the lower screen with keyboard open; captured status-voice-caption-keyboard.png")
+                                                        else:
+                                                            FAILURES.append(f"Voice caption field stayed too high while keyboard was open (top={caption_top}, screen_height={screen_height})")
+                                                    except (ValueError, AttributeError, ET.ParseError):
+                                                        FAILURES.append("Voice caption keyboard screenshot exists, but caption-field screen bounds could not be verified")
                                                 else:
                                                     FAILURES.append("Voice caption text was not visible after typing with the keyboard open")
                                             else:
