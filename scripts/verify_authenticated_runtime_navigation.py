@@ -58,7 +58,12 @@ def wait_for_home_feed_settled(timeout:float=30.0)->tuple[str,bool]:
     latest=""
     while time.monotonic()<deadline:
         latest=dump_ui("authenticated-home-settle.xml")
-        if latest and find_control(latest,["Your feed"]) and not find_control(latest,["Loading Home feed"]):
+        server_connected = (
+            find_control(latest, ["FYNX"])
+            and not find_control(latest, ["Waiting for network"])
+            and not find_control(latest, ["Connecting"])
+        )
+        if latest and server_connected and find_control(latest,["Your feed"]) and not find_control(latest,["Loading Home feed"]):
             return latest,True
         time.sleep(.5)
     return latest,False
@@ -492,15 +497,12 @@ def login():
     if result.returncode!=0: return xml,"adb input text failed for username"
     run("adb","shell","input","keyevent","4"); time.sleep(.5)
     xml=dump_ui("authenticated-after-username.xml")
-    # Debug APKs intentionally expose a passwordless local UI-entry path when no
-    # local account is stored. Exercise that explicit affordance rather than
-    # incorrectly failing because the Password field is intentionally absent.
+    # A local-only debug entry is never valid evidence for backend connectivity.
+    # Fail this certification rather than allowing a Home screenshot to look like
+    # successful server authentication.
     if find_control(xml,["Saved-device login for this debug APK"]):
-        LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
-        home_xml=tap_control(xml,["Sign In"],"debug-saved-device-login",["Open FYNX camera","Chat","Friends"])
-        if home_xml and find_control(home_xml,["Open FYNX camera"]) and find_control(home_xml,["Chat"]) and find_control(home_xml,["Friends"]):
-            return home_xml,""
-        return home_xml or xml,"debug saved-device entry did not reach Home"
+        screenshot("authenticated-local-only-entry-rejected.png")
+        return xml,"debug APK offered local-only entry instead of server credential login; backend connection is unproven"
     pass_control=find_control(xml,["Password"])
     if not pass_control:
         fields=find_edit_fields(xml)
@@ -537,8 +539,8 @@ def login():
             if not feed_settled:
                 (ROOT/"authenticated-home.xml").write_text(last_xml,encoding="utf-8")
                 screenshot("authenticated-home.png")
-                FAILURES.append("Home feed did not leave its loading state within 30 seconds after authenticated navigation")
-                return last_xml,"Home feed did not leave its loading state within 30 seconds after authenticated navigation"
+                FAILURES.append("Home feed did not show a settled feed and confirmed server-connected header within 30 seconds after authenticated navigation")
+                return last_xml,"Home feed did not show a settled feed and confirmed server-connected header within 30 seconds after authenticated navigation"
             (ROOT/"authenticated-home.xml").write_text(last_xml,encoding="utf-8")
             screenshot("authenticated-home.png")
             return last_xml,""
@@ -600,6 +602,7 @@ else:
             report.append("- PASS debug-only saved-device UI entry; this does not certify server authentication")
         else:
             report.append("- PASS real account authenticated through the FYNX login flow")
+            report.append("- PASS Home displayed the server-connected FYNX header and settled feed; see authenticated-home.png")
 
 if not FAILURES:
     # Capture the real Settings home from the authenticated running APK.
