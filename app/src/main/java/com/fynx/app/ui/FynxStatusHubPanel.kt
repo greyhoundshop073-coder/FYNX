@@ -29,6 +29,8 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Notes
+import androidx.compose.material.icons.filled.Photo
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.*
@@ -257,6 +259,15 @@ private fun FynxAddStatusPanel(
     ) {
         mediaPermissionGranted = fynxHasMediaPermission(context)
     }
+    // System photo picker works even when the user does not grant broad library access.
+    val deviceMediaPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            val mime = context.contentResolver.getType(it).orEmpty().lowercase()
+            onMediaSelected(FynxRecentMedia(it, mime.startsWith("video/"), System.currentTimeMillis() / 1000L))
+        }
+    }
 
     fun refreshMedia() {
         if (!mediaPermissionGranted) return
@@ -337,13 +348,19 @@ private fun FynxAddStatusPanel(
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                FynxStatusToolPill(
+                    icon = Icons.Default.Photo,
+                    label = "Photo",
+                    onClick = { deviceMediaPicker.launch(arrayOf("image/*", "video/*")) },
+                    modifier = Modifier.weight(1f)
+                )
                 FynxStatusToolPill(
                     icon = Icons.Default.Notes,
                     label = "Text",
                     onClick = onText,
-                    modifier = Modifier.widthIn(min = 120.dp, max = 180.dp)
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
@@ -396,11 +413,16 @@ private fun FynxAddStatusPanel(
                 )
                 Spacer(Modifier.height(12.dp))
                 Button(
-                    onClick = {
-                        permissionLauncher.launch(fynxMediaPermissions())
-                    }
+                    onClick = { deviceMediaPicker.launch(arrayOf("image/*", "video/*")) }
                 ) {
-                    Text("Allow media access")
+                    Icon(Icons.Default.PhotoLibrary, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Choose a photo or video")
+                }
+                TextButton(
+                    onClick = { permissionLauncher.launch(fynxMediaPermissions()) }
+                ) {
+                    Text("Allow access to recent media")
                 }
             }
         } else {
@@ -591,47 +613,55 @@ private fun fynxMediaPermissions(): Array<String> {
 }
 
 private fun loadFynxRecentMedia(context: android.content.Context): List<FynxRecentMedia> {
-    val result = mutableListOf<FynxRecentMedia>()
+    val images = mutableListOf<FynxRecentMedia>()
     val imageProjection = arrayOf(MediaStore.Images.Media._ID, MediaStore.Images.Media.DATE_ADDED)
-    context.contentResolver.query(
-        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-        imageProjection,
-        null,
-        null,
-        MediaStore.Images.Media.DATE_ADDED + " DESC"
-    )?.use { cursor ->
-        val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-        while (cursor.moveToNext() && result.size < 30) {
-            val id = cursor.getLong(idIndex)
-            result += FynxRecentMedia(
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI.buildUpon().appendPath(id.toString()).build(),
-                false,
-                cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED))
-            )
+    // Android can grant photo and video access separately (or only selected media).
+    // One denied collection must not crash the entire Status picker.
+    runCatching {
+        context.contentResolver.query(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            imageProjection,
+            null,
+            null,
+            MediaStore.Images.Media.DATE_ADDED + " DESC"
+        )?.use { cursor ->
+            val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+            val dateIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
+            while (cursor.moveToNext() && images.size < 30) {
+                val id = cursor.getLong(idIndex)
+                images += FynxRecentMedia(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI.buildUpon().appendPath(id.toString()).build(),
+                    false,
+                    cursor.getLong(dateIndex)
+                )
+            }
         }
     }
 
     val videos = mutableListOf<FynxRecentMedia>()
     val videoProjection = arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.DATE_ADDED)
-    context.contentResolver.query(
-        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-        videoProjection,
-        null,
-        null,
-        MediaStore.Video.Media.DATE_ADDED + " DESC"
-    )?.use { cursor ->
-        val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
-        while (cursor.moveToNext() && videos.size < 30) {
-            val id = cursor.getLong(idIndex)
-            videos += FynxRecentMedia(
-                MediaStore.Video.Media.EXTERNAL_CONTENT_URI.buildUpon().appendPath(id.toString()).build(),
-                true,
-                cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED))
-            )
+    runCatching {
+        context.contentResolver.query(
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+            videoProjection,
+            null,
+            null,
+            MediaStore.Video.Media.DATE_ADDED + " DESC"
+        )?.use { cursor ->
+            val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+            val dateIndex = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
+            while (cursor.moveToNext() && videos.size < 30) {
+                val id = cursor.getLong(idIndex)
+                videos += FynxRecentMedia(
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI.buildUpon().appendPath(id.toString()).build(),
+                    true,
+                    cursor.getLong(dateIndex)
+                )
+            }
         }
     }
 
-    return (result + videos)
+    return (images + videos)
         .distinctBy { it.uri.toString() }
         .sortedByDescending { it.dateAddedSeconds }
         .take(60)

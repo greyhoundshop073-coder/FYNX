@@ -641,6 +641,42 @@ if not FAILURES:
         after=capture_surface(name,labels,xml,expected)
         if after:
             report.append(f"- PASS authenticated Home -> {name} screenshot/UI hierarchy")
+            if name=="stories":
+                # Capture the newly updated Status composer from the exact APK under test,
+                # including its real text-style controls. Do not substitute the Stories home screenshot.
+                add_status = tap_control(after, ["Add status"], "status-add-menu", ["Text", "Photo", "Voice"])
+                if add_status:
+                    status_composer = tap_control(
+                        add_status,
+                        ["Text"],
+                        "status-text-composer",
+                        ["Type a Status", "Status tools"],
+                    )
+                    if status_composer:
+                        report.append("- PASS Status -> Add status -> Text opened the real Status composer; captured status-text-composer.png")
+                        tools_menu = tap_control(
+                            status_composer,
+                            ["Status tools"],
+                            "status-composer-tools",
+                            ["Text style", "Clear draft"],
+                        )
+                        if tools_menu:
+                            style_controls = tap_control(
+                                tools_menu,
+                                ["Text style"],
+                                "status-text-style-controls",
+                                ["Background color", "Text color", "Text alignment", "Font"],
+                            )
+                            if style_controls:
+                                report.append("- PASS real Status text-style panel captured with background/text colors, font and alignment controls")
+                            else:
+                                FAILURES.append("Status composer Text style did not expose background color, text color, font and alignment controls")
+                        else:
+                            FAILURES.append("Status composer tools menu did not open")
+                    else:
+                        FAILURES.append("Add status -> Text did not open the real Status composer")
+                else:
+                    FAILURES.append("Stories -> Add status menu did not open")
             if name=="friends":
                 # Exercise the same path used by real users: Friends -> a real person's Chat action.
                 friend_chat_control=find_control(after,["Open chat"])
