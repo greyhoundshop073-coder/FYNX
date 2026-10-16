@@ -20,7 +20,7 @@ class FynxNetworkRecoveryContractTest {
 
     @Test
     fun productionBackendUsesHttps() {
-        assertTrue(FynxBackendClient.baseUrl(context).startsWith("https://"))
+        assertEquals("https://fynx-backend-testing-testing.up.railway.app", FynxBackendClient.baseUrl(context))
     }
 
     @Test
@@ -57,6 +57,17 @@ class FynxNetworkRecoveryContractTest {
             FynxBackendClient.configureBaseUrl(context, "")
             assertTrue(FynxBackendClient.baseUrl(context).startsWith("https://"))
             assertNotNull(FynxBackendClient.baseUrl(context))
+        } finally {
+            FynxBackendClient.configureBaseUrl(context, original)
+        }
+    }
+
+    @Test
+    fun staleSavedBackendAddressMigratesToActiveBackend() {
+        val original = FynxBackendClient.baseUrl(context)
+        try {
+            FynxBackendClient.configureBaseUrl(context, "https://fynx-ai-backend.onrender.com")
+            assertEquals("https://fynx-backend-testing-testing.up.railway.app", FynxBackendClient.baseUrl(context))
         } finally {
             FynxBackendClient.configureBaseUrl(context, original)
         }
