@@ -45,6 +45,14 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
           CHECK (seller_id <> driver_id)
         );
         CREATE INDEX IF NOT EXISTS marketplace_delivery_assignments_driver_idx ON marketplace_delivery_assignments (driver_id, updated_at DESC);
+        CREATE TABLE IF NOT EXISTS marketplace_approved_drivers (
+          user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          approved_by BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+          active BOOLEAN NOT NULL DEFAULT TRUE,
+          approved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS marketplace_approved_drivers_active_idx ON marketplace_approved_drivers (active, user_id);
         CREATE TABLE IF NOT EXISTS marketplace_delivery_evidence (
           id BIGSERIAL PRIMARY KEY,
           order_id UUID NOT NULL REFERENCES marketplace_orders(id) ON DELETE CASCADE,
@@ -222,6 +230,48 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
     finally { client.release(); }
   });
 
+  app.get('/api/admin/marketplace/drivers', auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      const admin = await pool.query('SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role=\'ADMIN\' LIMIT 1', [req.user.sub]);
+      if (!admin.rowCount) return res.status(403).json({ error: 'administrator access required' });
+      const result = await pool.query(`
+        SELECT d.user_id, u.username, u.display_name, d.active, d.approved_by, d.approved_at, d.updated_at
+        FROM marketplace_approved_drivers d JOIN users u ON u.id=d.user_id
+        ORDER BY d.active DESC, d.updated_at DESC LIMIT 200
+      `);
+      return res.json({ drivers: result.rows.map(row => ({
+        userId: String(row.user_id), username: row.username, displayName: row.display_name,
+        active: row.active, approvedBy: String(row.approved_by), approvedAt: row.approved_at, updatedAt: row.updated_at
+      })) });
+    } catch (error) { console.error('marketplace approved driver list', error); return res.status(500).json({ error: 'approved driver list unavailable' }); }
+  });
+
+  app.post('/api/admin/marketplace/drivers/:userId/approval', auth, async (req, res) => {
+    const userId = Number(req.params.userId);
+    const active = req.body?.active;
+    if (!Number.isSafeInteger(userId) || userId < 1 || typeof active !== 'boolean') {
+      return res.status(400).json({ error: 'valid user id and boolean active value are required' });
+    }
+    try {
+      await ensureSchema();
+      const admin = await pool.query('SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role=\'ADMIN\' LIMIT 1', [req.user.sub]);
+      if (!admin.rowCount) return res.status(403).json({ error: 'administrator access required' });
+      const target = await pool.query('SELECT id FROM users WHERE id=$1', [userId]);
+      if (!target.rowCount) return res.status(404).json({ error: 'driver account not found' });
+      if (String(userId) === String(req.user.sub)) return res.status(400).json({ error: 'an administrator cannot approve their own driver account' });
+      const result = await pool.query(`
+        INSERT INTO marketplace_approved_drivers (user_id, approved_by, active, approved_at, updated_at)
+        VALUES ($1,$2,$3,NOW(),NOW())
+        ON CONFLICT (user_id) DO UPDATE SET active=EXCLUDED.active, approved_by=EXCLUDED.approved_by,
+          approved_at=CASE WHEN EXCLUDED.active THEN NOW() ELSE marketplace_approved_drivers.approved_at END,
+          updated_at=NOW()
+        RETURNING user_id, active, approved_by, approved_at, updated_at
+      `, [userId, req.user.sub, active]);
+      return res.json({ driver: { userId: String(result.rows[0].user_id), active: result.rows[0].active, approvedBy: String(result.rows[0].approved_by), approvedAt: result.rows[0].approved_at, updatedAt: result.rows[0].updated_at } });
+    } catch (error) { console.error('marketplace driver approval', error); return res.status(500).json({ error: 'driver approval update failed' }); }
+  });
+
   app.get('/api/marketplace/driver/assignments', auth, async (req, res) => {
     try {
       await ensureSchema();
@@ -234,6 +284,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
         JOIN marketplace_orders o ON o.id = a.order_id
         JOIN users seller ON seller.id = a.seller_id
         JOIN users buyer ON buyer.id = o.buyer_id
+        JOIN marketplace_approved_drivers approved_driver ON approved_driver.user_id=a.driver_id AND approved_driver.active=TRUE
         WHERE a.driver_id = $1 AND o.fulfillment_method = 'DELIVERY'
           AND o.status IN ('PAID','SHIPPED','INSPECTION')
         ORDER BY a.updated_at DESC LIMIT 100
@@ -280,7 +331,9 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (order.fulfillment_method !== 'DELIVERY') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver assignment is only available for delivery orders' }); }
       if (!['PAID','SHIPPED'].includes(order.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver can only be assigned to a paid order' }); }
       const driver = (await client.query(
-        driverUsername ? 'SELECT id FROM users WHERE lower(username)=$1' : 'SELECT id FROM users WHERE id=$1',
+        driverUsername
+          ? 'SELECT u.id FROM users u JOIN marketplace_approved_drivers ad ON ad.user_id=u.id AND ad.active=TRUE WHERE lower(u.username)=$1'
+          : 'SELECT u.id FROM users u JOIN marketplace_approved_drivers ad ON ad.user_id=u.id AND ad.active=TRUE WHERE u.id=$1',
         driverUsername ? [driverUsername] : [requestedDriverId]
       )).rows[0];
       if (!driver) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'driver account not found' }); }
@@ -315,6 +368,8 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       const assignment = (await client.query('SELECT * FROM marketplace_delivery_assignments WHERE order_id=$1 FOR UPDATE', [id])).rows[0];
       if (!assignment) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'no delivery driver is assigned' }); }
       if (String(assignment.driver_id) !== String(req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the assigned driver can accept this delivery' }); }
+      const approved = await client.query('SELECT 1 FROM marketplace_approved_drivers WHERE user_id=$1 AND active=TRUE', [req.user.sub]);
+      if (!approved.rowCount) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'driver approval is inactive; contact FYNX support' }); }
       if (!['PAID','SHIPPED'].includes(order.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order is not available for driver acceptance' }); }
       if (assignment.accepted_at) { await client.query('COMMIT'); return res.json({ accepted: true, acceptedAt: assignment.accepted_at, idempotent: true }); }
       const updated = await client.query('UPDATE marketplace_delivery_assignments SET accepted_at=NOW(),updated_at=NOW() WHERE order_id=$1 RETURNING accepted_at', [id]);
@@ -363,6 +418,8 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
       const assignment = (await client.query('SELECT * FROM marketplace_delivery_assignments WHERE order_id=$1 FOR UPDATE', [id])).rows[0];
       if (!assignment || String(assignment.driver_id) !== String(req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the assigned driver can confirm delivery' }); }
+      const approved = await client.query('SELECT 1 FROM marketplace_approved_drivers WHERE user_id=$1 AND active=TRUE', [req.user.sub]);
+      if (!approved.rowCount) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'driver approval is inactive; contact FYNX support' }); }
       if (order.status !== 'SHIPPED' || order.fulfillment_method !== 'DELIVERY' || !assignment.handover_at) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery requires a shipped order and recorded custody handover' }); }
       if (assignment.delivered_at) { await client.query('COMMIT'); return res.json({ delivered: true, deliveredAt: assignment.delivered_at, idempotent: true }); }
       if (await hasActiveProtectionCase(client, id)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order has an active protection case or dispute' }); }
