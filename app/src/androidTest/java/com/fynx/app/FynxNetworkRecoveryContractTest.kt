@@ -63,6 +63,18 @@ class FynxNetworkRecoveryContractTest {
     }
 
     @Test
+    fun staleSavedBackendAddressMigratesToActiveBackend() {
+        val original = FynxBackendClient.baseUrl(context)
+        try {
+            FynxBackendClient.configureBaseUrl(context, "https://fynx-ai-backend.onrender.com")
+            assertEquals("https://fynx-backend-testing-testing.up.railway.app", FynxBackendClient.baseUrl(context))
+        } finally {
+            FynxBackendClient.configureBaseUrl(context, original)
+        }
+    }
+
+
+    @Test
     fun networkAvailabilityContractDoesNotRequireValidatedCapability() {
         // The production client exposes availability independently of Android's
         // VALIDATED bit; the call transport shares this same contract.
