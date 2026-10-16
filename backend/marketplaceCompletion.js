@@ -205,6 +205,10 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       const order = (await client.query('SELECT * FROM marketplace_orders WHERE id=$1 FOR UPDATE', [id])).rows[0];
       if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'order not found' }); }
       if (!isSeller(order, req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the seller can update fulfillment progress' }); }
+      if (requested === 'DELIVERED') {
+        const assignment = (await client.query('SELECT delivered_at FROM marketplace_delivery_assignments WHERE order_id=$1', [id])).rows[0];
+        if (assignment) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'assigned-driver deliveries must be marked delivered by the assigned driver with evidence' }); }
+      }
       if (order.status !== 'PAID' && order.status !== 'SHIPPED') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order is not ready for fulfillment progress' }); }
       const current = order.fulfillment_status || (order.status === 'SHIPPED' ? (order.fulfillment_method === 'PICKUP' ? 'PICKUP_COMPLETED' : 'DISPATCHED') : 'PAID');
       if (!canAdvanceFulfillment(current, requested, order.fulfillment_method)) { await client.query('ROLLBACK'); return res.status(409).json({ error: `invalid fulfillment transition from ${current} to ${requested}` }); }
