@@ -27,6 +27,7 @@ private data class SellerOrderRow(
     val address: JSONObject?,
     val tracking: String?,
     val driverId: String?,
+    val driverApprovalActive: Boolean,
     val driverAcceptedAt: String?,
     val driverHandoverAt: String?,
     val driverDeliveredAt: String?
@@ -80,6 +81,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                                 address = o.optJSONObject("shippingAddress"),
                                 tracking = o.optString("trackingReference").takeIf { it.isNotBlank() },
                                 driverId = o.optString("driverId").takeIf { it.isNotBlank() && it != "null" },
+                                driverApprovalActive = o.optBoolean("driverApprovalActive", false),
                                 driverAcceptedAt = o.optString("driverAcceptedAt").takeIf { it.isNotBlank() && it != "null" },
                                 driverHandoverAt = o.optString("driverHandoverAt").takeIf { it.isNotBlank() && it != "null" },
                                 driverDeliveredAt = o.optString("driverDeliveredAt").takeIf { it.isNotBlank() && it != "null" }
@@ -222,12 +224,13 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         Text("Driver custody", style = MaterialTheme.typography.titleSmall)
                         when {
                             order.driverId == null -> Text("No driver assigned yet.")
+                            order.driverApprovalActive == false && order.driverAcceptedAt != null && order.driverHandoverAt == null -> Text("The previous driver's approval is inactive. Reassign an active approved driver before handover.")
                             order.driverHandoverAt != null && order.driverDeliveredAt != null -> Text("Driver submitted delivery evidence. Waiting for buyer confirmation.")
                             order.driverHandoverAt != null -> Text("Driver accepted and custody was handed over.")
                             order.driverAcceptedAt != null -> Text("Driver accepted. Record handover only when the parcel is physically handed over.")
                             else -> Text("Driver assignment sent. Waiting for acceptance.")
                         }
-                        if (order.driverAcceptedAt == null && order.status in setOf("PAID", "SHIPPED")) {
+                        if ((order.driverAcceptedAt == null || !order.driverApprovalActive) && order.status in setOf("PAID", "SHIPPED") && order.driverHandoverAt == null) {
                             OutlinedTextField(driverUsername, { driverUsername = it.take(32) }, label = { Text("Driver username") }, singleLine = true, enabled = !busy)
                             Button(enabled = !busy && driverUsername.trim().removePrefix("@").isNotBlank(), onClick = {
                                 busy = true
@@ -238,9 +241,9 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                                         .onFailure { message = it.message ?: "Could not assign this driver." }
                                     busy = false
                                 }
-                            }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(if (order.driverId == null) "Assign driver" else "Replace unaccepted driver") }
+                            }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(if (order.driverId == null) "Assign driver" else if (!order.driverApprovalActive && order.driverAcceptedAt != null) "Reassign revoked driver" else "Replace unaccepted driver") }
                         }
-                        if (order.status == "SHIPPED" && order.driverAcceptedAt != null && order.driverHandoverAt == null) {
+                        if (order.status == "SHIPPED" && order.driverAcceptedAt != null && order.driverApprovalActive && order.driverHandoverAt == null) {
                             OutlinedTextField(handoverNote, { handoverNote = it.take(1000) }, label = { Text("Handover note") }, minLines = 2, enabled = !busy)
                             Button(enabled = !busy && handoverNote.trim().isNotBlank(), onClick = {
                                 busy = true
