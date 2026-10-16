@@ -91,6 +91,9 @@ fun FynxMatureStatusComposerPanel(
         val previousStatus = window?.statusBarColor
         val previousNavigation = window?.navigationBarColor
         val previousDecorFlags = window?.decorView?.systemUiVisibility ?: 0
+        val previousFitsSystemWindows = window?.let { WindowCompat.getDecorFitsSystemWindows(it) } ?: true
+        val previousStatusContrast = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) window?.isStatusBarContrastEnforced else null
+        val previousNavigationContrast = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) window?.isNavigationBarContrastEnforced else null
         if (window != null) {
             WindowCompat.setDecorFitsSystemWindows(window, false)
             window.statusBarColor = android.graphics.Color.TRANSPARENT
@@ -109,9 +112,10 @@ fun FynxMatureStatusComposerPanel(
                 window.statusBarColor = previousStatus ?: android.graphics.Color.TRANSPARENT
                 window.navigationBarColor = previousNavigation ?: android.graphics.Color.TRANSPARENT
                 window.decorView.systemUiVisibility = previousDecorFlags
+                WindowCompat.setDecorFitsSystemWindows(window, previousFitsSystemWindows)
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                    window.isStatusBarContrastEnforced = true
-                    window.isNavigationBarContrastEnforced = true
+                    window.isStatusBarContrastEnforced = previousStatusContrast ?: true
+                    window.isNavigationBarContrastEnforced = previousNavigationContrast ?: true
                 }
             }
         }
@@ -256,8 +260,8 @@ fun FynxMatureStatusComposerPanel(
             FynxStatusType.VIDEO -> mediaUri?.let { MatureStatusMedia(it, true, Modifier.fillMaxSize().padding(top = 64.dp, bottom = 176.dp)) }
             FynxStatusType.VOICE -> Box(Modifier.fillMaxSize().background(Color(background)).padding(top = 64.dp, bottom = if (showMediaTools) 176.dp else 104.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) { Surface(shape = CircleShape, color = Color(foreground).copy(alpha = .14f), modifier = Modifier.size(112.dp)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Mic, null, tint = Color(foreground), modifier = Modifier.size(48.dp)) } }; Text(if (recording) formatMatureTime(elapsed) else if (mediaUri != null) "Voice Status ready" else "Press the microphone to record", color = Color(foreground), style = MaterialTheme.typography.titleMedium); if (recording) LinearProgressIndicator(progress = { (elapsed.toFloat() / FYNX_STATUS_MAX_VOICE_DURATION_MS).coerceIn(0f, 1f) }, modifier = Modifier.width(220.dp)) } }
         }
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.fillMaxSize().navigationBarsPadding()) {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     FynxProfileImage(username, FynxPreferencesStore.loadProfilePhoto(context), Modifier.size(40.dp).clip(CircleShape))
                     Spacer(Modifier.width(10.dp))
