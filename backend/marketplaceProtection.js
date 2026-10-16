@@ -118,10 +118,6 @@ export function registerMarketplaceProtectionRoutes({ app }) {
     await createCase(req, res, 'DISPUTE');
   });
 
-  app.post('/api/marketplace/orders/:id/disputes', auth, async (req, res) => {
-    await createCase(req, res, 'DISPUTE');
-  });
-
   app.post('/api/marketplace/protection/order/:id/refund-request', auth, async (req, res) => {
     await createCase(req, res, 'REFUND_REQUEST');
   });
