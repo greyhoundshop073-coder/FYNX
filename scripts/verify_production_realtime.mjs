@@ -27,6 +27,22 @@ if (!meResponse.ok) throw new Error(`Authenticated /api/me certification failed:
 const me = await meResponse.json();
 if (!me?.user || String(me.user.id ?? "") === "") throw new Error("Authenticated /api/me returned no user identity.");
 console.log("PASS: authenticated /api/me returned the signed-in user.");
+const authHeaders = { Authorization: `Bearer ${login.accessToken}`, Accept: "application/json" };
+const marketplaceResponse = await fetch(`${BASE_URL}/api/marketplace/discovery?limit=3&offset=0`, { headers: authHeaders, signal: AbortSignal.timeout(15_000) });
+if (!marketplaceResponse.ok) throw new Error(`Authenticated Marketplace discovery failed: HTTP ${marketplaceResponse.status}.`);
+const marketplace = await marketplaceResponse.json();
+if (!Array.isArray(marketplace?.listings)) throw new Error("Marketplace discovery returned no listings array.");
+console.log("PASS: authenticated Marketplace discovery returned a valid listings payload.");
+const filteredMarketplaceResponse = await fetch(`${BASE_URL}/api/marketplace/discovery?q=__fynx_network_probe__&category=__fynx_network_probe__&location=__fynx_network_probe__&limit=3&offset=0`, { headers: authHeaders, signal: AbortSignal.timeout(15_000) });
+if (!filteredMarketplaceResponse.ok) throw new Error(`Filtered Marketplace discovery failed: HTTP ${filteredMarketplaceResponse.status}.`);
+const filteredMarketplace = await filteredMarketplaceResponse.json();
+if (!Array.isArray(filteredMarketplace?.listings)) throw new Error("Filtered Marketplace discovery returned no listings array.");
+console.log("PASS: Marketplace search, category, location, limit, and offset filters execute without server errors.");
+const notificationsResponse = await fetch(`${BASE_URL}/api/notifications`, { headers: authHeaders, signal: AbortSignal.timeout(15_000) });
+if (!notificationsResponse.ok) throw new Error(`Authenticated notifications feed failed: HTTP ${notificationsResponse.status}.`);
+const notifications = await notificationsResponse.json();
+if (!Array.isArray(notifications?.notifications) || !Number.isFinite(Number(notifications?.unreadCount))) throw new Error("Notifications feed returned an invalid payload.");
+console.log("PASS: authenticated notifications feed returned a valid notifications payload.");
 
 if (typeof WebSocket !== "function") throw new Error("This Node runtime does not provide WebSocket support.");
 const wsUrl = `wss://${BASE_URL.slice("https://".length)}/realtime?token=${encodeURIComponent(login.accessToken)}`;
@@ -48,4 +64,4 @@ await new Promise((resolve, reject) => {
   });
 });
 console.log("PASS: authenticated /realtime WebSocket handshake succeeded.");
-console.log("GREEN: production login, authenticated API access, and realtime connection are reachable.");
+console.log("GREEN: login, authenticated profile, Marketplace discovery/filtering, notifications, and realtime are reachable.");
