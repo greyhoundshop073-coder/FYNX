@@ -36,7 +36,7 @@ fun MoneyToolsPanel() {
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = FynxDesign.LargeCardShape,
-            colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+            colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary),
             border = BorderStroke(1.dp, FynxDesign.Outline)
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -75,14 +75,14 @@ fun MoneyToolsPanel() {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = FynxDesign.CardShape,
-                    colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+                    colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary),
                     border = BorderStroke(1.dp, FynxDesign.Outline)
                 ) {
                     ListItem(
                         headlineContent = { Text(entry.title) },
                         supportingContent = { Text(entry.type, color = FynxDesign.TextSecondary) },
                         trailingContent = { Text("${if (entry.type == "Expense") "-" else "+"}${formatMoney(entry.amount)}", color = if (entry.type == "Expense") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) },
-                        colors = ListItemDefaults.colors(containerColor = FynxDesign.Surface)
+                        colors = ListItemDefaults.colors(containerColor = FynxDesign.Surface, headlineColor = FynxDesign.TextPrimary, supportingColor = FynxDesign.TextSecondary, leadingIconColor = FynxDesign.TextSecondary, trailingIconColor = FynxDesign.TextSecondary)
                     )
                 }
             }
@@ -104,7 +104,7 @@ private fun formatMoney(value: Double): String = "${(value * 100).roundToLong() 
 
 @Composable
 private fun FynxSectionCard(content: @Composable ColumnScope.() -> Unit) {
-    Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline)) {
+    Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary), border = BorderStroke(1.dp, FynxDesign.Outline)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
     }
 }

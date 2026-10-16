@@ -40,7 +40,7 @@ fun FynxSharePanel() {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface)
+                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(18.dp),
@@ -71,7 +71,7 @@ fun FynxSharePanel() {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface)
+                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(18.dp),
@@ -102,7 +102,7 @@ fun FynxSharePanel() {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface)
+                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(18.dp),

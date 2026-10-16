@@ -63,7 +63,7 @@ fun MoneyCenterPanel() {
             Spacer(Modifier.height(4.dp))
         }
         item {
-            Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline)) {
+            Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary), border = BorderStroke(1.dp, FynxDesign.Outline)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("One place for your money", style = MaterialTheme.typography.titleLarge)
                     Text("Planner • accounts • transfers • bills • transactions • budgets • savings • subscriptions • insights", color = FynxDesign.TextSecondary)
@@ -72,7 +72,7 @@ fun MoneyCenterPanel() {
             }
         }
         items(sections, key = { it.key }) { section ->
-            Card(onClick = { selectedTool = section.key }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline)) {
+            Card(onClick = { selectedTool = section.key }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary), border = BorderStroke(1.dp, FynxDesign.Outline)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp)) {
                     Text(section.icon, style = MaterialTheme.typography.titleLarge)
                     Spacer(Modifier.width(14.dp))
