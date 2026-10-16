@@ -209,7 +209,7 @@ fun FynxMatureStatusComposerPanel(
 
     BackHandler(enabled = !publishing && !recording) { onClose() }
 
-    Box(Modifier.fillMaxSize().imePadding().background(Color(background))) {
+    Box(Modifier.fillMaxSize().background(Color(background))) {
         when (type) {
             FynxStatusType.TEXT -> {
                 val editorTextAlign = when (alignment) { 0 -> TextAlign.Start; 2 -> TextAlign.End; else -> TextAlign.Center }
@@ -334,7 +334,7 @@ fun FynxMatureStatusComposerPanel(
                 }
             }
         }
-        Column(Modifier.fillMaxSize().navigationBarsPadding()) {
+        Column(Modifier.fillMaxSize().imePadding().navigationBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     FynxProfileImage(username, FynxPreferencesStore.loadProfilePhoto(context), Modifier.size(40.dp).clip(CircleShape))
