@@ -189,7 +189,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                         // Server sign-in is always the primary path, including debug APKs.
                                         busy = true
                                         error = null
-                                        scope.launch { finish(FynxRemoteAuthClient.login(context, requestedUsername, password), allowOfflineEntry = true) }
+                                        scope.launch { finish(FynxRemoteAuthClient.login(context, requestedUsername, password)) }
                                     }
                                 }
                             }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Signing in…" else "Sign In") }
