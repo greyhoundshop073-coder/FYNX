@@ -714,7 +714,7 @@ if not FAILURES:
                                                         left_top, right_bottom = caption_bounds.split("][", 1)
                                                         _, caption_top = map(int, left_top.strip("[]").split(","))
                                                         size_text = run("adb", "shell", "wm", "size").stdout
-                                                        size_match = re.search(r"(?:Physical|Override) size:\\s*(\\d+)x(\\d+)", size_text)
+                                                        size_match = re.search(r"(?:Physical|Override) size:\s*(\d+)x(\d+)", size_text)
                                                         screen_height = int(size_match.group(2)) if size_match else 2400
                                                         if caption_top > screen_height * 0.40:
                                                             report.append("- PASS Voice caption accepts typed text and its field is positioned in the lower screen with keyboard open; captured status-voice-caption-keyboard.png")
