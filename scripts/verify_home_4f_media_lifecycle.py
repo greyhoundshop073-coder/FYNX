@@ -131,7 +131,7 @@ if missing_viewer:
 
 required_media_recovery = [
     'var mediaLoading by remember(path)',
-    'val activeNetworkReady = networkReady ?: (FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE)',
+    'val activeNetworkReady = FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE',
     'FynxRemoteSocialClient.cachedFeedPage(context)',
     'You\'re offline. Connect to a network to load your feed.',
     'var mediaFailed by remember(path)',
