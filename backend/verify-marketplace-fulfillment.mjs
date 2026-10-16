@@ -9,6 +9,7 @@ const scalability = read('./scalability.js');
 const socialClient = read('../app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt');
 const expiry = read('./marketplaceInspectionExpiry.js');
 const settlement = read('./marketplaceSettlement.js');
+const shippingTimeline = read('./marketplaceShippingTimeline.js');
 
 const checks = [
   ['fulfillment selection is buyer-only', completion.includes("only the buyer can choose fulfillment")],
@@ -56,6 +57,7 @@ const checks = [
   ['seller handover records custody evidence and blocks active protection cases', completion.includes("app.post('/api/marketplace/orders/:id/driver-handover'") && completion.includes('DELIVERY_CUSTODY_HANDED_OVER') && completion.includes('HANDOVER_NOTE') && completion.includes('hasActiveProtectionCase(client, id)')],
   ['only the assigned driver can record delivery with recipient and proof evidence', completion.includes("app.post('/api/marketplace/orders/:id/driver-delivery'") && completion.includes('only the assigned driver can confirm delivery') && completion.includes('recipient name and delivery note or photo reference are required') && completion.includes('RECIPIENT_NAME') && completion.includes('PHOTO_REFERENCE')],
   ['buyer delivery confirmation waits for assigned driver evidence', completion.includes('assigned driver has not recorded delivery evidence yet') && completion.includes('SELECT delivered_at FROM marketplace_delivery_assignments')],
+  ['buyer and seller order timelines expose recorded delivery evidence', shippingTimeline.includes('deliveryEvidence: deliveryEvidence.rows.map') && shippingTimeline.includes('marketplace_delivery_evidence') && read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderTimeline.kt').includes('Text("Delivery evidence")')],
   ['seller cannot bypass driver delivery evidence for assigned orders', completion.includes('assigned-driver deliveries must be marked delivered by the assigned driver with evidence')],
   ['driver assignment and evidence tables are indexed and linked to order/user records', completion.includes('CREATE TABLE IF NOT EXISTS marketplace_delivery_assignments') && completion.includes('marketplace_delivery_assignments_driver_idx') && completion.includes('CREATE TABLE IF NOT EXISTS marketplace_delivery_evidence') && completion.includes('marketplace_delivery_evidence_order_idx')],
   ['approval revocation cannot strand a driver after physical custody handover', completion.includes('DRIVER_ACTIVE_CUSTODY') && completion.includes('resolve or complete that delivery before revoking approval') && completion.includes('FOR UPDATE OF o')],
