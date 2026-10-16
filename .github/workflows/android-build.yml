@@ -110,6 +110,9 @@ jobs:
         # builds remain server-independent while Backend CI reports live service availability.
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'fix/network-default-backend-railway-')) || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[home-cert]') || startsWith(github.ref_name, 'fix/network-default-backend-railway-'))) }}
         run: node scripts/verify_production_backend_reachability.mjs
+      - name: Verify authenticated production login, API, and realtime WebSocket
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'fix/network-default-backend-railway-')) || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[home-cert]') || startsWith(github.ref_name, 'fix/network-default-backend-railway-'))) }}
+        run: node scripts/verify_production_realtime.mjs
       - name: Verify consolidated FCM notification phase
         run: python3 scripts/verify_fcm_notifications.py
       - name: Verify notifications and settings integration
