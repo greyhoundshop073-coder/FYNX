@@ -232,16 +232,30 @@ fun FynxMatureStatusComposerPanel(
                     if (showColors && type == FynxStatusType.TEXT) {
                         Surface(color = Color.Black.copy(alpha = .55f), modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                                Text("Text style", color = Color.White, style = MaterialTheme.typography.labelLarge)
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) { items(MATURE_STATUS_BACKGROUNDS) { value -> Surface(shape = CircleShape, color = Color(value), modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).clickable(enabled = !recording && !publishing) { background = value }) {} } }
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) { items(MATURE_STATUS_TEXT_COLORS) { value -> Surface(shape = CircleShape, color = Color(value), modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).clickable(enabled = !recording && !publishing) { foreground = value }) {} } }
+                                Text("Text style", color = Color.White, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                Text("Background color", color = Color.White.copy(alpha = .78f), style = MaterialTheme.typography.labelSmall)
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 3.dp)) {
+                                    items(MATURE_STATUS_BACKGROUNDS) { value ->
+                                        MatureStatusColorSwatch(value, selected = background == value, enabled = !recording && !publishing, label = "Select background color") { background = value }
+                                    }
+                                }
+                                Text("Text color", color = Color.White.copy(alpha = .78f), style = MaterialTheme.typography.labelSmall)
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 3.dp)) {
+                                    items(MATURE_STATUS_TEXT_COLORS) { value ->
+                                        MatureStatusColorSwatch(value, selected = foreground == value, enabled = !recording && !publishing, label = "Select text color") { foreground = value }
+                                    }
+                                }
+                                Text("Font", color = Color.White.copy(alpha = .78f), style = MaterialTheme.typography.labelSmall)
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(FynxStatusTextFont.values().toList()) { option -> FilterChip(selected = font == option, onClick = { font = option }, enabled = !recording && !publishing, label = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() }) }) } }
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                                Text("Text alignment", color = Color.White.copy(alpha = .78f), style = MaterialTheme.typography.labelSmall)
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                                     IconButton(onClick = { alignment = 0 }, enabled = !recording && !publishing) { Icon(Icons.Default.FormatAlignLeft, "Align left", tint = if (alignment == 0) Color.White else Color.White.copy(alpha = .5f)) }
                                     IconButton(onClick = { alignment = 1 }, enabled = !recording && !publishing) { Icon(Icons.Default.FormatAlignCenter, "Align center", tint = if (alignment == 1) Color.White else Color.White.copy(alpha = .5f)) }
                                     IconButton(onClick = { alignment = 2 }, enabled = !recording && !publishing) { Icon(Icons.Default.FormatAlignRight, "Align right", tint = if (alignment == 2) Color.White else Color.White.copy(alpha = .5f)) }
                                 }
-                                TextButton(onClick = { showColors = false }) { Text("Done", color = Color.White) }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                    TextButton(onClick = { showColors = false }) { Text("Done", color = Color.White) }
+                                }
                             }
                         }
                     }
@@ -471,6 +485,46 @@ fun FynxMatureStatusComposerPanel(
         }
     }
 }
+@Composable
+private fun MatureStatusColorSwatch(
+    color: Long,
+    selected: Boolean,
+    enabled: Boolean,
+    label: String,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(Color(color))
+            .border(
+                width = if (selected) 3.dp else 1.dp,
+                color = if (selected) Color.White else Color.White.copy(alpha = 0.55f),
+                shape = CircleShape
+            )
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (selected) {
+            Surface(
+                shape = CircleShape,
+                color = Color.Black.copy(alpha = 0.58f),
+                modifier = Modifier.size(22.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = label,
+                        tint = Color.White,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable private fun MatureStatusModeButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) { Column(horizontalAlignment = Alignment.CenterHorizontally) { IconButton(onClick = onClick, enabled = enabled) { Icon(icon, label, tint = if (selected) Color.White else Color.White.copy(alpha = .65f), modifier = Modifier.size(28.dp)) }; Text(label, color = Color.White.copy(alpha = if (enabled && selected) 1f else .45f), style = MaterialTheme.typography.labelSmall) } }
 @Composable private fun MatureStatusMedia(uri: Uri, video: Boolean, modifier: Modifier) {
     val mediaKey = "${if (video) "video" else "image"}:$uri"
