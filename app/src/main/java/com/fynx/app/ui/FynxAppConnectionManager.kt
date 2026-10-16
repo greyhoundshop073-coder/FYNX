@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import kotlinx.coroutines.CoroutineScope
@@ -102,14 +101,11 @@ class FynxAppConnectionManager(
             override fun onLost(network: Network) = evaluate()
         }
 
-        // Observe every INTERNET-capable network, not only the current default.
-        // hasUsableTransport() intentionally scans allNetworks during handover, so
-        // callbacks must also fire when an alternate transport appears/disappears.
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
+        // HTTP requests from FynxBackendClient use Android's default network.
+        // Track that same network so a secondary, non-default network cannot make
+        // the header claim that the request path has usable transport.
         runCatching {
-            manager.registerNetworkCallback(request, newCallback)
+            manager.registerDefaultNetworkCallback(newCallback)
             callback = newCallback
         }
     }
@@ -123,18 +119,12 @@ class FynxAppConnectionManager(
 
     private fun hasUsableTransport(): Boolean {
         val manager = connectivityManager ?: return false
-        val active = manager.activeNetwork
-        // During Wi-Fi/mobile handover Android may briefly report no active network
-        // while another INTERNET-capable network is still available. Match the
-        // backend client's transport check instead of falsely dropping to WAITING.
-        val candidates = buildList {
-            if (active != null) add(active)
-            manager.allNetworks.filter { it != active }.forEach(::add)
-        }
-        return candidates.any { network ->
-            val capabilities = manager.getNetworkCapabilities(network) ?: return@any false
-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-        }
+        // Match the network Android will actually use for ordinary HTTP requests.
+        // If default-network handover is in progress, wait for its callback instead
+        // of treating an unrelated secondary network as the active route.
+        val active = manager.activeNetwork ?: return false
+        val capabilities = manager.getNetworkCapabilities(active) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     private fun evaluate() {
