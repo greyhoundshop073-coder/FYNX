@@ -361,6 +361,23 @@ app.post("/api/assistant", auth, async (req, res) => {
   }
 });
 
+app.post("/api/media/upload", auth, express.raw({ type: "application/octet-stream", limit: "12mb" }), async (req, res) => {
+  try {
+    requireConfig("DATABASE_URL", DATABASE_URL);
+    const mimeType = typeof req.get("x-fynx-media-type") === "string" ? req.get("x-fynx-media-type").trim().toLowerCase() : "";
+    const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm", "video/quicktime", "audio/mp4", "audio/mpeg", "audio/aac", "audio/x-m4a", "audio/wav", "application/pdf", "text/plain", "application/zip", "application/octet-stream", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "application/vnd.ms-excel", "application/vnd.ms-powerpoint"]);
+    const data = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    if (!allowedTypes.has(mimeType)) return res.status(400).json({ error: "unsupported media type" });
+    if (!data.length || data.length > MAX_MEDIA_BYTES) return res.status(413).json({ error: "media is too large" });
+    const result = await pool.query("INSERT INTO message_media (owner_id, mime_type, data, byte_size) VALUES ($1, $2, $3, $4) RETURNING id, mime_type, byte_size", [req.user.sub, mimeType, data, data.length]);
+    return res.status(201).json({ media: { id: String(result.rows[0].id), mimeType: result.rows[0].mime_type, byteSize: result.rows[0].byte_size } });
+  } catch (error) {
+    if (error?.type === "entity.too.large") return res.status(413).json({ error: "media is too large" });
+    console.error("binary media upload", error);
+    return res.status(500).json({ error: "media upload failed" });
+  }
+});
+
 app.post("/api/media", auth, async (req, res) => {
   try {
     requireConfig("DATABASE_URL", DATABASE_URL);
