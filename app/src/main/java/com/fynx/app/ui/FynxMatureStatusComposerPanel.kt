@@ -202,7 +202,7 @@ fun FynxMatureStatusComposerPanel(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp)
-                        .padding(top = 76.dp, bottom = if (showMediaTools || showColors) 220.dp else 120.dp)
+                        .padding(top = 76.dp, bottom = if (showColors) 440.dp else if (showMediaTools) 190.dp else 132.dp)
                         .imePadding(),
                     minLines = 2,
                         maxLines = 10
@@ -232,31 +232,78 @@ fun FynxMatureStatusComposerPanel(
             Spacer(Modifier.weight(1f))
             Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (showColors && type == FynxStatusType.TEXT) {
-                        Surface(color = Color.Black.copy(alpha = .55f), modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                                Text("Text style", color = Color.White, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                                Text("Background color", color = Color.White.copy(alpha = .78f), style = MaterialTheme.typography.labelSmall)
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 3.dp)) {
+                        Surface(
+                            color = Color(0xFF202124),
+                            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    Modifier
+                                        .width(40.dp)
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(Color(0xFF666A70))
+                                        .align(Alignment.CenterHorizontally)
+                                )
+                                Text(
+                                    "Styling & Options",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text("Fonts", color = Color.White.copy(alpha = .82f), style = MaterialTheme.typography.labelLarge)
+                                LazyRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    contentPadding = PaddingValues(end = 8.dp)
+                                ) {
+                                    items(FynxStatusTextFont.values().toList()) { option ->
+                                        FilterChip(
+                                            selected = font == option,
+                                            onClick = { font = option },
+                                            enabled = !recording && !publishing,
+                                            label = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() }, maxLines = 1) }
+                                        )
+                                    }
+                                }
+                                Text("Color Palettes", color = Color.White, style = MaterialTheme.typography.labelLarge)
+                                Text("Background Color", color = Color.White.copy(alpha = .82f), style = MaterialTheme.typography.labelMedium)
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 2.dp, vertical = 3.dp)
+                                ) {
                                     items(MATURE_STATUS_BACKGROUNDS) { value ->
                                         MatureStatusColorSwatch(value, selected = background == value, enabled = !recording && !publishing, label = "Select background color") { background = value }
                                     }
                                 }
-                                Text("Text color", color = Color.White.copy(alpha = .78f), style = MaterialTheme.typography.labelSmall)
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 3.dp)) {
+                                Text("Text Color", color = Color.White.copy(alpha = .82f), style = MaterialTheme.typography.labelMedium)
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 2.dp, vertical = 3.dp)
+                                ) {
                                     items(MATURE_STATUS_TEXT_COLORS) { value ->
                                         MatureStatusColorSwatch(value, selected = foreground == value, enabled = !recording && !publishing, label = "Select text color") { foreground = value }
                                     }
                                 }
-                                Text("Font", color = Color.White.copy(alpha = .78f), style = MaterialTheme.typography.labelSmall)
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(FynxStatusTextFont.values().toList()) { option -> FilterChip(selected = font == option, onClick = { font = option }, enabled = !recording && !publishing, label = { Text(option.name.lowercase().replaceFirstChar { it.uppercase() }) }) } }
-                                Text("Text alignment", color = Color.White.copy(alpha = .78f), style = MaterialTheme.typography.labelSmall)
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { alignment = 0 }, enabled = !recording && !publishing) { Icon(Icons.Default.FormatAlignLeft, "Align left", tint = if (alignment == 0) Color.White else Color.White.copy(alpha = .5f)) }
-                                    IconButton(onClick = { alignment = 1 }, enabled = !recording && !publishing) { Icon(Icons.Default.FormatAlignCenter, "Align center", tint = if (alignment == 1) Color.White else Color.White.copy(alpha = .5f)) }
-                                    IconButton(onClick = { alignment = 2 }, enabled = !recording && !publishing) { Icon(Icons.Default.FormatAlignRight, "Align right", tint = if (alignment == 2) Color.White else Color.White.copy(alpha = .5f)) }
-                                }
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                    TextButton(onClick = { showColors = false }) { Text("Done", color = Color.White) }
+                                Text("Text alignment", color = Color.White.copy(alpha = .82f), style = MaterialTheme.typography.labelLarge)
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(onClick = { alignment = 0 }, enabled = !recording && !publishing) {
+                                        Icon(Icons.Default.FormatAlignLeft, "Align left", tint = if (alignment == 0) Color.White else Color.White.copy(alpha = .58f))
+                                    }
+                                    IconButton(onClick = { alignment = 1 }, enabled = !recording && !publishing) {
+                                        Icon(Icons.Default.FormatAlignCenter, "Align center", tint = if (alignment == 1) Color.White else Color.White.copy(alpha = .58f))
+                                    }
+                                    IconButton(onClick = { alignment = 2 }, enabled = !recording && !publishing) {
+                                        Icon(Icons.Default.FormatAlignRight, "Align right", tint = if (alignment == 2) Color.White else Color.White.copy(alpha = .58f))
+                                    }
                                 }
                             }
                         }
@@ -444,15 +491,25 @@ fun FynxMatureStatusComposerPanel(
                             }
                         }
                         Spacer(Modifier.weight(1f))
-                        Button(
-                            onClick = ::publish,
-                            enabled = !publishing && !recording && ((type == FynxStatusType.TEXT && text.isNotBlank()) || (type != FynxStatusType.TEXT && mediaUri != null)),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
-                            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 9.dp)
-                        ) {
-                            Icon(Icons.Default.Send, "Send")
-                            Spacer(Modifier.width(6.dp))
-                            Text(if (publishing) "Sending…" else "Send")
+                        if (showColors && type == FynxStatusType.TEXT) {
+                            TextButton(
+                                onClick = { showColors = false },
+                                enabled = !publishing && !recording,
+                                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 9.dp)
+                            ) {
+                                Text("Done", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            }
+                        } else {
+                            Button(
+                                onClick = ::publish,
+                                enabled = !publishing && !recording && ((type == FynxStatusType.TEXT && text.isNotBlank()) || (type != FynxStatusType.TEXT && mediaUri != null)),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
+                                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 9.dp)
+                            ) {
+                                Icon(Icons.Default.Send, "Send")
+                                Spacer(Modifier.width(6.dp))
+                                Text(if (publishing) "Sending…" else "Send")
+                            }
                         }
                     }
                     if (publishing) LinearProgressIndicator(Modifier.fillMaxWidth())
