@@ -3,7 +3,6 @@ import { registerMarketplaceShippingTimeline } from './marketplaceShippingTimeli
 import { isMarketplaceDestinationCovered } from './marketplaceShipping.js';
 
 export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
-  registerMarketplaceShippingTimeline({ app, pool, auth });
   let schemaPromise;
 
   const ensureSchema = async () => {
@@ -74,6 +73,8 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
     }
     return schemaPromise;
   };
+
+  registerMarketplaceShippingTimeline({ app, pool, auth, ensureSchema });
 
   const parseUuid = (value) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value.trim()) ? value.trim() : null;
   const isSeller = (order, userId) => String(order.seller_id) === String(userId);
