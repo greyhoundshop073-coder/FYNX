@@ -25,7 +25,11 @@ private data class SellerOrderRow(
     val fulfillment: String,
     val fulfillmentStatus: String,
     val address: JSONObject?,
-    val tracking: String?
+    val tracking: String?,
+    val driverId: String?,
+    val driverAcceptedAt: String?,
+    val driverHandoverAt: String?,
+    val driverDeliveredAt: String?
 )
 
 private fun money(currency: String, amount: Double): String = "$currency ${String.format(Locale.US, "%,.2f", amount)}"
@@ -74,7 +78,11 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                                 fulfillment = o.optString("fulfillmentMethod", "DELIVERY"),
                                 fulfillmentStatus = o.optString("fulfillmentStatus").ifBlank { o.optString("status") },
                                 address = o.optJSONObject("shippingAddress"),
-                                tracking = o.optString("trackingReference").takeIf { it.isNotBlank() }
+                                tracking = o.optString("trackingReference").takeIf { it.isNotBlank() },
+                                driverId = o.optString("driverId").takeIf { it.isNotBlank() && it != "null" },
+                                driverAcceptedAt = o.optString("driverAcceptedAt").takeIf { it.isNotBlank() && it != "null" },
+                                driverHandoverAt = o.optString("driverHandoverAt").takeIf { it.isNotBlank() && it != "null" },
+                                driverDeliveredAt = o.optString("driverDeliveredAt").takeIf { it.isNotBlank() && it != "null" }
                             ))
                         }
                     }
@@ -120,6 +128,8 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
 
     selected?.let { order ->
         var tracking by remember(order.id) { mutableStateOf(order.tracking.orEmpty()) }
+        var driverUsername by remember(order.id) { mutableStateOf("") }
+        var handoverNote by remember(order.id) { mutableStateOf("") }
         var busy by remember(order.id) { mutableStateOf(false) }
         var message by remember(order.id) { mutableStateOf<String?>(null) }
         var settlementLoading by remember(order.id) { mutableStateOf(true) }
@@ -208,6 +218,42 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         if (a != null) Text("Deliver to: ${a.optString("name")} • ${a.optString("phone")}\n${a.optString("address")}${a.optString("city").let { if (it.isBlank()) "" else ", $it" }}")
                         else Text("Waiting for buyer delivery details.")
                     } else Text("Buyer selected pickup. Confirm the handover when the buyer receives the item.")
+                    if (order.fulfillment == "DELIVERY" && order.status in setOf("PAID", "SHIPPED")) {
+                        Text("Driver custody", style = MaterialTheme.typography.titleSmall)
+                        when {
+                            order.driverId == null -> Text("No driver assigned yet.")
+                            order.driverHandoverAt != null && order.driverDeliveredAt != null -> Text("Driver submitted delivery evidence. Waiting for buyer confirmation.")
+                            order.driverHandoverAt != null -> Text("Driver accepted and custody was handed over.")
+                            order.driverAcceptedAt != null -> Text("Driver accepted. Record handover only when the parcel is physically handed over.")
+                            else -> Text("Driver assignment sent. Waiting for acceptance.")
+                        }
+                        if (order.driverId == null && order.status == "PAID") {
+                            OutlinedTextField(driverUsername, { driverUsername = it.take(32) }, label = { Text("Driver username") }, singleLine = true, enabled = !busy)
+                            Button(enabled = !busy && driverUsername.trim().removePrefix("@").isNotBlank(), onClick = {
+                                busy = true
+                                message = null
+                                scope.launch {
+                                    FynxBackendClient.postJson(context, "/api/marketplace/orders/${order.id}/driver-assignment", JSONObject().put("driverUsername", driverUsername.trim().removePrefix("@")).toString())
+                                        .onSuccess { selected = null; load(); onChanged() }
+                                        .onFailure { message = it.message ?: "Could not assign this driver." }
+                                    busy = false
+                                }
+                            }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Assign driver") }
+                        }
+                        if (order.status == "SHIPPED" && order.driverAcceptedAt != null && order.driverHandoverAt == null) {
+                            OutlinedTextField(handoverNote, { handoverNote = it.take(1000) }, label = { Text("Handover note") }, minLines = 2, enabled = !busy)
+                            Button(enabled = !busy && handoverNote.trim().isNotBlank(), onClick = {
+                                busy = true
+                                message = null
+                                scope.launch {
+                                    FynxBackendClient.postJson(context, "/api/marketplace/orders/${order.id}/driver-handover", JSONObject().put("note", handoverNote.trim()).toString())
+                                        .onSuccess { selected = null; load(); onChanged() }
+                                        .onFailure { message = it.message ?: "Could not record driver handover." }
+                                    busy = false
+                                }
+                            }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Confirm driver handover") }
+                        }
+                    }
                     if (order.status == "PAID" && order.fulfillment == "DELIVERY") OutlinedTextField(tracking, { tracking = it }, label = { Text("Tracking reference (optional)") }, singleLine = true)
                     message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     if (payoutQueued || retryQueued) Text("Payout processing has been queued. FYNX will verify the provider transfer before marking it paid.", color = MaterialTheme.colorScheme.primary)
