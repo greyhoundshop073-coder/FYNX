@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import kotlinx.coroutines.CoroutineScope
@@ -101,8 +102,14 @@ class FynxAppConnectionManager(
             override fun onLost(network: Network) = evaluate()
         }
 
+        // Observe every INTERNET-capable network, not only the current default.
+        // hasUsableTransport() intentionally scans allNetworks during handover, so
+        // callbacks must also fire when an alternate transport appears/disappears.
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
         runCatching {
-            manager.registerDefaultNetworkCallback(newCallback)
+            manager.registerNetworkCallback(request, newCallback)
             callback = newCallback
         }
     }
