@@ -458,7 +458,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       let reassignedAfterRevocation = false;
       if (prior?.driver_type === 'FYNX_ACCOUNT' && prior.accepted_at) {
         const priorDriverActive = await client.query('SELECT 1 FROM marketplace_approved_drivers WHERE user_id=$1 AND active=TRUE', [prior.driver_id]);
-        if (priorDriverActive.rowCount || String(prior.driver_id) === String(driverId)) {
+        if (priorDriverActive.rowCount || String(prior.driver_id) === String(resolvedDriverId)) {
           await client.query('ROLLBACK');
           return res.status(409).json({ error: 'driver assignment is locked after acceptance unless FYNX has revoked the prior driver approval before custody handover' });
         }
