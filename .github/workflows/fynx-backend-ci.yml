@@ -39,62 +39,12 @@ jobs:
           cache-dependency-path: backend/package.json
       - name: Install backend dependencies
         run: npm install --no-audit --no-fund
-      - name: Check backend JavaScript
+      - name: Check all backend JavaScript modules
         run: |
-          node --check server.js
-          node --check socialRoutes.js
-          node --check verify-marketplace-price-watch.mjs
-          node --check profileRoutes.js
-          node --check marketplaceTransactions.js
-          node --check marketplaceReputation.js
-          node --check verify-marketplace-multi-checkout-lifecycle.mjs
-          node --check verify-marketplace-multi-payout-isolation.mjs
-          node --check verify-marketplace-end-to-end.mjs
-          node --check marketplaceSettlement.js
-          node --check marketplaceSettlementWorker.js
-          node --check marketplacePaymentExpiry.js
-          node --check marketplaceInspectionExpiry.js
-          node --check marketplaceProtection.js
-          node --check marketplaceProtectionResolution.js
-          node --check marketplaceAdvertising.js
-          node --check notificationPush.js
-          node --check notificationBootstrap.js
-          node --check notificationDevices.js
-          node --check verify-marketplace-ad-creative-identity.mjs
-          node --check verify-marketplace-fulfillment-integrity.mjs
-          node --check verify-marketplace-batch2.mjs
-          node --check verify-marketplace-batch3-security.mjs
-          node --check verify-marketplace-batch4-shipping.mjs
-          node --check verify-marketplace-shipping-timeline.mjs
-          node --check scalability.js
-          node --check privacyRoutes.js
-          node --check trustSafety.js
-          node --check adminRoutes.js
-          node --check reliability.js
-          node --check backgroundJobs.js
-          node --check securityHardening.js
-          node --check chatRealtimeCompatibility.js
-          node --check verify-marketplace-reconciliation.mjs
-          node --check verify-marketplace-currency-contract.mjs
-          node --check verify-marketplace-refund-dispute-isolation.mjs
-          node --check verify-marketplace-protection-admin.mjs
-          node --check verify-marketplace-order-lifecycle.mjs
-          node --check verify-marketplace-inspection-expiry.mjs
-          node --check verify-marketplace-ledger-invariants.mjs
-          node --check verify-marketplace-financial-security.mjs
-          node --check verify-marketplace-failure-paths.mjs
-          node --check verify-marketplace-state-machine.mjs
-          node --check verify-marketplace-protection-lifecycle.mjs
-          node --check verify-marketplace-accounting.mjs
-          node --check verify-marketplace-fulfillment.mjs
-          node --check verify-stage15e-performance.mjs
-          node --check verify-stage15f-security.mjs
-          node --check verify-stage15g-integration.mjs
-          node --check verify-stage15g-final-readiness.mjs
-          node --check verify-stage15g-regression.mjs
-          node --check verify-stage15h-admin.mjs
-          node --check verify-stage15d-advanced.mjs
-          node --check verify-stage15d-jobs.mjs
+          for file in *.js *.mjs; do
+            [ -f "$file" ] || continue
+            node --check "$file"
+          done
       - name: Run Chat end-to-end integration gate
         working-directory: .
         run: python3 scripts/verify_chat_end_to_end.py

@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.util.Base64
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -100,8 +99,7 @@ object FynxProductionMessaging {
             val effectiveMimeType = prepared.second
             require(bytes.isNotEmpty()) { "The selected media is empty." }
             require(bytes.size <= MAX_MEDIA_BYTES) { "Media is too large. Maximum size is 12 MB." }
-            val body = JSONObject().apply { put("mimeType", effectiveMimeType); put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP)) }
-            val raw = FynxBackendClient.postJson(context, "/api/media", body.toString()).getOrThrow()
+            val raw = FynxBackendClient.postBytes(context, "/api/media/upload", effectiveMimeType, bytes).getOrThrow()
             val item = JSONObject(raw).getJSONObject("media")
             Result.success(RemoteMedia(item.getString("id"), item.getString("mimeType"), item.optInt("byteSize", bytes.size)))
         } catch (cancelled: CancellationException) { throw cancelled }

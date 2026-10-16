@@ -108,7 +108,6 @@ async function initDatabase() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
     UPDATE users SET verified = FALSE;
-    UPDATE users SET verified = TRUE WHERE lower(username) = $1;
     CREATE TABLE IF NOT EXISTS messages (
       id BIGSERIAL PRIMARY KEY,
       sender_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -127,7 +126,8 @@ async function initDatabase() {
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_type TEXT;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS voice_duration_ms BIGINT NOT NULL DEFAULT 0;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT NOT NULL DEFAULT 'text';
-    ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_payload JSONB;\n    ALTER TABLE messages ADD COLUMN IF NOT EXISTS reaction TEXT;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_payload JSONB;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS reaction TEXT;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE;
     CREATE TABLE IF NOT EXISTS message_media (
       id BIGSERIAL PRIMARY KEY,
@@ -164,8 +164,10 @@ async function initDatabase() {
     CREATE TABLE IF NOT EXISTS ai_pending_message_actions (id UUID PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, recipient_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, message_text TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending','sent','cancelled','expired')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '10 minutes'), sent_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL);
     CREATE INDEX IF NOT EXISTS ai_pending_message_actions_user_idx ON ai_pending_message_actions(user_id,status,created_at DESC);
     CREATE UNIQUE INDEX IF NOT EXISTS ai_pending_message_actions_one_pending_idx ON ai_pending_message_actions(user_id) WHERE status='pending';
-  `, [officialFynxUsername]);
-  await pool.query(`DO $$ BEGIN ALTER TABLE messages ADD CONSTRAINT messages_media_fk FOREIGN KEY (media_id) REFERENCES message_media(id) ON DELETE SET NULL; EXCEPTION WHEN duplicate_object THEN NULL; END $$;`);
+  `);
+  await pool.query("UPDATE users SET verified = TRUE WHERE lower(username) = $1", [officialFynxUsername]);
+  const mediaConstraint = await pool.query("SELECT 1 FROM pg_constraint WHERE conname = $1", ["messages_media_fk"]);
+  if (!mediaConstraint.rowCount) await pool.query("ALTER TABLE messages ADD CONSTRAINT messages_media_fk FOREIGN KEY (media_id) REFERENCES message_media(id) ON DELETE SET NULL");
 }
 
 function requireConfig(name, value) { if (!value) throw new Error(`${name} is not configured.`); }
@@ -358,6 +360,23 @@ app.post("/api/assistant", auth, async (req, res) => {
   } catch (error) {
     console.error("assistant", error);
     return res.status(500).json({ error: "assistant request failed" });
+  }
+});
+
+app.post("/api/media/upload", auth, express.raw({ type: "application/octet-stream", limit: "12mb" }), async (req, res) => {
+  try {
+    requireConfig("DATABASE_URL", DATABASE_URL);
+    const mimeType = typeof req.get("x-fynx-media-type") === "string" ? req.get("x-fynx-media-type").trim().toLowerCase() : "";
+    const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm", "video/quicktime", "audio/mp4", "audio/mpeg", "audio/aac", "audio/x-m4a", "audio/wav", "application/pdf", "text/plain", "application/zip", "application/octet-stream", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.openxmlformats-officedocument.presentationml.presentation", "application/vnd.ms-excel", "application/vnd.ms-powerpoint"]);
+    const data = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    if (!allowedTypes.has(mimeType)) return res.status(400).json({ error: "unsupported media type" });
+    if (!data.length || data.length > MAX_MEDIA_BYTES) return res.status(413).json({ error: "media is too large" });
+    const result = await pool.query("INSERT INTO message_media (owner_id, mime_type, data, byte_size) VALUES ($1, $2, $3, $4) RETURNING id, mime_type, byte_size", [req.user.sub, mimeType, data, data.length]);
+    return res.status(201).json({ media: { id: String(result.rows[0].id), mimeType: result.rows[0].mime_type, byteSize: result.rows[0].byte_size } });
+  } catch (error) {
+    if (error?.type === "entity.too.large") return res.status(413).json({ error: "media is too large" });
+    console.error("binary media upload", error);
+    return res.status(500).json({ error: "media upload failed" });
   }
 });
 

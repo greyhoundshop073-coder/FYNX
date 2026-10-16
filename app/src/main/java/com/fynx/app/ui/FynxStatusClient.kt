@@ -2,7 +2,6 @@ package com.fynx.app.ui
 
 import android.content.Context
 import android.net.Uri
-import android.util.Base64
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
@@ -47,8 +46,7 @@ object FynxStatusClient {
         if (bytes.isEmpty()) error("Selected media is empty.")
         val normalizedMime = mimeType.trim().lowercase()
         if (!normalizedMime.startsWith("image/") && !normalizedMime.startsWith("video/") && !normalizedMime.startsWith("audio/")) error("Unsupported Status media type.")
-        val body = JSONObject().put("mimeType", normalizedMime).put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP)).toString()
-        val raw = FynxBackendClient.postJson(context, "/api/media", body).getOrThrow()
+        val raw = FynxBackendClient.postBytes(context, "/api/media/upload", normalizedMime, bytes).getOrThrow()
         JSONObject(raw).getJSONObject("media").getString("id")
     }
 

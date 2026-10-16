@@ -109,7 +109,7 @@ require('Status composer previews selected music','FynxRemoteAudio("/api/social/
 require('Status viewer renders attached music','status.musicCatalogueId' in timeline and 'FynxRemoteAudio("/api/social/music/catalogue/"' in timeline)
 require('Status viewer uses catalogue music duration','musicDurationMs.coerceAtLeast(1_000L)' in timeline and 'kotlin.math.max' in timeline)
 
-require('Status media upload uses authenticated backend client','FynxBackendClient.postJson(context, "/api/media", body)' in client)
+require('Status media upload uses authenticated binary backend client','FynxBackendClient.postBytes(context, "/api/media/upload", normalizedMime, bytes)' in client)
 require('Status media upload rejects unsupported types','Unsupported Status media type.' in client)
 require('Status media upload size cap','12 * 1024 * 1024' in client)
 require('Status publish sends media id','put("mediaId", mediaId)' in client)

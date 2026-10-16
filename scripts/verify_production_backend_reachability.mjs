@@ -1,5 +1,5 @@
-const BASE_URL = (process.env.FYNX_PRODUCTION_BASE_URL || "https://fynx-ai-backend.onrender.com").replace(/\/$/, "");
-// Render cold starts can legitimately take longer than the previous 45s request
+const BASE_URL = (process.env.FYNX_PRODUCTION_BASE_URL || "https://fynx-backend-testing-testing.up.railway.app").replace(/\/$/, "");
+// Remote backend startup can legitimately take longer than the previous 45s request
 // budget. Keep the certification strict (health + database readiness are still
 // required) while allowing enough time for the production service to wake up.
 const TIMEOUT_MS = 120_000;

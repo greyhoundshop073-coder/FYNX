@@ -9,6 +9,10 @@ async function patchOnce(fileName, patches) {
   let source = await readFile(filePath, "utf8");
   let changed = false;
   for (const patch of patches) {
+    // The marker remains inside the replacement, so check for the full replacement
+    // first. This prevents duplicate imports/hooks when npm runs prestart again
+    // against a container filesystem that was already patched during an earlier start.
+    if (source.includes(patch.replacement)) continue;
     if (source.includes(patch.marker)) {
       source = source.replace(patch.marker, patch.replacement);
       changed = true;
