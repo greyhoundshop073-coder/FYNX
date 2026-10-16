@@ -53,7 +53,7 @@ for path in sorted(UI.rglob("*.kt")):
             break
         opening = call + len(token) - 1
         args = call_arguments(source, opening)
-        if re.search(r"\\bFynxDesign\\.Surface\\b", args):
+        if "FynxDesign.Surface" in args and "FynxDesign.SurfaceRaised" not in args:
             custom_surface_cards += 1
             if "contentColor = FynxDesign.TextPrimary" not in args:
                 line = source.count("\n", 0, call) + 1
