@@ -126,7 +126,8 @@ async function initDatabase() {
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_type TEXT;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS voice_duration_ms BIGINT NOT NULL DEFAULT 0;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT NOT NULL DEFAULT 'text';
-    ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_payload JSONB;\n    ALTER TABLE messages ADD COLUMN IF NOT EXISTS reaction TEXT;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_payload JSONB;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS reaction TEXT;
     ALTER TABLE messages ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE;
     CREATE TABLE IF NOT EXISTS message_media (
       id BIGSERIAL PRIMARY KEY,
