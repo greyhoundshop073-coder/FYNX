@@ -257,6 +257,15 @@ private fun FynxAddStatusPanel(
     ) {
         mediaPermissionGranted = fynxHasMediaPermission(context)
     }
+    // System photo picker works even when the user does not grant broad library access.
+    val deviceMediaPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            val mime = context.contentResolver.getType(it).orEmpty().lowercase()
+            onMediaSelected(FynxRecentMedia(it, mime.startsWith("video/"), System.currentTimeMillis() / 1000L))
+        }
+    }
 
     fun refreshMedia() {
         if (!mediaPermissionGranted) return
@@ -337,13 +346,19 @@ private fun FynxAddStatusPanel(
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                FynxStatusToolPill(
+                    icon = Icons.Default.Photo,
+                    label = "Photo",
+                    onClick = { deviceMediaPicker.launch(arrayOf("image/*", "video/*")) },
+                    modifier = Modifier.weight(1f)
+                )
                 FynxStatusToolPill(
                     icon = Icons.Default.Notes,
                     label = "Text",
                     onClick = onText,
-                    modifier = Modifier.widthIn(min = 120.dp, max = 180.dp)
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
@@ -396,11 +411,16 @@ private fun FynxAddStatusPanel(
                 )
                 Spacer(Modifier.height(12.dp))
                 Button(
-                    onClick = {
-                        permissionLauncher.launch(fynxMediaPermissions())
-                    }
+                    onClick = { deviceMediaPicker.launch(arrayOf("image/*", "video/*")) }
                 ) {
-                    Text("Allow media access")
+                    Icon(Icons.Default.PhotoLibrary, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Choose a photo or video")
+                }
+                TextButton(
+                    onClick = { permissionLauncher.launch(fynxMediaPermissions()) }
+                ) {
+                    Text("Allow access to recent media")
                 }
             }
         } else {
