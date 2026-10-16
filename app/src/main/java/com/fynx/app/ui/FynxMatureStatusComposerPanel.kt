@@ -17,6 +17,8 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -204,7 +206,7 @@ fun FynxMatureStatusComposerPanel(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp)
-                        .padding(top = 76.dp, bottom = if (showColors) 440.dp else if (showMediaTools) 190.dp else 132.dp)
+                        .padding(top = 76.dp, bottom = if (showColors) 350.dp else if (showMediaTools) 150.dp else 104.dp)
                         .imePadding(),
                     minLines = 2,
                         maxLines = 10
@@ -240,7 +242,10 @@ fun FynxMatureStatusComposerPanel(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(
-                                Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                Modifier
+                                    .heightIn(max = 360.dp)
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 var handleDragDistance by remember { mutableFloatStateOf(0f) }
@@ -285,7 +290,7 @@ fun FynxMatureStatusComposerPanel(
                                 LazyRow(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    contentPadding = PaddingValues(end = 8.dp)
+                                    contentPadding = PaddingValues(start = 2.dp, end = 20.dp)
                                 ) {
                                     items(FynxStatusTextFont.values().toList()) { option ->
                                         FilterChip(
@@ -508,7 +513,8 @@ fun FynxMatureStatusComposerPanel(
                                 onClick = { audienceMenu = true },
                                 enabled = !recording && !publishing,
                                 leadingIcon = { Icon(if (audience == FynxStatusAudience.EVERYONE) Icons.Default.Public else if (audience == FynxStatusAudience.FRIENDS) Icons.Default.People else Icons.Default.Lock, null) },
-                                label = { Text(if (audience == FynxStatusAudience.EVERYONE) "Everyone" else if (audience == FynxStatusAudience.FRIENDS) "Friends" else "Only me") }
+                                label = { Text(if (audience == FynxStatusAudience.EVERYONE) "Everyone" else if (audience == FynxStatusAudience.FRIENDS) "Friends" else "Only me", color = Color(0xFF17212B)) },
+                                colors = AssistChipDefaults.assistChipColors(containerColor = Color(0xFFE8F1FB), labelColor = Color(0xFF17212B), leadingIconContentColor = Color(0xFF1565C0))
                             )
                             DropdownMenu(expanded = audienceMenu, onDismissRequest = { audienceMenu = false }) {
                                 DropdownMenuItem(text = { Text("Everyone") }, onClick = { audience = FynxStatusAudience.EVERYONE; FynxPreferencesStore.saveVisibility(context, "status_audience", audience.name); audienceMenu = false })
