@@ -252,9 +252,9 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
         assignedAt: row.assigned_at, acceptedAt: row.accepted_at, handoverAt: row.handover_at, deliveredAt: row.delivered_at,
         status: row.status, fulfillmentStatus: row.fulfillment_status, currency: row.currency,
         totalAmount: Number(row.total_amount), quantity: Number(row.quantity),
-        product: row.product_snapshot, shippingAddress: row.shipping_address, buyerNote: row.buyer_note,
+        product: row.product_snapshot, shippingAddress: row.accepted_at ? row.shipping_address : null, buyerNote: row.accepted_at ? row.buyer_note : '',
         trackingReference: row.tracking_reference, sellerUsername: row.seller_username,
-        buyerName: row.buyer_display_name || row.buyer_username, evidence: byOrder.get(String(row.order_id)) || []
+        buyerName: row.accepted_at ? (row.buyer_display_name || row.buyer_username) : '', evidence: byOrder.get(String(row.order_id)) || []
       })) });
     } catch (error) {
       console.error('marketplace driver assignments', error);
