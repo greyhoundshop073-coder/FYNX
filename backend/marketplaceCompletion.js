@@ -253,23 +253,53 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
     if (!Number.isSafeInteger(userId) || userId < 1 || typeof active !== 'boolean') {
       return res.status(400).json({ error: 'valid user id and boolean active value are required' });
     }
+    const client = await pool.connect();
     try {
       await ensureSchema();
-      const admin = await pool.query('SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role=\'ADMIN\' LIMIT 1', [req.user.sub]);
-      if (!admin.rowCount) return res.status(403).json({ error: 'administrator access required' });
-      const target = await pool.query('SELECT id FROM users WHERE id=$1', [userId]);
-      if (!target.rowCount) return res.status(404).json({ error: 'driver account not found' });
-      if (String(userId) === String(req.user.sub)) return res.status(400).json({ error: 'an administrator cannot approve their own driver account' });
-      const result = await pool.query(`
+      await client.query('BEGIN');
+      const admin = await client.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role='ADMIN' LIMIT 1", [req.user.sub]);
+      if (!admin.rowCount) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'administrator access required' }); }
+      const target = await client.query('SELECT id FROM users WHERE id=$1', [userId]);
+      if (!target.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'driver account not found' }); }
+      if (String(userId) === String(req.user.sub)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'an administrator cannot approve their own driver account' }); }
+      if (!active) {
+        // Match the order-first lock order used by handover/delivery so revocation cannot race custody transfer.
+        await client.query(\`
+          SELECT o.id
+          FROM marketplace_orders o
+          JOIN marketplace_delivery_assignments a ON a.order_id=o.id
+          WHERE a.driver_id=$1 AND o.status IN ('PAID','SHIPPED','INSPECTION')
+          ORDER BY o.id
+          FOR UPDATE OF o
+        \`, [userId]);
+        const custody = await client.query(\`
+          SELECT a.order_id
+          FROM marketplace_delivery_assignments a
+          JOIN marketplace_orders o ON o.id=a.order_id
+          WHERE a.driver_id=$1 AND a.handover_at IS NOT NULL AND a.delivered_at IS NULL
+            AND o.status IN ('PAID','SHIPPED','INSPECTION')
+          LIMIT 1
+        \`, [userId]);
+        if (custody.rowCount) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'driver has an order in active custody; resolve or complete that delivery before revoking approval', code: 'DRIVER_ACTIVE_CUSTODY' });
+        }
+      }
+      const result = await client.query(\`
         INSERT INTO marketplace_approved_drivers (user_id, approved_by, active, approved_at, updated_at)
         VALUES ($1,$2,$3,NOW(),NOW())
         ON CONFLICT (user_id) DO UPDATE SET active=EXCLUDED.active, approved_by=EXCLUDED.approved_by,
           approved_at=CASE WHEN EXCLUDED.active THEN NOW() ELSE marketplace_approved_drivers.approved_at END,
           updated_at=NOW()
         RETURNING user_id, active, approved_by, approved_at, updated_at
-      `, [userId, req.user.sub, active]);
+      \`, [userId, req.user.sub, active]);
+      await client.query('COMMIT');
       return res.json({ driver: { userId: String(result.rows[0].user_id), active: result.rows[0].active, approvedBy: String(result.rows[0].approved_by), approvedAt: result.rows[0].approved_at, updatedAt: result.rows[0].updated_at } });
-    } catch (error) { console.error('marketplace driver approval', error); return res.status(500).json({ error: 'driver approval update failed' }); }
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch {}
+      console.error('marketplace driver approval', error);
+      return res.status(500).json({ error: 'driver approval update failed' });
+    } finally { client.release(); }
   });
 
   app.get('/api/marketplace/driver/assignments', auth, async (req, res) => {
@@ -336,11 +366,20 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
           : 'SELECT u.id FROM users u JOIN marketplace_approved_drivers ad ON ad.user_id=u.id AND ad.active=TRUE WHERE u.id=$1',
         driverUsername ? [driverUsername] : [requestedDriverId]
       )).rows[0];
-      if (!driver) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'driver account not found' }); }
+      if (!driver) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'driver account not found or not approved by FYNX' }); }
       const driverId = Number(driver.id);
       if (String(driverId) === String(order.seller_id) || String(driverId) === String(order.buyer_id)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'buyer and seller cannot be assigned as the delivery driver' }); }
       const prior = (await client.query('SELECT * FROM marketplace_delivery_assignments WHERE order_id=$1 FOR UPDATE', [id])).rows[0];
-      if (prior && (prior.accepted_at || prior.handover_at || prior.delivered_at)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver assignment is locked after acceptance or custody handover' }); }
+      if (prior && (prior.handover_at || prior.delivered_at)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver assignment is locked after physical custody handover' }); }
+      let reassignedAfterRevocation = false;
+      if (prior && prior.accepted_at) {
+        const priorDriverActive = await client.query('SELECT 1 FROM marketplace_approved_drivers WHERE user_id=$1 AND active=TRUE', [prior.driver_id]);
+        if (priorDriverActive.rowCount || String(prior.driver_id) === String(driverId)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'driver assignment is locked after acceptance unless FYNX has revoked the prior driver approval before custody handover' });
+        }
+        reassignedAfterRevocation = true;
+      }
       if (prior && String(prior.driver_id) !== String(driverId)) {
         await client.query('DELETE FROM marketplace_delivery_evidence WHERE order_id=$1', [id]);
       }
@@ -350,7 +389,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
         ON CONFLICT (order_id) DO UPDATE SET driver_id=EXCLUDED.driver_id,assigned_at=NOW(),accepted_at=NULL,handover_at=NULL,delivered_at=NULL,updated_at=NOW()
         RETURNING order_id,driver_id,assigned_at,accepted_at,handover_at,delivered_at
       `, [id, order.seller_id, driverId]);
-      await recordFulfillmentEvent(client, id, req.user.sub, 'DELIVERY_DRIVER_ASSIGNED', order.fulfillment_status || 'PAID', order.fulfillment_status || 'PAID', { driverId: String(driverId) });
+      await recordFulfillmentEvent(client, id, req.user.sub, reassignedAfterRevocation ? 'DELIVERY_DRIVER_REASSIGNED_AFTER_REVOCATION' : 'DELIVERY_DRIVER_ASSIGNED', order.fulfillment_status || 'PAID', order.fulfillment_status || 'PAID', { driverId: String(driverId), previousDriverId: prior ? String(prior.driver_id) : null, reassignedAfterRevocation });
       await client.query('COMMIT');
       return res.json({ assignment: { orderId: String(assignment.rows[0].order_id), driverId: String(assignment.rows[0].driver_id), assignedAt: assignment.rows[0].assigned_at, acceptedAt: assignment.rows[0].accepted_at, handoverAt: assignment.rows[0].handover_at, deliveredAt: assignment.rows[0].delivered_at } });
     } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace driver assignment', error); return res.status(500).json({ error: 'driver assignment failed' }); }
