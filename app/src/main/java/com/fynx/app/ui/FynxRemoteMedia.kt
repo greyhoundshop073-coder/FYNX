@@ -6,6 +6,7 @@ import android.graphics.drawable.Drawable
 import android.os.Build
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
@@ -263,7 +264,11 @@ private sealed interface MediaLoadResult { data class Image(val bitmap: android.
 @Composable
 fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier, maxDurationMs: Long? = null) {
     val context = LocalContext.current
-    val resolvedUrl = remember(mediaUrl) { resolveFynxMediaUrl(context, mediaUrl) }
+    val resolvedUrl = remember(mediaUrl) {
+        val candidate = mediaUrl.trim()
+        if (Uri.parse(candidate).scheme.equals("file", ignoreCase = true)) candidate
+        else resolveFynxMediaUrl(context, candidate)
+    }
     val scope = rememberCoroutineScope()
     var player by remember(resolvedUrl) { mutableStateOf<MediaPlayer?>(null) }
     var playing by remember(resolvedUrl) { mutableStateOf(false) }
@@ -283,9 +288,21 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier, maxDuration
                 loading = true; error = null
                 scope.launch {
                     try {
-                        val cached = remoteMediaCacheFile(context, resolvedUrl, ".audio")
-                        val target = cached ?: File.createTempFile("fynx_audio_", ".audio", context.cacheDir)
-                        if (cached?.exists() != true) downloadRemoteMedia(context, resolvedUrl, target).getOrThrow()
+                        val localFile = runCatching {
+                            Uri.parse(resolvedUrl)
+                                .takeIf { it.scheme.equals("file", ignoreCase = true) }
+                                ?.path
+                                ?.let(::File)
+                                ?.takeIf { it.isFile && it.length() > 0L }
+                        }.getOrNull()
+                        val target = if (Uri.parse(resolvedUrl).scheme.equals("file", ignoreCase = true)) {
+                            localFile ?: error("Recorded audio file is unavailable.")
+                        } else {
+                            val cached = remoteMediaCacheFile(context, resolvedUrl, ".audio")
+                            val remoteTarget = cached ?: File.createTempFile("fynx_audio_", ".audio", context.cacheDir)
+                            if (cached?.exists() != true) downloadRemoteMedia(context, resolvedUrl, remoteTarget).getOrThrow()
+                            remoteTarget
+                        }
                         val next = MediaPlayer().apply {
                             setAudioAttributes(AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).setUsage(AudioAttributes.USAGE_MEDIA).build())
                             setDataSource(target.absolutePath)
