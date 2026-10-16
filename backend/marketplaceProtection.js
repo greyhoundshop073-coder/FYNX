@@ -144,7 +144,7 @@ async function createCase(req, res, caseType) {
   const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 160) : '';
   const details = typeof req.body?.details === 'string' ? req.body.details.trim().slice(0, 4000) : '';
   const suppliedKey = typeof req.get('idempotency-key') === 'string' ? req.get('idempotency-key').trim().slice(0, 160) : '';
-  const idempotencyKey = suppliedKey || `FYNX-${caseType}-${orderId}-${req.user.sub}`;
+  let idempotencyKey = suppliedKey || `FYNX-${caseType}-${orderId}-${req.user.sub}`;
   const allowedDisputeReasons = new Set(['ITEM_NOT_RECEIVED', 'WRONG_ITEM', 'DAMAGED', 'NOT_AS_DESCRIBED', 'SUSPECTED_SCAM', 'OTHER']);
   if (!orderId) return res.status(400).json({ error: 'invalid order id' });
   if (caseType === 'DISPUTE' && !allowedDisputeReasons.has(reason.toUpperCase())) {
@@ -173,10 +173,13 @@ async function createCase(req, res, caseType) {
       }
 
       const existing = (await client.query('SELECT id,case_type,reason,details,status,previous_order_status,previous_escrow_status,created_at,updated_at FROM marketplace_protection_cases WHERE idempotency_key=$1', [idempotencyKey])).rows[0];
-      if (existing) {
+      if (existing && (suppliedKey || ['OPEN', 'UNDER_REVIEW'].includes(String(existing.status)))) {
         await client.query('ROLLBACK');
         return res.json({ case: existing, idempotent: true });
       }
+      // Keep retries idempotent while a case is active. If the client did not
+      // supply a key and the prior case is closed, a new attempt needs a new key.
+      if (existing && !suppliedKey) idempotencyKey = `${idempotencyKey}-${crypto.randomUUID()}`;
       const activeCase = (await client.query("SELECT id,case_type,status FROM marketplace_protection_cases WHERE order_id=$1 AND status IN ('OPEN','UNDER_REVIEW') ORDER BY created_at DESC LIMIT 1", [orderId])).rows[0];
       if (activeCase) {
         await client.query('ROLLBACK');
