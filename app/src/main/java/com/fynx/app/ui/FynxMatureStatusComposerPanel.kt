@@ -175,7 +175,7 @@ fun FynxMatureStatusComposerPanel(
                     OutlinedTextField(
                         value = text,
                         onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) },
-                        placeholder = { Text("Type a Status", color = Color(foreground).copy(alpha = .6f), textAlign = editorTextAlign, modifier = Modifier.fillMaxWidth()) },
+                        placeholder = { Text("Type a Status...", color = Color(foreground).copy(alpha = .6f), textAlign = editorTextAlign, modifier = Modifier.fillMaxWidth()) },
                         textStyle = LocalTextStyle.current.copy(
                             color = Color(foreground),
                             textAlign = editorTextAlign,
@@ -234,7 +234,7 @@ fun FynxMatureStatusComposerPanel(
                 }
             }
             Spacer(Modifier.weight(1f))
-            Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (showColors && type == FynxStatusType.TEXT) {
                         Surface(
                             color = Color(0xFF202124),
@@ -340,7 +340,7 @@ fun FynxMatureStatusComposerPanel(
                         }
                     }
                     selectedMusic?.let { music ->
-                        Surface(color = Color.Black.copy(alpha = .32f), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                        Surface(color = Color.Black.copy(alpha = .32f), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp)) {
                             Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.MusicNote, "Music", tint = Color.White)
                                 Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
@@ -356,7 +356,7 @@ fun FynxMatureStatusComposerPanel(
                     }
                     if (type == FynxStatusType.TEXT) {
                         Row(
-                            Modifier.fillMaxWidth(),
+                            Modifier.fillMaxWidth().padding(horizontal = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             // Keep the three composition tools grouped like the reference.
@@ -457,7 +457,7 @@ fun FynxMatureStatusComposerPanel(
                         OutlinedTextField(
                             value = text,
                             onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) },
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp).imePadding(),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).imePadding(),
                             singleLine = true,
                             placeholder = { Text("Add a caption…", color = Color.White.copy(alpha = .72f)) },
                             textStyle = LocalTextStyle.current.copy(color = Color.White, fontWeight = FontWeight.Bold),
