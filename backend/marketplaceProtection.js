@@ -142,7 +142,7 @@ export function registerMarketplaceProtectionRoutes({ app }) {
 async function createCase(req, res, caseType) {
   const orderId = parseUuid(req.params.id);
   const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 160) : '';
-  const details = typeof req.body?.details === 'string' ? req.body.details.trim().slice(0, 2000) : '';
+  const details = typeof req.body?.details === 'string' ? req.body.details.trim().slice(0, 4000) : '';
   const suppliedKey = typeof req.get('idempotency-key') === 'string' ? req.get('idempotency-key').trim().slice(0, 160) : '';
   const idempotencyKey = suppliedKey || `FYNX-${caseType}-${orderId}-${req.user.sub}`;
   const allowedDisputeReasons = new Set(['ITEM_NOT_RECEIVED', 'WRONG_ITEM', 'DAMAGED', 'NOT_AS_DESCRIBED', 'SUSPECTED_SCAM', 'OTHER']);
