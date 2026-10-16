@@ -79,9 +79,9 @@ for path in sorted(UI.rglob("*.kt")):
         opening = call + len(token) - 1
         args = call_arguments(source, opening)
         if "containerColor = FynxDesign.Surface" in args and "headlineColor = FynxDesign.TextPrimary" not in args:
-            line = source.count("\\n", 0, call) + 1
+            line = source.count("\n", 0, call) + 1
             problems.append(f"{path.relative_to(ROOT)}:{line}: dark ListItem surface lacks explicit readable headlineColor")
         cursor = opening + len(args) + 2
 
-assert not problems, "Found card contrast regressions:\\n" + "\\n".join(problems)
+assert not problems, "Found card contrast regressions:\n" + "\n".join(problems)
 print(f"PASS: Home blue/foreground pairing; scanned {scanned_files} Kotlin UI files and {custom_surface_cards} custom-surface card declarations.")
