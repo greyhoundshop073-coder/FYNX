@@ -29,9 +29,9 @@ for needle in required:
     if needle not in backend:
         violations.append(f"central transport invariant missing: {needle}")
 connection_manager = Path("app/src/main/java/com/fynx/app/ui/FynxAppConnectionManager.kt").read_text(encoding="utf-8")
-for needle in ['manager.activeNetwork ?: return false', 'capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)', 'manager.registerDefaultNetworkCallback(newCallback)']:
+for needle in ['manager.activeNetwork ?: return false', 'capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)', 'manager.registerDefaultNetworkCallback(newCallback)', 'override fun onCapabilitiesChanged(', '= refreshDefaultNetwork()', 'private fun refreshDefaultNetwork()', 'probeJob?.cancel()', 'probeJob = null']:
     if needle not in connection_manager:
-        violations.append(f"app connection default-network invariant missing: {needle}")
+        violations.append(f"app connection default-network/reprobe invariant missing: {needle}")
 backend_client = backend
 if 'manager.allNetworks' in backend_client:
     violations.append("backend availability must not count a non-default network as the HTTP route")
