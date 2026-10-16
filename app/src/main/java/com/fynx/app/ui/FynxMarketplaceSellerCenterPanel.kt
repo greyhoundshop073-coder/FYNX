@@ -53,6 +53,24 @@ fun FynxMarketplaceSellerCenterPanel() {
     var moneyLoading by remember { mutableStateOf(true) }
     var moneyError by remember { mutableStateOf<String?>(null) }
     var moneyRecords by remember { mutableStateOf(emptyList<SellerMoneyRecord>()) }
+    var driverAssignments by remember { mutableStateOf(emptyList<FynxRemoteSocialClient.MarketplaceDriverAssignment>()) }
+    var driverLoading by remember { mutableStateOf(true) }
+    var driverError by remember { mutableStateOf<String?>(null) }
+    var driverBusyId by remember { mutableStateOf<String?>(null) }
+    var deliveryProofOrder by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceDriverAssignment?>(null) }
+    var recipientName by remember { mutableStateOf("") }
+    var deliveryNote by remember { mutableStateOf("") }
+
+    fun loadDriverAssignments() {
+        scope.launch {
+            driverLoading = true
+            driverError = null
+            FynxRemoteSocialClient.marketplaceDriverAssignments(context)
+                .onSuccess { driverAssignments = it }
+                .onFailure { driverError = it.message ?: "Assigned deliveries could not load." }
+            driverLoading = false
+        }
+    }
 
     fun loadMoney() {
         scope.launch {
@@ -135,9 +153,37 @@ fun FynxMarketplaceSellerCenterPanel() {
         }
     }
 
-    LaunchedEffect(Unit) { refresh() }
+    LaunchedEffect(Unit) { refresh(); loadDriverAssignments() }
 
     val currencies = moneyRecords.map { it.currency }.distinct()
+
+    deliveryProofOrder?.let { assignment ->
+        AlertDialog(
+            onDismissRequest = { if (driverBusyId == null) deliveryProofOrder = null },
+            title = { Text("Record delivery") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Order ${assignment.orderId.take(8)}. The buyer still controls receipt confirmation and inspection.")
+                    OutlinedTextField(recipientName, { recipientName = it.take(120) }, label = { Text("Recipient name") }, singleLine = true)
+                    OutlinedTextField(deliveryNote, { deliveryNote = it.take(1000) }, label = { Text("Delivery note / proof") }, minLines = 2)
+                    driverError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                Button(enabled = driverBusyId == null && recipientName.isNotBlank() && deliveryNote.isNotBlank(), onClick = {
+                    driverBusyId = assignment.orderId
+                    driverError = null
+                    scope.launch {
+                        FynxRemoteSocialClient.recordMarketplaceDriverDelivery(context, assignment.orderId, recipientName, deliveryNote)
+                            .onSuccess { deliveryProofOrder = null; loadDriverAssignments() }
+                            .onFailure { driverError = it.message ?: "Delivery evidence could not be submitted." }
+                        driverBusyId = null
+                    }
+                }) { if (driverBusyId == assignment.orderId) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Submit evidence") }
+            },
+            dismissButton = { TextButton(onClick = { if (driverBusyId == null) deliveryProofOrder = null }) { Text("Cancel") } }
+        )
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(12.dp),
@@ -152,6 +198,47 @@ fun FynxMarketplaceSellerCenterPanel() {
                     Text("Your Marketplace sales, protected funds and payout controls use your real FYNX account data.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick = { refresh() }) { Icon(Icons.Default.Refresh, "Refresh seller center") }
+            }
+        }
+
+        item {
+            Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Driver deliveries", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { loadDriverAssignments() }) { Icon(Icons.Default.Refresh, "Refresh assigned deliveries") }
+                    }
+                    Text("Only orders assigned to your signed-in account are shown. Delivery evidence does not complete the buyer's order or release seller funds.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (driverLoading) CircularProgressIndicator(Modifier.size(20.dp))
+                    driverError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    if (!driverLoading && driverAssignments.isEmpty() && driverError == null) Text("No assigned deliveries for this account.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    driverAssignments.forEach { assignment ->
+                        HorizontalDivider()
+                        Text(assignment.productTitle, fontWeight = FontWeight.SemiBold)
+                        Text("Order ${assignment.orderId.take(8)} • ${assignment.status} • ${assignment.fulfillmentStatus}", style = MaterialTheme.typography.bodySmall)
+                        Text("Buyer: ${assignment.buyerName.ifBlank { "Buyer" }} • ${formatSellerMoney(assignment.totalAmount, assignment.currency)}", style = MaterialTheme.typography.bodySmall)
+                        assignment.shippingAddress?.let { address ->
+                            Text("Deliver to: ${address.optString("name")} • ${address.optString("phone")}\n${address.optString("address")}${address.optString("city").let { if (it.isBlank()) "" else ", $it" }}", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (assignment.acceptedAt == null) {
+                            Button(enabled = driverBusyId == null, onClick = {
+                                driverBusyId = assignment.orderId
+                                scope.launch {
+                                    FynxRemoteSocialClient.acceptMarketplaceDriverAssignment(context, assignment.orderId)
+                                        .onSuccess { loadDriverAssignments() }
+                                        .onFailure { driverError = it.message ?: "Could not accept this delivery." }
+                                    driverBusyId = null
+                                }
+                            }) { if (driverBusyId == assignment.orderId) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Accept delivery") }
+                        } else if (assignment.handoverAt == null) {
+                            Text("Accepted — waiting for seller to record handover.", style = MaterialTheme.typography.bodySmall)
+                        } else if (assignment.deliveredAt == null) {
+                            Button(onClick = { deliveryProofOrder = assignment; recipientName = ""; deliveryNote = "" }, enabled = driverBusyId == null) { Text("Record delivery") }
+                        } else {
+                            Text("Delivery evidence submitted. Buyer confirmation is still required.", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
             }
         }
 
