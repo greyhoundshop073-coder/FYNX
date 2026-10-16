@@ -234,6 +234,8 @@ fun FynxMarketplaceSellerCenterPanel() {
                             Text("Accepted — waiting for seller to record handover.", style = MaterialTheme.typography.bodySmall)
                         } else if (assignment.deliveredAt == null) {
                             Button(onClick = { deliveryProofOrder = assignment; recipientName = ""; deliveryNote = "" }, enabled = driverBusyId == null) { Text("Record delivery") }
+                        } else if (assignment.status == "INSPECTION") {
+                            Text("Buyer confirmed receipt. The protected inspection period is active.", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
                         } else {
                             Text("Delivery evidence submitted. Buyer confirmation is still required.", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
                         }
