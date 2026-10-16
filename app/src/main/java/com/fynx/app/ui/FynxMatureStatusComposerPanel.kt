@@ -206,7 +206,7 @@ fun FynxMatureStatusComposerPanel(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp)
-                        .padding(top = 76.dp, bottom = if (showColors) 350.dp else if (showMediaTools) 150.dp else 104.dp)
+                        .padding(top = 76.dp, bottom = if (showColors) 300.dp else if (showMediaTools) 150.dp else 104.dp)
                         .imePadding(),
                     minLines = 2,
                         maxLines = 10
@@ -355,19 +355,104 @@ fun FynxMatureStatusComposerPanel(
                         }
                     }
                     if (type == FynxStatusType.TEXT) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.TextFields, null, tint = Color.White)
-                            if (text.length >= FYNX_STATUS_MAX_TEXT_LENGTH) {
-                                Text("$FYNX_STATUS_MAX_TEXT_LENGTH/$FYNX_STATUS_MAX_TEXT_LENGTH", color = Color.White, modifier = Modifier.padding(start = 8.dp))
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Keep the three composition tools grouped like the reference.
+                            IconButton(
+                                onClick = { showColors = !showColors },
+                                enabled = !recording && !publishing,
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Icon(Icons.Default.TextFields, "Text styling", tint = Color.White)
                             }
-                            Spacer(Modifier.weight(1f))
                             var showStatusEmoji by remember { mutableStateOf(false) }
                             Box {
-                                IconButton(onClick = { showStatusEmoji = true }, enabled = !recording && !publishing) { Icon(Icons.Default.EmojiEmotions, "Add emoji", tint = Color.White) }
+                                IconButton(
+                                    onClick = { showStatusEmoji = true },
+                                    enabled = !recording && !publishing,
+                                    modifier = Modifier.size(44.dp)
+                                ) {
+                                    Icon(Icons.Default.EmojiEmotions, "Add emoji", tint = Color.White)
+                                }
                                 DropdownMenu(expanded = showStatusEmoji, onDismissRequest = { showStatusEmoji = false }) {
                                     listOf("😀","😂","😍","🔥","❤️","👍","🎉","😮").forEach { emoji ->
-                                        DropdownMenuItem(text = { Text(emoji, fontSize = 22.sp) }, onClick = { text = (text + emoji).take(FYNX_STATUS_MAX_TEXT_LENGTH); showStatusEmoji = false })
+                                        DropdownMenuItem(
+                                            text = { Text(emoji, fontSize = 22.sp) },
+                                            onClick = {
+                                                text = (text + emoji).take(FYNX_STATUS_MAX_TEXT_LENGTH)
+                                                showStatusEmoji = false
+                                            }
+                                        )
                                     }
+                                }
+                            }
+                            IconButton(
+                                onClick = { showMediaTools = !showMediaTools },
+                                enabled = !recording && !publishing,
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Icon(
+                                    if (showMediaTools) Icons.Default.Close else Icons.Default.AddAPhoto,
+                                    if (showMediaTools) "Hide media tools" else "Add photo or media",
+                                    tint = Color.White
+                                )
+                            }
+                            if (text.length >= FYNX_STATUS_MAX_TEXT_LENGTH) {
+                                Text(
+                                    "$FYNX_STATUS_MAX_TEXT_LENGTH/$FYNX_STATUS_MAX_TEXT_LENGTH",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                            Spacer(Modifier.weight(1f))
+                            var audienceMenu by remember { mutableStateOf(false) }
+                            Box {
+                                AssistChip(
+                                    onClick = { audienceMenu = true },
+                                    enabled = !recording && !publishing,
+                                    leadingIcon = {
+                                        Icon(
+                                            if (audience == FynxStatusAudience.EVERYONE) Icons.Default.Public
+                                            else if (audience == FynxStatusAudience.FRIENDS) Icons.Default.People
+                                            else Icons.Default.Lock,
+                                            contentDescription = null
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            if (audience == FynxStatusAudience.EVERYONE) "Everyone"
+                                            else if (audience == FynxStatusAudience.FRIENDS) "Friends"
+                                            else "Only me"
+                                        )
+                                    },
+                                    colors = AssistChipDefaults.assistChipColors(
+                                        containerColor = Color.Transparent,
+                                        labelColor = Color.White,
+                                        leadingIconContentColor = Color(0xFF64B5F6)
+                                    ),
+                                    border = androidx.compose.material3.AssistChipDefaults.assistChipBorder(
+                                        enabled = true,
+                                        borderColor = Color.White.copy(alpha = .65f)
+                                    )
+                                )
+                                DropdownMenu(expanded = audienceMenu, onDismissRequest = { audienceMenu = false }) {
+                                    DropdownMenuItem(text = { Text("Everyone") }, onClick = {
+                                        audience = FynxStatusAudience.EVERYONE
+                                        FynxPreferencesStore.saveVisibility(context, "status_audience", audience.name)
+                                        audienceMenu = false
+                                    })
+                                    DropdownMenuItem(text = { Text("Friends") }, onClick = {
+                                        audience = FynxStatusAudience.FRIENDS
+                                        FynxPreferencesStore.saveVisibility(context, "status_audience", audience.name)
+                                        audienceMenu = false
+                                    })
+                                    DropdownMenuItem(text = { Text("Only me") }, onClick = {
+                                        audience = FynxStatusAudience.ONLY_ME
+                                        FynxPreferencesStore.saveVisibility(context, "status_audience", audience.name)
+                                        audienceMenu = false
+                                    })
                                 }
                             }
                         }
@@ -404,47 +489,7 @@ fun FynxMatureStatusComposerPanel(
                             item { MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording) { type = FynxStatusType.VOICE; showColors = false; error = null; mediaUri = null; elapsed = 0L; accumulatedRecordingMs = 0L; if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false; recording = true }, onError = { message -> error = message }) else micPermission.launch(Manifest.permission.RECORD_AUDIO) } }
                         }
                     }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Spacer(Modifier.weight(1f))
-                        IconButton(
-                            onClick = { showMediaTools = !showMediaTools },
-                            enabled = !recording && !publishing,
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            if (showMediaTools) {
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = "Hide status media tools",
-                                    tint = Color.White
-                                )
-                            } else {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.AddAPhoto,
-                                        contentDescription = "Show status media tools",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(25.dp)
-                                    )
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = Color.White,
-                                        modifier = Modifier
-                                            .size(11.dp)
-                                            .align(Alignment.BottomEnd)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Add,
-                                            contentDescription = null,
-                                            tint = Color.Black,
-                                            modifier = Modifier
-                                                .padding(1.dp)
-                                                .size(9.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    // Media tools are revealed from the photo/add control in the action row.
                                         if (type == FynxStatusType.VOICE) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                             if (recording) {
@@ -504,25 +549,11 @@ fun FynxMatureStatusComposerPanel(
                             }
                         }
                     }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Audience", color = Color.White, style = MaterialTheme.typography.labelLarge)
-                        Spacer(Modifier.width(10.dp))
-                        var audienceMenu by remember { mutableStateOf(false) }
-                        Box {
-                            AssistChip(
-                                onClick = { audienceMenu = true },
-                                enabled = !recording && !publishing,
-                                leadingIcon = { Icon(if (audience == FynxStatusAudience.EVERYONE) Icons.Default.Public else if (audience == FynxStatusAudience.FRIENDS) Icons.Default.People else Icons.Default.Lock, null) },
-                                label = { Text(if (audience == FynxStatusAudience.EVERYONE) "Everyone" else if (audience == FynxStatusAudience.FRIENDS) "Friends" else "Only me", color = Color(0xFF17212B)) },
-                                colors = AssistChipDefaults.assistChipColors(containerColor = Color(0xFFE8F1FB), labelColor = Color(0xFF17212B), leadingIconContentColor = Color(0xFF1565C0))
-                            )
-                            DropdownMenu(expanded = audienceMenu, onDismissRequest = { audienceMenu = false }) {
-                                DropdownMenuItem(text = { Text("Everyone") }, onClick = { audience = FynxStatusAudience.EVERYONE; FynxPreferencesStore.saveVisibility(context, "status_audience", audience.name); audienceMenu = false })
-                                DropdownMenuItem(text = { Text("Friends") }, onClick = { audience = FynxStatusAudience.FRIENDS; FynxPreferencesStore.saveVisibility(context, "status_audience", audience.name); audienceMenu = false })
-                                DropdownMenuItem(text = { Text("Only me") }, onClick = { audience = FynxStatusAudience.ONLY_ME; FynxPreferencesStore.saveVisibility(context, "status_audience", audience.name); audienceMenu = false })
-                            }
-                        }
-                        Spacer(Modifier.weight(1f))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         if (showColors && type == FynxStatusType.TEXT) {
                             TextButton(
                                 onClick = { showColors = false },
