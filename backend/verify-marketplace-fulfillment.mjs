@@ -52,6 +52,12 @@ const checks = [
   ['only the assigned driver can record delivery with recipient and proof evidence', completion.includes("app.post('/api/marketplace/orders/:id/driver-delivery'") && completion.includes('only the assigned driver can confirm delivery') && completion.includes('recipient name and delivery note or photo reference are required') && completion.includes('RECIPIENT_NAME') && completion.includes('PHOTO_REFERENCE')],
   ['buyer delivery confirmation waits for assigned driver evidence', completion.includes('assigned driver has not recorded delivery evidence yet') && completion.includes('SELECT delivered_at FROM marketplace_delivery_assignments')],
   ['driver assignment and evidence tables are indexed and linked to order/user records', completion.includes('CREATE TABLE IF NOT EXISTS marketplace_delivery_assignments') && completion.includes('marketplace_delivery_assignments_driver_idx') && completion.includes('CREATE TABLE IF NOT EXISTS marketplace_delivery_evidence') && completion.includes('marketplace_delivery_evidence_order_idx')],
+  ['driver queue is scoped to the authenticated driver account', completion.includes("app.get('/api/marketplace/driver/assignments'") && completion.includes('WHERE a.driver_id = $1') && completion.includes("req.user.sub")],
+  ['driver address and buyer contact are hidden until assignment acceptance', completion.includes('shippingAddress: row.accepted_at ? row.shipping_address : null') && completion.includes("buyerName: row.accepted_at ?")],
+  ['seller order API exposes driver acceptance and custody state', completion.includes('delivery_driver_accepted_at') && completion.includes('delivery_driver_handover_at') && completion.includes('delivery_driver_delivered_at')],
+  ['seller can assign by username and confirm physical handover', completion.includes('driverUsername') && completion.includes("app.post('/api/marketplace/orders/:id/driver-handover'")],
+  ['Android exposes driver assignment, acceptance and evidence actions', socialClient.includes('marketplaceDriverAssignments') && socialClient.includes('acceptMarketplaceDriverAssignment') && socialClient.includes('recordMarketplaceDriverDelivery')],
+
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
