@@ -60,7 +60,7 @@ object FynxBackendClient {
             val root = baseUrl(context)
             require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }
             require(path.startsWith("/")) { "Backend path must start with /." }
-            require(mimeType.isNotBlank() && !mimeType.contains("\\r") && !mimeType.contains("\\n")) { "Invalid media type." }
+            require(mimeType.isNotBlank() && !mimeType.contains("\r") && !mimeType.contains("\n")) { "Invalid media type." }
             awaitValidatedNetwork(context)
             val weak = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK
             val response = requestSemaphore.withPermit {
