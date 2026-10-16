@@ -116,9 +116,18 @@ class FynxAppConnectionManager(
 
     private fun hasUsableTransport(): Boolean {
         val manager = connectivityManager ?: return false
-        val active = manager.activeNetwork ?: return false
-        val capabilities = manager.getNetworkCapabilities(active) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        val active = manager.activeNetwork
+        // During Wi-Fi/mobile handover Android may briefly report no active network
+        // while another INTERNET-capable network is still available. Match the
+        // backend client's transport check instead of falsely dropping to WAITING.
+        val candidates = buildList {
+            if (active != null) add(active)
+            manager.allNetworks.filter { it != active }.forEach(::add)
+        }
+        return candidates.any { network ->
+            val capabilities = manager.getNetworkCapabilities(network) ?: return@any false
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        }
     }
 
     private fun evaluate() {
