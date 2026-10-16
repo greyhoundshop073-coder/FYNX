@@ -6,7 +6,7 @@ workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="ut
 
 checks = {
     "debug login is limited to Android debuggable builds": "ApplicationInfo.FLAG_DEBUGGABLE" in auth and "if (!isDebuggable || requestedUsername.isBlank()) return null" in auth,
-    "primary Sign In requires a password and invokes server authentication": 'password.isBlank() -> error = "Enter your username and password."' in auth and "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth and "Server sign-in is always the primary path" in auth,
+    "primary Sign In requires a password and invokes server authentication without silent offline fallback": 'password.isBlank() -> error = "Enter your username and password."' in auth and "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth and "Server sign-in is always the primary path" in auth and "FynxRemoteAuthClient.login(context, requestedUsername, password), allowOfflineEntry = true" not in auth,
     "saved-device login is an explicit secondary offline action": 'Text("Continue with saved device (offline)")' in auth and "A saved device session is available for offline use." in auth,
     "missing saved account never converts arbitrary typed username into local login": "return saved?.takeIf { it.equals(normalizedUsername, ignoreCase = true) }" in auth and "saved == null -> normalizedUsername" not in auth,
     "offline fallback requires a recognized network failure": "allowOfflineEntry && isLoginNetworkFailure(failure)" in auth,
