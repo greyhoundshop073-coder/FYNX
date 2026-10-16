@@ -244,8 +244,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
   app.get('/api/admin/marketplace/drivers', auth, async (req, res) => {
     try {
       await ensureSchema();
-      const admin = await pool.query('SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role=\'ADMIN\' LIMIT 1', [req.user.sub]);
-      if (!admin.rowCount) return res.status(403).json({ error: 'administrator access required' });
+      if (!(await hasMarketplaceAdminAccess(pool, req.user.sub))) return res.status(403).json({ error: 'administrator access required' });
       const result = await pool.query(`
         SELECT d.user_id, u.username, u.display_name, d.active, d.approved_by, d.approved_at, d.updated_at
         FROM marketplace_approved_drivers d JOIN users u ON u.id=d.user_id
