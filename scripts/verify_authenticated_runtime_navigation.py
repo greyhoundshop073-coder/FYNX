@@ -681,6 +681,8 @@ if not FAILURES:
                         run("adb","shell","input","keyevent","4")
                         time.sleep(1.0)
                         stories_home = dump_ui("status-voice-return-to-stories.xml")
+                        if not find_control(stories_home, ["Add status"]):
+                            stories_home = tap_control(stories_home, ["Stories"], "status-voice-return-to-stories-tab", ["Recent updates"])
                         voice_add = tap_control(stories_home, ["Add status"], "status-voice-add-menu", ["Text", "Photo", "Voice"])
                         if voice_add:
                             voice_composer = tap_control(voice_add, ["Voice"], "status-voice-composer", ["Start recording"])
