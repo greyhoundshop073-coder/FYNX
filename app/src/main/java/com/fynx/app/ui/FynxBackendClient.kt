@@ -52,6 +52,28 @@ object FynxBackendClient {
     suspend fun health(context: Context): Result<String> = get(context, "/health")
     suspend fun get(context: Context, path: String): Result<String> = request(context, "GET", path, null)
     suspend fun postJson(context: Context, path: String, body: String): Result<String> = request(context, "POST", path, body)
+
+    /** Upload raw media bytes without Base64 expansion or a JSON wrapper. */
+    suspend fun postBytes(context: Context, path: String, mimeType: String, body: ByteArray): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            require(body.isNotEmpty()) { "FYNX upload body is empty." }
+            val root = baseUrl(context)
+            require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }
+            require(path.startsWith("/")) { "Backend path must start with /." }
+            require(mimeType.isNotBlank() && !mimeType.contains("\\r") && !mimeType.contains("\\n")) { "Invalid media type." }
+            awaitValidatedNetwork(context)
+            val weak = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK
+            val response = requestSemaphore.withPermit {
+                if (weak) weakRequestSemaphore.withPermit { executeBinaryRequest(context, root, path, mimeType, body, true) }
+                else executeBinaryRequest(context, root, path, mimeType, body, false)
+            }
+            Result.success(response)
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+            Result.failure(error)
+        }
+    }
+
     suspend fun patchJson(context: Context, path: String, body: String): Result<String> = request(context, "PATCH", path, body)
     suspend fun delete(context: Context, path: String): Result<String> = request(context, "DELETE", path, null)
     suspend fun currentUserId(context: Context): Result<String> = get(context, "/api/me").mapCatching { raw -> JSONObject(raw).getJSONObject("user").getString("id") }
@@ -107,6 +129,61 @@ object FynxBackendClient {
 
     private suspend fun awaitValidatedNetwork(context: Context) { if (hasNetwork(context)) return; var waited = 0L; while (waited < NETWORK_VALIDATION_WAIT_MS) { delay(NETWORK_VALIDATION_POLL_MS); waited += NETWORK_VALIDATION_POLL_MS; if (hasNetwork(context)) return }; throw FynxNetworkUnavailableException() }
     private fun isPublicAuthPath(path: String): Boolean = path == "/api/auth/login" || path == "/api/auth/register"
+    private suspend fun executeBinaryRequest(context: Context, root: String, path: String, mimeType: String, body: ByteArray, weakNetwork: Boolean): String {
+        val connection = (URL(root + path).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = if (weakNetwork) 30_000 else 20_000
+            readTimeout = if (weakNetwork) 120_000 else 90_000
+            useCaches = false
+            doOutput = true
+            setFixedLengthStreamingMode(body.size)
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("Content-Type", "application/octet-stream")
+            setRequestProperty("X-FYNX-Media-Type", mimeType)
+            setRequestProperty("Accept-Encoding", "identity")
+            setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0")
+            setRequestProperty("Connection", "close")
+            setRequestProperty("User-Agent", "FYNX-Android/1")
+            accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
+        }
+        val cancellationHandle = currentCoroutineContext().job.invokeOnCompletion { connection.disconnect() }
+        try {
+            connection.outputStream.use { output ->
+                var offset = 0
+                while (offset < body.size) {
+                    val count = minOf(32 * 1024, body.size - offset)
+                    output.write(body, offset, count)
+                    offset += count
+                }
+                output.flush()
+            }
+            val status = connection.responseCode
+            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+            val response = stream?.use { input ->
+                val output = StringBuilder()
+                val buffer = ByteArray(16 * 1024)
+                var total = 0
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    total += count
+                    if (total > MAX_RESPONSE_BYTES) throw IOException("FYNX backend response is too large")
+                    output.append(String(buffer, 0, count, Charsets.UTF_8))
+                }
+                output.toString()
+            }.orEmpty()
+            if (status == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                FynxAuthStore.clear(context)
+                throw FynxUnauthorizedException()
+            }
+            if (status !in 200..299) throw FynxHttpException(status, response)
+            return response
+        } finally {
+            cancellationHandle.dispose()
+            connection.disconnect()
+        }
+    }
+
     private suspend fun executeRequest(context: Context, root: String, method: String, path: String, body: String?): String {
         val weakNetwork = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK
         val requiresAuthentication = !isPublicAuthPath(path)
