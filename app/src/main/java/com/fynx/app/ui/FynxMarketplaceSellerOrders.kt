@@ -227,7 +227,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                             order.driverAcceptedAt != null -> Text("Driver accepted. Record handover only when the parcel is physically handed over.")
                             else -> Text("Driver assignment sent. Waiting for acceptance.")
                         }
-                        if (order.driverId == null && order.status == "PAID") {
+                        if (order.driverAcceptedAt == null && order.status in setOf("PAID", "SHIPPED")) {
                             OutlinedTextField(driverUsername, { driverUsername = it.take(32) }, label = { Text("Driver username") }, singleLine = true, enabled = !busy)
                             Button(enabled = !busy && driverUsername.trim().removePrefix("@").isNotBlank(), onClick = {
                                 busy = true
@@ -238,7 +238,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                                         .onFailure { message = it.message ?: "Could not assign this driver." }
                                     busy = false
                                 }
-                            }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Assign driver") }
+                            }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(if (order.driverId == null) "Assign driver" else "Replace unaccepted driver") }
                         }
                         if (order.status == "SHIPPED" && order.driverAcceptedAt != null && order.driverHandoverAt == null) {
                             OutlinedTextField(handoverNote, { handoverNote = it.take(1000) }, label = { Text("Handover note") }, minLines = 2, enabled = !busy)
