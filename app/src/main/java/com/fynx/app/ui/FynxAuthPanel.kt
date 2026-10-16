@@ -248,12 +248,10 @@ private fun localDebugAccountForLogin(context: android.content.Context, requeste
     if (!isDebuggable || requestedUsername.isBlank()) return null
 
     val normalizedUsername = requestedUsername.trim().removePrefix("@")
-    val saved = FynxAuthStore.storedUsername(context)?.trim()?.takeIf { it.isNotBlank() }
-    return when {
-        saved == null -> normalizedUsername
-        saved.equals(normalizedUsername, ignoreCase = true) -> saved
-        else -> null
-    }
+    // Only restore a genuinely saved account. A fresh install must authenticate with
+    // the backend instead of silently creating a local-only session with no access token.
+    val saved = FynxAuthStore.storedUsername(context)?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    return saved.takeIf { it.equals(normalizedUsername, ignoreCase = true) }
 }
 
 private fun isLoginNetworkFailure(error: Throwable): Boolean =
