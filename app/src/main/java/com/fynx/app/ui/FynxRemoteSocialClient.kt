@@ -113,13 +113,13 @@ object FynxRemoteSocialClient {
         val text = "[FYNX_MARKETPLACE_AD]\n🛍️ ${title.trim().take(120)}\nPrice: $priceText\nStore: ${storeName.trim().take(120)}\n${description.trim().take(1000)}\nListing ID: $listingId"
         return FynxBackendClient.postJson(context, "/api/social/posts", JSONObject().apply { put("text", text.take(4000)); put("visibility", "PUBLIC"); put("mediaId", mediaId ?: JSONObject.NULL); put("mediaType", if (mediaId != null) "image" else JSONObject.NULL) }.toString()).map { Unit }
     }
-    suspend fun listings(context: Context, query: String = "", category: String = "All", seller: String = ""): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/listings?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&seller=${URLEncoder.encode(seller.removePrefix("@"), "UTF-8")}").mapCatching(::parseListings)
+    suspend fun listings(context: Context, query: String = "", category: String = "All", seller: String = ""): Result<List<MarketplaceListing>> = FynxBackendClient.getBounded(context, "/api/marketplace/listings?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&seller=${URLEncoder.encode(seller.removePrefix("@"), "UTF-8")}").mapCatching(::parseListings)
     data class MarketplaceListingPage(val listings: List<MarketplaceListing>, val hasMore: Boolean)
     suspend fun marketplaceDiscoveryPage(context: Context, query: String = "", category: String = "All", limit: Int = 24, offset: Int = 0, location: String = ""): Result<MarketplaceListingPage> {
         val safeLimit = limit.coerceIn(1, 60)
         val safeOffset = offset.coerceAtLeast(0)
         val path = "/api/marketplace/discovery?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&limit=$safeLimit&offset=$safeOffset&location=${URLEncoder.encode(location.trim(), "UTF-8")}"
-        return FynxBackendClient.get(context, path).mapCatching { raw ->
+        return FynxBackendClient.getBounded(context, path).mapCatching { raw ->
             val root = JSONObject(raw)
             MarketplaceListingPage(parseListings(raw), root.optBoolean("hasMore", false))
         }
@@ -136,7 +136,7 @@ object FynxRemoteSocialClient {
         val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
         return FynxBackendClient.delete(context, "/api/marketplace/listings/$numericId/price-watch").mapCatching { JSONObject(it).optBoolean("watched", false) }
     }
-    suspend fun nearbyMarketplaceListings(context: Context, query: String = "", category: String = "All", location: String): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/discovery?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&limit=60&location=${URLEncoder.encode(location.trim(), "UTF-8")}").mapCatching(::parseListings)
+    suspend fun nearbyMarketplaceListings(context: Context, query: String = "", category: String = "All", location: String): Result<List<MarketplaceListing>> = FynxBackendClient.getBounded(context, "/api/marketplace/discovery?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&limit=60&location=${URLEncoder.encode(location.trim(), "UTF-8")}").mapCatching(::parseListings)
     suspend fun myListings(context: Context): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/my-listings").mapCatching(::parseListings)
     suspend fun createMarketplaceListing(context: Context, title: String, description: String, storeName: String, price: Double, currency: String, category: String, condition: String, quantity: Int, location: String, deliveryAvailable: Boolean, pickupAvailable: Boolean, deliveryFee: Double?, mediaUris: List<Uri>): Result<MarketplaceListing?> = runCatching {
         require(title.trim().length >= 2) { "Product name is required." }; require(description.trim().length >= 5) { "Add a product description." }; require(price.isFinite() && price > 0) { "Enter a valid product price." }; require(FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency)) { "Marketplace currently supports NGN and USD." }; require(quantity > 0) { "Product quantity must be at least 1." }; require(mediaUris.isNotEmpty()) { "Add at least one product photo or video." }
