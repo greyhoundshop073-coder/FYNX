@@ -64,7 +64,7 @@ export function registerStatusManagementRoutes({ app }) {
   app.delete('/api/statuses/:statusId', auth, async (req, res) => {
     try {
       const statusId = String(req.params?.statusId || '').trim();
-      if (!/^[0-9a-f-]{36}$/i.test(statusId)) return res.status(400).json({ error: 'invalid status id' });
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(statusId)) return res.status(400).json({ error: 'invalid status id' });
       const result = await pool.query(
         'DELETE FROM statuses WHERE id=$1 AND owner_id=$2 RETURNING id',
         [statusId, req.user.sub]

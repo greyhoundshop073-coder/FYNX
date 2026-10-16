@@ -8,6 +8,14 @@ import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.io.File
 
+data class FynxStatusViewer(
+    val username: String,
+    val displayName: String,
+    val viewedAtMillis: Long,
+    val reaction: String?,
+    val liked: Boolean
+)
+
 data class FynxStatusInteractions(
     val viewCount: Int = 0,
     val likeCount: Int = 0,
@@ -119,12 +127,60 @@ object FynxStatusClient {
         if (reactionObject != null) reactionObject.keys().forEach { key -> counts[key] = reactionObject.optInt(key, 0) }
         FynxStatusInteractions(
             viewCount=o.optInt("viewCount"), likeCount=o.optInt("likeCount"), replyCount=o.optInt("replyCount"),
-            reactionCounts=counts, likedByMe=o.optBoolean("likedByMe"), myReaction=o.optString("myReaction").ifBlank { null }
+            reactionCounts=counts, likedByMe=o.optBoolean("likedByMe"), myReaction=if (o.isNull("myReaction")) null else o.optString("myReaction").ifBlank { null }
         )
     }
 
-    suspend fun markViewed(context: Context, statusId: String): Result<Unit> = runCatching {
-        FynxBackendClient.postJson(context, "/api/statuses/${statusId.trim()}/view", "{}").getOrThrow()
+    suspend fun mutualFollowUsernames(context: Context, usernames: List<String>): Result<Set<String>> = runCatching {
+        val normalized = usernames.map { it.removePrefix("@").trim().lowercase() }.filter { it.isNotBlank() && it.length <= 32 }.distinct().take(500)
+        if (normalized.isEmpty()) return@runCatching emptySet()
+        val body = JSONObject().put("usernames", org.json.JSONArray(normalized)).toString()
+        val raw = FynxBackendClient.postJson(context, "/api/social/mutual-follows", body).getOrThrow()
+        val items = JSONObject(raw).getJSONArray("mutualFollowUsernames")
+        buildSet { for (i in 0 until items.length()) add(items.getString(i).lowercase()) }
+    }
+
+    suspend fun viewers(context: Context, statusId: String): Result<List<FynxStatusViewer>> = runCatching {
+        val raw = FynxBackendClient.get(context, "/api/statuses/${statusId.trim()}/viewers").getOrThrow()
+        val items = JSONObject(raw).getJSONArray("viewers")
+        buildList {
+            for (i in 0 until items.length()) {
+                val item = items.getJSONObject(i)
+                add(FynxStatusViewer(
+                    username = item.optString("username"),
+                    displayName = item.optString("displayName").ifBlank { item.optString("username") },
+                    viewedAtMillis = item.optLong("viewedAtMillis"),
+                    reaction = item.optString("reaction").ifBlank { null },
+                    liked = item.optBoolean("liked")
+                ))
+            }
+        }
+    }
+
+    private const val VIEWED_STATUS_IDS = "fynx_viewed_status_ids"
+
+    fun viewedStatusIds(context: Context): Set<String> =
+        context.getSharedPreferences("fynx_status_views", Context.MODE_PRIVATE)
+            .getStringSet(VIEWED_STATUS_IDS, emptySet())
+            ?.toSet()
+            .orEmpty()
+
+    private fun rememberViewed(context: Context, statusId: String) {
+        val id = statusId.trim()
+        if (id.isBlank()) return
+        val prefs = context.getSharedPreferences("fynx_status_views", Context.MODE_PRIVATE)
+        val updated = prefs.getStringSet(VIEWED_STATUS_IDS, emptySet()).orEmpty().toMutableSet()
+        updated.add(id)
+        prefs.edit().putStringSet(VIEWED_STATUS_IDS, updated).apply()
+    }
+
+    suspend fun markViewed(context: Context, statusId: String): Result<Unit> {
+        rememberViewed(context, statusId)
+        // Notify Home immediately so the seen/unseen ring recomposes when a story is opened.
+        FynxHomeLifecycleRefreshBus.request(context)
+        return runCatching {
+            FynxBackendClient.postJson(context, "/api/statuses/${statusId.trim()}/view", "{}").getOrThrow()
+        }
     }
 
     suspend fun toggleLike(context: Context, statusId: String): Result<Boolean> = runCatching {
@@ -135,7 +191,7 @@ object FynxStatusClient {
     suspend fun react(context: Context, statusId: String, reaction: String): Result<String?> = runCatching {
         val body = JSONObject().put("reaction", reaction).toString()
         val raw = FynxBackendClient.postJson(context, "/api/statuses/${statusId.trim()}/reaction", body).getOrThrow()
-        JSONObject(raw).optString("reaction").ifBlank { null }
+        JSONObject(raw).let { response -> if (response.isNull("reaction")) null else response.optString("reaction").ifBlank { null } }
     }
 
     suspend fun reply(context: Context, statusId: String, body: String): Result<Unit> = runCatching {

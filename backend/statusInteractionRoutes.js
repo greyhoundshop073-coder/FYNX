@@ -70,7 +70,7 @@ export function registerStatusInteractionRoutes({ app }) {
     catch { return res.status(401).json({ error: 'invalid or expired token' }); }
   };
   const statusId = req => String(req.params?.statusId || '').trim();
-  const validId = id => /^[0-9a-f-]{36}$/i.test(id);
+  const validId = id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
   async function visibleStatus(id, userId) {
     if (!validId(id)) return null;
@@ -78,15 +78,17 @@ export function registerStatusInteractionRoutes({ app }) {
       SELECT s.id, s.owner_id
       FROM statuses s
       WHERE s.id=$1 AND s.expires_at > NOW()
-        AND (s.owner_id=$2 OR s.audience='EVERYONE' OR (s.audience='FRIENDS' AND EXISTS(
-          SELECT 1 FROM friendships f
-          WHERE ((f.user_id=s.owner_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=s.owner_id))
-            AND f.status='accepted'
-        )))
-        AND NOT EXISTS (
-          SELECT 1 FROM blocks b
-          WHERE (b.blocker_id=$2 AND b.blocked_id=s.owner_id) OR (b.blocker_id=s.owner_id AND b.blocked_id=$2)
-        )
+        AND (s.owner_id=$2 OR (
+          (s.audience='EVERYONE' OR (s.audience='FRIENDS' AND EXISTS(
+            SELECT 1 FROM friendships f
+            WHERE ((f.user_id=s.owner_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=s.owner_id))
+              AND f.status='accepted'
+          )))
+          AND NOT EXISTS (
+            SELECT 1 FROM blocks b
+            WHERE (b.blocker_id=$2 AND b.blocked_id=s.owner_id) OR (b.blocker_id=s.owner_id AND b.blocked_id=$2)
+          )
+        ))
       LIMIT 1`, [id, userId]);
     return result.rows[0] || null;
   }
@@ -120,6 +122,51 @@ export function registerStatusInteractionRoutes({ app }) {
     }
   });
 
+  // Only the Status owner may see the identities behind their view/reaction counts.
+  app.get('/api/statuses/:statusId/viewers', auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      const id = statusId(req);
+      if (!validId(id)) return res.status(400).json({ error: 'invalid status id' });
+      const owner = await pool.query(
+        'SELECT owner_id FROM statuses WHERE id=$1 AND owner_id=$2 AND expires_at > NOW() LIMIT 1',
+        [id, req.user.sub]
+      );
+      if (!owner.rows[0]) return res.status(404).json({ error: 'status not found or not owned by this account' });
+      const result = await pool.query(`
+        SELECT u.username, u.display_name,
+               v.viewed_at,
+               COALESCE(r.reaction, NULL) AS reaction,
+               (l.user_id IS NOT NULL) AS liked
+        FROM status_views v
+        JOIN users u ON u.id=v.viewer_id
+        LEFT JOIN status_reactions r ON r.status_id=v.status_id AND r.user_id=v.viewer_id
+        LEFT JOIN status_likes l ON l.status_id=v.status_id AND l.user_id=v.viewer_id
+        WHERE v.status_id=$1
+          AND NOT EXISTS (
+            SELECT 1 FROM blocks b
+            WHERE (b.blocker_id=$2 AND b.blocked_id=u.id)
+               OR (b.blocker_id=u.id AND b.blocked_id=$2)
+          )
+        ORDER BY v.viewed_at DESC
+        LIMIT 500
+      `, [id]);
+      return res.json({
+        statusId: id,
+        viewers: result.rows.map(row => ({
+          username: row.username,
+          displayName: row.display_name || row.username,
+          viewedAtMillis: new Date(row.viewed_at).getTime(),
+          reaction: row.reaction || null,
+          liked: Boolean(row.liked)
+        }))
+      });
+    } catch (error) {
+      console.error('status viewers read', error);
+      return res.status(500).json({ error: 'status viewers unavailable' });
+    }
+  });
+
   app.post('/api/statuses/:statusId/view', auth, async (req, res) => {
     try {
       await ensureSchema();
@@ -137,16 +184,44 @@ export function registerStatusInteractionRoutes({ app }) {
   });
 
   app.post('/api/statuses/:statusId/like', auth, async (req, res) => {
+    let transactionClient;
     try {
       await ensureSchema();
       const id = statusId(req);
       const status = await visibleStatus(id, req.user.sub);
       if (!status) return res.status(404).json({ error: 'status not found or not visible' });
-      const existing = await pool.query('SELECT 1 FROM status_likes WHERE status_id=$1 AND user_id=$2 LIMIT 1', [id, req.user.sub]);
-      if (existing.rows[0]) await pool.query('DELETE FROM status_likes WHERE status_id=$1 AND user_id=$2', [id, req.user.sub]);
-      else {
-        await pool.query('INSERT INTO status_likes(status_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [id, req.user.sub]);
-        if (String(status.owner_id) !== String(req.user.sub)) {
+
+      // Serialize toggles for this user/status pair. Without a lock, two rapid
+      // requests can both read "not liked" and both report a like was added.
+      transactionClient = await pool.connect();
+      await transactionClient.query('BEGIN');
+      await transactionClient.query(
+        'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2::text))',
+        [id, req.user.sub]
+      );
+      const existing = await transactionClient.query(
+        'SELECT 1 FROM status_likes WHERE status_id=$1 AND user_id=$2 LIMIT 1',
+        [id, req.user.sub]
+      );
+      const liked = !existing.rows[0];
+      if (!liked) {
+        await transactionClient.query(
+          'DELETE FROM status_likes WHERE status_id=$1 AND user_id=$2',
+          [id, req.user.sub]
+        );
+      } else {
+        await transactionClient.query(
+          'INSERT INTO status_likes(status_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING',
+          [id, req.user.sub]
+        );
+      }
+      await transactionClient.query('COMMIT');
+      transactionClient.release();
+      transactionClient = null;
+
+      // Notifications are best-effort and happen only after the toggle commits.
+      if (liked && String(status.owner_id) !== String(req.user.sub)) {
+        try {
           await queueFynxNotification(pool, {
             userId: status.owner_id,
             type: 'REACTION',
@@ -156,16 +231,25 @@ export function registerStatusInteractionRoutes({ app }) {
             sourceUsername: req.user.username || null,
             route: `fynx://status/${id}`
           });
+        } catch (error) {
+          console.error('status like notification', error);
         }
       }
-      return res.json({ liked: !existing.rows[0] });
+      return res.json({ liked });
     } catch (error) {
+      if (transactionClient) {
+        try { await transactionClient.query('ROLLBACK'); } catch (rollbackError) {
+          console.error('status like rollback', rollbackError);
+        }
+        transactionClient.release();
+      }
       console.error('status like', error);
       return res.status(500).json({ error: 'status like failed' });
     }
   });
 
   app.post('/api/statuses/:statusId/reaction', auth, async (req, res) => {
+    let transactionClient;
     try {
       await ensureSchema();
       const id = statusId(req);
@@ -173,32 +257,66 @@ export function registerStatusInteractionRoutes({ app }) {
       if (!reaction || reaction.length > 32) return res.status(400).json({ error: 'invalid reaction' });
       const status = await visibleStatus(id, req.user.sub);
       if (!status) return res.status(404).json({ error: 'status not found or not visible' });
-      const existing = await pool.query('SELECT reaction FROM status_reactions WHERE status_id=$1 AND user_id=$2', [id, req.user.sub]);
-      if (existing.rows[0]?.reaction === reaction) {
-        await pool.query('DELETE FROM status_reactions WHERE status_id=$1 AND user_id=$2', [id, req.user.sub]);
-        return res.json({ reaction: null });
+
+      // Serialize reaction toggles for this user/status pair, just like likes.
+      // Otherwise two rapid taps can both observe the old reaction and defeat
+      // the tap-to-remove behavior.
+      transactionClient = await pool.connect();
+      await transactionClient.query('BEGIN');
+      await transactionClient.query(
+        'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2::text))',
+        [id, req.user.sub]
+      );
+      const existing = await transactionClient.query(
+        'SELECT reaction FROM status_reactions WHERE status_id=$1 AND user_id=$2',
+        [id, req.user.sub]
+      );
+      const nextReaction = existing.rows[0]?.reaction === reaction ? null : reaction;
+      if (nextReaction === null) {
+        await transactionClient.query(
+          'DELETE FROM status_reactions WHERE status_id=$1 AND user_id=$2',
+          [id, req.user.sub]
+        );
+      } else {
+        await transactionClient.query(`INSERT INTO status_reactions(status_id,user_id,reaction) VALUES($1,$2,$3)
+          ON CONFLICT(status_id,user_id) DO UPDATE SET reaction=EXCLUDED.reaction, created_at=NOW()`,
+          [id, req.user.sub, nextReaction]
+        );
       }
-      await pool.query(`INSERT INTO status_reactions(status_id,user_id,reaction) VALUES($1,$2,$3)
-        ON CONFLICT(status_id,user_id) DO UPDATE SET reaction=EXCLUDED.reaction, created_at=NOW()`, [id, req.user.sub, reaction]);
-      if (String(status.owner_id) !== String(req.user.sub)) {
-        await queueFynxNotification(pool, {
-          userId: status.owner_id,
-          type: 'REACTION',
-          title: 'New Status reaction',
-          message: `${req.user.username || 'Someone'} reacted ${reaction} to your Status.`,
-          targetId: id,
-          sourceUsername: req.user.username || null,
-          route: `fynx://status/${id}`
-        });
+      await transactionClient.query('COMMIT');
+      transactionClient.release();
+      transactionClient = null;
+
+      if (nextReaction !== null && String(status.owner_id) !== String(req.user.sub)) {
+        try {
+          await queueFynxNotification(pool, {
+            userId: status.owner_id,
+            type: 'REACTION',
+            title: 'New Status reaction',
+            message: `${req.user.username || 'Someone'} reacted ${nextReaction} to your Status.`,
+            targetId: id,
+            sourceUsername: req.user.username || null,
+            route: `fynx://status/${id}`
+          });
+        } catch (error) {
+          console.error('status reaction notification', error);
+        }
       }
-      return res.json({ reaction });
+      return res.json({ reaction: nextReaction });
     } catch (error) {
+      if (transactionClient) {
+        try { await transactionClient.query('ROLLBACK'); } catch (rollbackError) {
+          console.error('status reaction rollback', rollbackError);
+        }
+        transactionClient.release();
+      }
       console.error('status reaction', error);
       return res.status(500).json({ error: 'status reaction failed' });
     }
   });
 
   app.post('/api/statuses/:statusId/reply', auth, async (req, res) => {
+    let transactionClient;
     try {
       await ensureSchema();
       const id = statusId(req);
@@ -207,55 +325,86 @@ export function registerStatusInteractionRoutes({ app }) {
       const status = await visibleStatus(id, req.user.sub);
       if (!status) return res.status(404).json({ error: 'status not found or not visible' });
       const replyId = randomUUID();
-      await pool.query('INSERT INTO status_replies(id,status_id,sender_id,body) VALUES($1,$2,$3,$4)', [replyId, id, req.user.sub, body]);
-      if (String(status.owner_id) !== String(req.user.sub)) {
-        // A Status reply is also a real private-chat message. Keep the existing
-        // status_replies record for Status history while making the reply visible
-        // in the owner's normal conversation surface.
-        const messageResult = await pool.query(`INSERT INTO messages(sender_id,recipient_id,text,created_at)
-          VALUES($1,$2,$3,NOW()) RETURNING id, EXTRACT(EPOCH FROM created_at) * 1000 AS timestamp`, [req.user.sub, status.owner_id, body]);
+      const deliveredToChat = String(status.owner_id) !== String(req.user.sub);
+      let messageRow = null;
+
+      // Keep Status history and the owner's private-chat message atomic. Otherwise
+      // a message insert failure leaves a reply that the client believes failed.
+      transactionClient = await pool.connect();
+      await transactionClient.query('BEGIN');
+      await transactionClient.query(
+        'INSERT INTO status_replies(id,status_id,sender_id,body) VALUES($1,$2,$3,$4)',
+        [replyId, id, req.user.sub, body]
+      );
+      if (deliveredToChat) {
+        const messageResult = await transactionClient.query(`INSERT INTO messages(sender_id,recipient_id,text,created_at)
+          VALUES($1,$2,$3,NOW()) RETURNING id, EXTRACT(EPOCH FROM created_at) * 1000 AS timestamp`,
+          [req.user.sub, status.owner_id, body]);
+        messageRow = messageResult.rows[0];
+      }
+      await transactionClient.query('COMMIT');
+      transactionClient.release();
+      transactionClient = null;
+
+      // Delivery side effects happen after durable writes. They must not turn a
+      // successfully saved reply into a 500 that encourages duplicate retries.
+      if (messageRow) {
         const broadcast = req.app.locals?.fynxBroadcastMessage;
         if (typeof broadcast === 'function') {
-          const row = messageResult.rows[0];
-          await broadcast({
-            id: String(row.id),
-            senderId: String(req.user.sub),
-            senderUsername: req.user.username || null,
-            senderDisplayName: null,
-            recipientId: String(status.owner_id),
-            recipientUsername: null,
-            recipientDisplayName: null,
-            text: body,
-            timestamp: Number(row.timestamp),
-            delivered: false,
-            read: false,
-            edited: false,
-            deleted: false,
-            replyToId: null,
-            mediaId: null,
-            mediaType: null,
-            mediaUrl: null,
-            voiceDurationMs: 0,
-            messageType: "text",
-            messagePayload: null,
-            reaction: null,
-            pinned: false
-          });
+          try {
+            await broadcast({
+              id: String(messageRow.id),
+              senderId: String(req.user.sub),
+              senderUsername: req.user.username || null,
+              senderDisplayName: null,
+              recipientId: String(status.owner_id),
+              recipientUsername: null,
+              recipientDisplayName: null,
+              text: body,
+              timestamp: Number(messageRow.timestamp),
+              delivered: false,
+              read: false,
+              edited: false,
+              deleted: false,
+              replyToId: null,
+              mediaId: null,
+              mediaType: null,
+              mediaUrl: null,
+              voiceDurationMs: 0,
+              messageType: "text",
+              messagePayload: null,
+              reaction: null,
+              pinned: false
+            });
+          } catch (error) {
+            console.error('status reply message broadcast', error);
+          }
         }
-        await queueFynxNotification(pool, {
-          userId: status.owner_id,
-          type: 'COMMENT',
-          title: 'New Status reply',
-          message: `${req.user.username || 'Someone'} replied to your Status.`,
-          targetId: id,
-          sourceUsername: req.user.username || null,
-          route: `fynx://status/${id}`
-        });
+        try {
+          await queueFynxNotification(pool, {
+            userId: status.owner_id,
+            type: 'COMMENT',
+            title: 'New Status reply',
+            message: `${req.user.username || 'Someone'} replied to your Status.`,
+            targetId: id,
+            sourceUsername: req.user.username || null,
+            route: `fynx://status/${id}`
+          });
+        } catch (error) {
+          console.error('status reply notification', error);
+        }
       }
-      return res.json({ replyId, sent: true, deliveredToChat: String(status.owner_id) !== String(req.user.sub) });
+      return res.json({ replyId, sent: true, deliveredToChat });
     } catch (error) {
+      if (transactionClient) {
+        try { await transactionClient.query('ROLLBACK'); } catch (rollbackError) {
+          console.error('status reply rollback', rollbackError);
+        }
+        transactionClient.release();
+      }
       console.error('status reply', error);
       return res.status(500).json({ error: 'status reply failed' });
     }
   });
+}
 }

@@ -101,6 +101,8 @@ fun FynxMatureStatusComposerPanel(
     var recording by remember { mutableStateOf(false) }
     var recordingStarted by remember { mutableLongStateOf(0L) }
     var elapsed by remember { mutableLongStateOf(0L) }
+    var accumulatedRecordingMs by remember { mutableLongStateOf(0L) }
+    var recordingPaused by remember { mutableStateOf(false) }
     var recorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var recordingFile by remember { mutableStateOf<File?>(null) }
     var showColors by remember { mutableStateOf(false) }
@@ -119,12 +121,16 @@ fun FynxMatureStatusComposerPanel(
         }
     }
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true; error = null }, onError = { message -> error = message }) else error = "Microphone permission is required for a voice Status."
+        if (granted) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false; recording = true; error = null }, onError = { message -> error = message }) else error = "Microphone permission is required for a voice Status."
     }
-    LaunchedEffect(recording, recordingStarted) {
+    LaunchedEffect(recording, recordingStarted, recordingPaused) {
         while (recording) {
-            elapsed = System.currentTimeMillis() - recordingStarted
-            if (elapsed >= FYNX_STATUS_MAX_VOICE_DURATION_MS) stopMatureVoiceRecording(recorder, recordingFile) { uri, message -> if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."; recorder = null; recordingFile = null; recording = false; type = FynxStatusType.VOICE }
+            if (!recordingPaused) {
+                elapsed = accumulatedRecordingMs + (System.currentTimeMillis() - recordingStarted).coerceAtLeast(0L)
+                if (elapsed >= FYNX_STATUS_MAX_VOICE_DURATION_MS) {
+                    stopMatureVoiceRecording(recorder, recordingFile) { uri, message -> if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."; recorder = null; recordingFile = null; recording = false; recordingPaused = false; accumulatedRecordingMs = 0L; type = FynxStatusType.VOICE }
+                }
+            }
             delay(200)
         }
     }
@@ -301,7 +307,7 @@ fun FynxMatureStatusComposerPanel(
                             item { MatureStatusModeButton(Icons.Default.TextFields, "Text", type == FynxStatusType.TEXT, !recording && !publishing) { type = FynxStatusType.TEXT; mediaUri = null; showColors = false; error = null } }
                             item { MatureStatusModeButton(Icons.Default.Photo, "Photo", type == FynxStatusType.PHOTO || type == FynxStatusType.VIDEO, !recording && !publishing) { pickMedia.launch(arrayOf("image/*", "video/*")) } }
                             item { MatureStatusModeButton(Icons.Default.CameraAlt, "Camera", false, !recording && !publishing) { cameraOpen = true; showColors = false; showTools = false; error = null } }
-                            item { MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording) { type = FynxStatusType.VOICE; showColors = false; error = null; if (mediaUri == null) if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; recording = true }, onError = { message -> error = message }) else micPermission.launch(Manifest.permission.RECORD_AUDIO) } }
+                            item { MatureStatusModeButton(Icons.Default.Mic, "Voice", type == FynxStatusType.VOICE, !publishing && !recording) { type = FynxStatusType.VOICE; showColors = false; error = null; mediaUri = null; elapsed = 0L; accumulatedRecordingMs = 0L; if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false; recording = true }, onError = { message -> error = message }) else micPermission.launch(Manifest.permission.RECORD_AUDIO) } }
                         }
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -348,18 +354,55 @@ fun FynxMatureStatusComposerPanel(
                                         if (type == FynxStatusType.VOICE) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                             if (recording) {
-                                FilledTonalButton(onClick = { stopMatureVoiceRecording(recorder, recordingFile) { uri, message -> if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."; recorder = null; recordingFile = null; recording = false } }) {
-                                    Icon(Icons.Default.Stop, "Stop")
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Stop • ${formatMatureTime(elapsed)}")
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    OutlinedButton(onClick = {
+                                        if (recordingPaused) {
+                                            runCatching { recorder?.resume() }.onSuccess {
+                                                recordingStarted = System.currentTimeMillis()
+                                                recordingPaused = false
+                                            }.onFailure { error = it.message ?: "Could not resume recording." }
+                                        } else {
+                                            elapsed = accumulatedRecordingMs + (System.currentTimeMillis() - recordingStarted).coerceAtLeast(0L)
+                                            runCatching { recorder?.pause() }.onSuccess {
+                                                accumulatedRecordingMs = elapsed
+                                                recordingPaused = true
+                                            }.onFailure { error = it.message ?: "Could not pause recording." }
+                                        }
+                                    }, enabled = !publishing) {
+                                        Text(if (recordingPaused) "Resume" else "Pause")
+                                    }
+                                    FilledTonalButton(onClick = { stopMatureVoiceRecording(recorder, recordingFile) { uri, message -> if (uri != null) { mediaUri = uri; error = null } else error = message ?: "Voice recording could not be saved."; recorder = null; recordingFile = null; recording = false; recordingPaused = false; accumulatedRecordingMs = 0L } }) {
+                                        Icon(Icons.Default.Stop, "Stop")
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Stop • ${formatMatureTime(elapsed)}")
+                                    }
                                 }
                             } else if (mediaUri != null) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     FynxRemoteAudio(mediaUri.toString(), Modifier.fillMaxWidth().padding(horizontal = 24.dp), elapsed.coerceAtLeast(1_000L))
-                                    OutlinedButton(onClick = { mediaUri = null; elapsed = 0L; error = null }, enabled = !publishing) {
-                                    Icon(Icons.Default.Close, "Clear voice")
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Clear voice")
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        OutlinedButton(onClick = { mediaUri = null; elapsed = 0L; error = null }, enabled = !publishing) {
+                                            Icon(Icons.Default.Close, "Clear voice")
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Delete")
+                                        }
+                                        Button(onClick = {
+                                            mediaUri = null
+                                            elapsed = 0L
+                                            error = null
+                                            type = FynxStatusType.VOICE
+                                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                                beginMatureVoiceRecording(
+                                                    context,
+                                                    onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false; recording = true },
+                                                    onError = { message -> error = message }
+                                                )
+                                            } else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                                        }, enabled = !publishing) {
+                                            Icon(Icons.Default.Mic, "Record again")
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Record again")
+                                        }
                                     }
                                 }
                             } else {
@@ -429,7 +472,41 @@ fun FynxMatureStatusComposerPanel(
     }
 }
 @Composable private fun MatureStatusModeButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) { Column(horizontalAlignment = Alignment.CenterHorizontally) { IconButton(onClick = onClick, enabled = enabled) { Icon(icon, label, tint = if (selected) Color.White else Color.White.copy(alpha = .65f), modifier = Modifier.size(28.dp)) }; Text(label, color = Color.White.copy(alpha = if (enabled && selected) 1f else .45f), style = MaterialTheme.typography.labelSmall) } }
-@Composable private fun MatureStatusMedia(uri: Uri, video: Boolean, modifier: Modifier) { AndroidView(modifier = modifier, factory = { context -> if (video) VideoView(context).apply { layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT); setVideoURI(uri); setOnPreparedListener { it.isLooping = true; it.start() } } else ImageView(context).apply { scaleType = ImageView.ScaleType.FIT_CENTER; setImageURI(uri) } }, update = { view -> if (view is VideoView) view.setVideoURI(uri) else (view as ImageView).setImageURI(uri) }) }
+@Composable private fun MatureStatusMedia(uri: Uri, video: Boolean, modifier: Modifier) {
+    val mediaKey = "${if (video) "video" else "image"}:$uri"
+    AndroidView(
+        modifier = modifier,
+        factory = { context ->
+            if (video) {
+                VideoView(context).apply {
+                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                    tag = mediaKey
+                    setOnPreparedListener { player -> player.isLooping = true; player.start() }
+                    setVideoURI(uri)
+                }
+            } else {
+                ImageView(context).apply {
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    tag = mediaKey
+                    setImageURI(uri)
+                }
+            }
+        },
+        update = { view ->
+            // Only reset the native view when the selected media or its type changes.
+            // Caption, toolbar, and other Compose recompositions must not restart playback.
+            if (view.tag != mediaKey) {
+                view.tag = mediaKey
+                if (view is VideoView) {
+                    view.setOnPreparedListener { player -> player.isLooping = true; player.start() }
+                    view.setVideoURI(uri)
+                } else if (view is ImageView) {
+                    view.setImageURI(uri)
+                }
+            }
+        }
+    )
+}
 private fun matureStatusFont(font: FynxStatusTextFont): FontFamily = when (font) { FynxStatusTextFont.SERIF -> FontFamily.Serif; FynxStatusTextFont.TYPEWRITER -> FontFamily.Monospace; else -> FontFamily.SansSerif }
 private fun beginMatureVoiceRecording(context: Context, onStarted: (MediaRecorder, File) -> Unit, onError: (String) -> Unit) { val file = File(context.cacheDir, "fynx-status-${System.currentTimeMillis()}.m4a"); var recorder: MediaRecorder? = null; try { recorder = MediaRecorder().apply { setAudioSource(MediaRecorder.AudioSource.MIC); setOutputFormat(MediaRecorder.OutputFormat.MPEG_4); setAudioEncoder(MediaRecorder.AudioEncoder.AAC); setMaxDuration(FYNX_STATUS_MAX_VOICE_DURATION_MS.toInt()); setOutputFile(file.absolutePath); prepare(); start() }; onStarted(recorder, file) } catch (e: Exception) { runCatching { recorder?.reset() }; runCatching { recorder?.release() }; runCatching { file.delete() }; onError(e.message ?: "Unable to start voice recording.") } }
 private fun stopMatureVoiceRecording(recorder: MediaRecorder?, file: File?, onFinished: (Uri?, String?) -> Unit) { if (recorder == null) { onFinished(null, "Voice recorder is not active."); return }; var stopped = false; try { recorder.stop(); stopped = true } catch (e: Exception) { runCatching { recorder.reset() }; onFinished(null, e.message ?: "Unable to stop voice recording.") } finally { runCatching { recorder.release() } }; if (stopped) { val output = file?.takeIf { it.exists() && it.length() > 0L }; if (output != null) onFinished(Uri.fromFile(output), null) else { runCatching { file?.delete() }; onFinished(null, "Voice recording was empty.") } } }
