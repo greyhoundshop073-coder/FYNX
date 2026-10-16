@@ -353,7 +353,7 @@ fun FynxMatureStatusComposerPanel(
                 }
             }
             Spacer(Modifier.weight(1f))
-            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp).imePadding(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (showColors && type == FynxStatusType.TEXT) {
                         Surface(
                             color = Color(0xFF202124),
