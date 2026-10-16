@@ -93,12 +93,14 @@ class FynxAppConnectionManager(
         if (callback != null) return
 
         val newCallback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) = evaluate()
+            // Android delivers capabilities after availability. Evaluate then, when
+            // the default route's actual capabilities are available to inspect.
+            override fun onAvailable(network: Network) = Unit
             override fun onCapabilitiesChanged(
                 network: Network,
                 networkCapabilities: NetworkCapabilities
-            ) = evaluate()
-            override fun onLost(network: Network) = evaluate()
+            ) = refreshDefaultNetwork()
+            override fun onLost(network: Network) = refreshDefaultNetwork()
         }
 
         // HTTP requests from FynxBackendClient use Android's default network.
@@ -108,6 +110,19 @@ class FynxAppConnectionManager(
             manager.registerDefaultNetworkCallback(newCallback)
             callback = newCallback
         }
+    }
+
+    /**
+     * A network transition must invalidate an in-flight or sleeping health probe.
+     * Otherwise evaluate() sees probeJob active and ignores the transition until
+     * a long request/retry or the 30-second connected recheck finishes.
+     */
+    private fun refreshDefaultNetwork() {
+        if (!started) return
+        generation++
+        probeJob?.cancel()
+        probeJob = null
+        evaluate()
     }
 
     private fun unregisterCallback() {
