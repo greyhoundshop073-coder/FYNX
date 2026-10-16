@@ -165,13 +165,13 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       const params = [req.user.sub];
       let where = 'o.seller_id = $1';
       if (status && allowed.has(status)) { params.push(status); where += ` AND o.status = $${params.length}`; }
-      const result = await pool.query(`SELECT o.*, u.username AS buyer_username, u.display_name AS buyer_display_name, da.driver_id AS delivery_driver_id, da.accepted_at AS delivery_driver_accepted_at, da.handover_at AS delivery_driver_handover_at, da.delivered_at AS delivery_driver_delivered_at FROM marketplace_orders o JOIN users u ON u.id = o.buyer_id LEFT JOIN marketplace_delivery_assignments da ON da.order_id=o.id WHERE ${where} ORDER BY o.created_at DESC LIMIT 100`, params);
+      const result = await pool.query(`SELECT o.*, u.username AS buyer_username, u.display_name AS buyer_display_name, da.driver_id AS delivery_driver_id, da.accepted_at AS delivery_driver_accepted_at, da.handover_at AS delivery_driver_handover_at, da.delivered_at AS delivery_driver_delivered_at, COALESCE(ad.active,FALSE) AS delivery_driver_approval_active FROM marketplace_orders o JOIN users u ON u.id = o.buyer_id LEFT JOIN marketplace_delivery_assignments da ON da.order_id=o.id LEFT JOIN marketplace_approved_drivers ad ON ad.user_id=da.driver_id WHERE ${where} ORDER BY o.created_at DESC LIMIT 100`, params);
       return res.json({ orders: result.rows.map((row) => ({
         id: String(row.id), buyerId: String(row.buyer_id), buyerUsername: row.buyer_username, buyerDisplayName: row.buyer_display_name,
         listingId: String(row.listing_id), quantity: Number(row.quantity), unitPrice: Number(row.unit_price), deliveryFee: Number(row.delivery_fee),
         totalAmount: Number(row.total_amount), currency: row.currency, product: row.product_snapshot, status: row.status,
         fulfillmentStatus: row.fulfillment_status, fulfillmentStatusUpdatedAt: row.fulfillment_status_updated_at,
-        fulfillmentMethod: row.fulfillment_method, shippingAddress: row.shipping_address, buyerNote: row.buyer_note, driverId: row.delivery_driver_id ? String(row.delivery_driver_id) : null, driverAcceptedAt: row.delivery_driver_accepted_at, driverHandoverAt: row.delivery_driver_handover_at, driverDeliveredAt: row.delivery_driver_delivered_at,
+        fulfillmentMethod: row.fulfillment_method, shippingAddress: row.shipping_address, buyerNote: row.buyer_note, driverId: row.delivery_driver_id ? String(row.delivery_driver_id) : null, driverApprovalActive: row.delivery_driver_approval_active === true, driverAcceptedAt: row.delivery_driver_accepted_at, driverHandoverAt: row.delivery_driver_handover_at, driverDeliveredAt: row.delivery_driver_delivered_at,
         paymentReference: row.payment_reference, trackingReference: row.tracking_reference, shippedAt: row.shipped_at,
         pickupHandoverAt: row.pickup_handover_at, pickupHandoverBy: row.pickup_handover_by ? String(row.pickup_handover_by) : null,
         deliveredAt: row.delivered_at, inspectionDeadline: row.inspection_deadline, completedAt: row.completed_at,
