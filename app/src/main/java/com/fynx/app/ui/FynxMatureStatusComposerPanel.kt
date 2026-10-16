@@ -13,6 +13,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -241,14 +243,38 @@ fun FynxMatureStatusComposerPanel(
                                 Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
+                                var handleDragDistance by remember { mutableFloatStateOf(0f) }
                                 Box(
                                     Modifier
-                                        .width(40.dp)
-                                        .height(4.dp)
-                                        .clip(RoundedCornerShape(2.dp))
-                                        .background(Color(0xFF666A70))
-                                        .align(Alignment.CenterHorizontally)
-                                )
+                                        .width(48.dp)
+                                        .height(24.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .pointerInput(showColors, publishing, recording) {
+                                            detectVerticalDragGestures(
+                                                onVerticalDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    handleDragDistance += dragAmount
+                                                },
+                                                onDragEnd = {
+                                                    if (handleDragDistance > 36f && !publishing && !recording) {
+                                                        showColors = false
+                                                    }
+                                                    handleDragDistance = 0f
+                                                },
+                                                onDragCancel = { handleDragDistance = 0f }
+                                            )
+                                        }
+                                        .clickable(enabled = !publishing && !recording) { showColors = false },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .width(40.dp)
+                                            .height(4.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(Color(0xFF858A91))
+                                    )
+                                }
                                 Text(
                                     "Styling & Options",
                                     color = Color.White,
