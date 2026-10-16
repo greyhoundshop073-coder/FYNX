@@ -29,7 +29,7 @@ for needle in required:
     if needle not in backend:
         violations.append(f"central transport invariant missing: {needle}")
 connection_manager = Path("app/src/main/java/com/fynx/app/ui/FynxAppConnectionManager.kt").read_text(encoding="utf-8")
-for needle in ['manager.allNetworks.filter { it != active }', 'capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)']:
+for needle in ['manager.allNetworks.filter { it != active }', 'capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)', 'NetworkRequest.Builder()', 'manager.registerNetworkCallback(request, newCallback)']:
     if needle not in connection_manager:
         violations.append(f"app connection transport detection invariant missing: {needle}")
 for needle in ['FynxBackendClient.get(context, path)', '/api/money-planner/rates']:
