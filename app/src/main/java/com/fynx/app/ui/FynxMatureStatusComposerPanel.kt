@@ -206,7 +206,7 @@ fun FynxMatureStatusComposerPanel(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp)
-                        .padding(top = 76.dp, bottom = if (showColors) 300.dp else if (showMediaTools) 150.dp else 104.dp)
+                        .padding(top = 76.dp, bottom = if (showColors) 350.dp else if (showMediaTools) 150.dp else 104.dp)
                         .imePadding(),
                     minLines = 2,
                         maxLines = 10
@@ -400,11 +400,7 @@ fun FynxMatureStatusComposerPanel(
                                 )
                             }
                             if (text.length >= FYNX_STATUS_MAX_TEXT_LENGTH) {
-                                Text(
-                                    "$FYNX_STATUS_MAX_TEXT_LENGTH/$FYNX_STATUS_MAX_TEXT_LENGTH",
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
+                                Text("$FYNX_STATUS_MAX_TEXT_LENGTH/$FYNX_STATUS_MAX_TEXT_LENGTH", color = Color.White, modifier = Modifier.padding(start = 8.dp))
                             }
                             Spacer(Modifier.weight(1f))
                             var audienceMenu by remember { mutableStateOf(false) }
