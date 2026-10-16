@@ -576,7 +576,7 @@ fun FynxMatureStatusComposerPanel(
                         OutlinedTextField(
                             value = text,
                             onValueChange = { text = it.take(FYNX_STATUS_MAX_TEXT_LENGTH) },
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).offset(y = if (WindowInsets.isImeVisible) 100.dp else 0.dp),
                             singleLine = true,
                             placeholder = { Text("Add a caption…", color = Color.White.copy(alpha = .72f)) },
                             textStyle = LocalTextStyle.current.copy(color = Color.White, fontWeight = FontWeight.Bold),
