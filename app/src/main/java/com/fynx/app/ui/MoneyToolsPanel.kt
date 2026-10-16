@@ -82,7 +82,7 @@ fun MoneyToolsPanel() {
                         headlineContent = { Text(entry.title) },
                         supportingContent = { Text(entry.type, color = FynxDesign.TextSecondary) },
                         trailingContent = { Text("${if (entry.type == "Expense") "-" else "+"}${formatMoney(entry.amount)}", color = if (entry.type == "Expense") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) },
-                        colors = ListItemDefaults.colors(containerColor = FynxDesign.Surface)
+                        colors = ListItemDefaults.colors(containerColor = FynxDesign.Surface, headlineColor = FynxDesign.TextPrimary, supportingColor = FynxDesign.TextSecondary, leadingIconColor = FynxDesign.TextSecondary, trailingIconColor = FynxDesign.TextSecondary)
                     )
                 }
             }

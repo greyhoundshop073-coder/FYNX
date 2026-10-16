@@ -65,5 +65,23 @@ for path in sorted(UI.rglob("*.kt")):
 notifications = (UI / "NotificationPanel.kt").read_text(encoding="utf-8")
 assert "CardDefaults.cardColors(containerColor = containerColor, contentColor = FynxDesign.TextPrimary)" in notifications, "Notification cards with dynamic backgrounds must set a readable foreground"
 
-assert not problems, "Found card contrast regressions:\n" + "\n".join(problems)
+# Also guard Material3 ListItem surfaces nested inside dark cards. A ListItem has
+# its own default headline/supporting colours, so Card's contentColor alone is
+# not enough to guarantee contrast when ListItem sets a custom container.
+for path in sorted(UI.rglob("*.kt")):
+    source = path.read_text(encoding="utf-8")
+    cursor = 0
+    token = "ListItemDefaults.colors("
+    while True:
+        call = source.find(token, cursor)
+        if call < 0:
+            break
+        opening = call + len(token) - 1
+        args = call_arguments(source, opening)
+        if "containerColor = FynxDesign.Surface" in args and "headlineColor = FynxDesign.TextPrimary" not in args:
+            line = source.count("\\n", 0, call) + 1
+            problems.append(f"{path.relative_to(ROOT)}:{line}: dark ListItem surface lacks explicit readable headlineColor")
+        cursor = opening + len(args) + 2
+
+assert not problems, "Found card contrast regressions:\\n" + "\\n".join(problems)
 print(f"PASS: Home blue/foreground pairing; scanned {scanned_files} Kotlin UI files and {custom_surface_cards} custom-surface card declarations.")
