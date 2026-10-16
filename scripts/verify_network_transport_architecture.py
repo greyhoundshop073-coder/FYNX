@@ -22,11 +22,16 @@ currency = Path("app/src/main/java/com/fynx/app/ui/CurrencyConverterPanel.kt").r
 required = [
     'PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"',
     'requiresAuthentication = !isPublicAuthPath(path)',
+    'path == "/health"',
     'FynxSecureTokenStore',
 ]
 for needle in required:
     if needle not in backend:
         violations.append(f"central transport invariant missing: {needle}")
+connection_manager = Path("app/src/main/java/com/fynx/app/ui/FynxAppConnectionManager.kt").read_text(encoding="utf-8")
+for needle in ['manager.allNetworks.filter { it != active }', 'capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)']:
+    if needle not in connection_manager:
+        violations.append(f"app connection transport detection invariant missing: {needle}")
 for needle in ['FynxBackendClient.get(context, path)', '/api/money-planner/rates']:
     if needle not in currency:
         violations.append(f"currency backend routing invariant missing: {needle}")
