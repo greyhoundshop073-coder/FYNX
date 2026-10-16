@@ -279,13 +279,13 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (!isSeller(order, req.user.sub)) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'only the seller can assign a delivery driver' }); }
       if (order.fulfillment_method !== 'DELIVERY') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver assignment is only available for delivery orders' }); }
       if (!['PAID','SHIPPED'].includes(order.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver can only be assigned to a paid order' }); }
-      if (String(driverId) === String(order.seller_id) || String(driverId) === String(order.buyer_id)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'buyer and seller cannot be assigned as the delivery driver' }); }
       const driver = (await client.query(
         driverUsername ? 'SELECT id FROM users WHERE lower(username)=$1' : 'SELECT id FROM users WHERE id=$1',
         driverUsername ? [driverUsername] : [requestedDriverId]
       )).rows[0];
       if (!driver) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'driver account not found' }); }
       const driverId = Number(driver.id);
+      if (String(driverId) === String(order.seller_id) || String(driverId) === String(order.buyer_id)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'buyer and seller cannot be assigned as the delivery driver' }); }
       const prior = (await client.query('SELECT * FROM marketplace_delivery_assignments WHERE order_id=$1 FOR UPDATE', [id])).rows[0];
       if (prior && (prior.accepted_at || prior.handover_at || prior.delivered_at)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver assignment is locked after acceptance or custody handover' }); }
       if (prior && String(prior.driver_id) !== String(driverId)) {
