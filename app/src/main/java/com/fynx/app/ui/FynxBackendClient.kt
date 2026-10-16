@@ -108,7 +108,7 @@ object FynxBackendClient {
     }
 
     private suspend fun awaitValidatedNetwork(context: Context) { if (hasNetwork(context)) return; var waited = 0L; while (waited < NETWORK_VALIDATION_WAIT_MS) { delay(NETWORK_VALIDATION_POLL_MS); waited += NETWORK_VALIDATION_POLL_MS; if (hasNetwork(context)) return }; throw FynxNetworkUnavailableException() }
-    private fun isPublicAuthPath(path: String): Boolean = path == "/api/auth/login" || path == "/api/auth/register"
+    private fun isPublicAuthPath(path: String): Boolean = path == "/health" || path == "/api/auth/login" || path == "/api/auth/register"
     private suspend fun executeRequest(context: Context, root: String, method: String, path: String, body: String?, connectTimeoutOverrideMs: Int? = null, readTimeoutOverrideMs: Int? = null): String {
         val weakNetwork = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK
         val requiresAuthentication = !isPublicAuthPath(path)
