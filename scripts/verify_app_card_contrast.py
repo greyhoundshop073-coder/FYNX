@@ -55,7 +55,7 @@ for path in sorted(UI.rglob("*.kt")):
         if "FynxDesign.Surface" in args:
             custom_surface_cards += 1
             if "contentColor = FynxDesign.TextPrimary" not in args:
-                line = source.count("\\n", 0, call) + 1
+                line = source.count("\n", 0, call) + 1
                 problems.append(f"{path.relative_to(ROOT)}:{line}: custom FynxDesign.Surface card lacks explicit readable contentColor")
         cursor = opening + len(args) + 2
 
@@ -64,5 +64,5 @@ for path in sorted(UI.rglob("*.kt")):
 notifications = (UI / "NotificationPanel.kt").read_text(encoding="utf-8")
 assert "CardDefaults.cardColors(containerColor = containerColor, contentColor = FynxDesign.TextPrimary)" in notifications, "Notification cards with dynamic backgrounds must set a readable foreground"
 
-assert not problems, "Found card contrast regressions:\\n" + "\\n".join(problems)
+assert not problems, "Found card contrast regressions:\n" + "\n".join(problems)
 print(f"PASS: Home blue/foreground pairing; scanned {scanned_files} Kotlin UI files and {custom_surface_cards} custom-surface card declarations.")
