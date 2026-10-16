@@ -48,6 +48,12 @@ const checks = [
     resolution.includes('dispute_id')]
 ];
 
+  ['delivery driver assignment is seller-only and limited to a real delivery user', completion.includes("app.post('/api/marketplace/orders/:id/driver-assignment'") && completion.includes('only the seller can assign a delivery driver') && completion.includes('driver account not found') && completion.includes('buyer and seller cannot be assigned as the delivery driver')],
+  ['assigned driver must accept before seller custody handover', completion.includes("app.post('/api/marketplace/orders/:id/driver-acceptance'") && completion.includes('only the assigned driver can accept this delivery') && completion.includes('driver must accept the assignment before handover')],
+  ['seller handover records custody evidence and blocks active protection cases', completion.includes("app.post('/api/marketplace/orders/:id/driver-handover'") && completion.includes('DELIVERY_CUSTODY_HANDED_OVER') && completion.includes('HANDOVER_NOTE') && completion.includes('hasActiveProtectionCase(client, id)')],
+  ['only the assigned driver can record delivery with recipient and proof evidence', completion.includes("app.post('/api/marketplace/orders/:id/driver-delivery'") && completion.includes('only the assigned driver can confirm delivery') && completion.includes('recipient name and delivery note or photo reference are required') && completion.includes('RECIPIENT_NAME') && completion.includes('PHOTO_REFERENCE')],
+  ['buyer delivery confirmation waits for assigned driver evidence', completion.includes('assigned driver has not recorded delivery evidence yet') && completion.includes('SELECT delivered_at FROM marketplace_delivery_assignments')],
+  ['driver assignment and evidence tables are indexed and linked to order/user records', completion.includes('CREATE TABLE IF NOT EXISTS marketplace_delivery_assignments') && completion.includes('marketplace_delivery_assignments_driver_idx') && completion.includes('CREATE TABLE IF NOT EXISTS marketplace_delivery_evidence') && completion.includes('marketplace_delivery_evidence_order_idx')],
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
 for (const [name, ok] of checks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
 if (failed.length) process.exit(1);
