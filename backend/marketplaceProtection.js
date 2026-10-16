@@ -145,8 +145,12 @@ async function createCase(req, res, caseType) {
   const details = typeof req.body?.details === 'string' ? req.body.details.trim().slice(0, 2000) : '';
   const suppliedKey = typeof req.get('idempotency-key') === 'string' ? req.get('idempotency-key').trim().slice(0, 160) : '';
   const idempotencyKey = suppliedKey || `FYNX-${caseType}-${orderId}-${req.user.sub}`;
+  const allowedDisputeReasons = new Set(['ITEM_NOT_RECEIVED', 'WRONG_ITEM', 'DAMAGED', 'NOT_AS_DESCRIBED', 'SUSPECTED_SCAM', 'OTHER']);
   if (!orderId) return res.status(400).json({ error: 'invalid order id' });
-  if (reason.length < 3) return res.status(400).json({ error: 'a short reason is required' });
+  if (caseType === 'DISPUTE' && !allowedDisputeReasons.has(reason.toUpperCase())) {
+    return res.status(400).json({ error: 'valid dispute reason is required' });
+  }
+  if (caseType === 'REFUND_REQUEST' && reason.length < 3) return res.status(400).json({ error: 'a short reason is required' });
   try {
     await ensureSchema();
     const client = await pool.connect();
