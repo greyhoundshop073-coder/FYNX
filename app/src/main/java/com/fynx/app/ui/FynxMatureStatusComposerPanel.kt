@@ -91,7 +91,6 @@ fun FynxMatureStatusComposerPanel(
         val previousStatus = window?.statusBarColor
         val previousNavigation = window?.navigationBarColor
         val previousDecorFlags = window?.decorView?.systemUiVisibility ?: 0
-        val previousFitsSystemWindows = window?.let { WindowCompat.getDecorFitsSystemWindows(it) } ?: true
         val previousStatusContrast = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) window?.isStatusBarContrastEnforced else null
         val previousNavigationContrast = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) window?.isNavigationBarContrastEnforced else null
         if (window != null) {
@@ -112,7 +111,8 @@ fun FynxMatureStatusComposerPanel(
                 window.statusBarColor = previousStatus ?: android.graphics.Color.TRANSPARENT
                 window.navigationBarColor = previousNavigation ?: android.graphics.Color.TRANSPARENT
                 window.decorView.systemUiVisibility = previousDecorFlags
-                WindowCompat.setDecorFitsSystemWindows(window, previousFitsSystemWindows)
+                // MainActivity uses edge-to-edge; keep it enabled after this overlay exits.
+                WindowCompat.setDecorFitsSystemWindows(window, false)
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                     window.isStatusBarContrastEnforced = previousStatusContrast ?: true
                     window.isNavigationBarContrastEnforced = previousNavigationContrast ?: true
