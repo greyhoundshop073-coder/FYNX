@@ -25,7 +25,6 @@ required = [
     'PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"',
     'requiresAuthentication = !isPublicAuthPath(path)',
     'FynxSecureTokenStore',
-    'app.post("/api/media/upload", auth, express.raw({ type: "application/octet-stream", limit: "12mb" })',
     'suspend fun postBytes(context: Context, path: String, mimeType: String, body: ByteArray)',
     'executeBinaryRequest(context, root, path, mimeType, body',
 ]
