@@ -264,8 +264,9 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
 
   app.post('/api/marketplace/orders/:id/driver-assignment', auth, async (req, res) => {
     const id = parseUuid(req.params.id);
-    const driverId = Number(req.body?.driverId);
-    if (!id || !Number.isSafeInteger(driverId) || driverId < 1) return res.status(400).json({ error: 'valid order id and driver id are required' });
+    const requestedDriverId = Number(req.body?.driverId);
+    const driverUsername = typeof req.body?.driverUsername === 'string' ? req.body.driverUsername.trim().replace(/^@/, '').toLowerCase() : '';
+    if (!id || ((!Number.isSafeInteger(requestedDriverId) || requestedDriverId < 1) && !/^[a-z0-9_.]{2,32}$/.test(driverUsername))) return res.status(400).json({ error: 'valid order id and driver username or id are required' });
     const client = await pool.connect();
     try {
       await ensureSchema(); await client.query('BEGIN');
@@ -275,8 +276,12 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (order.fulfillment_method !== 'DELIVERY') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver assignment is only available for delivery orders' }); }
       if (!['PAID','SHIPPED'].includes(order.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver can only be assigned to a paid order' }); }
       if (String(driverId) === String(order.seller_id) || String(driverId) === String(order.buyer_id)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'buyer and seller cannot be assigned as the delivery driver' }); }
-      const driver = (await client.query('SELECT id FROM users WHERE id=$1', [driverId])).rows[0];
+      const driver = (await client.query(
+        driverUsername ? 'SELECT id FROM users WHERE lower(username)=$1' : 'SELECT id FROM users WHERE id=$1',
+        driverUsername ? [driverUsername] : [requestedDriverId]
+      )).rows[0];
       if (!driver) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'driver account not found' }); }
+      const driverId = Number(driver.id);
       const prior = (await client.query('SELECT * FROM marketplace_delivery_assignments WHERE order_id=$1 FOR UPDATE', [id])).rows[0];
       if (prior && (prior.accepted_at || prior.handover_at || prior.delivered_at)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver assignment is locked after acceptance or custody handover' }); }
       if (prior && String(prior.driver_id) !== String(driverId)) {
