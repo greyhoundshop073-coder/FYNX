@@ -5,8 +5,10 @@ auth = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt").read_text(e
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 
 checks = {
-    "debug login requires an Android debuggable build": "ApplicationInfo.FLAG_DEBUGGABLE" in auth and "if (!isDebuggable || requestedUsername.isBlank()) return null" in auth,
-    "saved-device login is immediate and does not wait for the backend": "val savedLocalUsername = localDebugAccountForLogin(context, requestedUsername)" in auth and "FynxAuthStore.save(context, savedLocalUsername)" in auth,
+    "debug login is limited to Android debuggable builds": "ApplicationInfo.FLAG_DEBUGGABLE" in auth and "if (!isDebuggable || requestedUsername.isBlank()) return null" in auth,
+    "primary Sign In requires a password and invokes server authentication": 'password.isBlank() -> error = "Enter your username and password."' in auth and "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth and "Server sign-in is always the primary path" in auth,
+    "saved-device login is an explicit secondary offline action": 'Text("Continue with saved device (offline)")' in auth and "A saved device session is available for offline use." in auth,
+    "missing saved account never converts arbitrary typed username into local login": "return saved?.takeIf { it.equals(normalizedUsername, ignoreCase = true) }" in auth and "saved == null -> normalizedUsername" not in auth,
     "offline fallback requires a recognized network failure": "allowOfflineEntry && isLoginNetworkFailure(failure)" in auth,
     "network fallback reuses the debug-only local-account guard": "localDebugAccountForLogin(context, username)" in auth,
     "release and invalid-credential paths do not receive an unconditional local session": "if (allowOfflineEntry) {" not in auth and "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth,
