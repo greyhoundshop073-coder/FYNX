@@ -218,6 +218,50 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
     finally { client.release(); }
   });
 
+  app.get('/api/marketplace/driver/assignments', auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      const result = await pool.query(`
+        SELECT a.order_id, a.seller_id, a.driver_id, a.assigned_at, a.accepted_at, a.handover_at, a.delivered_at,
+               o.status, o.fulfillment_status, o.fulfillment_method, o.currency, o.total_amount,
+               o.product_snapshot, o.quantity, o.shipping_address, o.buyer_note, o.tracking_reference,
+               seller.username AS seller_username, buyer.display_name AS buyer_display_name, buyer.username AS buyer_username
+        FROM marketplace_delivery_assignments a
+        JOIN marketplace_orders o ON o.id = a.order_id
+        JOIN users seller ON seller.id = a.seller_id
+        JOIN users buyer ON buyer.id = o.buyer_id
+        WHERE a.driver_id = $1 AND o.fulfillment_method = 'DELIVERY'
+          AND o.status IN ('PAID','SHIPPED','INSPECTION')
+        ORDER BY a.updated_at DESC LIMIT 100
+      `, [req.user.sub]);
+      const ids = result.rows.map(row => row.order_id);
+      const evidence = ids.length ? await pool.query(`
+        SELECT order_id, evidence_type, value, created_at
+        FROM marketplace_delivery_evidence
+        WHERE order_id = ANY($1::uuid[])
+        ORDER BY created_at ASC
+      `, [ids]) : { rows: [] };
+      const byOrder = new Map();
+      for (const row of evidence.rows) {
+        const key = String(row.order_id);
+        if (!byOrder.has(key)) byOrder.set(key, []);
+        byOrder.get(key).push({ type: row.evidence_type, value: row.value, createdAt: row.created_at });
+      }
+      return res.json({ assignments: result.rows.map(row => ({
+        orderId: String(row.order_id), sellerId: String(row.seller_id), driverId: String(row.driver_id),
+        assignedAt: row.assigned_at, acceptedAt: row.accepted_at, handoverAt: row.handover_at, deliveredAt: row.delivered_at,
+        status: row.status, fulfillmentStatus: row.fulfillment_status, currency: row.currency,
+        totalAmount: Number(row.total_amount), quantity: Number(row.quantity),
+        product: row.product_snapshot, shippingAddress: row.shipping_address, buyerNote: row.buyer_note,
+        trackingReference: row.tracking_reference, sellerUsername: row.seller_username,
+        buyerName: row.buyer_display_name || row.buyer_username, evidence: byOrder.get(String(row.order_id)) || []
+      })) });
+    } catch (error) {
+      console.error('marketplace driver assignments', error);
+      return res.status(500).json({ error: 'driver assignments could not load' });
+    }
+  });
+
   app.post('/api/marketplace/orders/:id/driver-assignment', auth, async (req, res) => {
     const id = parseUuid(req.params.id);
     const driverId = Number(req.body?.driverId);
@@ -235,10 +279,13 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (!driver) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'driver account not found' }); }
       const prior = (await client.query('SELECT * FROM marketplace_delivery_assignments WHERE order_id=$1 FOR UPDATE', [id])).rows[0];
       if (prior && (prior.accepted_at || prior.handover_at || prior.delivered_at)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver assignment is locked after acceptance or custody handover' }); }
+      if (prior && String(prior.driver_id) !== String(driverId)) {
+        await client.query('DELETE FROM marketplace_delivery_evidence WHERE order_id=$1', [id]);
+      }
       const assignment = await client.query(`
-        INSERT INTO marketplace_delivery_assignments (order_id,seller_id,driver_id)
-        VALUES ($1,$2,$3)
-        ON CONFLICT (order_id) DO UPDATE SET driver_id=EXCLUDED.driver_id,assigned_at=NOW(),updated_at=NOW()
+        INSERT INTO marketplace_delivery_assignments (order_id,seller_id,driver_id,assigned_at,accepted_at,handover_at,delivered_at,updated_at)
+        VALUES ($1,$2,$3,NOW(),NULL,NULL,NULL,NOW())
+        ON CONFLICT (order_id) DO UPDATE SET driver_id=EXCLUDED.driver_id,assigned_at=NOW(),accepted_at=NULL,handover_at=NULL,delivered_at=NULL,updated_at=NOW()
         RETURNING order_id,driver_id,assigned_at,accepted_at,handover_at,delivered_at
       `, [id, order.seller_id, driverId]);
       await recordFulfillmentEvent(client, id, req.user.sub, 'DELIVERY_DRIVER_ASSIGNED', order.fulfillment_status || 'PAID', order.fulfillment_status || 'PAID', { driverId: String(driverId) });
