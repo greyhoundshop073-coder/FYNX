@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.MediaRecorder
@@ -24,7 +25,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Close
@@ -54,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -61,6 +62,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -77,6 +80,42 @@ fun FynxMatureStatusComposerPanel(
     onClose: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
+    val activity = remember(view) {
+        var current = view.context
+        while (current is android.content.ContextWrapper && current !is Activity) current = current.baseContext
+        current as? Activity
+    }
+    DisposableEffect(activity) {
+        val window = activity?.window
+        val previousStatus = window?.statusBarColor
+        val previousNavigation = window?.navigationBarColor
+        val previousDecorFlags = window?.decorView?.systemUiVisibility ?: 0
+        if (window != null) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            window.statusBarColor = android.graphics.Color.TRANSPARENT
+            window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                window.isStatusBarContrastEnforced = false
+                window.isNavigationBarContrastEnforced = false
+            }
+            WindowInsetsControllerCompat(window, window.decorView).apply {
+                isAppearanceLightStatusBars = false
+                isAppearanceLightNavigationBars = false
+            }
+        }
+        onDispose {
+            if (window != null) {
+                window.statusBarColor = previousStatus ?: android.graphics.Color.TRANSPARENT
+                window.navigationBarColor = previousNavigation ?: android.graphics.Color.TRANSPARENT
+                window.decorView.systemUiVisibility = previousDecorFlags
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    window.isStatusBarContrastEnforced = true
+                    window.isNavigationBarContrastEnforced = true
+                }
+            }
+        }
+    }
     val scope = rememberCoroutineScope()
     val auth = remember(context) { FynxAuthStore.load(context) }
     val username = auth.username?.removePrefix("@").orEmpty().ifBlank { "preview" }
@@ -218,12 +257,14 @@ fun FynxMatureStatusComposerPanel(
             FynxStatusType.VOICE -> Box(Modifier.fillMaxSize().background(Color(background)).padding(top = 64.dp, bottom = if (showMediaTools) 176.dp else 104.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) { Surface(shape = CircleShape, color = Color(foreground).copy(alpha = .14f), modifier = Modifier.size(112.dp)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Mic, null, tint = Color(foreground), modifier = Modifier.size(48.dp)) } }; Text(if (recording) formatMatureTime(elapsed) else if (mediaUri != null) "Voice Status ready" else "Press the microphone to record", color = Color(foreground), style = MaterialTheme.typography.titleMedium); if (recording) LinearProgressIndicator(progress = { (elapsed.toFloat() / FYNX_STATUS_MAX_VOICE_DURATION_MS).coerceIn(0f, 1f) }, modifier = Modifier.width(220.dp)) } }
         }
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onClose, enabled = !publishing && !recording) { Icon(Icons.Default.ArrowBack, "Back", tint = Color.White) }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                    FynxProfileImage(username, FynxPreferencesStore.loadProfilePhoto(context), Modifier.size(36.dp).clip(CircleShape))
+                    FynxProfileImage(username, FynxPreferencesStore.loadProfilePhoto(context), Modifier.size(40.dp).clip(CircleShape))
                     Spacer(Modifier.width(10.dp))
-                    Text(displayName, color = Color.White, style = MaterialTheme.typography.titleLarge)
+                    Column(verticalArrangement = Arrangement.Center) {
+                        Text("Stories", color = Color.White.copy(alpha = .78f), style = MaterialTheme.typography.labelMedium)
+                        Text(displayName, color = Color.White, style = MaterialTheme.typography.titleLarge, maxLines = 1)
+                    }
                 }
                 Box {
                     IconButton(onClick = { showTools = !showTools; showColors = false }, enabled = !recording && !publishing) { Icon(Icons.Default.MoreVert, "Status tools", tint = Color.White) }
