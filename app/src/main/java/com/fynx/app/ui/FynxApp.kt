@@ -106,7 +106,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
         onDispose { appConnectionManager.dispose() }
     }
     DisposableEffect(lifecycleOwner, authSession.state) {
-        if (authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) {
+        // The shell connection indicator must also probe public backend health in the
+        // debug saved-device session. Requiring an access token here leaves that
+        // supported test entry permanently stuck at "Waiting for network...".
+        if (authSession.state == AuthState.SIGNED_IN) {
             lifecycleOwner.lifecycle.addObserver(appConnectionManager)
         }
         onDispose {
