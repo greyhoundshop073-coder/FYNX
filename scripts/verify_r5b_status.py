@@ -200,6 +200,10 @@ require('external sharing uses Android share chooser','Intent.ACTION_SEND' in sh
 require('Marketplace link parses back to Marketplace','"marketplace"->if(normalizedPath.size<=2)FynxDeepLinkDestination.Marketplace(value)' in deeplink)
 require('Marketplace product detail share button reaches the real listing share action','FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title))' in marketplace and 'onShare = {' in marketplace and 'IconButton(onClick = onShare)' in marketplace_detail and 'Icon(Icons.Default.Share, "Share"' in marketplace_detail)
 
+require('Add Status Voice selection opens Voice composer mode','selectedInitialType = FynxStatusType.VOICE' in hub and 'initialType = selectedInitialType ?: selectedInitialMedia?.let' in hub)
+require('Voice mode has an explicit start-recording action','Text("Start recording")' in mature and 'FynxStatusType.VOICE ->' in mature)
+require('Status caption field avoids nested IME padding that can lift it away from the keyboard','modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),' in mature and 'modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).imePadding(),' not in mature)
+
 failed=[label for label,ok in checks if not ok]
 for label,ok in checks: print(('GREEN' if ok else 'RED')+' - '+label)
 if failed:
