@@ -55,7 +55,7 @@ class FynxNetworkRecoveryContractTest {
         val original = FynxBackendClient.baseUrl(context)
         try {
             FynxBackendClient.configureBaseUrl(context, "")
-            assertTrue(FynxBackendClient.baseUrl(context).startsWith("https://"))
+            assertEquals("https://fynx-backend-testing-testing.up.railway.app", FynxBackendClient.baseUrl(context))
             assertNotNull(FynxBackendClient.baseUrl(context))
         } finally {
             FynxBackendClient.configureBaseUrl(context, original)
