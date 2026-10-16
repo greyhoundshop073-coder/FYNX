@@ -143,7 +143,7 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
             }
         }
         if (showPreferences) {
-            Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
+            Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     preferenceSaveError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                     Text("GENERAL", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp, bottom = 3.dp))
@@ -188,7 +188,7 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
         HorizontalDivider(color = FynxDesign.Outline.copy(alpha = .6f))
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (filtered.isEmpty()) {
-                Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
                     Column(Modifier.fillMaxWidth().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Surface(shape = FynxDesign.ControlShape, color = FynxDesign.SelectedContainer) { Icon(Icons.Default.Notifications, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(12.dp).size(28.dp)) }
                         Spacer(Modifier.height(12.dp)); Text(if (current.isEmpty()) "No notifications yet" else "Nothing matches this filter", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(4.dp)); Text("Your FYNX activity and reminders will appear here.", color = FynxDesign.TextSecondary)
@@ -209,7 +209,7 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
                                 onNotificationRead(notification.id)
                             }
                             onNotificationOpen(notification)
-                        }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = containerColor), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
+                        }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = containerColor, contentColor = FynxDesign.TextPrimary), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
                             Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                                 NotificationActorAvatar(notification = notification, modifier = Modifier.size(46.dp))
                                 Spacer(Modifier.width(12.dp))

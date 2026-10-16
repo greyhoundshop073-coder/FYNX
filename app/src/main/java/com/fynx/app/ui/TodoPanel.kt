@@ -98,7 +98,7 @@ fun TodoPanel() {
 
         Card(
             modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape,
-            colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+            colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary),
             border = BorderStroke(1.dp, FynxDesign.Outline)
         ) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -205,7 +205,7 @@ private fun EditTodoPanel(todo: FynxTodo, onCancel: () -> Unit, onSave: (FynxTod
 
 @Composable
 private fun TodoRow(todo: FynxTodo, onToggle: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
-    Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline)) {
+    Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary), border = BorderStroke(1.dp, FynxDesign.Outline)) {
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Checkbox(todo.completed, { onToggle() })
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {

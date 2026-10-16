@@ -96,7 +96,7 @@ fun FynxExtraToolsPanel(onOpenCalendar: () -> Unit) {
             onClick = { showNoteEditor = true },
             modifier = Modifier.fillMaxWidth(),
             shape = FynxDesign.CardShape,
-            colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+            colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary),
             border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.5f))
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -115,7 +115,7 @@ fun FynxExtraToolsPanel(onOpenCalendar: () -> Unit) {
             onClick = onOpenCalendar,
             modifier = Modifier.fillMaxWidth(),
             shape = FynxDesign.CardShape,
-            colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+            colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary),
             border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.5f))
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -140,7 +140,7 @@ fun FynxExtraToolsPanel(onOpenCalendar: () -> Unit) {
                 onClick = { openArticle = article },
                 modifier = Modifier.fillMaxWidth(),
                 shape = FynxDesign.CardShape,
-                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary),
                 border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.5f))
             ) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -164,7 +164,7 @@ fun FynxExtraToolsPanel(onOpenCalendar: () -> Unit) {
                     Card(
                         Modifier.fillMaxWidth(),
                         shape = FynxDesign.CardShape,
-                        colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+                        colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary),
                         border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.4f))
                     ) {
                         Text(note.text, Modifier.padding(16.dp))
