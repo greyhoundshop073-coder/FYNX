@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Repository-wide regression gate for FYNX custom-surface card text contrast."""
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "app/src/main/java/com/fynx/app/ui"
@@ -52,7 +53,7 @@ for path in sorted(UI.rglob("*.kt")):
             break
         opening = call + len(token) - 1
         args = call_arguments(source, opening)
-        if "FynxDesign.Surface" in args:
+        if re.search(r"\\bFynxDesign\\.Surface\\b", args):
             custom_surface_cards += 1
             if "contentColor = FynxDesign.TextPrimary" not in args:
                 line = source.count("\n", 0, call) + 1
