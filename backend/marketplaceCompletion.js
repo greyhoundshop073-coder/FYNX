@@ -433,6 +433,8 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (await hasActiveProtectionCase(client, id)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'order has an active protection case or dispute' }); }
       const assignment = (await client.query('SELECT * FROM marketplace_delivery_assignments WHERE order_id=$1 FOR UPDATE', [id])).rows[0];
       if (!assignment) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'assign a delivery driver first' }); }
+      const approvedDriver = await client.query('SELECT 1 FROM marketplace_approved_drivers WHERE user_id=$1 AND active=TRUE', [assignment.driver_id]);
+      if (!approvedDriver.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'assigned driver approval is inactive; reassign to an active approved driver before handover', code: 'DRIVER_APPROVAL_INACTIVE' }); }
       if (!assignment.accepted_at) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver must accept the assignment before handover' }); }
       if (assignment.handover_at) { await client.query('COMMIT'); return res.json({ handedOver: true, handoverAt: assignment.handover_at, idempotent: true }); }
       const updated = await client.query('UPDATE marketplace_delivery_assignments SET handover_at=NOW(),updated_at=NOW() WHERE order_id=$1 RETURNING handover_at', [id]);
