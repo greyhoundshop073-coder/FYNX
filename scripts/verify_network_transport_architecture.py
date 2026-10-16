@@ -23,6 +23,8 @@ required = [
     'PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"',
     'requiresAuthentication = !isPublicAuthPath(path)',
     'FynxSecureTokenStore',
+    'suspend fun postBytes(context: Context, path: String, mimeType: String, body: ByteArray)',
+    'executeBinaryRequest(context, root, path, mimeType, body',
 ]
 for needle in required:
     if needle not in backend:
