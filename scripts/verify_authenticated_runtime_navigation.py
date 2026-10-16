@@ -673,6 +673,53 @@ if not FAILURES:
                                 FAILURES.append("Status composer Text style did not expose background color, text color, font and alignment controls")
                         else:
                             FAILURES.append("Status composer tools menu did not open")
+                        # Exercise the real Voice route, microphone recording, and caption field.
+                        # Keep this isolated from the text-style path above so it cannot confuse
+                        # a text draft with the voice-media caption.
+                        run("adb","shell","input","keyevent","4")
+                        time.sleep(.7)
+                        run("adb","shell","input","keyevent","4")
+                        time.sleep(1.0)
+                        stories_home = dump_ui("status-voice-return-to-stories.xml")
+                        voice_add = tap_control(stories_home, ["Add status"], "status-voice-add-menu", ["Text", "Photo", "Voice"])
+                        if voice_add:
+                            voice_composer = tap_control(voice_add, ["Voice"], "status-voice-composer", ["Start recording"])
+                            if voice_composer:
+                                report.append("- PASS Status -> Add status -> Voice opens the real voice composer with Start recording")
+                                voice_composer = tap_control(voice_composer, ["Start recording"], "status-voice-record-start", ["Stop"])
+                                if voice_composer:
+                                    time.sleep(2.0)
+                                    voice_composer = dump_ui("status-voice-recording.xml")
+                                    if find_control(voice_composer, ["Stop"]):
+                                        screenshot("status-voice-recording.png")
+                                        stopped = tap_control(voice_composer, ["Stop"], "status-voice-record-stop", ["Add a caption"])
+                                        if stopped:
+                                            report.append("- PASS Voice Status recording can be started and stopped; caption field appears after recording")
+                                            caption_field = find_control(stopped, ["Add a caption"])
+                                            if caption_field:
+                                                _, caption_x, caption_y = caption_field
+                                                run("adb","shell","input","tap",str(caption_x),str(caption_y))
+                                                time.sleep(1.0)
+                                                input_text("Voice caption test")
+                                                time.sleep(1.0)
+                                                caption_keyboard = dump_ui("status-voice-caption-keyboard.xml")
+                                                screenshot("status-voice-caption-keyboard.png")
+                                                if caption_keyboard and find_control(caption_keyboard, ["Voice caption test"]):
+                                                    report.append("- PASS Voice caption accepts typed text with the keyboard open; captured status-voice-caption-keyboard.png")
+                                                else:
+                                                    FAILURES.append("Voice caption text was not visible after typing with the keyboard open")
+                                            else:
+                                                FAILURES.append("Voice Status caption field was not accessible after recording")
+                                        else:
+                                            FAILURES.append("Voice Status recording stopped but the caption field did not appear")
+                                    else:
+                                        FAILURES.append("Voice Status recording did not expose its Stop control after starting")
+                                else:
+                                    FAILURES.append("Voice Status Start recording did not enter recording state")
+                            else:
+                                FAILURES.append("Add status -> Voice did not open the real voice composer")
+                        else:
+                            FAILURES.append("Stories -> Add status did not reopen for Voice runtime verification")
                     else:
                         FAILURES.append("Add status -> Text did not open the real Status composer")
                 else:
