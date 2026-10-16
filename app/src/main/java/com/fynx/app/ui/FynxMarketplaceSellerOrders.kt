@@ -313,7 +313,12 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                                         .onFailure { message = it.message ?: "Could not save the delivery driver." }
                                     busy = false
                                 }
-                            }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(if (order.driverId == null && order.driverType != "SELLER_LOCAL") "Assign driver" else "Save driver details") }
+                            }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(when {
+                order.driverType == "FYNX_ACCOUNT" && order.driverId != null && !order.driverApprovalActive && order.driverAcceptedAt != null -> "Reassign revoked driver"
+                order.driverId == null && order.driverType != "SELLER_LOCAL" -> "Assign driver"
+                order.driverType == "FYNX_ACCOUNT" && order.driverId != null && order.driverAcceptedAt == null -> "Replace unaccepted driver"
+                else -> "Save driver details"
+            }) }
                         }
                         if (order.status == "SHIPPED" && order.driverHandoverAt == null && (order.driverType == "SELLER_LOCAL" || (order.driverAcceptedAt != null && order.driverApprovalActive))) {
                             OutlinedTextField(handoverNote, { handoverNote = it.take(1000) }, label = { Text("Handover note") }, minLines = 2, enabled = !busy)
