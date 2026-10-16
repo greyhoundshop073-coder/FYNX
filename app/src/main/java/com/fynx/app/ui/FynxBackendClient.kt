@@ -143,16 +143,11 @@ object FynxBackendClient {
     /** INTERNET means a usable transport may exist while Android is still validating it. Let the request itself prove reachability. */
     private fun hasNetwork(context: Context): Boolean {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
-        val active = manager.activeNetwork
-        if (active != null) {
-            val capabilities = manager.getNetworkCapabilities(active)
-            if (capabilities != null && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return true
-        }
-        return manager.allNetworks.any { network ->
-            if (network == active) return@any false
-            val capabilities = manager.getNetworkCapabilities(network) ?: return@any false
-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-        }
+        // URL.openConnection() uses Android's default network. Do not treat a
+        // secondary INTERNET-capable network as proof that this request can route.
+        val active = manager.activeNetwork ?: return false
+        val capabilities = manager.getNetworkCapabilities(active) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     private fun isRetryableFailure(error: Throwable): Boolean { var current: Throwable? = error; while (current != null) { if (current is SocketTimeoutException || current is ConnectException || current is UnknownHostException || current is IOException) return true; if (current is FynxHttpException && current.status in setOf(408, 425, 429, 500, 502, 503, 504)) return true; current = current.cause }; return false }
