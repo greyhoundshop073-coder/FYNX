@@ -258,7 +258,81 @@ fun FynxMatureStatusComposerPanel(
             }
             FynxStatusType.PHOTO -> mediaUri?.let { MatureStatusMedia(it, false, Modifier.fillMaxSize().padding(top = 64.dp, bottom = if (showMediaTools) 176.dp else 104.dp)) }
             FynxStatusType.VIDEO -> mediaUri?.let { MatureStatusMedia(it, true, Modifier.fillMaxSize().padding(top = 64.dp, bottom = 176.dp)) }
-            FynxStatusType.VOICE -> Box(Modifier.fillMaxSize().background(Color(background)).padding(top = 64.dp, bottom = if (showMediaTools) 176.dp else 104.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) { Surface(shape = CircleShape, color = Color(foreground).copy(alpha = .14f), modifier = Modifier.size(112.dp)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Mic, null, tint = Color(foreground), modifier = Modifier.size(48.dp)) } }; Text(if (recording) formatMatureTime(elapsed) else if (mediaUri != null) "Voice Status ready" else "Press the microphone to record", color = Color(foreground), style = MaterialTheme.typography.titleMedium); if (recording) LinearProgressIndicator(progress = { (elapsed.toFloat() / FYNX_STATUS_MAX_VOICE_DURATION_MS).coerceIn(0f, 1f) }, modifier = Modifier.width(220.dp)); if (!recording && mediaUri == null) Button(onClick = { if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) beginMatureVoiceRecording(context, onStarted = { r, f -> recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis(); elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false; recording = true; error = null }, onError = { message -> error = message }) else micPermission.launch(Manifest.permission.RECORD_AUDIO) }, enabled = !publishing) { Icon(Icons.Default.Mic, "Start recording"); Spacer(Modifier.width(8.dp)); Text("Start recording") } } }
+            FynxStatusType.VOICE -> Box(
+                Modifier.fillMaxSize().background(Color(background)).padding(top = 64.dp, bottom = if (showMediaTools) 176.dp else 104.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (mediaUri != null && !recording) {
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.White.copy(alpha = 0.08f),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)
+                    ) {
+                        Column(
+                            Modifier.padding(horizontal = 24.dp, vertical = 28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Surface(shape = CircleShape, color = Color(foreground).copy(alpha = 0.16f), modifier = Modifier.size(72.dp)) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Mic, null, tint = Color(foreground), modifier = Modifier.size(32.dp))
+                                }
+                            }
+                            Text("Voice note ready", color = Color(foreground), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                            Text(formatMatureTime(elapsed), color = Color(foreground).copy(alpha = 0.72f), style = MaterialTheme.typography.bodyMedium)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                repeat(27) { index ->
+                                    Box(
+                                        Modifier
+                                            .padding(horizontal = 2.dp)
+                                            .width(4.dp)
+                                            .height(((index * 11 % 19) + 8).dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(Color(foreground).copy(alpha = if (index % 4 == 0) 0.48f else 0.88f))
+                                    )
+                                }
+                            }
+                            Text("Preview below or record again", color = Color(foreground).copy(alpha = 0.68f), style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                } else {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                        Surface(shape = CircleShape, color = Color(foreground).copy(alpha = .14f), modifier = Modifier.size(112.dp)) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Mic, null, tint = Color(foreground), modifier = Modifier.size(48.dp))
+                            }
+                        }
+                        Text(if (recording) formatMatureTime(elapsed) else "Ready to record your voice Status", color = Color(foreground), style = MaterialTheme.typography.titleMedium)
+                        if (recording) {
+                            LinearProgressIndicator(
+                                progress = { (elapsed.toFloat() / FYNX_STATUS_MAX_VOICE_DURATION_MS).coerceIn(0f, 1f) },
+                                modifier = Modifier.width(220.dp)
+                            )
+                        } else {
+                            Button(
+                                onClick = {
+                                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                        beginMatureVoiceRecording(context, onStarted = { r, f ->
+                                            recorder = r; recordingFile = f; recordingStarted = System.currentTimeMillis()
+                                            elapsed = 0L; accumulatedRecordingMs = 0L; recordingPaused = false
+                                            recording = true; error = null
+                                        }, onError = { message -> error = message })
+                                    } else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                                },
+                                enabled = !publishing
+                            ) {
+                                Icon(Icons.Default.Mic, "Start recording")
+                                Spacer(Modifier.width(8.dp))
+                                Text("Start recording")
+                            }
+                        }
+                    }
+                }
+            }
         }
         Column(Modifier.fillMaxSize().navigationBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
