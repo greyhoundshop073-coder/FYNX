@@ -33,6 +33,15 @@ for needle in ['FynxBackendClient.get(context, path)', '/api/money-planner/rates
 if 'https://open.er-api.com' in currency:
     violations.append("currency converter still calls external rate provider directly")
 
+network_settings = Path("app/src/main/java/com/fynx/app/ui/DataNetworkSettingsPanel.kt").read_text(encoding="utf-8")
+remote_auth = Path("app/src/main/java/com/fynx/app/ui/FynxRemoteAuthClient.kt").read_text(encoding="utf-8")
+for needle in ['"FYNX backend connection"', 'FynxBackendClient.health(context)', 'FynxBackendClient.get(context, "/api/me")', 'FynxRemoteAuthClient.connectSavedAccount(context, backendPassword)']:
+    if needle not in network_settings:
+        violations.append(f"visible backend connection panel missing: {needle}")
+for needle in ['suspend fun connectSavedAccount(', 'FynxBackendClient.isUnauthorizedFailure(failure)', 'FynxAuthStore.hasAccount(context)']:
+    if needle not in remote_auth:
+        violations.append(f"saved-account backend connector missing: {needle}")
+
 if violations:
     raise SystemExit("FYNX network transport gate failed:\n- " + "\n- ".join(violations))
 print("FYNX network transport gate passed")

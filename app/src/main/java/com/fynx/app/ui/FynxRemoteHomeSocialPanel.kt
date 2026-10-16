@@ -316,7 +316,11 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         feedRequestInFlight = true; lastFeedRequestAt = now
         scope.launch {
             loading = true
-            val activeNetworkReady = networkReady ?: (FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE)
+            // The shell's networkReady flag means the backend health probe succeeded; it is not
+            // proof that the phone has no internet. Do not suppress the real feed request when
+            // the backend health probe is down or temporarily failing. Use device transport
+            // state to decide whether to show the offline cache instead.
+            val activeNetworkReady = FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE
             if (!activeNetworkReady) {
                 val cachedPage = FynxRemoteSocialClient.cachedFeedPage(context)
                 if (posts.isEmpty() && cachedPage != null) {

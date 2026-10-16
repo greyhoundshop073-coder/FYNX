@@ -23,6 +23,7 @@ import org.json.JSONObject
 object FynxBackendClient {
     private const val PREFS = "fynx_backend"
     private const val KEY_BASE_URL = "base_url"
+    private const val KEY_BASE_URL_EXPLICIT = "base_url_explicit"
     private const val LEGACY_ACCESS_TOKEN = "access_token"
     private const val PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"
     private const val DEBUG_TEST_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"
@@ -43,8 +44,38 @@ object FynxBackendClient {
     data class DownloadedMedia(val contentType: String?, val byteCount: Long)
 
     fun availability(context: Context): FynxBackendAvailability = if (baseUrl(context).isBlank()) FynxBackendAvailability.DISABLED else FynxBackendAvailability.CONFIGURED
-    fun baseUrl(context: Context): String { val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE); val stored = prefs.getString(KEY_BASE_URL, null)?.trim()?.trimEnd('/'); val normalized = stored?.trimEnd('/')?.takeIf { it.isNotBlank() }; val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0; if (normalized == "https://ai-creative-studio-572v.onrender.com" || (isDebuggable && normalized == PRODUCTION_BASE_URL)) { prefs.edit().remove(KEY_BASE_URL).apply(); return if (isDebuggable) DEBUG_TEST_BASE_URL else PRODUCTION_BASE_URL }; return normalized ?: if (isDebuggable) DEBUG_TEST_BASE_URL else PRODUCTION_BASE_URL }
-    fun configureBaseUrl(context: Context, value: String) { val normalized = value.trim().trimEnd('/'); require(normalized.isBlank() || normalized.startsWith("https://")) { "FYNX backend must use HTTPS." }; context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_BASE_URL, normalized).apply() }
+    fun baseUrl(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val stored = prefs.getString(KEY_BASE_URL, null)?.trim()?.trimEnd('/')
+        val normalized = stored?.trimEnd('/')?.takeIf { it.isNotBlank() }
+        val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
+        if (isDebuggable) {
+            // Older APKs could persist a stale backend URL across upgrades. Only honor a
+            // debug override when this version explicitly configured it; migrate legacy
+            // unmarked values to the active Railway testing service.
+            val explicitlyConfigured = prefs.getBoolean(KEY_BASE_URL_EXPLICIT, false)
+            val safeExplicitOverride = explicitlyConfigured &&
+                normalized != null &&
+                normalized != PRODUCTION_BASE_URL &&
+                normalized != "https://ai-creative-studio-572v.onrender.com"
+            if (safeExplicitOverride) return checkNotNull(normalized)
+            if (normalized != DEBUG_TEST_BASE_URL || !explicitlyConfigured) {
+                prefs.edit()
+                    .putString(KEY_BASE_URL, DEBUG_TEST_BASE_URL)
+                    .putBoolean(KEY_BASE_URL_EXPLICIT, false)
+                    .apply()
+            }
+            return DEBUG_TEST_BASE_URL
+        }
+
+        if (normalized == "https://ai-creative-studio-572v.onrender.com") {
+            prefs.edit().remove(KEY_BASE_URL).apply()
+            return PRODUCTION_BASE_URL
+        }
+        return normalized ?: PRODUCTION_BASE_URL
+    }
+    fun configureBaseUrl(context: Context, value: String) { val normalized = value.trim().trimEnd('/'); require(normalized.isBlank() || normalized.startsWith("https://")) { "FYNX backend must use HTTPS." }; context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_BASE_URL, normalized).putBoolean(KEY_BASE_URL_EXPLICIT, true).apply() }
     fun saveAccessToken(context: Context, token: String?) { if (token.isNullOrBlank()) { FynxAuthStore.clear(context); return }; FynxSecureTokenStore.save(context, token) }
     fun accessToken(context: Context): String? = FynxSecureTokenStore.load(context) ?: migrateLegacyAccessToken(context)
     fun hasAccessToken(context: Context): Boolean = accessToken(context) != null
@@ -81,9 +112,10 @@ object FynxBackendClient {
 
     private suspend fun downloadOnce(context: Context, target: URL, temporary: File, maxBytes: Long): DownloadedMedia {
         val weakNetwork = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK
-        val connection = (target.openConnection() as HttpURLConnection).apply { connectTimeout = if (weakNetwork) WEAK_CONNECT_TIMEOUT_MS else CONNECT_TIMEOUT_MS; readTimeout = if (weakNetwork) WEAK_READ_TIMEOUT_MS else READ_TIMEOUT_MS; useCaches = false; instanceFollowRedirects = false; setRequestProperty("Accept", "image/*,video/*,audio/*,*/*"); setRequestProperty("Accept-Encoding", "identity"); setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0"); setRequestProperty("Pragma", "no-cache"); setRequestProperty("Connection", "close"); setRequestProperty("User-Agent", "FYNX-Android/1"); accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") } }
+        val requestToken = accessToken(context)
+        val connection = (target.openConnection() as HttpURLConnection).apply { connectTimeout = if (weakNetwork) WEAK_CONNECT_TIMEOUT_MS else CONNECT_TIMEOUT_MS; readTimeout = if (weakNetwork) WEAK_READ_TIMEOUT_MS else READ_TIMEOUT_MS; useCaches = false; instanceFollowRedirects = false; setRequestProperty("Accept", "image/*,video/*,audio/*,*/*"); setRequestProperty("Accept-Encoding", "identity"); setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0"); setRequestProperty("Pragma", "no-cache"); setRequestProperty("Connection", "close"); setRequestProperty("User-Agent", "FYNX-Android/1"); requestToken?.let { setRequestProperty("Authorization", "Bearer $it") } }
         val cancellationHandle = currentCoroutineContext().job.invokeOnCompletion { connection.disconnect() }
-        try { val status = connection.responseCode; if (status == HttpURLConnection.HTTP_UNAUTHORIZED) { FynxAuthStore.clear(context); throw FynxUnauthorizedException() }; val stream = if (status in 200..299) connection.inputStream else connection.errorStream; if (status !in 200..299) throw FynxHttpException(status, stream?.use { it.bufferedReader().readText().take(600) }.orEmpty()); val declaredLength = connection.contentLengthLong; require(declaredLength < 0L || declaredLength <= maxBytes) { "FYNX media is too large" }; temporary.delete(); var total = 0L; stream?.use { input -> temporary.outputStream().use { output -> val buffer = ByteArray(32 * 1024); while (true) { val count = input.read(buffer); if (count < 0) break; total += count; if (total > maxBytes) throw IOException("FYNX media is too large"); output.write(buffer, 0, count) }; output.flush() } } ?: throw IOException("FYNX media response was empty"); if (total <= 0L || temporary.length() != total) throw IOException("FYNX media download was incomplete"); return DownloadedMedia(connection.contentType?.substringBefore(';')?.trim()?.lowercase(), total) } finally { cancellationHandle.dispose(); connection.disconnect() }
+        try { val status = connection.responseCode; if (status == HttpURLConnection.HTTP_UNAUTHORIZED) { if (requestToken != null) FynxAuthStore.clear(context); throw FynxUnauthorizedException() }; val stream = if (status in 200..299) connection.inputStream else connection.errorStream; if (status !in 200..299) throw FynxHttpException(status, stream?.use { it.bufferedReader().readText().take(600) }.orEmpty()); val declaredLength = connection.contentLengthLong; require(declaredLength < 0L || declaredLength <= maxBytes) { "FYNX media is too large" }; temporary.delete(); var total = 0L; stream?.use { input -> temporary.outputStream().use { output -> val buffer = ByteArray(32 * 1024); while (true) { val count = input.read(buffer); if (count < 0) break; total += count; if (total > maxBytes) throw IOException("FYNX media is too large"); output.write(buffer, 0, count) }; output.flush() } } ?: throw IOException("FYNX media response was empty"); if (total <= 0L || temporary.length() != total) throw IOException("FYNX media download was incomplete"); return DownloadedMedia(connection.contentType?.substringBefore(';')?.trim()?.lowercase(), total) } finally { cancellationHandle.dispose(); connection.disconnect() }
     }
 
     private suspend fun request(context: Context, method: String, path: String, body: String?): Result<String> {
@@ -111,6 +143,7 @@ object FynxBackendClient {
     private suspend fun executeRequest(context: Context, root: String, method: String, path: String, body: String?): String {
         val weakNetwork = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK
         val requiresAuthentication = !isPublicAuthPath(path)
+        val requestToken = if (requiresAuthentication) accessToken(context) else null
         val connection = (URL(root + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = if (weakNetwork) WEAK_CONNECT_TIMEOUT_MS else CONNECT_TIMEOUT_MS
@@ -122,7 +155,7 @@ object FynxBackendClient {
             setRequestProperty("Pragma", "no-cache")
             setRequestProperty("Connection", "close")
             setRequestProperty("User-Agent", "FYNX-Android/1")
-            if (requiresAuthentication) accessToken(context)?.let { setRequestProperty("Authorization", "Bearer $it") }
+            requestToken?.let { setRequestProperty("Authorization", "Bearer $it") }
         }
         val cancellationHandle = currentCoroutineContext().job.invokeOnCompletion { connection.disconnect() }
         try {
@@ -131,7 +164,7 @@ object FynxBackendClient {
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val response = stream?.use { input -> val output = StringBuilder(); val buffer = ByteArray(16 * 1024); var total = 0; while (true) { val count = input.read(buffer); if (count < 0) break; total += count; if (total > MAX_RESPONSE_BYTES) throw IOException("FYNX backend response is too large"); output.append(String(buffer, 0, count, Charsets.UTF_8)) }; output.toString() }.orEmpty()
             if (status == HttpURLConnection.HTTP_UNAUTHORIZED) {
-                if (requiresAuthentication) FynxAuthStore.clear(context)
+                if (requestToken != null) FynxAuthStore.clear(context)
                 throw FynxUnauthorizedException()
             }
             if (status !in 200..299) throw FynxHttpException(status, response)

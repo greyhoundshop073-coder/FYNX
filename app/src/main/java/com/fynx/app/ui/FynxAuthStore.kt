@@ -23,6 +23,7 @@ object FynxAuthStore {
     fun hasAccount(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ACCOUNT_CREATED, false)
 
     fun storedUsername(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_USERNAME, null)
+    fun storedDisplayName(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_DISPLAY_NAME, null)?.trim()?.takeIf { it.isNotEmpty() }
     fun storedPhone(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_PHONE, null)?.trim()?.takeIf { it.isNotEmpty() }
 
     /** Stable local namespace for account-scoped caches and stores. */

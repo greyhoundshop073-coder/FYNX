@@ -7,6 +7,7 @@ routes = Path("backend/socialRoutes.js").read_text()
 
 checks = [
     ("feed page exposes a continuation cursor", "val nextCursor: String? = null" in client),
+    ("backend health failure does not falsely block Home feed requests", "val activeNetworkReady = FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE" in home and "networkReady ?: (FynxNetworkQuality.current(context)" not in home),
     ("feed client accepts and sends cursor", "beforeCursor: String? = null" in client and 'cursorQuery' in client),
     ("Home stores the feed cursor", "var feedNextCursor by remember" in home),
     ("Home uses cursor for subsequent pages", "beforeCursor = feedNextCursor" in home),

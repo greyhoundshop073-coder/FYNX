@@ -2,14 +2,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 auth = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt").read_text(encoding="utf-8")
+app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+remote_auth = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteAuthClient.kt").read_text(encoding="utf-8")
 
 checks = {
     "debug login requires an Android debuggable build": "ApplicationInfo.FLAG_DEBUGGABLE" in auth and "if (!isDebuggable || requestedUsername.isBlank()) return null" in auth,
-    "saved-device login is immediate and does not wait for the backend": "val savedLocalUsername = localDebugAccountForLogin(context, requestedUsername)" in auth and "FynxAuthStore.save(context, savedLocalUsername)" in auth,
+    "saved-device login requires a password for server connection": "password.isBlank() -> error = \"Enter your password to connect to the FYNX server. A local-only session cannot load server-backed features.\"" in auth and "FynxAuthStore.save(context, savedLocalUsername)" not in auth,
     "offline fallback requires a recognized network failure": "allowOfflineEntry && isLoginNetworkFailure(failure)" in auth,
     "network fallback reuses the debug-only local-account guard": "localDebugAccountForLogin(context, username)" in auth,
-    "release and invalid-credential paths do not receive an unconditional local session": "if (allowOfflineEntry) {" not in auth and "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth,
+    "saved debug login can authenticate with a server password": 'FynxAuthField(password, { password = it }, "Password"' in auth and "FynxRemoteAuthClient.login(context, requestedUsername, password)" in auth,
+    "saved local-only debug accounts can migrate to a real server token": "FynxRemoteAuthClient.connectSavedAccount(context, password)" in auth and "FynxAuthStore.hasAccount(context)" in remote_auth and "FynxBackendClient.isUnauthorizedFailure(failure)" in remote_auth,
+    "failed server login cannot silently fall back to a local session": "finish(connectedResult)" in auth and "finish(connectedResult, allowOfflineEntry = true)" not in auth,
+    "startup refuses to restore a tokenless signed-in session outside preview": "stored.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)" in app and "debugOfflineSession" not in app,
     "live-backend probe is separately opt-in and not required for feature-branch APK runtime": "run_live_backend_probe:" in workflow and "inputs.run_live_backend_probe == true" in workflow and "github.ref == 'refs/heads/main'" in workflow and "if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]')) }}" not in workflow,
     "explicit live-backend probe remains available when deliberately requested": "inputs.run_live_backend_probe == true" in workflow and "github.ref == 'refs/heads/main'" in workflow and "run: node scripts/verify_production_backend_reachability.mjs" in workflow,
 }
