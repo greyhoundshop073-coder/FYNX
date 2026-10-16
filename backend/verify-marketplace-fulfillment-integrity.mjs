@@ -26,7 +26,14 @@ const checks = [
   ['seller Android keeps delivery on the shipping route', sellerUi.includes('/api/marketplace/orders/${order.id}/ship') && sellerUi.includes('Mark dispatched')],
   ['buyer Android reaches the same receive/inspection lifecycle', buyerUi.includes('Confirm received') && buyerUi.includes('Complete order')],
   ['protection creation serializes on the order row', protection.includes('FROM marketplace_orders WHERE id=$1 FOR UPDATE')],
-  ['protection changes the order to DISPUTED inside its transaction', protection.includes("UPDATE marketplace_orders SET status='DISPUTED'") && protection.includes('COMMIT')]
+  ['protection changes the order to DISPUTED inside its transaction', protection.includes("UPDATE marketplace_orders SET status='DISPUTED'") && protection.includes('COMMIT')],
+  ['both approved FYNX and seller-local delivery modes are supported', completion.includes("'FYNX_ACCOUNT','SELLER_LOCAL'") && completion.includes("driverType === 'SELLER_LOCAL'")],
+  ['local drivers require a name, phone and agreed pickup point', completion.includes('local driver name, phone, and agreed pickup point are required')],
+  ['local driver handover does not require a FYNX account acceptance', completion.includes('seller-local drivers do not use FYNX account acceptance') && completion.includes('LOCAL_DRIVER_CUSTODY_HANDED_OVER')],
+  ['local driver arrival remains separate from buyer receipt confirmation', completion.includes('LOCAL_DRIVER_ARRIVAL_REPORTED') && completion.includes('only the buyer can confirm delivery')],
+  ['delivery details are restricted to buyer or seller', completion.includes('/api/marketplace/orders/:id/delivery-details') && completion.includes('only the buyer or seller can view delivery details')],
+  ['seller Android can choose both driver modes and capture vehicle details', sellerUi.includes('Local phone driver') && sellerUi.includes('vehiclePlate') && sellerUi.includes('pickupPoint')],
+  ['buyer Android displays agreed pickup and vehicle information', buyerUi.includes('Agreed pickup point:') && buyerUi.includes('Vehicle:')]
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);

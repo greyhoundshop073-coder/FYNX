@@ -27,6 +27,15 @@ private data class SellerOrderRow(
     val address: JSONObject?,
     val tracking: String?,
     val driverId: String?,
+    val driverType: String,
+    val localDriverName: String?,
+    val localDriverPhone: String?,
+    val pickupPoint: String?,
+    val pickupInstructions: String?,
+    val vehicleType: String?,
+    val vehicleColor: String?,
+    val vehiclePlate: String?,
+    val vehicleNote: String?,
     val driverApprovalActive: Boolean,
     val driverAcceptedAt: String?,
     val driverHandoverAt: String?,
@@ -81,6 +90,15 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                                 address = o.optJSONObject("shippingAddress"),
                                 tracking = o.optString("trackingReference").takeIf { it.isNotBlank() },
                                 driverId = o.optString("driverId").takeIf { it.isNotBlank() && it != "null" },
+                                driverType = o.optString("driverType").takeUnless { it.isBlank() || it == "null" } ?: "FYNX_ACCOUNT",
+                                localDriverName = o.optString("localDriverName").takeIf { it.isNotBlank() && it != "null" },
+                                localDriverPhone = o.optString("localDriverPhone").takeIf { it.isNotBlank() && it != "null" },
+                                pickupPoint = o.optString("pickupPoint").takeIf { it.isNotBlank() && it != "null" },
+                                pickupInstructions = o.optString("pickupInstructions").takeIf { it.isNotBlank() && it != "null" },
+                                vehicleType = o.optString("vehicleType").takeIf { it.isNotBlank() && it != "null" },
+                                vehicleColor = o.optString("vehicleColor").takeIf { it.isNotBlank() && it != "null" },
+                                vehiclePlate = o.optString("vehiclePlate").takeIf { it.isNotBlank() && it != "null" },
+                                vehicleNote = o.optString("vehicleNote").takeIf { it.isNotBlank() && it != "null" },
                                 driverApprovalActive = o.optBoolean("driverApprovalActive", false),
                                 driverAcceptedAt = o.optString("driverAcceptedAt").takeIf { it.isNotBlank() && it != "null" },
                                 driverHandoverAt = o.optString("driverHandoverAt").takeIf { it.isNotBlank() && it != "null" },
@@ -131,6 +149,15 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
     selected?.let { order ->
         var tracking by remember(order.id) { mutableStateOf(order.tracking.orEmpty()) }
         var driverUsername by remember(order.id) { mutableStateOf("") }
+        var driverMode by remember(order.id) { mutableStateOf(order.driverType) }
+        var localDriverName by remember(order.id) { mutableStateOf(order.localDriverName.orEmpty()) }
+        var localDriverPhone by remember(order.id) { mutableStateOf(order.localDriverPhone.orEmpty()) }
+        var pickupPoint by remember(order.id) { mutableStateOf(order.pickupPoint.orEmpty()) }
+        var pickupInstructions by remember(order.id) { mutableStateOf(order.pickupInstructions.orEmpty()) }
+        var vehicleType by remember(order.id) { mutableStateOf(order.vehicleType.orEmpty()) }
+        var vehicleColor by remember(order.id) { mutableStateOf(order.vehicleColor.orEmpty()) }
+        var vehiclePlate by remember(order.id) { mutableStateOf(order.vehiclePlate.orEmpty()) }
+        var vehicleNote by remember(order.id) { mutableStateOf(order.vehicleNote.orEmpty()) }
         var handoverNote by remember(order.id) { mutableStateOf("") }
         var busy by remember(order.id) { mutableStateOf(false) }
         var message by remember(order.id) { mutableStateOf<String?>(null) }
@@ -221,29 +248,74 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         else Text("Waiting for buyer delivery details.")
                     } else Text("Buyer selected pickup. Confirm the handover when the buyer receives the item.")
                     if (order.fulfillment == "DELIVERY" && order.status in setOf("PAID", "SHIPPED")) {
-                        Text("Driver custody", style = MaterialTheme.typography.titleSmall)
-                        when {
-                            order.driverId == null -> Text("No driver assigned yet.")
-                            order.driverApprovalActive == false && order.driverAcceptedAt != null && order.driverHandoverAt == null -> Text("The previous driver's approval is inactive. Reassign an active approved driver before handover.")
-                            order.driverHandoverAt != null && order.driverDeliveredAt != null -> Text("Driver submitted delivery evidence. Waiting for buyer confirmation.")
-                            order.driverHandoverAt != null -> Text("Driver accepted and custody was handed over.")
-                            order.driverAcceptedAt != null -> Text("Driver accepted. Record handover only when the parcel is physically handed over.")
-                            else -> Text("Driver assignment sent. Waiting for acceptance.")
+                        Text("Delivery driver", style = MaterialTheme.typography.titleSmall)
+                        if (order.driverType == "SELLER_LOCAL") {
+                            Text("Local phone driver — no FYNX account is needed.")
+                            order.localDriverName?.let { Text("Driver: $it") }
+                            order.localDriverPhone?.let { Text("Phone: $it") }
+                            order.pickupPoint?.let { Text("Agreed pickup point: $it") }
+                            order.pickupInstructions?.takeIf { it.isNotBlank() }?.let { Text("Pickup instructions: $it") }
+                            val vehicleSummary = listOfNotNull(order.vehicleType, order.vehicleColor, order.vehiclePlate?.let { "Plate $it" }).joinToString(" • ")
+                            if (vehicleSummary.isNotBlank()) Text("Vehicle: $vehicleSummary")
+                            order.vehicleNote?.takeIf { it.isNotBlank() }?.let { Text("Vehicle note: $it") }
+                            when {
+                                order.driverHandoverAt != null && order.driverDeliveredAt != null -> Text("Seller reported the local driver arrived. Waiting for buyer to confirm collection.")
+                                order.driverHandoverAt != null -> Text("Parcel handed to the local driver. Mark arrival only after the driver calls the buyer at the agreed point.")
+                                else -> Text("Confirm handover only after the parcel is physically given to this driver.")
+                            }
+                        } else {
+                            when {
+                                order.driverId == null -> Text("No FYNX driver assigned yet.")
+                                order.driverApprovalActive == false && order.driverAcceptedAt != null && order.driverHandoverAt == null -> Text("The previous driver's approval is inactive. Reassign an active approved driver before handover.")
+                                order.driverHandoverAt != null && order.driverDeliveredAt != null -> Text("FYNX driver submitted delivery evidence. Waiting for buyer confirmation.")
+                                order.driverHandoverAt != null -> Text("FYNX driver accepted and custody was handed over.")
+                                order.driverAcceptedAt != null -> Text("FYNX driver accepted. Record handover only when the parcel is physically handed over.")
+                                else -> Text("FYNX driver assignment sent. Waiting for acceptance.")
+                            }
                         }
-                        if ((order.driverAcceptedAt == null || !order.driverApprovalActive) && order.status in setOf("PAID", "SHIPPED") && order.driverHandoverAt == null) {
-                            OutlinedTextField(driverUsername, { driverUsername = it.take(32) }, label = { Text("Driver username") }, singleLine = true, enabled = !busy)
-                            Button(enabled = !busy && driverUsername.trim().removePrefix("@").isNotBlank(), onClick = {
+                        if (order.status in setOf("PAID", "SHIPPED") && order.driverHandoverAt == null && (order.driverType == "SELLER_LOCAL" || order.driverAcceptedAt == null || !order.driverApprovalActive)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilterChip(selected = driverMode == "FYNX_ACCOUNT", onClick = { driverMode = "FYNX_ACCOUNT" }, label = { Text("FYNX driver") }, enabled = !busy)
+                                FilterChip(selected = driverMode == "SELLER_LOCAL", onClick = { driverMode = "SELLER_LOCAL" }, label = { Text("Local phone driver") }, enabled = !busy)
+                            }
+                            if (driverMode == "FYNX_ACCOUNT") {
+                                OutlinedTextField(driverUsername, { driverUsername = it.take(32) }, label = { Text("Approved driver username") }, singleLine = true, enabled = !busy)
+                            } else {
+                                Text("Use a driver who can call the buyer from an ordinary phone. Agree on a safe public pickup point with the buyer.")
+                                OutlinedTextField(localDriverName, { localDriverName = it.take(120) }, label = { Text("Driver name") }, singleLine = true, enabled = !busy)
+                                OutlinedTextField(localDriverPhone, { localDriverPhone = it.take(40) }, label = { Text("Driver phone number") }, singleLine = true, enabled = !busy)
+                                OutlinedTextField(pickupPoint, { pickupPoint = it.take(300) }, label = { Text("Agreed bus stop / roadside pickup point") }, minLines = 2, enabled = !busy)
+                                OutlinedTextField(pickupInstructions, { pickupInstructions = it.take(500) }, label = { Text("Pickup instructions (optional)") }, minLines = 2, enabled = !busy)
+                                OutlinedTextField(vehicleType, { vehicleType = it.take(80) }, label = { Text("Vehicle type (optional)") }, singleLine = true, enabled = !busy)
+                                OutlinedTextField(vehicleColor, { vehicleColor = it.take(80) }, label = { Text("Vehicle colour (optional)") }, singleLine = true, enabled = !busy)
+                                OutlinedTextField(vehiclePlate, { vehiclePlate = it.take(40) }, label = { Text("Plate number (optional)") }, singleLine = true, enabled = !busy)
+                                OutlinedTextField(vehicleNote, { vehicleNote = it.take(300) }, label = { Text("Vehicle note (optional)") }, minLines = 2, enabled = !busy)
+                            }
+                            Button(enabled = !busy && (if (driverMode == "FYNX_ACCOUNT") driverUsername.trim().removePrefix("@").isNotBlank() else localDriverName.trim().isNotBlank() && localDriverPhone.trim().isNotBlank() && pickupPoint.trim().isNotBlank()), onClick = {
                                 busy = true
                                 message = null
+                                val payload = JSONObject().put("driverType", driverMode)
+                                if (driverMode == "FYNX_ACCOUNT") {
+                                    payload.put("driverUsername", driverUsername.trim().removePrefix("@"))
+                                } else {
+                                    payload.put("localDriverName", localDriverName.trim())
+                                        .put("localDriverPhone", localDriverPhone.trim())
+                                        .put("pickupPoint", pickupPoint.trim())
+                                        .put("pickupInstructions", pickupInstructions.trim())
+                                        .put("vehicleType", vehicleType.trim())
+                                        .put("vehicleColor", vehicleColor.trim())
+                                        .put("vehiclePlate", vehiclePlate.trim())
+                                        .put("vehicleNote", vehicleNote.trim())
+                                }
                                 scope.launch {
-                                    FynxBackendClient.postJson(context, "/api/marketplace/orders/${order.id}/driver-assignment", JSONObject().put("driverUsername", driverUsername.trim().removePrefix("@")).toString())
+                                    FynxBackendClient.postJson(context, "/api/marketplace/orders/${order.id}/driver-assignment", payload.toString())
                                         .onSuccess { selected = null; load(); onChanged() }
-                                        .onFailure { message = it.message ?: "Could not assign this driver." }
+                                        .onFailure { message = it.message ?: "Could not save the delivery driver." }
                                     busy = false
                                 }
-                            }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(if (order.driverId == null) "Assign driver" else if (!order.driverApprovalActive && order.driverAcceptedAt != null) "Reassign revoked driver" else "Replace unaccepted driver") }
+                            }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(if (order.driverId == null && order.driverType != "SELLER_LOCAL") "Assign driver" else "Save driver details") }
                         }
-                        if (order.status == "SHIPPED" && order.driverAcceptedAt != null && order.driverApprovalActive && order.driverHandoverAt == null) {
+                        if (order.status == "SHIPPED" && order.driverHandoverAt == null && (order.driverType == "SELLER_LOCAL" || (order.driverAcceptedAt != null && order.driverApprovalActive))) {
                             OutlinedTextField(handoverNote, { handoverNote = it.take(1000) }, label = { Text("Handover note") }, minLines = 2, enabled = !busy)
                             Button(enabled = !busy && handoverNote.trim().isNotBlank(), onClick = {
                                 busy = true
@@ -254,7 +326,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                                         .onFailure { message = it.message ?: "Could not record driver handover." }
                                     busy = false
                                 }
-                            }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Confirm driver handover") }
+                            }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(if (order.driverType == "SELLER_LOCAL") "Confirm local driver handover" else "Confirm driver handover") }
                         }
                     }
                     if (order.status == "PAID" && order.fulfillment == "DELIVERY") OutlinedTextField(tracking, { tracking = it }, label = { Text("Tracking reference (optional)") }, singleLine = true)
@@ -279,7 +351,11 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         TextButton(enabled = !busy, onClick = { progress("FAILED_DELIVERY", "Seller reported a failed delivery attempt.") }) { Text("Report failed delivery") }
                     }
                     order.status == "SHIPPED" && order.fulfillment == "DELIVERY" && order.fulfillmentStatus == "IN_TRANSIT" -> Column(horizontalAlignment = Alignment.End) {
-                        Button(enabled = !busy, onClick = { progress("DELIVERED") }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Mark delivered") }
+                        if (order.driverId == null || order.driverType == "SELLER_LOCAL") {
+                            Button(enabled = !busy && (order.driverType != "SELLER_LOCAL" || order.driverHandoverAt != null), onClick = { progress("DELIVERED", if (order.driverType == "SELLER_LOCAL") "Local driver called the buyer at the agreed pickup point." else "Seller reported delivery.") }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text(if (order.driverType == "SELLER_LOCAL") "Report driver arrival" else "Mark delivered") }
+                        } else {
+                            Text("Waiting for the assigned FYNX driver to submit delivery evidence.", style = MaterialTheme.typography.bodySmall)
+                        }
                         TextButton(enabled = !busy, onClick = { progress("FAILED_DELIVERY", "Seller reported a failed delivery attempt.") }) { Text("Report failed delivery") }
                     }
                     order.status == "SHIPPED" && order.fulfillment == "DELIVERY" && order.fulfillmentStatus == "FAILED_DELIVERY" -> Column(horizontalAlignment = Alignment.End) {

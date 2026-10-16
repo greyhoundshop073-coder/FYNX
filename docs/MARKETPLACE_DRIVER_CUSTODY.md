@@ -38,3 +38,10 @@ The critical scenarios to verify behaviorally are:
 - Approval revocation and physical handover cannot race into an unsafe custody state.
 - Reassignment is allowed after pre-handover revocation but blocked after handover.
 - The buyer cannot complete the order before driver evidence, receipt confirmation, and item/quantity confirmation.
+
+
+## Seller-local phone driver mode
+
+A second delivery mode is supported alongside approved FYNX-account drivers. The seller can record a local driver's name and phone number, an agreed bus-stop/roadside pickup point, optional instructions, and optional vehicle type/colour/plate/note. The local driver does not need a FYNX account or app. The seller records physical handover; after the driver calls the buyer at the agreed point, the seller may report arrival. That report is not buyer receipt: the buyer must still confirm collection, and the existing inspection/completion protections remain in force.
+
+Vehicle photo upload is not included in this change because a real photo requires media upload/storage and display integration; the optional vehicle note is supported instead. The pickup point is stored separately from the buyer's delivery address. Assignment details are exposed by the delivery-details endpoint only to the order buyer or seller. Reassignment remains locked after physical handover.
