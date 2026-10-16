@@ -63,7 +63,12 @@ def wait_for_home_feed_settled(timeout:float=30.0)->tuple[str,bool]:
             and not find_control(latest, ["Waiting for network"])
             and not find_control(latest, ["Connecting"])
         )
-        if latest and server_connected and find_control(latest,["Your feed"]) and not find_control(latest,["Loading Home feed"]):
+        feed_has_no_network_error = not any(find_control(latest, [marker]) for marker in (
+            "You're offline. Connect to a network to load your feed.",
+            "Unable to load your feed.",
+            "Your FYNX feed service is temporarily unavailable.",
+        ))
+        if latest and server_connected and feed_has_no_network_error and find_control(latest,["Your feed"]) and not find_control(latest,["Loading Home feed"]):
             return latest,True
         time.sleep(.5)
     return latest,False
