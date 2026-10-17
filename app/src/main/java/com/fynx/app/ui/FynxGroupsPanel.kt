@@ -72,6 +72,12 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
     var groups by remember { mutableStateOf(FynxGroupsStore.load(context)) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var createError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect("remote-groups") {
+        FynxGroupRemoteClient.loadMyGroups(context).onSuccess { remoteGroups ->
+            FynxGroupsStore.save(context, remoteGroups)
+            groups = remoteGroups
+        }
+    }
     val visible = groups.filter { it.name.contains(query, true) || it.description.contains(query, true) }
 
     Column(Modifier.fillMaxSize().background(FynxDesign.Background).padding(16.dp)) {

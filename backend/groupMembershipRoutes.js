@@ -39,6 +39,37 @@ export function registerGroupMembershipRoutes({ app }) {
   const isAdmin = role => String(role) === 'ADMIN';
   const canManageMembers = role => ['ADMIN', 'MODERATOR'].includes(String(role || '').toUpperCase());
 
+  app.get('/api/groups', auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      const rows = (await pool.query(`
+        SELECT g.id,g.name,g.description,g.visibility,g.group_photo_media_id,
+               owner.username AS owner_username,
+               COALESCE(json_agg(json_build_object('username',u.username,'role',m.role))
+                 FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS members
+        FROM fynx_group_members mine
+        JOIN fynx_groups g ON g.id=mine.group_id
+        JOIN users owner ON owner.id=g.owner_id
+        LEFT JOIN fynx_group_members m ON m.group_id=g.id
+        LEFT JOIN users u ON u.id=m.user_id
+        WHERE mine.user_id=$1
+        GROUP BY g.id,owner.username
+        ORDER BY g.updated_at DESC,g.created_at DESC
+        LIMIT 500
+      `, [req.user.sub])).rows;
+      res.set('Cache-Control','no-store');
+      return res.json({ groups: rows.map(row => ({
+        id: String(row.id), name: row.name, description: row.description || '',
+        visibility: row.visibility, ownerUsername: row.owner_username,
+        groupPhotoMediaId: row.group_photo_media_id == null ? null : String(row.group_photo_media_id),
+        members: row.members
+      })) });
+    } catch (error) {
+      console.error('groups list', error);
+      return res.status(500).json({ error: 'groups lookup failed' });
+    }
+  });
+
   app.get('/api/groups/:groupId/members', auth, async (req, res) => {
     try {
       await ensureSchema();
