@@ -57,15 +57,15 @@ async function authenticatedRequest(path, token) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20_000);
   try {
-    const response = await fetch(\`\${BASE_URL}\${path}\`, {
+    const response = await fetch(`${BASE_URL}${path}`, {
       method: "GET",
-      headers: { Accept: "application/json", Authorization: \`Bearer \${token}\`, "Cache-Control": "no-store" },
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Cache-Control": "no-store" },
       signal: controller.signal,
     });
     const text = await response.text();
     let body = {};
     try { body = JSON.parse(text); } catch { body = { raw: text.slice(0, 300) }; }
-    if (!response.ok) throw new Error(\`Authenticated \${path} returned HTTP \${response.status}: \${JSON.stringify(body)}\`);
+    if (!response.ok) throw new Error(`Authenticated ${path} returned HTTP ${response.status}: ${JSON.stringify(body)}`);
     return body;
   } finally {
     clearTimeout(timer);
@@ -76,7 +76,7 @@ const loginController = new AbortController();
 const loginTimer = setTimeout(() => loginController.abort(), 20_000);
 let login;
 try {
-  const response = await fetch(\`\${BASE_URL}/api/auth/login\`, {
+  const response = await fetch(`${BASE_URL}/api/auth/login`, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json", "Cache-Control": "no-store" },
     body: JSON.stringify({ username, password }),
@@ -85,7 +85,7 @@ try {
   const text = await response.text();
   let body = {};
   try { body = JSON.parse(text); } catch { body = { raw: text.slice(0, 300) }; }
-  if (!response.ok) throw new Error(\`E2E login returned HTTP \${response.status}: \${JSON.stringify(body)}\`);
+  if (!response.ok) throw new Error(`E2E login returned HTTP ${response.status}: ${JSON.stringify(body)}`);
   login = body;
 } finally {
   clearTimeout(loginTimer);
@@ -101,13 +101,13 @@ const checks = [
 ];
 for (const [path, validate, label] of checks) {
   const body = await authenticatedRequest(path, token);
-  if (!validate(body)) throw new Error(\`\${label} returned an unexpected response shape.\`);
-  console.log(\`PASS: authenticated \${label}\`);
+  if (!validate(body)) throw new Error(`${label} returned an unexpected response shape.`);
+  console.log(`PASS: authenticated ${label}`);
 }
 
 async function verifyRealtimeSocket(accessToken) {
   if (typeof globalThis.WebSocket !== "function") throw new Error("Node runtime does not expose WebSocket; realtime handshake cannot be certified.");
-  const wsUrl = \`\${BASE_URL.replace(/^https:/, "wss:")}/realtime?token=\${encodeURIComponent(accessToken)}\`;
+  const wsUrl = `${BASE_URL.replace(/^https:/, "wss:")}/realtime?token=${encodeURIComponent(accessToken)}`;
   await new Promise((resolve, reject) => {
     const socket = new globalThis.WebSocket(wsUrl);
     let opened = false;
@@ -140,4 +140,4 @@ async function verifyRealtimeSocket(accessToken) {
 }
 await verifyRealtimeSocket(token);
 console.log("PASS: authenticated realtime WebSocket handshake");
-console.log(\`GREEN: backend health/readiness, login, protected reads, and realtime handshake passed at \${BASE_URL}.\`);
+console.log(`GREEN: backend health/readiness, login, protected reads, and realtime handshake passed at ${BASE_URL}.`);
