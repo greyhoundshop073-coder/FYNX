@@ -81,6 +81,17 @@ class FynxNetworkRecoveryContractTest {
     }
 
     @Test
+    fun protectedBackendRequestsRequireATokenBeforeTransport() {
+        assertFalse(FynxBackendClient.canRequestWithoutAuthentication("/api/social/feed", null))
+        assertFalse(FynxBackendClient.canRequestWithoutAuthentication("/api/messages/test-user", ""))
+        assertTrue(FynxBackendClient.canRequestWithoutAuthentication("/api/social/feed", "test-token"))
+        assertTrue(FynxBackendClient.canRequestWithoutAuthentication("/health", null))
+        assertTrue(FynxBackendClient.canRequestWithoutAuthentication("/api/auth/login", null))
+        assertTrue(FynxBackendClient.canRequestWithoutAuthentication("/api/auth/register", null))
+        assertFalse(FynxBackendClient.canRequestWithoutAuthentication("/api/auth/refresh", null))
+    }
+
+    @Test
     fun callProtocolSupportsEveryProductionSignal() {
         listOf("invite", "accept", "reject", "end", "offer", "answer", "ice", "unavailable", "busy")
             .forEach { assertTrue(FynxCallTransportHardening.isValidCallSignal(it)) }
