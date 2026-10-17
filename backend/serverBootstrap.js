@@ -31,6 +31,33 @@ source = source.replace(
 
 source = source.replace('from "./socialRoutes.js";', 'from "./.fynx-runtime-socialRoutes.js";\nimport { registerDiscoveryRoutes } from "./discoveryRoutes.js";\nimport { registerBusinessRoutes } from "./businessRoutes.js";\nimport { startMarketplaceInspectionReconciliation } from "./marketplaceInspectionReconciliation.js";\nimport { registerMarketplacePaystackWebhook } from "./marketplacePaystackWebhook.js";\nimport { registerMarketplaceCheckoutRoutes } from "./marketplaceCheckout.js";\nimport { registerMarketplaceCheckoutOrderRoutes } from "./marketplaceCheckoutOrder.js";\nimport { registerMarketplaceShippingRoutes } from "./marketplaceShipping.js";');
 source = source.replace('registerSocialRoutes(app, { pool, auth, findUserByUsername });', 'registerSocialRoutes(app, { pool, auth, findUserByUsername });\nif (pool) registerDiscoveryRoutes({ app, pool, auth });\nif (pool) registerBusinessRoutes({ app, auth });\nif (pool) startMarketplaceInspectionReconciliation({ pool });\nif (pool) registerMarketplacePaystackWebhook({ app, pool });');
+
+// Keep social-post creation available if an earlier source-rewrite bootstrap omits it.
+// Install the fallback only when the original route was not registered.
+const routeRegistrationNeedle = 'registerSocialRoutes(app, { pool, auth, findUserByUsername });';
+if (!source.includes(routeRegistrationNeedle)) throw new Error("FYNX bootstrap could not locate social route registration call");
+const guardedPostFallback = `
+if (!app._router?.stack?.some(layer => layer.route?.path === "/api/social/posts" && layer.route.methods?.post)) {
+  app.post("/api/social/posts", auth, async (req, res) => {
+    const text = typeof req.body?.text === "string" ? req.body.text.trim().slice(0, 4000) : "";
+    const allowed = ["PUBLIC", "FRIENDS_ONLY", "SELECTED_PEOPLE", "ONLY_ME"];
+    const visibility = allowed.includes(String(req.body?.visibility)) ? String(req.body.visibility) : "PUBLIC";
+    if (!text) return res.status(400).json({ error: "post text is required" });
+    if (!pool) return res.status(503).json({ error: "database unavailable" });
+    try {
+      const result = await pool.query(
+        "INSERT INTO social_posts (author_id, text, visibility) VALUES ($1, $2, $3) RETURNING id",
+        [req.user.sub, text, visibility]
+      );
+      return res.status(201).json({ postId: String(result.rows[0].id) });
+    } catch (error) {
+      console.error("social post fallback create", error);
+      return res.status(500).json({ error: "post creation failed" });
+    }
+  });
+}
+`;
+source = source.replace(routeRegistrationNeedle, routeRegistrationNeedle + guardedPostFallback);
 source = source.replace(
   'registerMarketplaceCompletionRoutes({ app, pool, auth });',
   'registerMarketplaceCompletionRoutes({ app, pool, auth });\nif (pool) {\n  registerMarketplaceCheckoutRoutes({ app, pool, auth });\n  registerMarketplaceCheckoutOrderRoutes({ app, pool, auth });\n  registerMarketplaceShippingRoutes({ app, pool, auth });\n}'
