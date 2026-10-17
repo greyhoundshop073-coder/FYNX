@@ -17,7 +17,7 @@ on:
       - ".maestro/**"
       - "visual-baselines/**"
   pull_request:
-    branches: ["main"]
+    branches: ["main", "fix/network-health-probe-and-transport-detection-20261016"]
     paths:
       - "app/**"
       - "backend/**"
