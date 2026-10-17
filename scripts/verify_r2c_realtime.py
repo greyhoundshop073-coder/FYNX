@@ -2,6 +2,8 @@ from pathlib import Path
 
 SOURCE = Path("app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt")
 text = SOURCE.read_text(encoding="utf-8")
+HARDENING = Path("app/src/main/java/com/fynx/app/ui/FynxCallTransportHardening.kt").read_text(encoding="utf-8")
+SERVER = Path("backend/realtimeIsolationBootstrap.js").read_text(encoding="utf-8")
 
 checks = {
     "reconnect timers are cleared before scheduling": "reconnectHandler.removeCallbacksAndMessages(null)" in text,
@@ -14,6 +16,7 @@ checks = {
     "socket creation synchronous failure resets state": "} catch (_: Throwable)" in text and "socketCreationInProgress = false" in text,
     "stale socket callbacks are rejected": "socket === webSocket" in text and "FYNX socket replaced" in text,
     "closed sockets retry only when policy allows": "shouldRetrySocket(code)" in text,
+    "replaced realtime session close is not retried": "4001 -> false" in HARDENING and 'previous.close(4001, "replaced realtime session")' in SERVER,
     "auth websocket failure clears session": "isAuthFailure(response?.code)" in text and "FynxAuthStore.clear(context)" in text,
     "realtime sends are account-bound": "socketAccountKey != accountKey" in text,
     "realtime sends require an access token": "!FynxBackendClient.hasAccessToken(context)" in text,

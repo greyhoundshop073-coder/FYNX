@@ -59,4 +59,9 @@ class FynxCallTransportHardeningTest {
         assertFalse(FynxCallTransportHardening.shouldRetrySocket(1008))
         assertFalse(FynxCallTransportHardening.shouldRetrySocket(1009))
     }
+
+    @Test
+    fun does_not_retry_when_server_replaces_realtime_session() {
+        assertFalse(FynxCallTransportHardening.shouldRetrySocket(4001))
+    }
 }

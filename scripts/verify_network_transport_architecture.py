@@ -50,6 +50,12 @@ for needle in ['FynxBackendClient.get(context, path)', '/api/money-planner/rates
 if 'https://open.er-api.com' in currency:
     violations.append("currency converter still calls external rate provider directly")
 
+workflow = Path(".github/workflows/android-build.yml").read_text(encoding="utf-8")
+if "github.event.pull_request.head.ref || github.ref_name" not in workflow:
+    violations.append("Android push/PR runtime tests must share a source-branch concurrency group")
+if "cancel-in-progress: true" not in workflow:
+    violations.append("Android runtime tests must cancel stale same-branch runs")
+
 if violations:
     raise SystemExit("FYNX network transport gate failed:\n- " + "\n- ".join(violations))
 print("FYNX network transport gate passed")
