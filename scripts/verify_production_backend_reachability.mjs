@@ -53,15 +53,18 @@ if (!username || !password) {
   throw new Error("Authenticated network certification requires FYNX_E2E_USERNAME and FYNX_E2E_PASSWORD secrets.");
 }
 
-async function authenticatedRequest(path, token) {
+async function authenticatedRequest(path, token, options = {}) {
+  const method = options.method || "GET";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20_000);
   try {
-    const response = await fetch(`${BASE_URL}${path}`, {
-      method: "GET",
-      headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Cache-Control": "no-store" },
-      signal: controller.signal,
-    });
+    const headers = { Accept: "application/json", Authorization: `Bearer ${token}`, "Cache-Control": "no-store" };
+    const requestOptions = { method, headers, signal: controller.signal };
+    if (options.body !== undefined) {
+      headers["Content-Type"] = "application/json";
+      requestOptions.body = JSON.stringify(options.body);
+    }
+    const response = await fetch(`${BASE_URL}${path}`, requestOptions);
     const text = await response.text();
     let body = {};
     try { body = JSON.parse(text); } catch { body = { raw: text.slice(0, 300) }; }
@@ -139,4 +142,28 @@ async function verifyRealtimeSocket(accessToken, expectedUserId) {
 }
 await verifyRealtimeSocket(token, login.user.id);
 console.log("PASS: authenticated realtime WebSocket identity/presence event");
+
+// Verify a real authenticated write -> read-back -> cleanup cycle. ONLY_ME keeps
+// the temporary certification post private while still allowing its owner to read it.
+const markerText = `FYNX_NETWORK_E2E_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+let createdPostId = "";
+try {
+  const created = await authenticatedRequest("/api/social/posts", token, {
+    method: "POST",
+    body: { text: markerText, visibility: "ONLY_ME" },
+  });
+  createdPostId = typeof created?.postId === "string" ? created.postId : "";
+  if (!createdPostId) throw new Error(`Authenticated post creation did not return postId: ${JSON.stringify(created).slice(0, 500)}`);
+  const readBack = await authenticatedRequest("/api/social/feed?limit=50", token);
+  if (!Array.isArray(readBack?.posts) || !readBack.posts.some(post => String(post?.id) === createdPostId && post?.text === markerText)) {
+    throw new Error("Authenticated post write did not appear in the owner's feed read-back.");
+  }
+  console.log("PASS: authenticated post write/read-back");
+} finally {
+  if (createdPostId) {
+    const deleted = await authenticatedRequest(`/api/social/posts/${encodeURIComponent(createdPostId)}`, token, { method: "DELETE" });
+    if (deleted?.ok !== true) throw new Error(`Temporary authenticated post cleanup failed for postId ${createdPostId}.`);
+    console.log("PASS: authenticated E2E post cleanup");
+  }
+}
 console.log(`GREEN: backend health/readiness, login, protected reads, and realtime handshake passed at ${BASE_URL}.`);
