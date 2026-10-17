@@ -567,6 +567,24 @@ def dismiss_runtime_permission_prompt()->str:
         time.sleep(.5)
     return dump_ui("authenticated-home-after-permission.xml")
 
+def return_home_via_back(name:str, current_xml:str="")->str:
+    """Return to Home without cold-starting and discarding debug saved-device sessions."""
+    xml=current_xml
+    for attempt in range(10):
+        if not xml:
+            xml=dump_ui(f"{name}-home-return-{attempt}.xml")
+        if (find_control(xml,["Open FYNX camera"])
+                or (find_control(xml,["Chat"]) and find_control(xml,["Friends"]))):
+            return xml
+        # A cold start can discard the intentionally local debug session. Do not
+        # relaunch fynx://home here; use the app's real back stack instead.
+        if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
+            return xml
+        run("adb","shell","input","keyevent","4")
+        time.sleep(.7)
+        xml=dump_ui(f"{name}-home-return-{attempt+1}.xml")
+    return xml
+
 def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[str]|None=None)->str:
     # A failed tap must remain failed; returning the previous screen caused false GREEN results.
     return tap_control(xml,labels,name,expected_labels)
@@ -630,8 +648,8 @@ if not FAILURES:
         if camera_xml: report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
         else: FAILURES.append("post composer -> real camera")
     else: FAILURES.append("Home header camera -> real post composer")
-    run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
-    xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-camera-reset.xml") or xml
+    xml=return_home_via_back("authenticated-home-camera-reset", xml)
+    xml=dismiss_runtime_permission_prompt() or xml
 
     for name,labels,expected in (
         ("chat",["Chat"],["Messages and groups in one place"]),
@@ -730,10 +748,8 @@ if not FAILURES:
                 else:
                     # Use the production Friends discovery UI as the fallback. This
                     # exercises the same real-user search and Chat action a user uses.
-                    run("adb","shell","am","force-stop",PACKAGE)
-                    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-                    time.sleep(2.5)
-                    home_for_chat=dismiss_runtime_permission_prompt() or dump_ui("private-chat-fallback-home.xml")
+                    home_for_chat=return_home_via_back("private-chat-fallback-home", after)
+                    home_for_chat=dismiss_runtime_permission_prompt() or home_for_chat
                     friends_surface=tap_control(
                         home_for_chat,
                         ["Friends"],
@@ -936,10 +952,8 @@ def find_feature_entry(xml_text:str, labels:list[str]):
     return None
 
 def open_features(target_labels:list[str]|None=None):
-    run("adb","shell","am","force-stop",PACKAGE)
-    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-    time.sleep(2.5)
-    home_xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-features.xml") or xml
+    home_xml=return_home_via_back("authenticated-home-features", xml)
+    home_xml=dismiss_runtime_permission_prompt() or home_xml
     feature_xml=tap_control(home_xml,["More","Features"],"features",["FYNX Features"])
     if not feature_xml: return ""
     if target_labels is None: return feature_xml
@@ -1004,10 +1018,8 @@ def open_features(target_labels:list[str]|None=None):
 # Certify the actual Marketplace destination in the same exact-commit APK.
 # This is a UI/runtime assertion only; the screen must remain navigable when the
 # live service is unavailable, and no sample listing data is fabricated.
-run("adb","shell","am","force-stop",PACKAGE)
-run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-time.sleep(2.5)
-marketplace_home = dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-marketplace-entry.xml")
+marketplace_home = return_home_via_back("authenticated-home-marketplace-entry", xml)
+marketplace_home = dismiss_runtime_permission_prompt() or marketplace_home
 marketplace_xml = tap_control(
     marketplace_home,
     ["Marketplace"],
