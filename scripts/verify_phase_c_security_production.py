@@ -36,6 +36,7 @@ check("API responses have bounded size", "MAX_RESPONSE_BYTES" in client and "tot
 check("media downloads have bounded size", "maxBytes" in client and "total += count" in client and "total > maxBytes" in client and "FYNX media is too large" in client)
 check("authenticated media endpoint exists", 'app.get("/api/media/:id", auth' in server)
 check("media ownership and visibility are server checked", "owner_id" in server and "sender_id" in server and "recipient_id" in server and "blocks" in media_privacy)
+check("active Marketplace listing media is readable by buyers without bypassing seller blocks", "marketplace_listings ml WHERE ml.active = TRUE AND ml.quantity > 0" in server and "ml.media_ids @> to_jsonb(ARRAY[mm.id::text])" in server and "ml.seller_id" in server and "ml.currency" in server)
 check("production transport security headers are enabled", "X-Content-Type-Options" in server and "Referrer-Policy" in server and "X-Frame-Options" in server and "Strict-Transport-Security" in server)
 check("request body size is bounded", 'express.json({ limit: "18mb"' in server)
 check("endpoint rate limiting is enabled", 'rateLimit("auth"' in server and 'rateLimit("assistant"' in server and 'rateLimit("media"' in server and 'rateLimit("messages"' in server)
