@@ -185,6 +185,35 @@ def _find_control_node(root, wanted:list[str]):
             return node
     return candidates[0]
 
+def find_exact_control(xml_text:str, label:str):
+    """Find an exact accessible label and promote it to its clickable ancestor."""
+    if not xml_text: return None
+    try: root=ET.fromstring(xml_text)
+    except ET.ParseError: return None
+    parents={}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)]=parent
+    for node in root.iter("node"):
+        values=((node.attrib.get("text") or "").strip(),
+                (node.attrib.get("content-desc") or "").strip(),
+                (node.attrib.get("resource-id") or "").strip())
+        if label not in values: continue
+        target=node
+        cur=node
+        while cur is not None:
+            if cur.attrib.get("clickable","false").lower()=="true" and _center(cur):
+                target=cur
+                break
+            cur=parents.get(id(cur))
+        center=_center(target)
+        if center:
+            text_value=(target.attrib.get("text") or "").strip()
+            desc=(target.attrib.get("content-desc") or "").strip()
+            rid=(target.attrib.get("resource-id") or "").strip()
+            return text_value or desc or rid or label,center[0],center[1]
+    return None
+
 def find_control(xml_text:str, labels:list[str]):
     if not xml_text: return None
     wanted=[x.lower() for x in labels]
@@ -584,12 +613,24 @@ def return_home_via_back(name:str, current_xml:str="")->str:
             xml=observed
         if find_control(xml,["Open FYNX camera"]):
             return xml
-        if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
+        # "Username" also appears in Friends search ("Search username or name"),
+        # so only recognize the auth gate when login-specific controls coexist.
+        if find_control(xml,["Sign In"]) and (find_control(xml,["Password"]) or find_control(xml,["Create a new account"])):
             return xml
-        # Use Android's real back stack for nested surfaces. A generic "Home"
-        # substring can match a non-clickable "Back to Home" decoration and
-        # falsely leave the helper on Profile/Settings. Do not cold-start the
-        # activity: local debug sessions can be lost on process restart.
+        # Dismiss the IME first; otherwise Compose may omit the bottom navigation
+        # from the accessibility tree. Tap the exact Home tab label, never a
+        # partial "Home" match on nested screens such as "Back to Home".
+        home_control=find_exact_control(xml,"Home")
+        if home_control:
+            _,hx,hy=home_control
+            run("adb","shell","input","tap",str(hx),str(hy))
+            time.sleep(.8)
+            home_xml=dump_ui(f"{name}-home-tab.xml")
+            if home_xml:
+                xml=home_xml
+            if find_control(xml,["Open FYNX camera"]):
+                return xml
+        # Keep the same in-app session; cold-starting can discard local debug login.
         run("adb","shell","input","keyevent","KEYCODE_BACK")
         time.sleep(.8)
     # Return the last observed hierarchy; downstream selectors will fail loudly
