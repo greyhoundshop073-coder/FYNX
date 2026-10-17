@@ -95,49 +95,48 @@ if (!token || !login?.user?.id) throw new Error("E2E login did not return a user
 
 const checks = [
   ["/api/me", body => Boolean(body?.user?.id), "authenticated identity"],
-  ["/api/social/feed", body => Array.isArray(body?.posts) || Array.isArray(body?.feed) || Array.isArray(body?.items) || typeof body === "object", "social feed read"],
-  ["/api/statuses", body => typeof body === "object", "statuses read"],
-  ["/api/marketplace/discovery", body => typeof body === "object", "Marketplace discovery read"],
+  ["/api/social/feed", body => Array.isArray(body?.posts), "social feed read (posts array)"],
+  ["/api/statuses", body => Array.isArray(body?.statuses), "statuses read (statuses array)"],
+  ["/api/marketplace/discovery", body => Array.isArray(body?.listings) && typeof body?.hasMore === "boolean", "Marketplace discovery read (listings + hasMore)"],
 ];
 for (const [path, validate, label] of checks) {
   const body = await authenticatedRequest(path, token);
-  if (!validate(body)) throw new Error(`${label} returned an unexpected response shape.`);
+  if (!validate(body)) throw new Error(`${label} returned an unexpected response shape: ${JSON.stringify(body).slice(0, 500)}`);
   console.log(`PASS: authenticated ${label}`);
 }
 
-async function verifyRealtimeSocket(accessToken) {
-  if (typeof globalThis.WebSocket !== "function") throw new Error("Node runtime does not expose WebSocket; realtime handshake cannot be certified.");
+async function verifyRealtimeSocket(accessToken, expectedUserId) {
+  if (typeof globalThis.WebSocket !== "function") throw new Error("Node runtime does not expose WebSocket; realtime authentication cannot be certified.");
   const wsUrl = `${BASE_URL.replace(/^https:/, "wss:")}/realtime?token=${encodeURIComponent(accessToken)}`;
   await new Promise((resolve, reject) => {
     const socket = new globalThis.WebSocket(wsUrl);
-    let opened = false;
     let settled = false;
-    const timeout = setTimeout(() => {
+    const finish = (error) => {
       if (settled) return;
-      settled = true;
-      try { socket.close(); } catch {}
-      reject(new Error("Authenticated realtime WebSocket did not open within 12 seconds."));
-    }, 12_000);
-    socket.addEventListener("open", () => {
-      opened = true;
-      setTimeout(() => { try { socket.close(1000, "network smoke test complete"); } catch {} }, 750);
-    }, { once: true });
-    socket.addEventListener("error", () => {
-      if (settled || opened) return;
       settled = true;
       clearTimeout(timeout);
       try { socket.close(); } catch {}
-      reject(new Error("Authenticated realtime WebSocket handshake failed."));
+      if (error) reject(error); else resolve();
+    };
+    const timeout = setTimeout(() => finish(new Error("Authenticated realtime socket did not deliver its own presence event within 12 seconds.")), 12_000);
+    socket.addEventListener("message", event => {
+      try {
+        const raw = typeof event.data === "string" ? event.data : event.data?.toString?.() || "";
+        const body = JSON.parse(raw);
+        if (body?.type === "presence" && String(body?.userId) === String(expectedUserId) && body?.online === true) {
+          finish(null);
+        }
+      } catch {
+        // Ignore non-JSON or unrelated realtime events; only the expected authenticated
+        // presence event is sufficient evidence that the server accepted this identity.
+      }
     });
+    socket.addEventListener("error", () => finish(new Error("Authenticated realtime WebSocket handshake failed.")), { once: true });
     socket.addEventListener("close", () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (opened) resolve();
-      else reject(new Error("Realtime WebSocket closed before authentication completed."));
+      if (!settled) finish(new Error("Realtime WebSocket closed before the authenticated presence event arrived."));
     }, { once: true });
   });
 }
-await verifyRealtimeSocket(token);
-console.log("PASS: authenticated realtime WebSocket handshake");
+await verifyRealtimeSocket(token, login.user.id);
+console.log("PASS: authenticated realtime WebSocket identity/presence event");
 console.log(`GREEN: backend health/readiness, login, protected reads, and realtime handshake passed at ${BASE_URL}.`);
