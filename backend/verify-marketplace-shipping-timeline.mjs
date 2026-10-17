@@ -16,7 +16,7 @@ const checks = [
   ['timeline authorizes buyer or seller', timeline.includes('(o.buyer_id = $2 OR o.seller_id = $2)')],
   ['timeline orders events chronologically', timeline.includes('ORDER BY e.created_at ASC, e.id ASC')],
   ['timeline does not alter payment state', !timeline.includes('UPDATE marketplace_orders')],
-  ['timeline is registered by the existing marketplace completion route', completion.includes("registerMarketplaceShippingTimeline({ app, pool, auth });")],
+  ['timeline is registered by the existing marketplace completion route', completion.includes('registerMarketplaceShippingTimeline({ app, pool, auth, ensureSchema });')],
   ['fulfillment progression is integrated in marketplace completion', completion.includes("/api/marketplace/orders/:id/fulfillment-progress")],
   ['delivery states are server-authoritative', ['PREPARING','DISPATCHED','IN_TRANSIT','DELIVERED','FAILED_DELIVERY','RETURNED'].every((state) => completion.includes(state))],
   ['pickup states are server-authoritative', ['READY_FOR_PICKUP','PICKUP_COMPLETED'].every((state) => completion.includes(state))],
