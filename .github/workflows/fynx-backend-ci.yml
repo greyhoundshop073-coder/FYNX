@@ -98,6 +98,9 @@ jobs:
       - name: Run social post route/bootstrap regression gate
         working-directory: .
         run: python3 scripts/verify_social_post_route_bootstrap.py
+      - name: Run marketplace discovery SQL parameter regression gate
+        working-directory: .
+        run: python3 scripts/verify_marketplace_discovery_query_params.py
       - name: Run Chat end-to-end integration gate
         working-directory: .
         run: python3 scripts/verify_chat_end_to_end.py
