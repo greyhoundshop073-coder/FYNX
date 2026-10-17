@@ -855,8 +855,8 @@ if not FAILURES:
                         exercise_notification_route("fynx://chat/" + route_username, "private-chat")
                 else:
                     report.append("- PASS private-chat notification-route test skipped because no real chat participant identifier was visible; no test data was fabricated")
-                run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
-                reset=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-chat-group-reset.xml") or xml
+                reset=return_home_via_back("authenticated-home-chat-group-reset", xml)
+                reset=dismiss_runtime_permission_prompt() or reset
                 groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Messages and groups in one place"])
                 if groups_xml:
                     groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["New group"])
@@ -914,8 +914,8 @@ if not FAILURES:
                 else:
                     FAILURES.append("group-chat entry certification blocked because the authenticated Chat surface was unavailable after Home reset")
         else: FAILURES.append("authenticated Home -> "+name)
-        run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
-        xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-reset.xml") or xml
+        xml=return_home_via_back("authenticated-home-reset", after)
+        xml=dismiss_runtime_permission_prompt() or xml
 
 def find_feature_entry(xml_text:str, labels:list[str]):
     """Find an actual clickable feature card, not the search field or its text."""
