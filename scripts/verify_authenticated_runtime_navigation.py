@@ -589,6 +589,16 @@ report.append(f"- APK install: {'PASS' if install.returncode==0 else 'FAIL'}")
 if install.returncode!=0:
     report.append("- "+install.stdout.strip().replace("\n"," | ")); raise SystemExit(1)
 
+# Authentication certification must start without persisted tokens or a saved
+# debug account; otherwise the UI can take the offline route and skip the server.
+clear_data=run("adb","shell","pm","clear",PACKAGE)
+if clear_data.returncode!=0 or "Success" not in clear_data.stdout:
+    report.append("- FAIL could not clear app data before server-authentication certification")
+    report.append("- "+clear_data.stdout.strip().replace("\n"," | "))
+    (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")
+    print("\n".join(report)); raise SystemExit(1)
+report.append("- PASS app data cleared before login to prevent saved-device state from bypassing server authentication")
+
 xml,error=login()
 if error:
     FAILURES.append(("debug offline/saved-device entry: " if LOCAL_DEBUG_LOGIN_USED else "real account sign-in: ") + error)
