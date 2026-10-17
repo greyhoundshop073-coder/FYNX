@@ -166,6 +166,9 @@ def _find_control_node(root, wanted:list[str]):
             cur=parents.get(id(cur))
         return node
     for node in root.iter("node"):
+        # Compose/Android can leave off-screen or obscured controls in the
+        # accessibility tree. They are not valid navigation targets.
+        if node.attrib.get("visible-to-user","true").lower()=="false": continue
         if not _center(node): continue
         text=(node.attrib.get("text") or "").strip().lower()
         desc=(node.attrib.get("content-desc") or "").strip().lower()
@@ -192,7 +195,7 @@ def find_control(xml_text:str, labels:list[str]):
         candidates=[]; path=[]
         def collect(node):
             path.append(node)
-            if _matches(node, wanted) and _center(node):
+            if node.attrib.get("visible-to-user","true").lower()!="false" and _matches(node, wanted) and _center(node):
                 # Compose may expose a merged content description on a wrapper
                 # rather than the clickable IconButton node. Prefer the nearest
                 # clickable node, but retain the labeled 48dp wrapper as fallback.
@@ -571,39 +574,26 @@ def dismiss_runtime_permission_prompt()->str:
     return dump_ui("authenticated-home-after-permission.xml")
 
 def return_home_via_back(name:str, current_xml:str="")->str:
-    """Return to Home without cold-starting and discarding debug saved-device sessions."""
+    """Return to the visible Home feed through the app back stack without cold-starting."""
     xml=current_xml
-    for attempt in range(10):
-        # Always inspect the current device. A previous surface's XML can be stale
-        # after another journey (for example Features -> AI -> Marketplace).
+    for attempt in range(12):
+        # Always inspect the current device; prior screenshots may describe a
+        # different surface after a nested Profile/Settings or Chat journey.
         observed=dump_ui(f"{name}-home-return-{attempt}.xml")
         if observed:
             xml=observed
         if find_control(xml,["Open FYNX camera"]):
             return xml
-        # Home is a main-navigation destination, not necessarily the previous
-        # Activity in Android's back stack. Prefer the real Home tab when present;
-        # this also avoids leaving the app when the current tab is Friends.
-        # "Username" also appears in the Friends search placeholder ("Search username or name").
-        # Treat the screen as the auth gate only when the sign-in action and a login-specific
-        # control are both present; otherwise this prematurely returns from Friends and blocks
-        # the Home tab tap needed by Stories/Marketplace certification.
-        if find_control(xml,["Sign In"]) and (find_control(xml,["Password"]) or find_control(xml,["Create a new account"])):
+        if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
             return xml
-        home_control=find_control(xml,["Home"])
-        if home_control:
-            _,hx,hy=home_control
-            run("adb","shell","input","tap",str(hx),str(hy))
-            time.sleep(.8)
-            home_xml=dump_ui(f"{name}-home-tab.xml")
-            if home_xml:
-                xml=home_xml
-            if find_control(xml,["Open FYNX camera"]):
-                return xml
-        # A cold start can discard the intentionally local debug session. Never
-        # force-stop or relaunch the APK here; fall back to the in-app back stack.
-        run("adb","shell","input","keyevent","4")
-        time.sleep(.7)
+        # Use Android's real back stack for nested surfaces. A generic "Home"
+        # substring can match a non-clickable "Back to Home" decoration and
+        # falsely leave the helper on Profile/Settings. Do not cold-start the
+        # activity: local debug sessions can be lost on process restart.
+        run("adb","shell","input","keyevent","KEYCODE_BACK")
+        time.sleep(.8)
+    # Return the last observed hierarchy; downstream selectors will fail loudly
+    # with its visible markers rather than pretending we reached Home.
     return xml
 
 def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[str]|None=None)->str:
