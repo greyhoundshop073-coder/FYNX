@@ -25,6 +25,7 @@ async function patchOnce(fileName, patches) {
 await patchOnce("server.js", [
   {
     marker: 'import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";',
+    already: 'import { queueFynxNotification, registerFynxPushRoutes } from "./notificationPush.js";',
     replacement: 'import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";\nimport { queueFynxNotification, registerFynxPushRoutes } from "./notificationPush.js";'
   },
   {
@@ -40,6 +41,7 @@ await patchOnce("server.js", [
 await patchOnce("groupRoutes.js", [
   {
     marker: "import { inspectTrustSafetyText } from './trustSafety.js';",
+    already: "import { queueFynxNotification } from './notificationPush.js';",
     replacement: "import { inspectTrustSafetyText } from './trustSafety.js';\nimport { queueFynxNotification } from './notificationPush.js';"
   },
   {
@@ -51,6 +53,7 @@ await patchOnce("groupRoutes.js", [
 await patchOnce("socialRoutes.js", [
   {
     marker: 'export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {',
+    already: 'import { queueFynxNotification } from "./notificationPush.js";',
     replacement: 'import { queueFynxNotification } from "./notificationPush.js";\n\nexport function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {'
   },
   {
