@@ -574,8 +574,11 @@ def return_home_via_back(name:str, current_xml:str="")->str:
     """Return to Home without cold-starting and discarding debug saved-device sessions."""
     xml=current_xml
     for attempt in range(10):
-        if not xml:
-            xml=dump_ui(f"{name}-home-return-{attempt}.xml")
+        # Always inspect the current device. A previous surface's XML can be stale
+        # after another journey (for example Features -> AI -> Marketplace).
+        observed=dump_ui(f"{name}-home-return-{attempt}.xml")
+        if observed:
+            xml=observed
         if (find_control(xml,["Open FYNX camera"])
                 or (find_control(xml,["Chat"]) and find_control(xml,["Friends"]))):
             return xml
@@ -585,7 +588,6 @@ def return_home_via_back(name:str, current_xml:str="")->str:
             return xml
         run("adb","shell","input","keyevent","4")
         time.sleep(.7)
-        xml=dump_ui(f"{name}-home-return-{attempt+1}.xml")
     return xml
 
 def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[str]|None=None)->str:
