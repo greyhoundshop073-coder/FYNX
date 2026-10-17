@@ -581,10 +581,23 @@ def return_home_via_back(name:str, current_xml:str="")->str:
             xml=observed
         if find_control(xml,["Open FYNX camera"]):
             return xml
-        # A cold start can discard the intentionally local debug session. Do not
-        # relaunch fynx://home here; use the app's real back stack instead.
+        # Home is a main-navigation destination, not necessarily the previous
+        # Activity in Android's back stack. Prefer the real Home tab when present;
+        # this also avoids leaving the app when the current tab is Friends.
         if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
             return xml
+        home_control=find_control(xml,["Home"])
+        if home_control:
+            _,hx,hy=home_control
+            run("adb","shell","input","tap",str(hx),str(hy))
+            time.sleep(.8)
+            home_xml=dump_ui(f"{name}-home-tab.xml")
+            if home_xml:
+                xml=home_xml
+            if find_control(xml,["Open FYNX camera"]):
+                return xml
+        # A cold start can discard the intentionally local debug session. Never
+        # force-stop or relaunch the APK here; fall back to the in-app back stack.
         run("adb","shell","input","keyevent","4")
         time.sleep(.7)
     return xml
@@ -635,13 +648,7 @@ if not FAILURES:
     # Return through the app's own back stack. Do not force-stop/relaunch here:
     # offline/local test sessions may be in-memory and a cold start can send the
     # emulator back to the sign-in gate, making unrelated navigation checks fail.
-    for step in range(3):
-        current=dump_ui(f"authenticated-after-settings-back-{step}.xml")
-        if find_control(current,["Open FYNX camera"]):
-            xml=current
-            break
-        run("adb","shell","input","keyevent","4")
-        time.sleep(0.8)
+    xml=return_home_via_back("authenticated-after-settings", settings_xml or xml)
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-after-settings.xml") or xml
     if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
         FAILURES.append("Settings visual capture returned to the sign-in gate; in-app back navigation did not preserve the authenticated Home session")
