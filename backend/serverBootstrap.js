@@ -31,6 +31,11 @@ source = source.replace(
 
 source = source.replace('from "./socialRoutes.js";', 'from "./.fynx-runtime-socialRoutes.js";\nimport { registerDiscoveryRoutes } from "./discoveryRoutes.js";\nimport { registerBusinessRoutes } from "./businessRoutes.js";\nimport { startMarketplaceInspectionReconciliation } from "./marketplaceInspectionReconciliation.js";\nimport { registerMarketplacePaystackWebhook } from "./marketplacePaystackWebhook.js";\nimport { registerMarketplaceCheckoutRoutes } from "./marketplaceCheckout.js";\nimport { registerMarketplaceCheckoutOrderRoutes } from "./marketplaceCheckoutOrder.js";\nimport { registerMarketplaceShippingRoutes } from "./marketplaceShipping.js";');
 source = source.replace('registerSocialRoutes(app, { pool, auth, findUserByUsername });', 'registerSocialRoutes(app, { pool, auth, findUserByUsername });\nif (pool) registerDiscoveryRoutes({ app, pool, auth });\nif (pool) registerBusinessRoutes({ app, auth });\nif (pool) startMarketplaceInspectionReconciliation({ pool });\nif (pool) registerMarketplacePaystackWebhook({ app, pool });');
+
+// Fail startup instead of serving a misleading 404 if the social-post route is absent.
+const routeRegistrationNeedle = 'registerSocialRoutes(app, { pool, auth, findUserByUsername });';
+if (!source.includes(routeRegistrationNeedle)) throw new Error("FYNX bootstrap could not locate social route registration call");
+source = source.replace(routeRegistrationNeedle, `${routeRegistrationNeedle}\nconst fynxPostRouteRegistered = app._router?.stack?.some(layer => layer.route?.path === "/api/social/posts" && layer.route.methods?.post);\nif (!fynxPostRouteRegistered) throw new Error("FYNX startup invariant failed: POST /api/social/posts was not registered");`);
 source = source.replace(
   'registerMarketplaceCompletionRoutes({ app, pool, auth });',
   'registerMarketplaceCompletionRoutes({ app, pool, auth });\nif (pool) {\n  registerMarketplaceCheckoutRoutes({ app, pool, auth });\n  registerMarketplaceCheckoutOrderRoutes({ app, pool, auth });\n  registerMarketplaceShippingRoutes({ app, pool, auth });\n}'
