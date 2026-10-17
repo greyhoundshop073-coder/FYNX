@@ -7,10 +7,13 @@ production_media = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxProductionMess
 remote_media = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt").read_text(encoding="utf-8")
 currency = (ROOT / "app/src/main/java/com/fynx/app/ui/CurrencyConverterPanel.kt").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+auth_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt").read_text(encoding="utf-8")
+auth_finish = auth_panel.split("fun finish(", 1)[-1].split("val background", 1)[0]
 
 checks = []
 def check(name, condition):
     checks.append((name, bool(condition)))
+check("new account identity is saved before its access token", "FynxAuthStore.saveAccount(context" in auth_finish and "FynxBackendClient.saveAccessToken(context, account.token)" in auth_finish and auth_finish.index("FynxAuthStore.saveAccount(context") < auth_finish.index("FynxBackendClient.saveAccessToken(context, account.token)"))
 
 check("backend transport requires HTTPS", 'startsWith("https://")' in client)
 # HttpURLConnection uses Android's default network, so availability must inspect that route.
@@ -23,6 +26,8 @@ check("non-idempotent POST/PATCH are not automatically retried", 'val retryable 
 retry_classifier = client.split("private fun isRetryableFailure", 1)[-1].split("private fun migrateLegacyAccessToken", 1)[0]
 check("HTTP status is classified before generic IOException", "if (current is FynxHttpException)" in retry_classifier and retry_classifier.index("if (current is FynxHttpException)") < retry_classifier.index("if (current is IOException)"))
 check("only transient HTTP statuses are retried", "setOf(408, 425, 429, 500, 502, 503, 504)" in retry_classifier and "return current.status in setOf" in retry_classifier)
+check("protected API requests are gated before transport without a token", "if (!canRequestWithoutAuthentication(path, accessToken(context))) throw FynxUnauthorizedException()" in client and "internal fun canRequestWithoutAuthentication" in client)
+check("media downloads require an access token before transport", "if (accessToken(context).isNullOrBlank()) throw FynxUnauthorizedException()" in client)
 
 check("backend responses have a size limit", "MAX_RESPONSE_BYTES" in client and "total > MAX_RESPONSE_BYTES" in client)
 check("backend cancellation disconnects the request", "invokeOnCompletion" in client and "connection.disconnect()" in client)
