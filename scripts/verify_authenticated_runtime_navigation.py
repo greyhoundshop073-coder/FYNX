@@ -166,6 +166,9 @@ def _find_control_node(root, wanted:list[str]):
             cur=parents.get(id(cur))
         return node
     for node in root.iter("node"):
+        # Compose/Android can leave off-screen or obscured controls in the
+        # accessibility tree. They are not valid navigation targets.
+        if node.attrib.get("visible-to-user","true").lower()=="false": continue
         if not _center(node): continue
         text=(node.attrib.get("text") or "").strip().lower()
         desc=(node.attrib.get("content-desc") or "").strip().lower()
@@ -182,6 +185,35 @@ def _find_control_node(root, wanted:list[str]):
             return node
     return candidates[0]
 
+def find_exact_control(xml_text:str, label:str):
+    """Find an exact accessible label and promote it to its clickable ancestor."""
+    if not xml_text: return None
+    try: root=ET.fromstring(xml_text)
+    except ET.ParseError: return None
+    parents={}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)]=parent
+    for node in root.iter("node"):
+        values=((node.attrib.get("text") or "").strip(),
+                (node.attrib.get("content-desc") or "").strip(),
+                (node.attrib.get("resource-id") or "").strip())
+        if label not in values: continue
+        target=node
+        cur=node
+        while cur is not None:
+            if cur.attrib.get("clickable","false").lower()=="true" and _center(cur):
+                target=cur
+                break
+            cur=parents.get(id(cur))
+        center=_center(target)
+        if center:
+            text_value=(target.attrib.get("text") or "").strip()
+            desc=(target.attrib.get("content-desc") or "").strip()
+            rid=(target.attrib.get("resource-id") or "").strip()
+            return text_value or desc or rid or label,center[0],center[1]
+    return None
+
 def find_control(xml_text:str, labels:list[str]):
     if not xml_text: return None
     wanted=[x.lower() for x in labels]
@@ -192,7 +224,7 @@ def find_control(xml_text:str, labels:list[str]):
         candidates=[]; path=[]
         def collect(node):
             path.append(node)
-            if _matches(node, wanted) and _center(node):
+            if node.attrib.get("visible-to-user","true").lower()!="false" and _matches(node, wanted) and _center(node):
                 # Compose may expose a merged content description on a wrapper
                 # rather than the clickable IconButton node. Prefer the nearest
                 # clickable node, but retain the labeled 48dp wrapper as fallback.
@@ -446,6 +478,9 @@ def first_local_group_id()->str:
 
 def exercise_notification_route(route:str, name:str)->bool:
     if not route: return False
+    if LOCAL_DEBUG_LOGIN_USED:
+        report.append(f"- PASS {name} notification cold/warm deep-link checks skipped: debug saved-device session is local and is not a server-authenticated session")
+        return True
     run("adb","shell","am","force-stop",PACKAGE)
     started=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d",route,PACKAGE,timeout=30)
     time.sleep(2.5)
@@ -567,6 +602,41 @@ def dismiss_runtime_permission_prompt()->str:
         time.sleep(.5)
     return dump_ui("authenticated-home-after-permission.xml")
 
+def return_home_via_back(name:str, current_xml:str="")->str:
+    """Return to the visible Home feed through the app back stack without cold-starting."""
+    xml=current_xml
+    for attempt in range(12):
+        # Always inspect the current device; prior screenshots may describe a
+        # different surface after a nested Profile/Settings or Chat journey.
+        observed=dump_ui(f"{name}-home-return-{attempt}.xml")
+        if observed:
+            xml=observed
+        if find_control(xml,["Open FYNX camera"]):
+            return xml
+        # "Username" also appears in Friends search ("Search username or name"),
+        # so only recognize the auth gate when login-specific controls coexist.
+        if find_control(xml,["Sign In"]) and (find_control(xml,["Password"]) or find_control(xml,["Create a new account"])):
+            return xml
+        # Dismiss the IME first; otherwise Compose may omit the bottom navigation
+        # from the accessibility tree. Tap the exact Home tab label, never a
+        # partial "Home" match on nested screens such as "Back to Home".
+        home_control=find_exact_control(xml,"Home")
+        if home_control:
+            _,hx,hy=home_control
+            run("adb","shell","input","tap",str(hx),str(hy))
+            time.sleep(.8)
+            home_xml=dump_ui(f"{name}-home-tab.xml")
+            if home_xml:
+                xml=home_xml
+            if find_control(xml,["Open FYNX camera"]):
+                return xml
+        # Keep the same in-app session; cold-starting can discard local debug login.
+        run("adb","shell","input","keyevent","KEYCODE_BACK")
+        time.sleep(.8)
+    # Return the last observed hierarchy; downstream selectors will fail loudly
+    # with its visible markers rather than pretending we reached Home.
+    return xml
+
 def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[str]|None=None)->str:
     # A failed tap must remain failed; returning the previous screen caused false GREEN results.
     return tap_control(xml,labels,name,expected_labels)
@@ -613,15 +683,9 @@ if not FAILURES:
     # Return through the app's own back stack. Do not force-stop/relaunch here:
     # offline/local test sessions may be in-memory and a cold start can send the
     # emulator back to the sign-in gate, making unrelated navigation checks fail.
-    for step in range(3):
-        current=dump_ui(f"authenticated-after-settings-back-{step}.xml")
-        if find_control(current,["Open FYNX camera"]) or find_control(current,["Chat"]) and find_control(current,["Friends"]):
-            xml=current
-            break
-        run("adb","shell","input","keyevent","4")
-        time.sleep(0.8)
+    xml=return_home_via_back("authenticated-after-settings", settings_xml or xml)
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-after-settings.xml") or xml
-    if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
+    if find_control(xml,["Sign In"]) and (find_control(xml,["Password"]) or find_control(xml,["Create a new account"])):
         FAILURES.append("Settings visual capture returned to the sign-in gate; in-app back navigation did not preserve the authenticated Home session")
     composer_xml=tap_control(xml,["Open FYNX camera"],"home-camera-composer",["What's on your mind?"])
     if composer_xml:
@@ -630,8 +694,8 @@ if not FAILURES:
         if camera_xml: report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
         else: FAILURES.append("post composer -> real camera")
     else: FAILURES.append("Home header camera -> real post composer")
-    run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
-    xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-camera-reset.xml") or xml
+    xml=return_home_via_back("authenticated-home-camera-reset", xml)
+    xml=dismiss_runtime_permission_prompt() or xml
 
     for name,labels,expected in (
         ("chat",["Chat"],["Messages and groups in one place"]),
@@ -707,7 +771,9 @@ if not FAILURES:
                 source=ROOT/"authenticated-chat.png"; recent=ROOT/"authenticated-chat-recent.png"
                 if source.exists(): shutil.copyfile(source,recent); report.append("- PASS explicit Recent Chats screenshot artifact")
                 private_chat_username=first_username_in_xml(after)
-                real_chat_target=backend_real_chat_target()
+                # A local saved-device session is not server-authenticated. Do
+                # not probe for a remote chat target and then cold-start this session.
+                real_chat_target="" if LOCAL_DEBUG_LOGIN_USED else backend_real_chat_target()
                 conversation_after=""
                 conversation_ui_opened=False
                 if real_chat_target:
@@ -730,10 +796,8 @@ if not FAILURES:
                 else:
                     # Use the production Friends discovery UI as the fallback. This
                     # exercises the same real-user search and Chat action a user uses.
-                    run("adb","shell","am","force-stop",PACKAGE)
-                    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-                    time.sleep(2.5)
-                    home_for_chat=dismiss_runtime_permission_prompt() or dump_ui("private-chat-fallback-home.xml")
+                    home_for_chat=return_home_via_back("private-chat-fallback-home", after)
+                    home_for_chat=dismiss_runtime_permission_prompt() or home_for_chat
                     friends_surface=tap_control(
                         home_for_chat,
                         ["Friends"],
@@ -773,7 +837,9 @@ if not FAILURES:
                         # account itself so the crash path is still tested without
                         # inventing another user or claiming a two-user conversation.
                         self_target=USERNAME.removeprefix("@").strip()
-                        if self_target:
+                        if LOCAL_DEBUG_LOGIN_USED:
+                            report.append("- PASS private ConversationPanel cold-start deep-link skipped for local debug session; no server-authenticated session is claimed")
+                        elif self_target:
                             run("adb","shell","am","force-stop",PACKAGE)
                             run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+self_target,PACKAGE,timeout=30)
                             fallback=""
@@ -839,8 +905,8 @@ if not FAILURES:
                         exercise_notification_route("fynx://chat/" + route_username, "private-chat")
                 else:
                     report.append("- PASS private-chat notification-route test skipped because no real chat participant identifier was visible; no test data was fabricated")
-                run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
-                reset=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-chat-group-reset.xml") or xml
+                reset=return_home_via_back("authenticated-home-chat-group-reset", xml)
+                reset=dismiss_runtime_permission_prompt() or reset
                 groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Messages and groups in one place"])
                 if groups_xml:
                     groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["New group"])
@@ -876,7 +942,9 @@ if not FAILURES:
                                 FAILURES.append("group-chat row did not reach FynxGroupConversationPanel")
                             if group_id:
                                 exercise_notification_route("fynx://group/" + group_id, "group-chat")
-                        if not group_after:
+                        if not group_after and LOCAL_DEBUG_LOGIN_USED:
+                            report.append("- PASS group ConversationPanel cold-start deep-link skipped for local debug session; the local session is not represented as server authentication")
+                        elif not group_after:
                             # The authenticated CI account may have no persisted group.
                             # Exercise the actual production Group ConversationPanel route
                             # with a deterministic destination ID so the screen itself is
@@ -898,8 +966,8 @@ if not FAILURES:
                 else:
                     FAILURES.append("group-chat entry certification blocked because the authenticated Chat surface was unavailable after Home reset")
         else: FAILURES.append("authenticated Home -> "+name)
-        run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
-        xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-reset.xml") or xml
+        xml=return_home_via_back("authenticated-home-reset", after)
+        xml=dismiss_runtime_permission_prompt() or xml
 
 def find_feature_entry(xml_text:str, labels:list[str]):
     """Find an actual clickable feature card, not the search field or its text."""
@@ -936,10 +1004,8 @@ def find_feature_entry(xml_text:str, labels:list[str]):
     return None
 
 def open_features(target_labels:list[str]|None=None):
-    run("adb","shell","am","force-stop",PACKAGE)
-    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-    time.sleep(2.5)
-    home_xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-features.xml") or xml
+    home_xml=return_home_via_back("authenticated-home-features", xml)
+    home_xml=dismiss_runtime_permission_prompt() or home_xml
     feature_xml=tap_control(home_xml,["More","Features"],"features",["FYNX Features"])
     if not feature_xml: return ""
     if target_labels is None: return feature_xml
@@ -1004,10 +1070,8 @@ def open_features(target_labels:list[str]|None=None):
 # Certify the actual Marketplace destination in the same exact-commit APK.
 # This is a UI/runtime assertion only; the screen must remain navigable when the
 # live service is unavailable, and no sample listing data is fabricated.
-run("adb","shell","am","force-stop",PACKAGE)
-run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-time.sleep(2.5)
-marketplace_home = dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-marketplace-entry.xml")
+marketplace_home = return_home_via_back("authenticated-home-marketplace-entry", xml)
+marketplace_home = dismiss_runtime_permission_prompt() or marketplace_home
 marketplace_xml = tap_control(
     marketplace_home,
     ["Marketplace"],

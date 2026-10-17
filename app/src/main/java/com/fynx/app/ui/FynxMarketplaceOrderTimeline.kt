@@ -31,6 +31,12 @@ private data class MarketplaceTimelineEvent(
     val createdAt: String?
 )
 
+private data class MarketplaceTimelineEvidence(
+    val type: String,
+    val value: String,
+    val createdAt: String?
+)
+
 @Composable
 fun FynxMarketplaceOrderTimeline(
     context: Context,
@@ -39,6 +45,7 @@ fun FynxMarketplaceOrderTimeline(
     var loading by remember(orderId) { mutableStateOf(true) }
     var error by remember(orderId) { mutableStateOf<String?>(null) }
     var events by remember(orderId) { mutableStateOf<List<MarketplaceTimelineEvent>>(emptyList()) }
+    var deliveryEvidence by remember(orderId) { mutableStateOf<List<MarketplaceTimelineEvidence>>(emptyList()) }
 
     LaunchedEffect(orderId) {
         loading = true
@@ -48,8 +55,9 @@ fun FynxMarketplaceOrderTimeline(
         }
         result.onSuccess { raw ->
             runCatching {
-                val array = JSONObject(raw).optJSONArray("events") ?: JSONArray()
-                buildList {
+                val root = JSONObject(raw)
+                val array = root.optJSONArray("events") ?: JSONArray()
+                val parsedEvents = buildList {
                     for (i in 0 until array.length()) {
                         val event = array.getJSONObject(i)
                         add(
@@ -62,8 +70,24 @@ fun FynxMarketplaceOrderTimeline(
                         )
                     }
                 }
-            }.onSuccess { parsed -> events = parsed }
-                .onFailure { error = "Order timeline could not be read." }
+                val evidenceArray = root.optJSONArray("deliveryEvidence") ?: JSONArray()
+                val parsedEvidence = buildList {
+                    for (i in 0 until evidenceArray.length()) {
+                        val item = evidenceArray.getJSONObject(i)
+                        add(
+                            MarketplaceTimelineEvidence(
+                                item.optString("type"),
+                                item.optString("value"),
+                                item.optString("createdAt").takeIf { it.isNotBlank() }
+                            )
+                        )
+                    }
+                }
+                parsedEvents to parsedEvidence
+            }.onSuccess { (parsedEvents, parsedEvidence) ->
+                events = parsedEvents
+                deliveryEvidence = parsedEvidence
+            }.onFailure { error = "Order timeline could not be read." }
         }.onFailure { error = it.message ?: "Order timeline could not be loaded." }
         loading = false
     }
@@ -91,6 +115,20 @@ fun FynxMarketplaceOrderTimeline(
                     event.createdAt?.let { Text(it.replace('T', ' ').substringBefore('.')) }
                 }
                 Spacer(Modifier.height(2.dp))
+            }
+        }
+        if (!loading && error == null && deliveryEvidence.isNotEmpty()) {
+            Text("Delivery evidence")
+            deliveryEvidence.forEach { evidence ->
+                val label = when (evidence.type) {
+                    "RECIPIENT_NAME" -> "Recipient"
+                    "DELIVERY_NOTE" -> "Driver note"
+                    "HANDOVER_NOTE" -> "Seller handover note"
+                    "PHOTO_REFERENCE" -> "Photo reference"
+                    else -> evidence.type.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
+                }
+                Text("$label: ${evidence.value}")
+                evidence.createdAt?.let { Text(it.replace('T', ' ').substringBefore('.')) }
             }
         }
     }
