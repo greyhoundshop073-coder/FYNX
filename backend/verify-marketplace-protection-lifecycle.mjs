@@ -8,13 +8,22 @@ const transactions = read('./marketplaceTransactions.js');
 const settlement = read('./marketplaceSettlement.js');
 const inspection = read('./marketplaceInspectionExpiry.js');
 const paymentExpiry = read('./marketplacePaymentExpiry.js');
+const socialClient = read('../app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt');
+const scalability = read('./scalability.js');
 
 const checks = [
   ['buyer can open a refund request', protection.includes("app.post('/api/marketplace/protection/order/:id/refund-request'") && protection.includes("only the buyer can request a refund")],
   ['participants can open disputes', protection.includes("app.post('/api/marketplace/protection/order/:id/dispute'") && protection.includes("const isBuyer") && protection.includes("const isSeller")],
+  ['dispute reasons are server-validated against the legacy database enum', protection.includes("const allowedDisputeReasons = new Set(['ITEM_NOT_RECEIVED', 'WRONG_ITEM', 'DAMAGED', 'NOT_AS_DESCRIBED', 'SUSPECTED_SCAM', 'OTHER'])") && protection.includes("caseType === 'DISPUTE' && !allowedDisputeReasons.has(reason.toUpperCase())") && protection.includes("error: 'valid dispute reason is required'")],
+  ['protection endpoint preserves the Android dispute-details limit', protection.includes("details.trim().slice(0, 4000)")],
+  ['Android dispute action targets the protected dispute endpoint', socialClient.includes('FynxBackendClient.postJson(context, "/api/marketplace/protection/order/$id/dispute"') && !socialClient.includes('FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/disputes"')],
+  ['legacy dispute route is preserved only in transaction routes', transactions.includes("app.post('/api/marketplace/orders/:id/disputes'") && !protection.includes("app.post('/api/marketplace/orders/:id/disputes'")],
+  ['legacy open disputes reconcile into protected cases', resolution.includes('async function reconcileOpenDisputes') && resolution.includes('marketplace_order_disputes') && resolution.includes('marketplace_protection_cases') && resolution.includes('dispute_id')],
+  ['protection and reconciliation route modules are registered in scalability bootstrap', scalability.includes('registerMarketplaceProtectionRoutes({ app })') && scalability.includes('registerMarketplaceProtectionResolutionRoutes({ app })')],
   ['protected requests lock the order before state change', protection.includes('SELECT id,buyer_id,seller_id,total_amount,currency,status FROM marketplace_orders WHERE id=$1 FOR UPDATE') && protection.includes("SET status='DISPUTED'")],
   ['protected requests move escrow to DISPUTED', protection.includes("UPDATE marketplace_escrows SET status='DISPUTED'")],
   ['open protection cases are idempotent', protection.includes('idempotencyKey') && protection.includes('WHERE idempotency_key=$1') && protection.includes('idempotency_key TEXT NOT NULL UNIQUE')],
+  ['closed cases do not block a fresh request without a supplied idempotency key', protection.includes("existing && (suppliedKey || ['OPEN', 'UNDER_REVIEW'].includes(String(existing.status)))") && protection.includes('if (existing && !suppliedKey) idempotencyKey =') && protection.includes('crypto.randomUUID()')],
   ['evidence is stored against the order', transactions.includes('marketplace_order_evidence') && transactions.includes("app.post('/api/marketplace/orders/:id/evidence'")],
   ['seller alone can ship', completion.includes('only the seller can ship this order') && completion.includes("order.status !== 'PAID'")],
   ['buyer alone selects fulfillment', completion.includes('only the buyer can choose fulfillment')],

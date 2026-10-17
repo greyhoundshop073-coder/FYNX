@@ -17,6 +17,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 @Composable
 fun FynxMarketplaceOrderLifecycle(
@@ -39,7 +41,13 @@ fun FynxMarketplaceOrderLifecycle(
     var confirmOrderMatch by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var deliveryDetails by remember(order.id) { mutableStateOf<JSONObject?>(null) }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(order.id) {
+        FynxBackendClient.get(context, "/api/marketplace/orders/${order.id}/delivery-details")
+            .onSuccess { raw -> deliveryDetails = JSONObject(raw).optJSONObject("assignment") }
+    }
 
     if (showFulfillment) {
         MarketplaceFulfillmentDialog(
@@ -106,6 +114,21 @@ fun FynxMarketplaceOrderLifecycle(
                     Text("${order.currency} ${"%.2f".format(order.totalAmount)}")
                     Text("Fulfillment: ${order.fulfillmentMethod.ifBlank { "Not selected" }}")
                     order.trackingReference?.takeIf { it.isNotBlank() }?.let { Text("Tracking: $it") }
+                    deliveryDetails?.let { details ->
+                        Text("Delivery information", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
+                        Text("Driver type: ${if (details.optString("driverType") == "SELLER_LOCAL") "Local phone driver" else "FYNX driver"}")
+                        details.optString("driverName").takeIf { it.isNotBlank() && it != "null" }?.let { Text("Driver: $it") }
+                        details.optString("driverPhone").takeIf { it.isNotBlank() && it != "null" }?.let { Text("Driver phone: $it") }
+                        details.optString("pickupPoint").takeIf { it.isNotBlank() && it != "null" }?.let { Text("Agreed pickup point: $it") }
+                        details.optString("pickupInstructions").takeIf { it.isNotBlank() && it != "null" }?.let { Text("Pickup instructions: $it") }
+                        val vehicle = listOf(
+                            details.optString("vehicleType").takeIf { it.isNotBlank() && it != "null" },
+                            details.optString("vehicleColor").takeIf { it.isNotBlank() && it != "null" },
+                            details.optString("vehiclePlate").takeIf { it.isNotBlank() && it != "null" }?.let { "Plate $it" }
+                        ).filterNotNull().joinToString(" • ")
+                        if (vehicle.isNotBlank()) Text("Vehicle: $vehicle")
+                        details.optString("vehicleNote").takeIf { it.isNotBlank() && it != "null" }?.let { Text("Vehicle note: $it") }
+                    }
                     FynxMarketplaceOrderTimeline(context = context, orderId = order.id)
                     when (order.status) {
                         "PAID" -> Text("Choose delivery or pickup so the seller can fulfill the order.")
