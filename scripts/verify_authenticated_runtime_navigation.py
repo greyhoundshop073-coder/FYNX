@@ -730,7 +730,9 @@ if not FAILURES:
                 source=ROOT/"authenticated-chat.png"; recent=ROOT/"authenticated-chat-recent.png"
                 if source.exists(): shutil.copyfile(source,recent); report.append("- PASS explicit Recent Chats screenshot artifact")
                 private_chat_username=first_username_in_xml(after)
-                real_chat_target=backend_real_chat_target()
+                # A local saved-device session is not server-authenticated. Do
+                # not probe for a remote chat target and then cold-start this session.
+                real_chat_target="" if LOCAL_DEBUG_LOGIN_USED else backend_real_chat_target()
                 conversation_after=""
                 conversation_ui_opened=False
                 if real_chat_target:
