@@ -30,10 +30,12 @@ await patchOnce("server.js", [
   },
   {
     marker: 'registerSocialRoutes(app, { pool, auth, findUserByUsername });',
+    already: 'registerFynxPushRoutes({ app, pool, auth });',
     replacement: 'registerSocialRoutes(app, { pool, auth, findUserByUsername });\nregisterFynxPushRoutes({ app, pool, auth });'
   },
   {
     marker: '    await broadcastMessage(message);\n    return res.status(201).json({ message });',
+    already: 'notificationId: "message-" + message.id',
     replacement: '    await broadcastMessage(message);\n    await queueFynxNotification(pool, { userId: recipient.id, type: "MESSAGE", title: "New message", message: "You have a new message.", targetId: recipient.username, sourceUsername: req.user.username || null, route: "fynx://chat/" + encodeURIComponent(req.user.username || ""), notificationId: "message-" + message.id });\n    return res.status(201).json({ message });'
   }
 ]);
@@ -46,6 +48,7 @@ await patchOnce("groupRoutes.js", [
   },
   {
     marker: "res.status(201).json({message:messageJson(row)});",
+    already: "notificationId:`group-message-${row.id}-${member.user_id}`",
     replacement: "const groupMembers=(await pool.query('SELECT gm.user_id,u.username FROM fynx_group_members gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id=$1 AND gm.user_id<>$2',[groupId,req.user.sub])).rows; for(const member of groupMembers){await queueFynxNotification(pool,{userId:member.user_id,type:'GROUP',title:'New group message',message:'You have a new message in a FYNX group.',targetId:groupId,sourceUsername:row.sender_username,route:`fynx://group/${encodeURIComponent(groupId)}`,notificationId:`group-message-${row.id}-${member.user_id}`});}res.status(201).json({message:messageJson(row)});"
   }
 ]);
@@ -58,14 +61,17 @@ await patchOnce("socialRoutes.js", [
   },
   {
     marker: "      return res.status(201).json({ request: result.rows[0] });",
+    already: "notificationId:`friend-request-${result.rows[0].id}`",
     replacement: "      await queueFynxNotification(pool,{userId:target.id,type:'FRIEND_REQUEST',title:'New friend request',message:`@${req.user.username || 'A FYNX user'} sent you a friend request.`,targetId:result.rows[0].id,sourceUsername:req.user.username || null,route:`fynx://profile/${encodeURIComponent(req.user.username || '')}`,notificationId:`friend-request-${result.rows[0].id}`});\n      return res.status(201).json({ request: result.rows[0] });"
   },
   {
     marker: "      return res.json({ request: result.rows[0] });",
+    already: "notificationId:`friend-accepted-${result.rows[0].id}`",
     replacement: "      await queueFynxNotification(pool,{userId:result.rows[0].user_id,type:'FRIEND_REQUEST',title:'Friend request accepted',message:`@${req.user.username || 'A FYNX user'} accepted your friend request.`,targetId:result.rows[0].id,sourceUsername:req.user.username || null,route:`fynx://profile/${encodeURIComponent(req.user.username || '')}`,notificationId:`friend-accepted-${result.rows[0].id}`});\n      return res.json({ request: result.rows[0] });"
   },
   {
     marker: "      const author = await pool.query('SELECT username,display_name FROM users WHERE id=$1', [req.user.sub]);\n      return res.status(201).json({ comment:{ id:String(result.rows[0].id), text, timestamp:Number(result.rows[0].timestamp), authorId:String(req.user.sub), authorUsername:author.rows[0]?.username || '', authorDisplayName:author.rows[0]?.display_name || '' } });",
+    already: "const postOwner = await pool.query('SELECT author_id FROM social_posts WHERE id=$1', [id]);",
     replacement: "      const author = await pool.query('SELECT username,display_name FROM users WHERE id=$1', [req.user.sub]);\n      const postOwner = await pool.query('SELECT author_id FROM social_posts WHERE id=$1', [id]);\n      if (postOwner.rows[0] && String(postOwner.rows[0].author_id) !== String(req.user.sub)) {\n        await queueFynxNotification(pool,{userId:postOwner.rows[0].author_id,type:'COMMENT',title:`@${author.rows[0]?.username || 'A FYNX user'} commented on your post`,message:text,targetId:id,sourceUsername:author.rows[0]?.username || null,route:'fynx://post/' + id + '?comment=' + result.rows[0].id,notificationId:`comment-${result.rows[0].id}`});\n      }\n      return res.status(201).json({ comment:{ id:String(result.rows[0].id), text, timestamp:Number(result.rows[0].timestamp), authorId:String(req.user.sub), authorUsername:author.rows[0]?.username || '', authorDisplayName:author.rows[0]?.display_name || '' } });"
   }
 ]);
