@@ -9,6 +9,9 @@ async function patchOnce(fileName, patches) {
   let source = await readFile(filePath, "utf8");
   let changed = false;
   for (const patch of patches) {
+    if (patch.already && source.includes(patch.already)) {
+      continue;
+    }
     if (source.includes(patch.marker)) {
       source = source.replace(patch.marker, patch.replacement);
       changed = true;
