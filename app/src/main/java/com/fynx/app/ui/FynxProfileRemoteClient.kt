@@ -20,6 +20,7 @@ object FynxProfileRemoteClient {
 
     suspend fun get(context:Context,username:String):Result<Profile>{
         val normalized = username.trim().removePrefix("@").trim()
+        if (normalized.isBlank()) return Result.failure(IllegalArgumentException("Username is required to load a profile"))
         val encoded=URLEncoder.encode(normalized,"UTF-8")
         return FynxBackendClient.get(context,"/api/social/profile/$encoded").mapCatching{
             val p=JSONObject(it).getJSONObject("profile")
@@ -41,7 +42,7 @@ object FynxProfileRemoteClient {
     suspend fun following(context:Context):Result<List<ConnectionUser>> = FynxBackendClient.get(context,"/api/social/me/following").mapCatching { parseConnections(it) }
     private fun parseConnections(raw:String):List<ConnectionUser>{val array=JSONObject(raw).optJSONArray("users")?:JSONArray();return buildList{for(i in 0 until array.length()){val u=array.getJSONObject(i);add(ConnectionUser(u.optString("id"),u.optString("username"),u.optString("displayName")))}}}
 
-    suspend fun posts(context:Context,username:String):Result<List<ProfilePost>>{val encoded=URLEncoder.encode(username.trim().removePrefix("@"),"UTF-8");return FynxBackendClient.get(context,"/api/social/profile/$encoded/posts?limit=30").mapCatching{val a=JSONObject(it).optJSONArray("posts")?:JSONArray();buildList{for(i in 0 until a.length()){val p=a.getJSONObject(i);add(ProfilePost(p.optString("id"),p.optString("text"),p.optString("visibility"),p.optString("mediaId").takeIf{v->v.isNotBlank()&&v!="null"},p.optString("mediaType").takeIf{v->v.isNotBlank()&&v!="null"},p.optString("mediaUrl").takeIf{v->v.isNotBlank()},p.optDouble("timestamp").toLong(),p.optInt("likeCount"),p.optInt("commentCount")))}}}}
+    suspend fun posts(context:Context,username:String):Result<List<ProfilePost>>{val normalized=username.trim().removePrefix("@").trim();if(normalized.isBlank())return Result.failure(IllegalArgumentException("Username is required to load profile posts"));val encoded=URLEncoder.encode(normalized,"UTF-8");return FynxBackendClient.get(context,"/api/social/profile/$encoded/posts?limit=30").mapCatching{val a=JSONObject(it).optJSONArray("posts")?:JSONArray();buildList{for(i in 0 until a.length()){val p=a.getJSONObject(i);add(ProfilePost(p.optString("id"),p.optString("text"),p.optString("visibility"),p.optString("mediaId").takeIf{v->v.isNotBlank()&&v!="null"},p.optString("mediaType").takeIf{v->v.isNotBlank()&&v!="null"},p.optString("mediaUrl").takeIf{v->v.isNotBlank()},p.optDouble("timestamp").toLong(),p.optInt("likeCount"),p.optInt("commentCount")))}}}}
 
     suspend fun update(context:Context,displayName:String,username:String,bio:String,country:String="",profilePhotoMediaId:String?=null,removeProfilePhoto:Boolean=false):Result<Profile>{
         val normalizedUsername = username.trim().removePrefix("@").trim()
@@ -64,5 +65,5 @@ object FynxProfileRemoteClient {
     }
 
     suspend fun uploadProfilePhoto(context:Context,uri:Uri):Result<String>{val mime=context.contentResolver.getType(uri)?.lowercase()?.takeIf{it.startsWith("image/")}?:"image/jpeg";return FynxProductionMessaging.uploadMedia(context,uri,mime).map{it.id}}
-    suspend fun report(context:Context,username:String,reason:String,details:String=""):Result<Report>{val encoded=URLEncoder.encode(username.trim().removePrefix("@"),"UTF-8");return FynxBackendClient.postJson(context,"/api/social/profile/$encoded/report",JSONObject().apply{put("reason",reason.trim().ifBlank{"Other"});put("details",details.trim())}.toString()).mapCatching{val r=JSONObject(it).getJSONObject("report");Report(r.optString("id"),r.optString("status"))}}
+    suspend fun report(context:Context,username:String,reason:String,details:String=""):Result<Report>{val normalized=username.trim().removePrefix("@").trim();if(normalized.isBlank())return Result.failure(IllegalArgumentException("Username is required to report a profile"));val encoded=URLEncoder.encode(normalized,"UTF-8");return FynxBackendClient.postJson(context,"/api/social/profile/$encoded/report",JSONObject().apply{put("reason",reason.trim().ifBlank{"Other"});put("details",details.trim())}.toString()).mapCatching{val r=JSONObject(it).getJSONObject("report");Report(r.optString("id"),r.optString("status"))}}
 }
