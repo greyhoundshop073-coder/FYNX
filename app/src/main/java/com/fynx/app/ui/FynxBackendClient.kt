@@ -108,7 +108,7 @@ object FynxBackendClient {
     }
 
     private suspend fun awaitValidatedNetwork(context: Context) { if (hasNetwork(context)) return; var waited = 0L; while (waited < NETWORK_VALIDATION_WAIT_MS) { delay(NETWORK_VALIDATION_POLL_MS); waited += NETWORK_VALIDATION_POLL_MS; if (hasNetwork(context)) return }; throw FynxNetworkUnavailableException() }
-    private fun isPublicAuthPath(path: String): Boolean = path == "/api/auth/login" || path == "/api/auth/register"
+    private fun isPublicAuthPath(path: String): Boolean = path == "/health" || path == "/api/auth/login" || path == "/api/auth/register"
     private suspend fun executeRequest(context: Context, root: String, method: String, path: String, body: String?, connectTimeoutOverrideMs: Int? = null, readTimeoutOverrideMs: Int? = null): String {
         val weakNetwork = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK
         val requiresAuthentication = !isPublicAuthPath(path)
@@ -143,19 +143,27 @@ object FynxBackendClient {
     /** INTERNET means a usable transport may exist while Android is still validating it. Let the request itself prove reachability. */
     private fun hasNetwork(context: Context): Boolean {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
-        val active = manager.activeNetwork
-        if (active != null) {
-            val capabilities = manager.getNetworkCapabilities(active)
-            if (capabilities != null && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return true
-        }
-        return manager.allNetworks.any { network ->
-            if (network == active) return@any false
-            val capabilities = manager.getNetworkCapabilities(network) ?: return@any false
-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-        }
+        // URL.openConnection() uses Android's default network. Do not treat a
+        // secondary INTERNET-capable network as proof that this request can route.
+        val active = manager.activeNetwork ?: return false
+        val capabilities = manager.getNetworkCapabilities(active) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
-    private fun isRetryableFailure(error: Throwable): Boolean { var current: Throwable? = error; while (current != null) { if (current is SocketTimeoutException || current is ConnectException || current is UnknownHostException || current is IOException) return true; if (current is FynxHttpException && current.status in setOf(408, 425, 429, 500, 502, 503, 504)) return true; current = current.cause }; return false }
+    private fun isRetryableFailure(error: Throwable): Boolean {
+        var current: Throwable? = error
+        while (current != null) {
+            // HTTP errors are IOExceptions too. Classify them first so permanent
+            // 4xx responses (for example 400/401/403/404/422) are not retried.
+            if (current is FynxHttpException) {
+                return current.status in setOf(408, 425, 429, 500, 502, 503, 504)
+            }
+            if (current is SocketTimeoutException || current is ConnectException || current is UnknownHostException) return true
+            if (current is IOException) return true
+            current = current.cause
+        }
+        return false
+    }
     private fun migrateLegacyAccessToken(context: Context): String? { val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE); val legacy = prefs.getString(LEGACY_ACCESS_TOKEN, null)?.takeIf { it.isNotBlank() } ?: return null; return runCatching { FynxSecureTokenStore.save(context, legacy); prefs.edit().remove(LEGACY_ACCESS_TOKEN).apply(); legacy }.getOrNull() }
     private class FynxNetworkUnavailableException : IOException("FYNX network connection is unavailable")
     private class FynxUnauthorizedException : IOException("FYNX session expired")
