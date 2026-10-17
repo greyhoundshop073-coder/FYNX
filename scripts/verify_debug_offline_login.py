@@ -13,6 +13,7 @@ checks = {
     "offline access is an explicit separate debug-only action": "Continue offline (debug only)" in auth and "savedLocalUsername = localDebugAccountForLogin(context, username)" in auth,
     "network/auth failures are not silently converted into local sessions": "allowOfflineEntry" not in auth and "isLoginNetworkFailure" not in auth and "onFailure { failure ->" in auth,
     "runtime server-auth test clears persisted local account and tokens": 'run("adb","shell","pm","clear",PACKAGE)' in runtime and "before server-authentication certification" in runtime,
+    "runtime server-auth test rejects any debug/offline route": 'debug offline/saved-device control appeared during clean server-auth certification' in runtime and '"Continue offline (debug only)"' in runtime,
     "network-fix branch opts into live-backend probe without making it mandatory for unrelated APK builds": "startsWith(github.head_ref, 'fix/network-health-probe-and-transport-detection-')" in workflow and "startsWith(github.ref_name, 'fix/network-health-probe-and-transport-detection-')" in workflow and "continue-on-error: true" not in workflow,
     "explicit full-runtime and home-cert runs retain the probe": "inputs.full_runtime == 'true'" in workflow and "[home-cert]" in workflow and "run: node scripts/verify_production_backend_reachability.mjs" in workflow,
 }
