@@ -48,6 +48,12 @@ fun FynxProfileContentSection(
 
     LaunchedEffect(username) {
         loading = true
+        if (username.trim().removePrefix("@").isBlank()) {
+            posts = emptyList()
+            marketplace = emptyList()
+            loading = false
+            return@LaunchedEffect
+        }
         FynxProfileRemoteClient.posts(context, username)
             .onSuccess { posts = it }
             .onFailure { onError(it.message) }
