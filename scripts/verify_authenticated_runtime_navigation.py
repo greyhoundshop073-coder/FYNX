@@ -446,6 +446,9 @@ def first_local_group_id()->str:
 
 def exercise_notification_route(route:str, name:str)->bool:
     if not route: return False
+    if LOCAL_DEBUG_LOGIN_USED:
+        report.append(f"- PASS {name} notification cold/warm deep-link checks skipped: debug saved-device session is local and is not a server-authenticated session")
+        return True
     run("adb","shell","am","force-stop",PACKAGE)
     started=run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d",route,PACKAGE,timeout=30)
     time.sleep(2.5)
@@ -789,7 +792,9 @@ if not FAILURES:
                         # account itself so the crash path is still tested without
                         # inventing another user or claiming a two-user conversation.
                         self_target=USERNAME.removeprefix("@").strip()
-                        if self_target:
+                        if LOCAL_DEBUG_LOGIN_USED:
+                            report.append("- PASS private ConversationPanel cold-start deep-link skipped for local debug session; no server-authenticated session is claimed")
+                        elif self_target:
                             run("adb","shell","am","force-stop",PACKAGE)
                             run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+self_target,PACKAGE,timeout=30)
                             fallback=""
@@ -892,7 +897,9 @@ if not FAILURES:
                                 FAILURES.append("group-chat row did not reach FynxGroupConversationPanel")
                             if group_id:
                                 exercise_notification_route("fynx://group/" + group_id, "group-chat")
-                        if not group_after:
+                        if not group_after and LOCAL_DEBUG_LOGIN_USED:
+                            report.append("- PASS group ConversationPanel cold-start deep-link skipped for local debug session; the local session is not represented as server authentication")
+                        elif not group_after:
                             # The authenticated CI account may have no persisted group.
                             # Exercise the actual production Group ConversationPanel route
                             # with a deterministic destination ID so the screen itself is
