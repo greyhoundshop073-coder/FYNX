@@ -427,6 +427,11 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             try {
                 var displayName = "Contact"
                 var phone = ""
+                val resolvedContactUri = ContactsContract.Contacts.lookupContact(context.contentResolver, uri)
+                    ?: throw IllegalArgumentException("The selected contact could not be opened.")
+                val contactId = resolvedContactUri.lastPathSegment
+                    ?.takeIf { it.isNotBlank() && it.all(Char::isDigit) }
+                    ?: throw IllegalArgumentException("The selected contact has an invalid ID.")
                 context.contentResolver.query(
                     ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                     arrayOf(
@@ -434,7 +439,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         ContactsContract.CommonDataKinds.Phone.NUMBER
                     ),
                     "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID}=?",
-                    arrayOf(uri.lastPathSegment),
+                    arrayOf(contactId),
                     null
                 )?.use { cursor ->
                     if (cursor.moveToFirst()) {
@@ -483,6 +488,14 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     val selectedType = attachmentType ?: "image"
                     FynxProductionMessaging.uploadMedia(context, selectedAttachment)
                         .mapCatching { media ->
+                            val messageMediaType = when {
+                                selectedType == "video_note" -> "video_note"
+                                selectedMessageType != null -> "image"
+                                media.mimeType.startsWith("image/") -> "image"
+                                media.mimeType.startsWith("video/") -> "video"
+                                media.mimeType.startsWith("audio/") -> "audio"
+                                else -> "document"
+                            }
                             if (selectedMessageType != null) {
                                 FynxProductionMessaging.sendStructuredMessage(
                                     context = context,
@@ -491,10 +504,10 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                     payload = mapOf("mediaId" to media.id),
                                     replyToId = replyToId,
                                     mediaId = media.id,
-                                    mediaType = selectedType
+                                    mediaType = messageMediaType
                                 ).getOrThrow()
                             } else {
-                                FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId, media.id, selectedType, 0L).getOrThrow()
+                                FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId, media.id, messageMediaType, 0L).getOrThrow()
                             }
                         }
                 } else {
