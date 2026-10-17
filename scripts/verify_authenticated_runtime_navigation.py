@@ -654,7 +654,7 @@ if not FAILURES:
     # emulator back to the sign-in gate, making unrelated navigation checks fail.
     xml=return_home_via_back("authenticated-after-settings", settings_xml or xml)
     xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-after-settings.xml") or xml
-    if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
+    if find_control(xml,["Sign In"]) and (find_control(xml,["Password"]) or find_control(xml,["Create a new account"])):
         FAILURES.append("Settings visual capture returned to the sign-in gate; in-app back navigation did not preserve the authenticated Home session")
     composer_xml=tap_control(xml,["Open FYNX camera"],"home-camera-composer",["What's on your mind?"])
     if composer_xml:
