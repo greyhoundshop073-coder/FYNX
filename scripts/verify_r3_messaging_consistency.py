@@ -19,7 +19,7 @@ for needle, label in [
     ("const fynxRealtimeMessagingCanSend = async (senderId, targetId)", "shared message authorization helper"),
     ("fynxRealtimeMessagingBlocks(senderId, targetId)", "mutual block check"),
     ("messages_visibility", "message visibility policy"),
-    ("f.status='ACCEPTED'", "accepted-friend policy"),
+    ("f.status='accepted'", "accepted-friend policy (matches friendships schema)"),
     ("const fynxRealtimeMessagingRead = async (userId, ids)", "read helper"),
     ("recipient_id=$2", "recipient-bound message state update"),
     ("const fynxRealtimeMessagingAck = async (userId, id)", "ACK helper"),
