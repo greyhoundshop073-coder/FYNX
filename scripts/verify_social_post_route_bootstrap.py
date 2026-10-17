@@ -25,6 +25,10 @@ checks = [
      "\\n  app.post('/api/social/posts'" not in social),
     ("server bootstrap keeps the guarded post-route fallback",
      "/api/social/posts" in bootstrap and "registerSocialRoutes" in bootstrap),
+    ("guarded fallback preserves uploaded post media",
+     'INSERT INTO social_posts (author_id, text, visibility, media_id, media_type)' in bootstrap
+     and 'post media is not owned by this account' in bootstrap
+     and 'post media type does not match uploaded media' in bootstrap),
     ("foundation bootstrap writes patched source back to disk",
      'await writeFile(bootstrapPath, source, "utf8");' in foundation
      and "\\nawait writeFile(bootstrapPath" not in foundation),
