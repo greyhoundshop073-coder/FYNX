@@ -579,8 +579,7 @@ def return_home_via_back(name:str, current_xml:str="")->str:
         observed=dump_ui(f"{name}-home-return-{attempt}.xml")
         if observed:
             xml=observed
-        if (find_control(xml,["Open FYNX camera"])
-                or (find_control(xml,["Chat"]) and find_control(xml,["Friends"]))):
+        if find_control(xml,["Open FYNX camera"]):
             return xml
         # A cold start can discard the intentionally local debug session. Do not
         # relaunch fynx://home here; use the app's real back stack instead.
@@ -638,7 +637,7 @@ if not FAILURES:
     # emulator back to the sign-in gate, making unrelated navigation checks fail.
     for step in range(3):
         current=dump_ui(f"authenticated-after-settings-back-{step}.xml")
-        if find_control(current,["Open FYNX camera"]) or find_control(current,["Chat"]) and find_control(current,["Friends"]):
+        if find_control(current,["Open FYNX camera"]):
             xml=current
             break
         run("adb","shell","input","keyevent","4")
