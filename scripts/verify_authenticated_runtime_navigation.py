@@ -584,7 +584,11 @@ def return_home_via_back(name:str, current_xml:str="")->str:
         # Home is a main-navigation destination, not necessarily the previous
         # Activity in Android's back stack. Prefer the real Home tab when present;
         # this also avoids leaving the app when the current tab is Friends.
-        if find_control(xml,["Sign In"]) or find_control(xml,["Username"]):
+        # "Username" also appears in the Friends search placeholder ("Search username or name").
+        # Treat the screen as the auth gate only when the sign-in action and a login-specific
+        # control are both present; otherwise this prematurely returns from Friends and blocks
+        # the Home tab tap needed by Stories/Marketplace certification.
+        if find_control(xml,["Sign In"]) and (find_control(xml,["Password"]) or find_control(xml,["Create a new account"])):
             return xml
         home_control=find_control(xml,["Home"])
         if home_control:
