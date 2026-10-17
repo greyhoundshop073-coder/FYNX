@@ -41,13 +41,27 @@ if (!app._router?.stack?.some(layer => layer.route?.path === "/api/social/posts"
   app.post("/api/social/posts", auth, async (req, res) => {
     const text = typeof req.body?.text === "string" ? req.body.text.trim().slice(0, 4000) : "";
     const allowed = ["PUBLIC", "FRIENDS_ONLY", "SELECTED_PEOPLE", "ONLY_ME"];
-    const visibility = allowed.includes(String(req.body?.visibility)) ? String(req.body.visibility) : "PUBLIC";
-    if (!text) return res.status(400).json({ error: "post text is required" });
+    const rawVisibility = typeof req.body?.visibility === "string" ? req.body.visibility.trim().toUpperCase() : "PUBLIC";
+    const visibility = allowed.includes(rawVisibility) ? rawVisibility : "PUBLIC";
+    const mediaId = req.body?.mediaId == null ? null : Number(req.body.mediaId);
+    const mediaType = typeof req.body?.mediaType === "string" ? req.body.mediaType.trim().toLowerCase() : null;
+    if (!text && mediaId == null) return res.status(400).json({ error: "post text or media is required" });
     if (!pool) return res.status(503).json({ error: "database unavailable" });
+    if (mediaId != null && (!Number.isSafeInteger(mediaId) || mediaId < 1 || !["image", "video"].includes(mediaType))) {
+      return res.status(400).json({ error: "invalid post media" });
+    }
     try {
+      if (mediaId != null) {
+        const media = await pool.query("SELECT id, owner_id, mime_type FROM message_media WHERE id=$1 LIMIT 1", [mediaId]);
+        const row = media.rows[0];
+        const mime = String(row?.mime_type || "").toLowerCase();
+        const matches = mediaType === "image" ? mime.startsWith("image/") : mime.startsWith("video/");
+        if (!row || String(row.owner_id) !== String(req.user.sub)) return res.status(403).json({ error: "post media is not owned by this account" });
+        if (!matches) return res.status(400).json({ error: "post media type does not match uploaded media" });
+      }
       const result = await pool.query(
-        "INSERT INTO social_posts (author_id, text, visibility) VALUES ($1, $2, $3) RETURNING id",
-        [req.user.sub, text, visibility]
+        "INSERT INTO social_posts (author_id, text, visibility, media_id, media_type) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+        [req.user.sub, text, visibility, mediaId, mediaType]
       );
       return res.status(201).json({ postId: String(result.rows[0].id) });
     } catch (error) {
