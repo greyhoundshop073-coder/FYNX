@@ -19,6 +19,28 @@ object FynxGroupRemoteClient {
 
     suspend fun syncGroup(context:Context,group:FynxGroup):Result<Unit> = runCatching { val body=JSONObject().apply{put("ownerUsername",group.ownerUsername.trim().removePrefix("@"));put("name",group.name);put("groupPhotoMediaId",group.groupPhotoMediaId ?: JSONObject.NULL);put("description",group.description);put("visibility",group.visibility.name);put("members",JSONArray().apply{group.members.forEach{member->put(JSONObject().apply{put("username",member.username.trim().removePrefix("@"));put("role",member.role.name)})}})};FynxBackendClient.postJson(context,"/api/groups/${group.id}/sync",body.toString()).getOrThrow();Unit }
     suspend fun updateGroupPhoto(context:Context,groupId:String,mediaId:String?):Result<String?> = runCatching { val body=JSONObject().apply{put("mediaId",mediaId?.trim()?.takeIf{it.isNotBlank()}?:JSONObject.NULL)}; val o=JSONObject(FynxBackendClient.patchJson(context,"/api/groups/$groupId/photo",body.toString()).getOrThrow()); o.optString("groupPhotoMediaId").takeIf{it.isNotBlank()&&it!="null"} }
+
+    suspend fun loadMyGroups(context:Context):Result<List<FynxGroup>> = runCatching {
+        val root=JSONObject(FynxBackendClient.get(context,"/api/groups").getOrThrow())
+        val array=root.optJSONArray("groups")?:JSONArray()
+        buildList {
+            for(i in 0 until array.length()) {
+                val o=array.getJSONObject(i)
+                val membersJson=o.optJSONArray("members")?:JSONArray()
+                val members=buildList {
+                    for(j in 0 until membersJson.length()) {
+                        val m=membersJson.getJSONObject(j)
+                        val role=runCatching { FynxGroupRole.valueOf(m.optString("role","MEMBER").uppercase()) }.getOrDefault(FynxGroupRole.MEMBER)
+                        add(FynxGroupMember(m.optString("username"),role))
+                    }
+                }
+                val visibility=runCatching { FynxGroupVisibility.valueOf(o.optString("visibility","PRIVATE").uppercase()) }.getOrDefault(FynxGroupVisibility.PRIVATE)
+                val group=FynxGroup(o.optString("id"),o.optString("name"),o.optString("description"),visibility,o.optString("ownerUsername"),members,o.optString("groupPhotoMediaId").takeIf { it.isNotBlank() && it!="null" })
+                if(FynxGroupsBatch1.validate(group).isEmpty()) add(group)
+            }
+        }.distinctBy { it.id }
+    }
+
     suspend fun loadMembers(context:Context,groupId:String):Result<List<RemoteMember>> = runCatching { val a=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/members").getOrThrow()).optJSONArray("members")?:JSONArray();buildList{for(i in 0 until a.length()){val o=a.getJSONObject(i);add(RemoteMember(o.optString("username"),o.optString("role","MEMBER"),o.optLong("joinedAt")))}} }
     suspend fun addMember(context:Context,groupId:String,username:String):Result<RemoteMember> = runCatching {
         val body=JSONObject().put("username",username.trim().removePrefix("@"))
