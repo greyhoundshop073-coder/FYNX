@@ -63,7 +63,7 @@ object FynxBackendClient {
             try {
                 val root = baseUrl(context).trimEnd('/'); require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }; val candidate = mediaUrl.trim(); require(candidate.isNotBlank()) { "Media URL is empty." }
                 val absoluteUrl = if (candidate.startsWith("http://") || candidate.startsWith("https://")) candidate else { require(candidate.startsWith("/")) { "Media path must start with /." }; root + candidate }
-                val target = URL(absoluteUrl); val configured = URL(root); require(target.protocol.equals("https", true)) { "FYNX media must use HTTPS." }; require(target.host.equals(configured.host, true)) { "FYNX media host is not trusted." }
+                val target = URL(absoluteUrl); val configured = URL(root); require(target.protocol.equals("https", true)) { "FYNX media must use HTTPS." }; require(target.host.equals(configured.host, true)) { "FYNX media host is not trusted." }; if (accessToken(context).isNullOrBlank()) throw FynxUnauthorizedException()
                 awaitValidatedNetwork(context); val parent = destination.parentFile ?: throw IOException("Media destination has no parent directory"); if (!parent.exists() && !parent.mkdirs() && !parent.isDirectory) throw IOException("Unable to create media destination directory")
                 val temporary = File(parent, ".${destination.name}.part"); var attempt = 0; var completed: Result<DownloadedMedia>? = null
                 while (completed == null) {
@@ -90,7 +90,7 @@ object FynxBackendClient {
     private suspend fun request(context: Context, method: String, path: String, body: String?, maxRetries: Int = MAX_IDEMPOTENT_RETRIES, connectTimeoutMs: Int? = null, readTimeoutMs: Int? = null): Result<String> {
         return withContext(Dispatchers.IO) {
             try {
-                val root = baseUrl(context); require(root.isNotBlank()) { "FYNX backend is not configured." }; require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }; require(path.startsWith("/")) { "Backend path must start with /." }; awaitValidatedNetwork(context)
+                val root = baseUrl(context); require(root.isNotBlank()) { "FYNX backend is not configured." }; require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }; require(path.startsWith("/")) { "Backend path must start with /." }; if (!canRequestWithoutAuthentication(path, accessToken(context))) throw FynxUnauthorizedException(); awaitValidatedNetwork(context)
                 var attempt = 0; var completed: Result<String>? = null
                 while (completed == null) {
                     try {
@@ -109,6 +109,7 @@ object FynxBackendClient {
 
     private suspend fun awaitValidatedNetwork(context: Context) { if (hasNetwork(context)) return; var waited = 0L; while (waited < NETWORK_VALIDATION_WAIT_MS) { delay(NETWORK_VALIDATION_POLL_MS); waited += NETWORK_VALIDATION_POLL_MS; if (hasNetwork(context)) return }; throw FynxNetworkUnavailableException() }
     private fun isPublicAuthPath(path: String): Boolean = path == "/health" || path == "/api/auth/login" || path == "/api/auth/register"
+    internal fun canRequestWithoutAuthentication(path: String, token: String?): Boolean = isPublicAuthPath(path) || !token.isNullOrBlank()
     private suspend fun executeRequest(context: Context, root: String, method: String, path: String, body: String?, connectTimeoutOverrideMs: Int? = null, readTimeoutOverrideMs: Int? = null): String {
         val weakNetwork = FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK
         val requiresAuthentication = !isPublicAuthPath(path)
