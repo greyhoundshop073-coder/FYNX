@@ -9,11 +9,11 @@ currency = (ROOT / "app/src/main/java/com/fynx/app/ui/CurrencyConverterPanel.kt"
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 auth_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt").read_text(encoding="utf-8")
 auth_finish = auth_panel.split("fun finish(", 1)[-1].split("val background", 1)[0]
-check("new account identity is saved before its access token", "FynxAuthStore.saveAccount(context" in auth_finish and "FynxBackendClient.saveAccessToken(context, account.token)" in auth_finish and auth_finish.index("FynxAuthStore.saveAccount(context") < auth_finish.index("FynxBackendClient.saveAccessToken(context, account.token)"))
 
 checks = []
 def check(name, condition):
     checks.append((name, bool(condition)))
+check("new account identity is saved before its access token", "FynxAuthStore.saveAccount(context" in auth_finish and "FynxBackendClient.saveAccessToken(context, account.token)" in auth_finish and auth_finish.index("FynxAuthStore.saveAccount(context") < auth_finish.index("FynxBackendClient.saveAccessToken(context, account.token)"))
 
 check("backend transport requires HTTPS", 'startsWith("https://")' in client)
 # HttpURLConnection uses Android's default network, so availability must inspect that route.
