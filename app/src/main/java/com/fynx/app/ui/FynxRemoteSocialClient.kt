@@ -19,6 +19,7 @@ object FynxRemoteSocialClient {
 
     private const val FEED_PAGE_SIZE = 20
     private const val FEED_CACHE_TTL_MS = 120_000L
+    private const val FEED_CACHE_MAX_STALE_MS = 24L * 60L * 60L * 1000L
     private const val FEED_CACHE_KEY_PREFIX = "fynx_feed_cache_v1_"
     private const val FEED_CACHE_TIME_KEY_PREFIX = "fynx_feed_cache_time_v1_"
     private fun feedCacheAccountKey(context: Context): String? = FynxAuthStore.accountStorageKey(context)?.takeIf { it.isNotBlank() }
@@ -86,7 +87,11 @@ object FynxRemoteSocialClient {
     }.getOrNull()
     private fun readStaleCachedFeed(context: Context): FeedPage? = runCatching {
         val k = feedCacheKey(context) ?: return null
+        val t = feedCacheTimeKey(context) ?: return null
         val p = context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE)
+        val savedAt = p.getLong(t, 0L)
+        val age = System.currentTimeMillis() - savedAt
+        if (savedAt <= 0L || age < 0L || age > FEED_CACHE_MAX_STALE_MS) return null
         parseFeedPage(p.getString(k, null) ?: return null)
     }.getOrNull()
     private fun writeCachedFeed(context: Context, raw: String) { runCatching { val k = feedCacheKey(context) ?: return; val t = feedCacheTimeKey(context) ?: return; context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE).edit().putString(k, raw).putLong(t, System.currentTimeMillis()).apply() } }
