@@ -45,7 +45,7 @@ require('backend Status media authorization','FROM statuses s' in server and 's.
 require('backend status media expires before delivery','s.expires_at > NOW()' in server)
 require('media responses are not cached past Status expiry or privacy changes','res.set("Cache-Control", "private, no-store")' in server)
 require('expired Status media is denied by the authenticated media route while other valid media contexts remain accessible','s.expires_at > NOW()' in server and 'expired_status.expires_at <= NOW()' not in media_privacy)
-require('backend Status media owner bypasses block denial but other viewers remain block-filtered',"s.owner_id = $2 OR (" in server and "s.audience = 'EVERYONE'" in server and "s.audience = 'FRIENDS'" in server and 'b.blocker_id = $2 AND b.blocked_id = s.owner_id' in server and 'b.blocker_id = s.owner_id AND b.blocked_id = $2' in server)
+require('backend Status media owner bypasses block denial but other viewers remain block-filtered',"s.owner_id = $2" in server and "s.audience = 'EVERYONE'" in server and "s.audience = 'FRIENDS'" in server and 'b.blocker_id = $2 AND b.blocked_id = s.owner_id' in server and 'b.blocker_id = s.owner_id AND b.blocked_id = $2' in server)
 require('owner-only Status deletion','DELETE FROM statuses WHERE id=$1 AND owner_id=$2' in management)
 require('owner Status archive',"/api/statuses/archive" in management and "expires_at <= NOW()" in management and "req.user.sub" in management and "suspend fun archive" in client and "Status archive" in timeline)
 require('management route authentication','jwt.verify(token, JWT_SECRET)' in management)
