@@ -540,7 +540,35 @@ app.get("/api/media/:id", auth, async (req, res) => {
         )
       LIMIT 1
     `, [mediaId, req.user.sub]);
-    if (!result.rows[0]) return res.status(404).json({ error: "media not found" });
+    if (!result.rows[0]) {
+      // Marketplace dispute photos are visible only to the buyer/seller on the order
+      // that explicitly references the uploaded media. Check table existence first so
+      // media access remains safe before the Marketplace schema has been initialized.
+      const evidenceTable = await pool.query("SELECT to_regclass('public.marketplace_order_evidence') AS table_name");
+      if (evidenceTable.rows[0]?.table_name) {
+        const evidenceMedia = await pool.query(`
+          SELECT mm.mime_type, mm.data
+          FROM message_media mm
+          WHERE mm.id = $1
+            AND EXISTS (
+              SELECT 1
+              FROM marketplace_order_evidence e
+              JOIN marketplace_orders o ON o.id = e.order_id
+              WHERE e.kind = 'PHOTO'
+                AND e.value = CAST(mm.id AS TEXT)
+                AND e.order_id IS NOT NULL
+                AND (o.buyer_id = $2 OR o.seller_id = $2)
+            )
+          LIMIT 1
+        `, [mediaId, req.user.sub]);
+        if (evidenceMedia.rows[0]) {
+          res.set("Cache-Control", "private, no-store");
+          res.type(evidenceMedia.rows[0].mime_type);
+          return res.send(evidenceMedia.rows[0].data);
+        }
+      }
+      return res.status(404).json({ error: "media not found" });
+    }
     res.set("Cache-Control", "private, no-store");
     res.type(result.rows[0].mime_type);
     return res.send(result.rows[0].data);
