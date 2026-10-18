@@ -113,5 +113,45 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
 
   app.get('/api/marketplace/orders/:id/evidence',auth,async(req,res)=>{const id=parseUuid(req.params.id);if(!id)return res.status(400).json({error:'invalid order id'});try{await ensureMarketplaceTransactionSchema();const order=(await pool.query('SELECT buyer_id,seller_id FROM marketplace_orders WHERE id=$1',[id])).rows[0];if(!order)return res.status(404).json({error:'order not found'});if(!isParticipant(order,req.user.sub))return res.status(403).json({error:'order unavailable'});const result=await pool.query('SELECT id,order_id,submitted_by,kind,value,created_at FROM marketplace_order_evidence WHERE order_id=$1 ORDER BY created_at ASC,id ASC',[id]);return res.json({evidence:result.rows});}catch(error){console.error('marketplace evidence lookup',error);return res.status(500).json({error:'evidence lookup failed'});}});
 
-  app.post('/api/marketplace/orders/:id/evidence',auth,async(req,res)=>{const id=parseUuid(req.params.id);const allowedKinds=new Set(['PHOTO','VIDEO','DOCUMENT','MESSAGE_REFERENCE','TRACKING_REFERENCE','NOTE']);const kind=typeof req.body?.kind==='string'?req.body.kind.trim().toUpperCase():'';const value=typeof req.body?.value==='string'?req.body.value.trim().slice(0,4000):'';if(!id||!allowedKinds.has(kind)||!value)return res.status(400).json({error:'valid evidence is required'});try{await ensureMarketplaceTransactionSchema();const order=(await pool.query('SELECT * FROM marketplace_orders WHERE id=$1',[id])).rows[0];if(!order)return res.status(404).json({error:'order not found'});if(!isParticipant(order, req.user.sub))return res.status(403).json({error:'order unavailable'});const result=await pool.query(`INSERT INTO marketplace_order_evidence (order_id,submitted_by,kind,value) VALUES ($1,$2,$3,$4) RETURNING id,order_id,submitted_by,kind,value,created_at`,[id,req.user.sub,kind,value]);return res.status(201).json({evidence:result.rows[0]});}catch(error){console.error('marketplace evidence',error);return res.status(500).json({error:'evidence submission failed'});}});
+  app.post('/api/marketplace/orders/:id/evidence', auth, async (req, res) => {
+    const id = parseUuid(req.params.id);
+    const allowedKinds = new Set(['PHOTO', 'VIDEO', 'DOCUMENT', 'MESSAGE_REFERENCE', 'TRACKING_REFERENCE', 'NOTE']);
+    const kind = typeof req.body?.kind === 'string' ? req.body.kind.trim().toUpperCase() : '';
+    const value = typeof req.body?.value === 'string' ? req.body.value.trim().slice(0, 4000) : '';
+    if (!id || !allowedKinds.has(kind) || !value) return res.status(400).json({ error: 'valid evidence is required' });
+
+    try {
+      await ensureMarketplaceTransactionSchema();
+      const order = (await pool.query('SELECT * FROM marketplace_orders WHERE id=$1', [id])).rows[0];
+      if (!order) return res.status(404).json({ error: 'order not found' });
+      if (!isParticipant(order, req.user.sub)) return res.status(403).json({ error: 'order unavailable' });
+
+      let storedValue = value;
+      if (kind === 'PHOTO') {
+        // PHOTO evidence must reference an actual uploaded image owned by this participant,
+        // not an arbitrary URL, another user's media ID, or an unverified text string.
+        if (!/^\\d{1,18}$/.test(value)) return res.status(400).json({ error: 'PHOTO evidence must reference an uploaded image media ID', code: 'PHOTO_MEDIA_REQUIRED' });
+        const mediaId = Number(value);
+        if (!Number.isSafeInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: 'invalid photo media ID' });
+        const media = (await pool.query(
+          'SELECT id, mime_type FROM message_media WHERE id=$1 AND owner_id=$2',
+          [mediaId, req.user.sub]
+        )).rows[0];
+        if (!media) return res.status(403).json({ error: 'photo must be uploaded by the authenticated participant', code: 'PHOTO_MEDIA_NOT_OWNED' });
+        if (!/^image\\/(jpeg|png|webp|gif)$/.test(String(media.mime_type || '').toLowerCase())) {
+          return res.status(400).json({ error: 'PHOTO evidence requires an image upload', code: 'PHOTO_MEDIA_TYPE_INVALID' });
+        }
+        storedValue = String(media.id);
+      }
+
+      const result = await pool.query(
+        'INSERT INTO marketplace_order_evidence (order_id,submitted_by,kind,value) VALUES ($1,$2,$3,$4) RETURNING id,order_id,submitted_by,kind,value,created_at',
+        [id, req.user.sub, kind, storedValue]
+      );
+      return res.status(201).json({ evidence: result.rows[0] });
+    } catch (error) {
+      console.error('marketplace evidence', error);
+      return res.status(500).json({ error: 'evidence submission failed' });
+    }
+  });
 }
