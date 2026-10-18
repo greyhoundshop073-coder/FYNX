@@ -584,7 +584,11 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 ) { page ->
                     when (page) {
             "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED, initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { statusOpenOwner = null; selected = "Stories" }, onOpenStatusOwner = { statusOpenOwner = it; selected = "Stories" }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it }, initialPostId = postOpenId, initialCommentId = postOpenCommentId, onInitialPostConsumed = { postOpenId = null; postOpenCommentId = null })
-            "Search" -> FynxUniversalSearchPanel(onOpenProfile = { username -> profileUser = username; selected = "Home" })
+            "Search" -> FynxUniversalSearchPanel(
+                onOpenProfile = { username -> profileUser = username; selected = "Home" },
+                onOpenPost = { postId -> postOpenId = postId; postOpenCommentId = null; selected = "Home" },
+                onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }
+            )
             "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" }, onOpenContacts = { selected = "Contacts" })
             "Friends" -> FriendsPanel(
                 onOpenProfile = { profileUser = it },
