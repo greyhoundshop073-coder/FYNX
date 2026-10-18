@@ -1,6 +1,10 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -159,6 +163,11 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
         var vehiclePlate by remember(order.id) { mutableStateOf(order.vehiclePlate.orEmpty()) }
         var vehicleNote by remember(order.id) { mutableStateOf(order.vehicleNote.orEmpty()) }
         var handoverNote by remember(order.id) { mutableStateOf("") }
+        var handoverPhotoUri by remember(order.id) { mutableStateOf<Uri?>(null) }
+        val handoverPhotoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
+            handoverPhotoUri = uri
+            if (uri != null) message = "Handover photo selected; it will upload when you confirm handover."
+        }
         var busy by remember(order.id) { mutableStateOf(false) }
         var message by remember(order.id) { mutableStateOf<String?>(null) }
         var settlementLoading by remember(order.id) { mutableStateOf(true) }
@@ -322,12 +331,37 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         }
                         if (order.status == "SHIPPED" && order.driverHandoverAt == null && (order.driverType == "SELLER_LOCAL" || (order.driverAcceptedAt != null && order.driverApprovalActive))) {
                             OutlinedTextField(handoverNote, { handoverNote = it.take(1000) }, label = { Text("Handover note") }, minLines = 2, enabled = !busy)
+                            TextButton(
+                                enabled = !busy,
+                                onClick = { handoverPhotoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                            ) { Text(if (handoverPhotoUri == null) "Add handover photo (optional)" else "Change handover photo") }
+                            handoverPhotoUri?.let { Text("A photo will upload securely when handover is confirmed.", style = MaterialTheme.typography.bodySmall) }
                             Button(enabled = !busy && handoverNote.trim().isNotBlank(), onClick = {
                                 busy = true
                                 message = null
                                 scope.launch {
-                                    FynxBackendClient.postJson(context, "/api/marketplace/orders/${order.id}/driver-handover", JSONObject().put("note", handoverNote.trim()).toString())
-                                        .onSuccess { selected = null; load(); onChanged() }
+                                    var photoReference: String? = null
+                                    val photoUri = handoverPhotoUri
+                                    if (photoUri != null) {
+                                        val uploaded = FynxProductionMessaging.uploadMedia(context, photoUri)
+                                        if (uploaded.isFailure) {
+                                            message = uploaded.exceptionOrNull()?.message ?: "Handover photo upload failed."
+                                            busy = false
+                                            return@launch
+                                        }
+                                        val media = uploaded.getOrThrow()
+                                        val allowedImageTypes = setOf("image/jpeg", "image/png", "image/webp", "image/gif")
+                                        if (media.mimeType.trim().lowercase(Locale.ROOT) !in allowedImageTypes) {
+                                            message = "Choose a JPEG, PNG, WebP or GIF image."
+                                            busy = false
+                                            return@launch
+                                        }
+                                        photoReference = media.id
+                                    }
+                                    val payload = JSONObject().put("note", handoverNote.trim())
+                                    if (photoReference != null) payload.put("photoReference", photoReference)
+                                    FynxBackendClient.postJson(context, "/api/marketplace/orders/${order.id}/driver-handover", payload.toString())
+                                        .onSuccess { handoverPhotoUri = null; selected = null; load(); onChanged() }
                                         .onFailure { message = it.message ?: "Could not record driver handover." }
                                     busy = false
                                 }
