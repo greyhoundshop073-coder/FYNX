@@ -90,6 +90,8 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
             EXISTS (
               SELECT 1 FROM marketplace_listings ml
               WHERE ml.active = TRUE
+                AND ml.quantity > 0
+                AND UPPER(COALESCE(ml.currency, '')) IN ('NGN', 'USD')
                 AND EXISTS (
                   SELECT 1
                   FROM regexp_split_to_table(regexp_replace(CAST(ml.media_ids AS TEXT), '[^0-9]+', ',', 'g'), ',') AS listing_media_id
@@ -108,7 +110,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
           )
         LIMIT 1`, [mediaId, req.user.sub]);
       if (!result.rows[0]) return res.status(404).json({ error: 'marketplace media not found' });
-      res.set('Cache-Control', 'private, max-age=3600');
+      res.set('Cache-Control', 'private, no-store');
       res.type(result.rows[0].mime_type);
       return res.send(result.rows[0].data);
     } catch (error) {
