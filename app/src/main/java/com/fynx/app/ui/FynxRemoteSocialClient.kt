@@ -187,7 +187,7 @@ object FynxRemoteSocialClient {
         return FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/complete", body).map { Unit }
     }
     suspend fun cancelMarketplaceOrder(context: Context, id: String): Result<Unit> = FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/cancel", "{}").map { Unit }
-    suspend fun disputeMarketplaceOrder(context: Context, id: String, reason: String, details: String): Result<Unit> { val safeReason = reason.trim().uppercase().takeIf { it in setOf("ITEM_NOT_RECEIVED", "WRONG_ITEM", "DAMAGED", "NOT_AS_DESCRIBED", "SUSPECTED_SCAM", "OTHER") } ?: "OTHER"; return FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/disputes", JSONObject().apply { put("reason", safeReason); put("details", details.trim().take(4000)) }.toString()).map { Unit } }
+    suspend fun disputeMarketplaceOrder(context: Context, id: String, reason: String, details: String): Result<Unit> { val safeReason = reason.trim().uppercase().takeIf { it in setOf("ITEM_NOT_RECEIVED", "WRONG_ITEM", "DAMAGED", "NOT_AS_DESCRIBED", "SUSPECTED_SCAM", "OTHER") } ?: "OTHER"; return FynxBackendClient.postJson(context, "/api/marketplace/protection/order/$id/dispute", JSONObject().apply { put("reason", safeReason); put("details", details.trim().take(4000)) }.toString()).map { Unit } }
     suspend fun reviewMarketplaceOrder(context: Context, id: String, rating: Int, comment: String): Result<Unit> { require(rating in 1..5) { "Rating must be between 1 and 5." }; return FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/review", JSONObject().apply { put("rating", rating); put("comment", comment.trim().take(1000)) }.toString()).map { Unit } }
 
     suspend fun recordPostView(context: Context, id: String): Result<Int> {

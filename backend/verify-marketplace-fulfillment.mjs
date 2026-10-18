@@ -3,6 +3,10 @@ import fs from 'node:fs';
 const read = (name) => fs.readFileSync(new URL(name, import.meta.url), 'utf8');
 const completion = read('./marketplaceCompletion.js');
 const protection = read('./marketplaceProtection.js');
+const transactions = read('./marketplaceTransactions.js');
+const resolution = read('./marketplaceProtectionResolution.js');
+const scalability = read('./scalability.js');
+const socialClient = read('../app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt');
 const expiry = read('./marketplaceInspectionExpiry.js');
 const settlement = read('./marketplaceSettlement.js');
 
@@ -25,11 +29,23 @@ const checks = [
   ['completion consumes reserved inventory once', completion.includes('reserved_quantity=GREATEST(0,reserved_quantity-$1)') && completion.includes("status='INSPECTION'")],
   ['inspection expiry has a dedicated worker', expiry.includes('marketplace.inspection.expire') || expiry.includes('inspection expiry')],
   ['settlement requires completed/release-pending protection', settlement.includes("order.status !== 'COMPLETED'") || settlement.includes("escrow.status !== 'RELEASE_PENDING'")],
-  ['protection routes are wired',
+  ['protection routes are wired without a competing legacy dispute handler',
     protection.includes("app.post('/api/marketplace/protection/order/:id/dispute'") &&
-    protection.includes("app.post('/api/marketplace/orders/:id/disputes'") &&
+    !protection.includes("app.post('/api/marketplace/orders/:id/disputes'") &&
     protection.includes("app.post('/api/marketplace/protection/order/:id/refund-request'") &&
-    protection.includes('marketplace_protection_cases')]
+    protection.includes('marketplace_protection_cases') &&
+    scalability.includes('registerMarketplaceProtectionRoutes({ app })') &&
+    scalability.includes('registerMarketplaceProtectionResolutionRoutes({ app })')],
+  ['Android dispute requests use the dedicated protected endpoint',
+    socialClient.includes('FynxBackendClient.postJson(context, "/api/marketplace/protection/order/$id/dispute"') &&
+    !socialClient.includes('FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/disputes"')],
+  ['legacy dispute endpoint remains registered for older clients',
+    transactions.includes("app.post('/api/marketplace/orders/:id/disputes'")],
+  ['legacy open disputes reconcile into protected cases',
+    resolution.includes('async function reconcileOpenDisputes') &&
+    resolution.includes('marketplace_order_disputes') &&
+    resolution.includes('marketplace_protection_cases') &&
+    resolution.includes('dispute_id')]
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 const completion = read('./marketplaceCompletion.js');
 const protection = read('./marketplaceProtection.js');
+const transactions = read('./marketplaceTransactions.js');
 const settlement = read('./marketplaceSettlement.js');
 const client = read('../app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt');
 const lifecycle = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt');
@@ -29,8 +30,8 @@ const checks = [
   ['buyer lifecycle UI exposes inspection completion', lifecycle.includes('Complete order')],
   ['buyer order UI exposes problem reporting', panel.includes('Report problem')],
   ['protection dispute endpoint exists', protection.includes('/api/marketplace/protection/order/:id/dispute')],
-  ['existing Android dispute route is compatible', protection.includes('/api/marketplace/orders/:id/disputes')],
-  ['Android dispute client targets compatibility route', client.includes('/api/marketplace/orders/$id/disputes')],
+  ['legacy dispute route remains available to older clients', transactions.includes('/api/marketplace/orders/:id/disputes') && !protection.includes('/api/marketplace/orders/:id/disputes')],
+  ['Android dispute client targets dedicated buyer-protection route', client.includes('/api/marketplace/protection/order/$id/dispute') && !client.includes('/api/marketplace/orders/$id/disputes')],
   ['marketplace orders remain protected before completion', completion.includes("order.status !== 'INSPECTION'") && completion.includes("status='COMPLETED'")],
   ['buyer lifecycle client stays server-authoritative', lifecycle.includes('FynxRemoteSocialClient') && !/marketplace_orders.*UPDATE|UPDATE.*marketplace_orders/i.test(lifecycle)],
   ['seller lifecycle client stays server-authoritative', seller.includes('FynxBackendClient') && !/marketplace_orders.*UPDATE|UPDATE.*marketplace_orders/i.test(seller)],
