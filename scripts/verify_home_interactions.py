@@ -80,6 +80,8 @@ for needle in ('feedPage(context, limit = 20, offset = 0','beforeCursor = feedNe
 for needle in ('var feedPaginationPaused by remember { mutableStateOf(false) }','var discoveryPaginationPaused by remember { mutableStateOf(false) }','if (discoveryLoadingMore || discoveryPaginationPaused) return','discoveryPaginationPaused = true','feedPaginationPaused = true','if (hasMore && !feedPaginationPaused)','else if (!hasMore && discoveryHasMore && !discoveryPaginationPaused)','if (forceRefresh) { feedPaginationPaused = false; discoveryPaginationPaused = false }'):
     require(home, needle, f"independent feed/discovery pagination recovery {needle}")
 require(home, 'if (!discoveryNetworkReady) {', "Home discovery does not request more posts while offline")
+require(home, 'LaunchedEffect(posts.size, discoveryOffset, discoveryHasMore, discoveryPaginationPaused)', "Home loads the initial suggested-post page")
+require(home, 'hydrateDiscovery(0, replace = true)', "Home discovery starts from a clean first page after feed load")
 require(home, 'RemoteSocialMedia(audioMedia.mediaUrl, audioMedia.mediaType', "voice-note post renders audio instead of disappearing inside the visual grid")
 require(home, 'val visualMediaItems = mediaItems.filter { it.mediaType.equals("image", true) || it.mediaType.equals("video", true) }', "Home multi-media grid contains only photos and videos")
 require(home, 'MusicPostPlayer(post.musicMediaId!!, post.musicTitle.orEmpty(), post.musicArtist.orEmpty(), post.musicDurationMs)', "catalogue music is displayed on photo/video posts")
@@ -89,6 +91,8 @@ for needle in ('FEED_CACHE_TTL_MS','readCachedFeed(context)','readStaleCachedFee
     require(client, needle, f"offline feed recovery {needle}")
 for needle in ('onCommentCountChanged','expandedReplies','parentCommentId','nextCursor'):
     require(comments_panel, needle, f"comment/reply lifecycle {needle}")
+require(comments_panel, 'LaunchedEffect(highlightedCommentId, comments.size, nextCursor, loadingMore, loading, error)', "comment notification targets page through older comments")
+require(comments_panel, 'if ((target == null || parentMissing) && nextCursor != null && !loadingMore && !loading && error == null)', "comment deep-link paging stops on target, end, or error")
 for needle in ('post.mediaUrl?.let','RemoteSocialMedia','VideoView','rememberLazyListState','focusedVideoPostId','playbackActive','setVolume','VolumeOff','VolumeUp','FilledIconButton','Fullscreen','"Open video full screen"'):
     require(home, needle, f"post media behavior {needle}")
 if 'MediaController' in home:
