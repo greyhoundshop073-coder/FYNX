@@ -260,6 +260,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
 private fun relative(timestamp: Long): String {
     val minutes = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L))
     return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" }
+}
 
 @Composable
 private fun MentionText(text: String, onOpenAuthorProfile: (String) -> Unit) {
