@@ -56,8 +56,9 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
         return res.json({ users: result.rows });
       }
       const normalized = query.replace(/^@+/, "").toLowerCase();
-      if (normalized.length < 2 || normalized.length > 32) return res.status(400).json({ error: "username search must be 2-32 characters" });
-      const result = await pool.query(`SELECT id, username, display_name, created_at FROM users WHERE username ILIKE $1 OR display_name ILIKE $2 ORDER BY CASE WHEN lower(username) = $3 THEN 0 ELSE 1 END, username LIMIT 20`, [`%${normalized}%`, `%${query.toLowerCase()}%`, normalized]);
+      if (normalized.length < 2) return res.status(400).json({ error: "username or display-name search must contain at least 2 characters" });
+      const usernameTerm = normalized.length <= 32 ? `%${normalized}%` : null;
+      const result = await pool.query(`SELECT id, username, display_name, created_at FROM users WHERE ($1::text IS NOT NULL AND username ILIKE $1) OR display_name ILIKE $2 ORDER BY CASE WHEN lower(username) = $3 THEN 0 ELSE 1 END, username LIMIT 20`, [usernameTerm, `%${query.toLowerCase()}%`, normalized]);
       return res.json({ users: result.rows });
     } catch (error) { console.error("user search", error); return res.status(500).json({ error: "user search failed" }); }
   });
