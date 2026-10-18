@@ -40,7 +40,7 @@ for needle in ("COALESCE(l.category,'') ILIKE", "COALESCE(l.store_name,'') ILIKE
     require(discovery, needle, f"Marketplace search includes product category and store name {needle}")
 for needle in ('suspend fun searchPosts(context: Context, query: String', '"/api/social/search?q='):
     require(client, needle, f"dedicated post-search client contract {needle}")
-for needle in ('FynxRemoteSocialClient.searchPosts(context, q', 'FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query = q', 'onOpenPost(post.id)', 'onOpenListing(listing.id)', 'Suggestions update as you type'):
+for needle in ('FynxRemoteSocialClient.searchPosts(context, q', 'FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query = q', 'onOpenPost(post.id)', 'onOpenListing(listing.id)', 'Suggestions update as you type', 'Text("Suggestions"', 'heightIn(max = 220.dp)', 'people.take(2).forEach', 'posts.take(2).forEach', 'listings.take(2).forEach'):
     require(search_panel, needle, f"live universal search result behavior {needle}")
 for needle in ('onOpenPost = { postId -> postOpenId = postId; postOpenCommentId = null; selected = "Home" }', 'onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }'):
     require(app_shell, needle, f"search result opens the selected item {needle}")
