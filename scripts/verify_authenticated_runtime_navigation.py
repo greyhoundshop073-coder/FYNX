@@ -752,10 +752,11 @@ if not FAILURES:
                 else:
                     # Use the production Friends discovery UI as the fallback. This
                     # exercises the same real-user search and Chat action a user uses.
-                    run("adb","shell","am","force-stop",PACKAGE)
-                    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-                    time.sleep(2.5)
-                    home_for_chat=dismiss_runtime_permission_prompt() or dump_ui("private-chat-fallback-home.xml")
+                    # Use the same recovery helper as the other cold-start journeys.
+                    # The debug-only saved-device session is intentionally in-memory and
+                    # may be lost after force-stop; bypassing restore_home_after_restart()
+                    # leaves Sign In visible and creates a false Chat/Groups regression.
+                    home_for_chat=restore_home_after_restart("private-chat-fallback-home")
                     friends_surface=tap_control(
                         home_for_chat,
                         ["Friends"],
