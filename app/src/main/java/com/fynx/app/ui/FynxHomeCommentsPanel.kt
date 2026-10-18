@@ -136,6 +136,15 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
             sending = false
         }
     }
+    LaunchedEffect(highlightedCommentId, comments.size, nextCursor, loadingMore, loading, error) {
+        val targetId = highlightedCommentId ?: return@LaunchedEffect
+        val target = comments.firstOrNull { it.id == targetId }
+        val parentMissing = target?.parentCommentId?.let { parentId -> comments.none { it.id == parentId } } == true
+        if ((target == null || parentMissing) && nextCursor != null && !loadingMore && !loading && error == null) {
+            loadMore()
+        }
+    }
+
     fun toggleReplies(comment: FynxRemoteSocialClient.RemoteComment) {
         if (replyLoadingId != null || sending) return
         if (expandedReplies.containsKey(comment.id)) { expandedReplies = expandedReplies - comment.id; replyErrorId = null; return }
