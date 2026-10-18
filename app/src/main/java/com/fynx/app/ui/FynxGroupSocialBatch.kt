@@ -81,11 +81,11 @@ fun FynxGroupCameraPicker(context: Context, videoNoteMode: Boolean = false, onMe
 }
 
 @Composable
-fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (String) -> Unit, onMedia: (Uri, String) -> Unit, onStoryShare: () -> Unit) {
+fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (String) -> Unit, onMedia: (Uri, String) -> Unit, onStoryShare: () -> Unit, openContentInitially: Boolean = false) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var showFriends by remember { mutableStateOf(false) }
-    var showContent by remember { mutableStateOf(false) }
+    var showContent by remember { mutableStateOf(openContentInitially) }
     var inviteMessage by remember { mutableStateOf("") }
     var selectedMedia by remember { mutableStateOf<Uri?>(null) }
     var mediaType by remember { mutableStateOf("image") }
@@ -244,3 +244,42 @@ private fun FynxCreateGroupEventDialog(onDismiss: () -> Unit, onCreate: (String,
 }
 
 fun createGroupMediaMessage(uri: Uri, type: String = "image"): ChatMessage = ChatMessage(text = if (type == "video") "Video" else "Photo", fromMe = true, id = java.util.UUID.randomUUID().toString(), delivered = true, read = true, attachmentUri = uri.toString(), attachmentType = type)
+
+
+@Composable
+private fun FynxGroupLocationShareDialog(onDismiss: () -> Unit, onShare: (String, String) -> Unit) {
+    var place by remember { mutableStateOf("") }
+    var details by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Share a location") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Enter a place or address to share a map link with the group. This does not read your device's GPS location.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(place, { place = it }, label = { Text("Place or address") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(details, { details = it }, label = { Text("Directions or note (optional)") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = { TextButton(enabled = place.trim().isNotBlank(), onClick = { onShare(place.trim(), details.trim()) }) { Text("Share") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+private fun FynxGroupContactShareDialog(onDismiss: () -> Unit, onShare: (String, String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Share a contact") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Share the contact details you choose with this group.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(name, { name = it }, label = { Text("Contact name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(phone, { phone = it }, label = { Text("Phone number") }, singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+            }
+        },
+        confirmButton = { TextButton(enabled = name.trim().isNotBlank() && phone.trim().isNotBlank(), onClick = { onShare(name.trim(), phone.trim()) }) { Text("Share") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
