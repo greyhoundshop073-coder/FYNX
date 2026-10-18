@@ -43,9 +43,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -882,8 +881,7 @@ private fun VideoDiscoveryCard(video: FynxDiscoveryClient.TrendingPost, isSource
 @Composable
 private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsername: String, profilePhotoMediaId: String?, hasActiveStatus: Boolean, interactionState: FynxRemoteSocialClient.SocialInteractionState, reactionState: FynxHomePostReactionsClient.ReactionState, interactionBusy: Boolean, mediaItems: List<FynxHomePostMediaClient.PostMediaItem>, playbackActive: Boolean, onOpenProfile: () -> Unit, onOpenStatus: () -> Unit, onLike: (String) -> Unit, onComment: () -> Unit, onFollow: (Boolean) -> Unit, onDelete: () -> Unit, onReport: () -> Unit, onInterested: (String) -> Unit, onNotInterested: (String) -> Unit, onSave: (String, Boolean) -> Unit, onRepost: (String, Boolean) -> Unit, onShare: () -> Unit, onOpenReactionPicker: () -> Unit, onReact: (String, String) -> Unit, onOpenAudienceEditor: () -> Unit, reactionPickerOpen: Boolean, onOpenReactionUsers: () -> Unit, onOpenMarketplace: () -> Unit, onOpenVideoDiscovery: () -> Unit, onOpenMediaViewer: (List<FynxHomePostMediaClient.PostMediaItem>, Int) -> Unit) {
     val context = LocalContext.current
-    val configuration = LocalConfiguration.current
-    val density = LocalDensity.current
+    val rootView = LocalView.current
     var menuOpen by remember(post.id) { mutableStateOf(false) }
     var sufficientlyVisible by remember(post.id) { mutableStateOf(false) }
     var viewerCount by remember(post.id) { mutableIntStateOf(post.viewerCount) }
@@ -892,8 +890,10 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
         if (sufficientlyVisible && !viewRecorded) {
             delay(1_000L)
             if (sufficientlyVisible && !viewRecorded) {
-                FynxRemoteSocialClient.recordPostView(context, post.id).onSuccess { viewerCount = it }
-                viewRecorded = true
+                FynxRemoteSocialClient.recordPostView(context, post.id).onSuccess {
+                    viewerCount = it
+                    viewRecorded = true
+                }
             }
         }
     }
@@ -904,9 +904,9 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
             .onGloballyPositioned { coordinates ->
                 val bounds = coordinates.boundsInWindow()
-                val viewportHeight = with(density) { configuration.screenHeightDp.dp.toPx() }
+                val viewportHeight = rootView.height.toFloat()
                 val visibleHeight = (minOf(bounds.bottom, viewportHeight) - maxOf(bounds.top, 0f)).coerceAtLeast(0f)
-                sufficientlyVisible = bounds.height > 0f && visibleHeight / bounds.height >= 0.5f
+                sufficientlyVisible = viewportHeight > 0f && bounds.height > 0f && visibleHeight / bounds.height >= 0.5f
             }
     ) {
         if (post.isDiscovery) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Explore, "Suggested for you", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(6.dp)); Text("Suggested for you", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
@@ -985,7 +985,7 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
             else -> post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType, openMarketplaceTarget, if (openMarketplaceTarget == null && post.mediaType.equals("video", true)) onOpenVideoDiscovery else null, playbackActive = playbackActive) }
         }
         if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = { openMarketplaceTarget?.invoke() ?: onOpenMarketplace() }) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
-        if (viewerCount > 0 || mine) {
+        if (mine) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
