@@ -40,6 +40,7 @@ checks = [
     ("marketplace top sellers are derived from real successful sales", "successfulSales" in marketplace and "Top Sellers (Highest Sales)" in marketplace),
     ("marketplace filtered empty state can clear filters", "No matching products" in marketplace and "Clear filters" in marketplace),
     ("active marketplace retains order protection", "MarketplaceProtectedOrderDialog" in marketplace),
+    ("marketplace order history distinguishes loading, failure, empty and populated states", "var ordersLoading by remember" in marketplace and "var ordersError by remember" in marketplace and "Loading your orders" in marketplace and "Your orders could not be loaded." in marketplace and "No orders yet." in marketplace and "Text(if (loadError != null) \"Retry\" else \"Refresh\")" in marketplace and "onRefresh = { loadOrders() }" in marketplace),
     ("marketplace cart opens from the real cart button", "showCart = true" in marketplace and "Icons.Default.ShoppingCart" in marketplace),
     ("marketplace cart prevents duplicate listing entries", "cart.none { it.id == listing.id }" in marketplace),
     ("marketplace cart passes selected products into multi-product checkout", "onCheckout = { selectedItems -> showCart = false; multiCheckoutItems = selectedItems }" in marketplace and "multiCheckoutItems?.let { selectedItems -> FynxMarketplaceMultiCheckoutDialog(context, selectedItems, cartQuantities" in marketplace and "multiPaymentListingIds = selectedItems.map { it.id }.toSet()" in marketplace),
