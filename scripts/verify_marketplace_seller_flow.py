@@ -64,6 +64,7 @@ checks = [
 
 checks.extend([
     ("both order screens let buyers choose a real backend dispute reason", "disputeReason" in marketplace and "disputeReason" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt").read_text() and "SUSPECTED_SCAM" in marketplace),
+    ("Android disputes use escrow-aware protection route rather than duplicate legacy dispute route", "/api/marketplace/protection/order/$id/dispute" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt").read_text() and "/api/marketplace/orders/$id/disputes" not in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt").read_text()),
     ("order lifecycle submits evidence through the authenticated backend client", "submitMarketplaceOrderEvidence" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt").read_text() and "Supporting evidence (optional)" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt").read_text()),
     ("offline catalogue cache refuses blank or preview account identities", 'it.isNotBlank() && it != "preview"' in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceOfflineCache.kt").read_text()),
 ])
