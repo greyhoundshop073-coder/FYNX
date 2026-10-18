@@ -59,9 +59,9 @@ fun GroupChatPanel(
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
-    val messageHorizontalPadding = when (messageStyle) { "Compact" -> 7.dp; "Comfortable" -> 13.dp; else -> 10.dp }
-    val messageVerticalPadding = when (messageStyle) { "Compact" -> 3.dp; "Comfortable" -> 8.dp; else -> 10.dp }
-    val messageCornerRadius = when (messageStyle) { "Compact" -> 12.dp; "Comfortable" -> 21.dp; else -> 18.dp }
+    val messageHorizontalPadding = when (messageStyle) { "Compact" -> 9.dp; "Comfortable" -> 14.dp; else -> 11.dp }
+    val messageVerticalPadding = when (messageStyle) { "Compact" -> 5.dp; "Comfortable" -> 9.dp; else -> 8.dp }
+    val messageCornerRadius = when (messageStyle) { "Compact" -> 14.dp; "Comfortable" -> 20.dp; else -> 17.dp }
     val isAdmin = group.isAdmin(currentUsername)
     var newMember by remember { mutableStateOf("") }
     var description by remember { mutableStateOf(group.description) }
