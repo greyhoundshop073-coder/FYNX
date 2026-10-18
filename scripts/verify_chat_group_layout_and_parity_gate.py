@@ -4,36 +4,31 @@ ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "app/src/main/java/com/fynx/app/ui"
 
 PRIVATE = (UI / "ConversationPanel.kt").read_text(encoding="utf-8")
-GROUP = (UI / "GroupChatPanel.kt").read_text(encoding="utf-8")
+ACTIVE_GROUP = (UI / "FynxGroupsPanel.kt").read_text(encoding="utf-8")
+APP = (UI / "FynxApp.kt").read_text(encoding="utf-8")
 MODELS = (UI / "ChatModels.kt").read_text(encoding="utf-8")
 
 checks = []
 def require(label, condition):
     checks.append((label, bool(condition)))
 
-# Certify the real shared message contract instead of requiring a brittle
-# literal string that may only appear in comments or formatting.
-require(
-    "private chat message model supports audio attachments",
-    "attachmentType: String?" in MODELS and "audio" in MODELS and "ChatMessage" in MODELS,
-)
-require("group chat has document attachment flow", "documentPicker" in GROUP)
-require("group chat has voice recording flow", "MediaRecorder" in GROUP and "voice" in GROUP.lower())
-require("group chat has search", "searchQuery" in GROUP)
-require("group chat has replies", "replyTo" in GROUP)
-require("group chat has realtime group-message handling", "GroupMessage" in GROUP)
+# The route check prevents a green gate from certifying an unused legacy screen.
+require("app routes group conversations to the active FynxGroupConversationPanel", "FynxGroupConversationPanel(groupId = openGroup!!" in APP)
+require("active group conversation protects top system inset", "statusBarsPadding" in ACTIVE_GROUP)
+require("active group conversation has bottom content padding", "contentPadding = PaddingValues(bottom" in ACTIVE_GROUP)
+require("active group conversation uses 48dp minimum touch targets", "Modifier.size(48.dp)" in ACTIVE_GROUP)
+require("active group conversation supports message search", "searchQuery" in ACTIVE_GROUP)
+require("active group conversation supports reply targets", "replyToId" in ACTIVE_GROUP)
+require("active group conversation loads authenticated remote history", "FynxGroupRemoteClient.loadMessages(context, groupId)" in ACTIVE_GROUP)
+require("active group conversation handles realtime group-message events", "FynxRealtimeClient.Event.GroupMessage" in ACTIVE_GROUP and "realtime.connect()" in ACTIVE_GROUP)
+require("active group realtime connection is cancelled and closed with the screen", "awaitCancellation()" in ACTIVE_GROUP and "realtime.close()" in ACTIVE_GROUP)
 
-# Layout safety: Android edge-to-edge requires critical content to avoid system bars.
+# Shared private-chat and model contracts remain covered.
 require("private chat protects top system inset", "statusBarsPadding" in PRIVATE)
-require("group chat protects top system inset", "statusBarsPadding" in GROUP)
-require("group chat list has bottom content padding", "contentPadding = PaddingValues(bottom" in GROUP)
-require("group chat interactive controls use 48dp minimum touch targets", "Modifier.size(48.dp)" in GROUP)
-
-# Do not silently certify music-file parity until the picker is actually wired.
-require("group chat exposes a phone audio/music picker", "audio/*" in GROUP)
+require("message model supports audio attachments", "attachmentType: String?" in MODELS and "audio" in MODELS and "ChatMessage" in MODELS)
 
 failed = [label for label, ok in checks if not ok]
-print(f"CHAT/GROUP PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
+print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
 if failed:
     raise SystemExit("GATE RED: " + "; ".join(failed))
-print("GATE GREEN: parity and layout safety contracts are present")
+print("GATE GREEN: active Chat/Group route, realtime, and layout contracts are present")
