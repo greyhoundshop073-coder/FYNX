@@ -479,7 +479,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = FynxDesign.LargeCardShape,
-                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary),
                 border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .45f))
             ) {
                 Row(
