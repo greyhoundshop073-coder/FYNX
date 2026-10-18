@@ -168,7 +168,7 @@ internal fun FynxMarketplaceCheckoutDialog(
     onClose: () -> Unit
 ) {
     var quantityText by remember { mutableStateOf("1") }
-    var fulfillment by remember { mutableStateOf(if (listing.pickupAvailable) "PICKUP" else "DELIVERY") }
+    var fulfillment by remember(listing.id) { mutableStateOf(when { listing.deliveryAvailable && listing.pickupAvailable -> ""; listing.deliveryAvailable -> "DELIVERY"; listing.pickupAvailable -> "PICKUP"; else -> "" }) }
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
@@ -182,6 +182,11 @@ internal fun FynxMarketplaceCheckoutDialog(
     val quantity = quantityText.toIntOrNull()?.coerceAtLeast(1) ?: 0
 
     fun refreshQuote() {
+        if (fulfillment.isBlank()) {
+            message = "Choose delivery or pickup before reviewing your total."
+            quote = null
+            return
+        }
         if (quantity <= 0 || quantity > listing.quantity) {
             message = "Choose a valid quantity (maximum ${listing.quantity})."
             quote = null
@@ -219,6 +224,9 @@ internal fun FynxMarketplaceCheckoutDialog(
                     if (listing.deliveryAvailable) FilterChip(selected = fulfillment == "DELIVERY", onClick = { fulfillment = "DELIVERY"; quote = null }, label = { Text("Delivery") })
                     if (listing.pickupAvailable) FilterChip(selected = fulfillment == "PICKUP", onClick = { fulfillment = "PICKUP"; quote = null }, label = { Text("Pickup") })
                 }
+                if (fulfillment.isBlank()) {
+                    Text("Choose delivery or pickup before reviewing your total.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 if (fulfillment == "DELIVERY") {
                     OutlinedTextField(name, { name = it }, label = { Text("Full name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(phone, { phone = it }, label = { Text("Phone") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -228,7 +236,7 @@ internal fun FynxMarketplaceCheckoutDialog(
                         OutlinedTextField(state, { state = it }, label = { Text("State") }, singleLine = true, modifier = Modifier.weight(1f))
                     }
                 }
-                Button(onClick = { refreshQuote() }, enabled = !busy && quantity > 0, modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { refreshQuote() }, enabled = !busy && quantity > 0 && fulfillment.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
                     if (busy) CircularProgressIndicator(Modifier.height(18.dp)) else Text("Review exact total")
                 }
                 quote?.let { q ->
