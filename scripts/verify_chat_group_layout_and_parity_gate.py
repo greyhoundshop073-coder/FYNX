@@ -22,6 +22,8 @@ require("active group conversation supports reply targets", "replyToId" in ACTIV
 require("active group conversation loads authenticated remote history", "FynxGroupRemoteClient.loadMessages(context, groupId)" in ACTIVE_GROUP)
 require("active group conversation handles realtime group-message events", "FynxRealtimeClient.Event.GroupMessage" in ACTIVE_GROUP and "realtime.connect()" in ACTIVE_GROUP)
 require("active group realtime connection is cancelled and closed with the screen", "awaitCancellation()" in ACTIVE_GROUP and "realtime.close()" in ACTIVE_GROUP)
+require("failed group messages remain visible instead of being silently deleted", "it.copy(delivered = false, read = false)" in ACTIVE_GROUP and "messages = messages.map" in ACTIVE_GROUP)
+require("active group conversation exposes a retry action for unsent messages", 'TextButton(enabled = !sending, onClick = {' in ACTIVE_GROUP and 'Text("Retry")' in ACTIVE_GROUP)
 
 # Shared private-chat and model contracts remain covered.
 require("private chat protects top system inset", "statusBarsPadding" in PRIVATE)
