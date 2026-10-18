@@ -1,6 +1,8 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -14,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import java.io.File
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -163,6 +166,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
         var vehiclePlate by remember(order.id) { mutableStateOf(order.vehiclePlate.orEmpty()) }
         var vehicleNote by remember(order.id) { mutableStateOf(order.vehicleNote.orEmpty()) }
         var handoverNote by remember(order.id) { mutableStateOf("") }
+        var handoverPhotoMediaId by remember(order.id) { mutableStateOf<String?>(null) }
         var handoverPhotoUri by remember(order.id) { mutableStateOf<Uri?>(null) }
         val handoverPhotoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
             handoverPhotoUri = uri
@@ -180,6 +184,14 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
             FynxBackendClient.get(context, "/api/marketplace/settlement/order/${order.id}")
                 .onSuccess { raw -> settlement = JSONObject(raw) }
                 .onFailure { message = it.message ?: "Settlement details could not load." }
+            FynxBackendClient.get(context, "/api/marketplace/orders/${order.id}/delivery-details")
+                .onSuccess { raw ->
+                    val evidence = JSONObject(raw).optJSONArray("evidence")
+                    handoverPhotoMediaId = if (evidence == null) null else (0 until evidence.length())
+                        .mapNotNull { evidence.optJSONObject(it) }
+                        .lastOrNull { it.optString("type") == "PHOTO_REFERENCE" }
+                        ?.optString("value")?.takeIf { it.toLongOrNull()?.let { id -> id > 0L } == true }
+                }
             settlementLoading = false
         }
 
@@ -251,6 +263,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                             }
                         }
                     }
+                    MarketplaceHandoverPhotoPreview(context, order.id, handoverPhotoMediaId)
                     if (order.fulfillment == "DELIVERY") {
                         val a = order.address
                         if (a != null) Text("Deliver to: ${a.optString("name")} • ${a.optString("phone")}\n${a.optString("address")}${a.optString("city").let { if (it.isBlank()) "" else ", $it" }}")
