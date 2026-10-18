@@ -797,7 +797,11 @@ if not FAILURES:
                         # inventing another user or claiming a two-user conversation.
                         self_target=USERNAME.removeprefix("@").strip()
                         if self_target:
-                            run("adb","shell","am","force-stop",PACKAGE)
+                            # Restore the debug-only local session after the previous cold-start
+                            # paths, then deliver the chat deep link to the live Activity. A
+                            # second force-stop here discards that in-memory session and leaves
+                            # the test on the public Sign In screen instead of testing Chat.
+                            restore_home_after_restart("private-chat-self-fallback-home")
                             run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+self_target,PACKAGE,timeout=30)
                             fallback=""
                             # Deep-link Activity launch can briefly expose the previous
@@ -906,7 +910,10 @@ if not FAILURES:
                             # Exercise the actual production Group ConversationPanel route
                             # with a deterministic destination ID so the screen itself is
                             # still certified rather than silently skipped.
-                            run("adb","shell","am","force-stop",PACKAGE)
+                            # Keep the local debug session alive while testing the group route.
+                            # Cold-starting directly into the deep link loses this session and
+                            # falsely reports a missing Group ConversationPanel.
+                            restore_home_after_restart("group-chat-self-fallback-home")
                             run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/ci-runtime-group",PACKAGE)
                             time.sleep(.5)
                             group_destination=wait_for_group_conversation_ui("group-chat-inside.xml")
