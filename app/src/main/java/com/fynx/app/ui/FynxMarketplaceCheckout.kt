@@ -46,6 +46,7 @@ internal data class FynxMarketplaceCheckoutQuote(
     val deliveryFee: Double,
     val marketplaceFee: Double,
     val marketplaceFeeBuyer: Double,
+    val marketplaceFeeSeller: Double,
     val discountAmount: Double,
     val total: Double,
     val protectionText: String
@@ -102,6 +103,7 @@ internal suspend fun requestMarketplaceCheckoutQuote(
             deliveryFee = q.optDouble("deliveryFee"),
             marketplaceFee = q.optDouble("marketplaceFee"),
             marketplaceFeeBuyer = q.optDouble("marketplaceFeeBuyer"),
+            marketplaceFeeSeller = q.optDouble("marketplaceFeeSeller"),
             discountAmount = q.optDouble("discountAmount"),
             total = q.optDouble("total"),
             protectionText = q.optJSONObject("protection")?.optString("payout").orEmpty()
@@ -244,7 +246,9 @@ internal fun FynxMarketplaceCheckoutDialog(
                     Text("Order summary", style = MaterialTheme.typography.titleSmall)
                     Text("Subtotal: ${q.currency} ${String.format(Locale.US, "%,.2f", q.subtotal)}")
                     Text("Delivery: ${q.currency} ${String.format(Locale.US, "%,.2f", q.deliveryFee)}")
-                    Text("FYNX fee: ${q.currency} ${String.format(Locale.US, "%,.2f", q.marketplaceFeeBuyer)}")
+                    Text("Total FYNX marketplace fee: ${q.currency} ${String.format(Locale.US, "%,.2f", q.marketplaceFee)}")
+                    Text("Your FYNX fee share: ${q.currency} ${String.format(Locale.US, "%,.2f", q.marketplaceFeeBuyer)}")
+                    if (q.marketplaceFeeSeller > 0) Text("Seller-paid FYNX fee (deducted from seller payout): ${q.currency} ${String.format(Locale.US, "%,.2f", q.marketplaceFeeSeller)}")
                     Text("Discount: ${q.currency} ${String.format(Locale.US, "%,.2f", q.discountAmount)}")
                     Text("Total: ${q.currency} ${String.format(Locale.US, "%,.2f", q.total)}", style = MaterialTheme.typography.titleLarge)
                     Text("Payment is protected. Seller payout is released only after the buyer confirmation flow.", style = MaterialTheme.typography.bodySmall)
