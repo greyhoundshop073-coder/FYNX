@@ -752,10 +752,9 @@ if not FAILURES:
                 else:
                     # Use the production Friends discovery UI as the fallback. This
                     # exercises the same real-user search and Chat action a user uses.
-                    run("adb","shell","am","force-stop",PACKAGE)
-                    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-                    time.sleep(2.5)
-                    home_for_chat=dismiss_runtime_permission_prompt() or dump_ui("private-chat-fallback-home.xml")
+                    # A force-stop discards the debug-only saved-device session. Restore Home
+                    # through the same explicit test entry path before exercising Chat.
+                    home_for_chat=restore_home_after_restart("private-chat-fallback-home")
                     friends_surface=tap_control(
                         home_for_chat,
                         ["Friends"],
@@ -796,7 +795,11 @@ if not FAILURES:
                         # inventing another user or claiming a two-user conversation.
                         self_target=USERNAME.removeprefix("@").strip()
                         if self_target:
-                            run("adb","shell","am","force-stop",PACKAGE)
+                            # The local debug session is intentionally process-scoped. Keep
+                            # the app alive for this fallback rather than force-stopping it
+                            # and then mistaking the sign-in gate for a broken ConversationPanel.
+                            if not LOCAL_DEBUG_LOGIN_USED:
+                                run("adb","shell","am","force-stop",PACKAGE)
                             run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://chat/"+self_target,PACKAGE,timeout=30)
                             fallback=""
                             # Deep-link Activity launch can briefly expose the previous
@@ -861,8 +864,9 @@ if not FAILURES:
                         exercise_notification_route("fynx://chat/" + route_username, "private-chat")
                 else:
                     report.append("- PASS private-chat notification-route test skipped because no real chat participant identifier was visible; no test data was fabricated")
-                run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
-                reset=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-chat-group-reset.xml") or xml
+                # Preserve/re-enter the explicitly supported debug-local session after
+                # earlier cold-start route checks, then use the real Groups navigation.
+                reset=restore_home_after_restart("authenticated-home-chat-group-reset") or xml
                 groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Messages and groups in one place"])
                 if groups_xml:
                     groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["New group"])
@@ -903,7 +907,10 @@ if not FAILURES:
                             # Exercise the actual production Group ConversationPanel route
                             # with a deterministic destination ID so the screen itself is
                             # still certified rather than silently skipped.
-                            run("adb","shell","am","force-stop",PACKAGE)
+                            # A local debug session is process-scoped; don't force-stop
+                            # it immediately before checking the Group ConversationPanel.
+                            if not LOCAL_DEBUG_LOGIN_USED:
+                                run("adb","shell","am","force-stop",PACKAGE)
                             run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://group/ci-runtime-group",PACKAGE)
                             time.sleep(.5)
                             group_destination=wait_for_group_conversation_ui("group-chat-inside.xml")
