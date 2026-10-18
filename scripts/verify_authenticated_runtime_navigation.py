@@ -567,6 +567,25 @@ def dismiss_runtime_permission_prompt()->str:
         time.sleep(.5)
     return dump_ui("authenticated-home-after-permission.xml")
 
+def restore_home_after_restart(name:str)->str:
+    """Cold-start Home, re-entering the explicit debug-only local session when needed."""
+    run("adb","shell","am","force-stop",PACKAGE)
+    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
+    time.sleep(2.5)
+    current=dismiss_runtime_permission_prompt() or dump_ui(name+"-initial.xml")
+    if find_control(current,["Sign In"]):
+        # The debug saved-device entry is intentionally local and can be lost on
+        # process death. Restore it explicitly instead of reporting every Home
+        # destination as broken merely because the test cold-started the APK.
+        current,error=login()
+        if error:
+            FAILURES.append(name+": could not restore Home after app restart: "+error)
+            return current
+    if find_control(current,["Sign In"]) or find_control(current,["Username"]):
+        FAILURES.append(name+": restart remained at the sign-in gate")
+        return current
+    return current
+
 def capture_surface(name:str, labels:list[str], xml:str, expected_labels:list[str]|None=None)->str:
     # A failed tap must remain failed; returning the previous screen caused false GREEN results.
     return tap_control(xml,labels,name,expected_labels)
@@ -630,14 +649,17 @@ if not FAILURES:
         if camera_xml: report.append("- PASS Post composer -> real camera screenshot/UI hierarchy")
         else: FAILURES.append("post composer -> real camera")
     else: FAILURES.append("Home header camera -> real post composer")
-    run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
-    xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-camera-reset.xml") or xml
+    xml=restore_home_after_restart("authenticated-home-camera-reset") or xml
 
     for name,labels,expected in (
         ("chat",["Chat"],["Messages and groups in one place"]),
         ("friends",["Friends"],["Search username or name"]),
         ("stories",["Open Stories","See all"],["Recent updates"]),
     ):
+        # Each surface starts from Home; the previous iteration may have opened
+        # a destination or nested action and must not reuse stale coordinates.
+        if name != "chat":
+            xml=restore_home_after_restart("authenticated-home-before-"+name) or xml
         after=capture_surface(name,labels,xml,expected)
         if after:
             report.append(f"- PASS authenticated Home -> {name} screenshot/UI hierarchy")
@@ -936,10 +958,7 @@ def find_feature_entry(xml_text:str, labels:list[str]):
     return None
 
 def open_features(target_labels:list[str]|None=None):
-    run("adb","shell","am","force-stop",PACKAGE)
-    run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-    time.sleep(2.5)
-    home_xml=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-features.xml") or xml
+    home_xml=restore_home_after_restart("authenticated-home-features") or xml
     feature_xml=tap_control(home_xml,["More","Features"],"features",["FYNX Features"])
     if not feature_xml: return ""
     if target_labels is None: return feature_xml
@@ -1004,10 +1023,7 @@ def open_features(target_labels:list[str]|None=None):
 # Certify the actual Marketplace destination in the same exact-commit APK.
 # This is a UI/runtime assertion only; the screen must remain navigable when the
 # live service is unavailable, and no sample listing data is fabricated.
-run("adb","shell","am","force-stop",PACKAGE)
-run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE)
-time.sleep(2.5)
-marketplace_home = dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-marketplace-entry.xml")
+marketplace_home = restore_home_after_restart("authenticated-home-marketplace-entry")
 marketplace_xml = tap_control(
     marketplace_home,
     ["Marketplace"],
