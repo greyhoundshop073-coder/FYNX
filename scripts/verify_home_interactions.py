@@ -30,7 +30,50 @@ client = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
 saved_panel = read("app/src/main/java/com/fynx/app/ui/FynxSavedPostsPanel.kt")
 privacy_bootstrap = read("backend/homeCommentsPrivacyBootstrap.js")
 realtime_bootstrap = read("backend/realtimeIsolationBootstrap.js")
+push = read("backend/notificationPush.js")
 backend_package = read("backend/package.json")
+search_panel = read("app/src/main/java/com/fynx/app/ui/FynxUniversalSearchPanel.kt")
+app_shell = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
+
+for needle in ("app.get('/api/social/search',auth,async(req,res)=>{", "p.text ILIKE $2", "COALESCE(p.media_type,'') ILIKE $2", "COALESCE(p.music_title,'') ILIKE $2", "COALESCE(p.feeling_activity,'') ILIKE $2", "social_post_audience a WHERE a.post_id=p.id AND a.user_id=$1", "NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$1))"):
+    require(social_routes, needle, f"privacy-aware post search contract {needle}")
+for needle in ("COALESCE(l.category,'') ILIKE", "COALESCE(l.store_name,'') ILIKE"):
+    require(discovery, needle, f"Marketplace search includes product category and store name {needle}")
+for needle in ("l.title ILIKE $${n}", "l.description ILIKE $${n}", "COALESCE(l.category,'') ILIKE $${n}", "COALESCE(l.store_name,'') ILIKE $${n}", "u.username ILIKE $${n}", "u.display_name ILIKE $${n}", "l.category=$${params.length}", "l.location ILIKE $${params.length}"):
+    require(discovery, needle, f"Marketplace search uses valid PostgreSQL parameter placeholders {needle}")
+for needle in ('suspend fun searchPosts(context: Context, query: String', '"/api/social/search?q='):
+    require(client, needle, f"dedicated post-search client contract {needle}")
+for needle in ('FynxRemoteSocialClient.searchPosts(context, q', 'FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query = q', 'onOpenPost(post.id)', 'onOpenListing(listing.id)', 'Suggestions update as you type', 'Text("Suggestions"', 'heightIn(max = 220.dp)', 'people.take(2).forEach', 'posts.take(2).forEach', 'listings.take(2).forEach'):
+    require(search_panel, needle, f"live universal search result behavior {needle}")
+require(search_panel, "query = it.take(80)", "search input matches the backend post-search maximum")
+require(search_panel, "FynxSocialClient.searchUsers(context, q)", "people lookup receives the full search query")
+require(search_panel, "coroutineScope", "independent universal search sources run concurrently")
+require(search_panel, "Triple(peopleTask.await(), listingsTask.await(), postsTask.await())", "parallel search waits for all result sources")
+require(search_panel, "peopleFailed = peopleResult.isFailure", "people API failure is tracked separately from empty results")
+require(search_panel, "postsFailed = postResult.isFailure", "post API failure is tracked separately from empty results")
+require(search_panel, "listingsFailed = listingResult.isFailure", "Marketplace API failure is tracked separately from empty results")
+require(search_panel, "Post search unavailable. Check your connection and try again.", "failed post search is not mislabeled as zero results")
+require(search_panel, "Marketplace search unavailable. Check your connection and try again.", "failed Marketplace search is not mislabeled as zero results")
+require(social_routes, "const usernameTerm = normalized.length <= 32", "long display-name queries do not exceed username column limits")
+require(social_routes, "($1::text IS NOT NULL AND username ILIKE $1) OR display_name ILIKE $2", "username matching is bounded while full display-name matching remains available")
+
+for needle in ("app.get('/api/social/posts/:id/detail',auth,async(req,res)=>{", "await visibleSocialPost(id, req.user.sub)", "post not found"):
+    require(social_routes, needle, f"authorized single-post lookup contract {needle}")
+for needle in ("suspend fun postById(context: Context, postId: String)", '"/api/social/posts/$id/detail"'):
+    require(client, needle, f"single-post lookup client contract {needle}")
+require(home, "LaunchedEffect(initialPostId, initialCommentId, loading, feedRequestInFlight, posts)", "post and comment deep links wait for the feed request to settle")
+require(home, "FynxRemoteSocialClient.postById(context, target)", "search post navigation fetches posts outside the loaded feed")
+require(home, "searchOpenedPostId = post.id", "search result opens the post in Home rather than opening comments")
+require(home, "if (!initialCommentId.isNullOrBlank())", "comment deep links remain distinct from post-only navigation")
+require(home, "feedListState.animateScrollToItem(leadingItems + targetPosition + precedingInsertions)", "opened search posts scroll into view")
+require(home, "This post is unavailable. It may have been deleted or its audience may have changed.", "unavailable search results fail gracefully")
+require(home, "Some post attachments couldn't be loaded.", "failed post-media hydration has a visible recovery state")
+require(home, "Offline snapshot — posts and media may be out of date until FYNX reconnects.", "offline feed state is clearly identified")
+require(client, "FEED_CACHE_MAX_STALE_MS = 24L * 60L * 60L * 1000L", "offline cache has a bounded maximum age")
+require(client, "age > FEED_CACHE_MAX_STALE_MS", "stale cached feed is rejected after the retention limit")
+
+for needle in ('onOpenPost = { postId -> postOpenId = postId; postOpenCommentId = null; selected = "Home" }', 'onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }'):
+    require(app_shell, needle, f"search result opens the selected item {needle}")
 
 for route in ('app.post("/api/social/posts/:id/save"','app.delete("/api/social/posts/:id/save"','app.get("/api/social/saved"','app.post("/api/social/posts/:id/repost"','app.delete("/api/social/posts/:id/repost"','app.get("/api/social/posts/:id/interaction-state"'):
     require(discovery, route, f"durable interaction route {route}")
@@ -42,12 +85,32 @@ for needle in ("suspend fun comments(context: Context, id: String)","suspend fun
     require_normalized(client, needle, f"existing social client API {needle}")
 for needle in ('Icons.Default.Favorite','Icons.Default.ChatBubbleOutline','Icons.Default.Bookmark','Icons.Default.BookmarkBorder','Icons.Default.Repeat','Icons.Default.MoreHoriz','interactionBusy','feedRequestInFlight','lastFeedRequestAt','FEED_REFRESH_DEBOUNCE_MS','posts = posts.filterNot { it.id == id }','deletePost = null','AlertDialog(','sharePost(context, post)'):
     require(home, needle, f"Home reliability surface {needle}")
-for needle in ('feedPage(context, limit = 20, offset = 0','beforeCursor = feedNextCursor','discoveryFeed(context, 3, offset)','discoveryOffset','discoveryHasMore','val existing = posts.map { it.id }.toSet()','filterNot { it.id in existing }','lastVisibleIndex >= totalItems - 6','!loadingMore && !discoveryLoadingMore && !feedRequestInFlight','if (hasMore) loadMore() else if (discoveryHasMore) hydrateDiscovery(discoveryOffset)'):
+for needle in ('feedPage(context, limit = 20, offset = 0','beforeCursor = feedNextCursor','discoveryFeed(context, 3, offset)','discoveryOffset','discoveryHasMore','val existing = posts.map { it.id }.toSet()','filterNot { it.id in existing }','lastVisibleIndex >= totalItems - 6','!loadingMore && !discoveryLoadingMore && !feedRequestInFlight','if (hasMore && !feedPaginationPaused) loadMore()' , 'else if (!hasMore && discoveryHasMore && !discoveryPaginationPaused) hydrateDiscovery(discoveryOffset)'):
     require(home, needle, f"feed recovery/pagination {needle}")
+for needle in ('var feedPaginationPaused by remember { mutableStateOf(false) }','var discoveryPaginationPaused by remember { mutableStateOf(false) }','if (discoveryLoadingMore || discoveryPaginationPaused) return','discoveryPaginationPaused = true','feedPaginationPaused = true','if (hasMore && !feedPaginationPaused)','else if (!hasMore && discoveryHasMore && !discoveryPaginationPaused)','if (forceRefresh) { feedPaginationPaused = false; discoveryPaginationPaused = false }'):
+    require(home, needle, f"independent feed/discovery pagination recovery {needle}")
+require(home, 'if (!discoveryNetworkReady) {', "Home discovery does not request more posts while offline")
+require(home, 'LaunchedEffect(posts.size, discoveryOffset, discoveryHasMore, discoveryPaginationPaused, feedRequestInFlight, loading)', "Home loads the initial suggested-post page only after feed revalidation settles")
+require(home, 'hydrateDiscovery(0, replace = true)', "Home discovery starts from a clean first page after feed load")
+require(home, 'var discoveryVideosError by remember { mutableStateOf<String?>(null) }', "Home video discovery has an explicit error state")
+require(home, 'discoveryVideosError = failure.message ?: "Unable to load discovery videos."', "Home video discovery failures are not silently swallowed")
+require(home, 'Text("Discovery videos: $message"', "Home video discovery errors are visible")
+require(home, 'TextButton(onClick = { loadDiscoveryVideos(reset = true) }, enabled = !discoveryVideosLoading)', "Home video discovery offers retry")
+require(home, 'RemoteSocialMedia(audioMedia.mediaUrl, audioMedia.mediaType', "voice-note post renders audio instead of disappearing inside the visual grid")
+require(home, 'val visualMediaItems = mediaItems.filter { it.mediaType.equals("image", true) || it.mediaType.equals("video", true) }', "Home multi-media grid contains only photos and videos")
+require(home, 'MusicPostPlayer(post.musicMediaId!!, post.musicTitle.orEmpty(), post.musicArtist.orEmpty(), post.musicDurationMs)', "catalogue music is displayed on photo/video posts")
+require(home, 'FynxRemoteAudio(\n                mediaUrl = "/api/social/music/media/" + mediaId', "post soundtrack uses asynchronous audio playback with visible loading/error feedback")
+if home.index('MusicPostPlayer(post.musicMediaId!!') > home.index('val visualMediaItems = mediaItems.filter'):
+    raise SystemExit("HOME INTERACTIONS RED: soundtrack attribution must appear before post media")
+require(home, 'Box(Modifier.weight(1f)) { Cell(visual[0], 0) }; Box(Modifier.weight(1f)) { Cell(visual[1], 1) }', "two-photo posts allocate equal-width media cells")
+require(home, 'if (!activeNetworkReady) {', "Home pagination does not make requests while offline")
+require(home, 'error = if (posts.isEmpty()) "You\'re offline. Connect to a network to load your feed."', "Home offline state explains how to recover")
 for needle in ('FEED_CACHE_TTL_MS','readCachedFeed(context)','readStaleCachedFeed(context)','if (safeOffset == 0 && remote.isFailure)'):
     require(client, needle, f"offline feed recovery {needle}")
 for needle in ('onCommentCountChanged','expandedReplies','parentCommentId','nextCursor'):
     require(comments_panel, needle, f"comment/reply lifecycle {needle}")
+require(comments_panel, 'LaunchedEffect(highlightedCommentId, comments.size, nextCursor, loadingMore, loading, error)', "comment notification targets page through older comments")
+require(comments_panel, 'if ((target == null || parentMissing) && nextCursor != null && !loadingMore && !loading && error == null)', "comment deep-link paging stops on target, end, or error")
 for needle in ('post.mediaUrl?.let','RemoteSocialMedia','VideoView','rememberLazyListState','focusedVideoPostId','playbackActive','setVolume','VolumeOff','VolumeUp','FilledIconButton','Fullscreen','"Open video full screen"'):
     require(home, needle, f"post media behavior {needle}")
 if 'MediaController' in home:
@@ -128,10 +191,12 @@ else:
     require(home, 'FynxHomeMarketplaceCarousel(', "Marketplace remains in the shared Home scroll surface")
     require(home, 'HomePeopleRecommendationsCard(', "People recommendations remain in the shared Home scroll surface")
     require(home, 'FynxHomeDiscoverySection(', "Discovery remains in the shared Home scroll surface")
+require_normalized(home, "Text(\"What's on your mind?\",", "Home keeps a persistent create-post entry above the feed")
+require(home, 'contentDescription = "Create post"', "Home create-post action remains accessible")
 require(home, 'networkReady: Boolean? = null', "Home feed receives the authoritative app connection state")
 require(home, 'val activeNetworkReady = networkReady ?: (FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE)', "Home feed uses a consistent offline gate")
 require(home, 'FynxRemoteSocialClient.cachedFeedPage(context)', "Home feed restores the account-scoped cached snapshot while offline")
-require(home, 'if (networkReady == true) reload()', "Home feed automatically revalidates when the app connection returns")
+require(home, 'if (networkReady == true) { feedPaginationPaused = false; discoveryPaginationPaused = false; reload() }', "Home feed and discovery automatically resume when the app connection returns")
 require(home, 'You\'re offline. Connect to a network to load your feed.', "Home feed shows a settled offline state instead of a permanent spinner")
 require(home, 'LaunchedEffect(publishRefreshKey) {\n        val network = FynxNetworkQuality.current(context)', "Home secondary refresh observes network quality")
 require(home, 'if (network == FynxNetworkQuality.Level.OFFLINE) return@LaunchedEffect', "Home secondary refresh preserves offline data")
@@ -153,7 +218,9 @@ require(app_source, '"Contacts" -> "Chats"', "Contacts back returns to Chats")
 require(app_source, '"Privacy" -> "Profile"', "Privacy back returns to Profile")
 require(app_source, '"Notifications" -> if (notificationPreferencesOnly) "Profile" else "Home"', "Notifications back preserves the Profile-settings entry path")
 require(app_source, '"Money Tools" -> "Features"', "Money Tools returns to its Features entry point")
-require(app_source, '"Stories", "Calls" -> "Home"', "Stories and Calls have a deterministic safe back destination")
+require(app_source, '"Stories", "Calls", "Search" -> "Home"', "Stories, Calls, and Search have deterministic safe back destinations")
+require(app_source, 'onClick = { selected = "Search" }', "Home header opens the dedicated Search destination")
+require(app_source, '"Search" -> FynxUniversalSearchPanel(', "Search destination reuses the existing Universal Search panel")
 require(app_source, '"Groups" -> "Chats"', "Groups returns to Chats")
 require(app_source, '"Saved Posts", "Invite", "Gifts", "To-Do", "Share", "Announcements", "Admin" -> "Features"', "feature-owned secondary screens return to Features")
 require(app_source, '"Business Account" -> "Features"', "Business Account returns to Features")
@@ -186,5 +253,20 @@ require(ai_panel, 'FynxAiConversationClient.uploadImage(context, uri)', "real FY
 require(ai_panel, 'FynxFutureIntelligencePolicy.authorize(', "full FYNX AI authorization boundary")
 if 'TextToSpeech' in ai_panel or 'android.speech.tts' in ai_panel:
     raise SystemExit("HOME INTERACTIONS RED: Google Android TTS must not be reintroduced into FYNX AI")
+
+
+require(push, "notifyCommentMentions", "comment mention notification helper")
+require(realtime_bootstrap, "COMMENT_WRITE_RATE_LIMIT", "reply anti-spam rate limit")
+require(realtime_bootstrap, "nextCursor", "cursor-paginated replies")
+require(realtime_bootstrap, "String(result.rows[limit - 1].id) : null", "comment and reply cursors use the last returned row, not the lookahead row")
+require(client, "before: String? = null, limit: Int = 50): Result<CommentPage>", "cursor-paginated reply client")
+require(comments_panel, "Load more replies", "reply pagination UI")
+require(comments_panel, "ClickableText", "tappable comment mentions")
+require(social_routes, "CREATE TABLE IF NOT EXISTS social_comment_likes", "dedicated comment likes are persisted separately from post likes")
+require(social_routes, "commentId/like", "comment like endpoint validates post/comment visibility")
+require(client, "suspend fun likeComment(", "backend-backed comment reaction client")
+require(comments_panel, "toggleCommentLike(comment)", "comment like action with state reconciliation")
+require(comments_panel, "shareComment(comment)", "comment sharing through Android share sheet")
+require(realtime_bootstrap, "likedByCurrentUser: Boolean(row.liked_by_current_user)", "comment pages hydrate reaction state")
 
 print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions including Save/Saved Posts continuity, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, clean-startup privacy boundaries, FYNX AI single-scroll/typing/security integration, and direct Create status -> existing composer wiring are present without duplicate vertical feed surfaces or client API secrets.")

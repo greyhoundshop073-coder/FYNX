@@ -120,7 +120,7 @@ fun FynxHomeSocialHubPanel(
     }
 
     val gallery = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickMultipleVisualMedia(12)
+        ActivityResultContracts.PickMultipleVisualMedia(4)
     ) { uris ->
         if (uris.isNotEmpty()) {
             uris.take(4).forEach { uri -> runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.net.Uri
 import android.view.ViewGroup
 import android.view.Surface
@@ -41,7 +42,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -73,11 +77,17 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var loading by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
     var hasMore by remember { mutableStateOf(false) }
+    var feedPaginationPaused by remember { mutableStateOf(false) }
+    var discoveryPaginationPaused by remember { mutableStateOf(false) }
     var feedNextCursor by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var feedRequestInFlight by remember { mutableStateOf(false) }
     var lastFeedRequestAt by remember { mutableLongStateOf(0L) }
     var commentsPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
+    var searchOpenedPostId by remember { mutableStateOf<String?>(null) }
+    var handledInitialPostId by remember { mutableStateOf<String?>(null) }
+    var postMediaError by remember { mutableStateOf(false) }
+    var offlineSnapshot by remember { mutableStateOf(false) }
     var authorPhotos by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var activeStatusOwners by remember { mutableStateOf<Set<String>>(emptySet()) }
     var peopleRecommendations by remember { mutableStateOf<List<HomePeopleRecommendation>>(emptyList()) }
@@ -104,6 +114,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var postMedia by remember { mutableStateOf<Map<String, List<FynxHomePostMediaClient.PostMediaItem>>>(emptyMap()) }
     var discoveryVideos by remember { mutableStateOf<List<FynxDiscoveryClient.TrendingPost>>(emptyList()) }
     var discoveryVideosLoading by remember { mutableStateOf(false) }
+    var discoveryVideosError by remember { mutableStateOf<String?>(null) }
     var discoveryVideosHasMore by remember { mutableStateOf(true) }
     var discoveryVideosOffset by remember { mutableIntStateOf(0) }
     var homeDiscoveryViewerOpen by remember { mutableStateOf(false) }
@@ -251,8 +262,10 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         val targets = items.filter { it.id.isNotBlank() && !postMedia.containsKey(it.id) && !it.mediaUrl.isNullOrBlank() }
         if (targets.isEmpty()) return
         scope.launch {
-            val resolved = targets.map { post -> async(Dispatchers.IO) { post.id to FynxHomePostMediaClient.list(context, post.id).getOrNull().orEmpty() } }.awaitAll().toMap()
+            val outcomes = targets.map { post -> async(Dispatchers.IO) { post.id to FynxHomePostMediaClient.list(context, post.id) } }.awaitAll()
+            val resolved = outcomes.mapNotNull { (id, result) -> result.getOrNull()?.let { id to it } }.toMap()
             if (resolved.isNotEmpty()) postMedia = postMedia + resolved
+            postMediaError = postMediaError || outcomes.any { it.second.isFailure }
         }
     }
     fun loadDiscoveryVideos(reset: Boolean = false) {
@@ -266,6 +279,9 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                 discoveryVideos = (existing + videoPosts).distinctBy { it.id }
                 discoveryVideosOffset = offset + page.size
                 discoveryVideosHasMore = page.size >= 12
+                discoveryVideosError = null
+            }.onFailure { failure ->
+                discoveryVideosError = failure.message ?: "Unable to load discovery videos."
             }
             discoveryVideosLoading = false
         }
@@ -290,7 +306,13 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         return result
     }
     fun hydrateDiscovery(offset: Int = 0, replace: Boolean = false) {
-        if (discoveryLoadingMore) return
+        if (discoveryLoadingMore || discoveryPaginationPaused) return
+        val discoveryNetworkReady = networkReady ?: (FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE)
+        if (!discoveryNetworkReady) {
+            error = "You\u0027re offline. Connect to a network to load suggested posts."
+            discoveryPaginationPaused = true
+            return
+        }
         discoveryLoadingMore = true
         scope.launch {
             FynxRemoteSocialClient.discoveryFeed(context, 3, offset).onSuccess { suggested ->
@@ -302,22 +324,25 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                 posts = mergeDiscoveryPosts(base, mergedDiscovery)
                 discoveryOffset = offset + suggested.posts.size
                 discoveryHasMore = suggested.hasMore && suggested.posts.isNotEmpty()
+                discoveryPaginationPaused = false
                 resolveAuthorPhotos(additions)
                 hydrateInteractionStates(additions)
                 hydrateReactionStates(additions)
                 hydratePostMedia(additions)
-            }
+            }.onFailure { error = it.message ?: "Unable to load suggested posts."; discoveryPaginationPaused = true }
             discoveryLoadingMore = false
         }
     }
 
     fun reload(forceRefresh: Boolean = false) {
         val now = System.currentTimeMillis(); if (feedRequestInFlight) return; if (forceRefresh && now - lastFeedRequestAt < FEED_REFRESH_DEBOUNCE_MS) return
+        if (forceRefresh) { feedPaginationPaused = false; discoveryPaginationPaused = false }
         feedRequestInFlight = true; lastFeedRequestAt = now
         scope.launch {
             loading = true
             val activeNetworkReady = networkReady ?: (FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE)
             if (!activeNetworkReady) {
+                offlineSnapshot = true
                 val cachedPage = FynxRemoteSocialClient.cachedFeedPage(context)
                 if (posts.isEmpty() && cachedPage != null) {
                     posts = cachedPage.posts
@@ -336,9 +361,9 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             var cachedRevalidationStarted = false
             FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
                 .onSuccess { page ->
-                    posts = page.posts; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null
+                    posts = page.posts; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; feedPaginationPaused = false; offlineSnapshot = false
                     interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null
-                    resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); hydratePostMedia(page.posts)
+                    resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); postMediaError = false; hydratePostMedia(page.posts)
                     discoveryOffset = 0; discoveryHasMore = false
                     if (hadFreshCache) {
                         // Keep pagination locked until cache revalidation settles. Otherwise a
@@ -362,23 +387,65 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
     }
 
+    LaunchedEffect(posts.size, discoveryOffset, discoveryHasMore, discoveryPaginationPaused, feedRequestInFlight, loading) {
+        // Suggested posts need an initial page before end-of-feed pagination can continue,
+        // including when a new account has no primary feed posts yet.
+        // Wait for cache revalidation to finish so a fresh feed response cannot erase discovery posts.
+        if (!loading && !feedRequestInFlight && discoveryOffset == 0 && !discoveryHasMore && !discoveryPaginationPaused) {
+            hydrateDiscovery(0, replace = true)
+        }
+    }
+
     LaunchedEffect(publishRefreshKey) {
         reload(forceRefresh = publishRefreshKey > 0)
     }
     LaunchedEffect(networkReady) {
-        if (networkReady == true) reload()
+        if (networkReady == true) { feedPaginationPaused = false; discoveryPaginationPaused = false; reload() }
     }
-    LaunchedEffect(posts, initialPostId, initialCommentId) {
-        val target = initialPostId?.trim()?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
-        val post = posts.firstOrNull { it.id == target } ?: return@LaunchedEffect
-        commentsPost = post
-        onInitialPostConsumed()
+    LaunchedEffect(initialPostId, initialCommentId, loading, feedRequestInFlight, posts) {
+        val target = initialPostId?.trim()?.takeIf { it.isNotBlank() }
+        if (target == null) {
+            handledInitialPostId = null
+            return@LaunchedEffect
+        }
+        if (target == handledInitialPostId) return@LaunchedEffect
+        // Let the first feed request settle before resolving a search target so a feed refresh cannot overwrite it.
+        if (loading || feedRequestInFlight) return@LaunchedEffect
+        val loadedPost = posts.firstOrNull { it.id == target }
+        val postResult = if (loadedPost != null) Result.success(loadedPost) else FynxRemoteSocialClient.postById(context, target)
+        postResult
+            .onSuccess { post ->
+                handledInitialPostId = target
+                error = null
+                if (!initialCommentId.isNullOrBlank()) {
+                    commentsPost = post
+                } else {
+                    if (posts.none { it.id == post.id }) posts = listOf(post) + posts
+                    searchOpenedPostId = post.id
+                    resolveAuthorPhotos(listOf(post))
+                    hydrateInteractionStates(listOf(post))
+                    hydrateReactionStates(listOf(post))
+                    hydratePostMedia(listOf(post))
+                }
+                onInitialPostConsumed()
+            }
+            .onFailure { failure ->
+                handledInitialPostId = target
+                error = failure.message ?: "This post is unavailable. It may have been deleted or its audience may have changed."
+                onInitialPostConsumed()
+            }
     }
 
     fun loadMore() {
-        if (loading || loadingMore || (!hasMore && !discoveryHasMore) || feedRequestInFlight) return
+        if (loading || loadingMore || feedPaginationPaused || (!hasMore && !discoveryHasMore) || feedRequestInFlight) return
+        val activeNetworkReady = networkReady ?: (FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE)
+        if (!activeNetworkReady) {
+            error = if (posts.isEmpty()) "You're offline. Connect to a network to load your feed." else "You're offline. Connect to a network to load more posts."
+            feedPaginationPaused = true
+            return
+        }
         feedRequestInFlight = true
-        scope.launch { loadingMore = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false, beforeCursor = feedNextCursor).onSuccess { page -> val existing = posts.map { it.id }.toSet(); val additions = page.posts.filterNot { it.id in existing }; posts = posts + additions; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; resolveAuthorPhotos(additions); hydrateInteractionStates(additions); hydrateReactionStates(additions); hydratePostMedia(additions); if (!page.hasMore && discoveryHasMore) hydrateDiscovery(discoveryOffset) }.onFailure { error = it.message ?: "Unable to load more posts." }; loadingMore = false; feedRequestInFlight = false }
+        scope.launch { loadingMore = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false, beforeCursor = feedNextCursor).onSuccess { page -> val existing = posts.map { it.id }.toSet(); val additions = page.posts.filterNot { it.id in existing }; posts = posts + additions; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; feedPaginationPaused = false; resolveAuthorPhotos(additions); hydrateInteractionStates(additions); hydrateReactionStates(additions); hydratePostMedia(additions); if (!page.hasMore && discoveryHasMore) hydrateDiscovery(discoveryOffset) }.onFailure { error = it.message ?: "Unable to load more posts."; feedPaginationPaused = true }; loadingMore = false; feedRequestInFlight = false }
     }
     fun runInteraction(id: String, desired: Boolean, isActive: (FynxRemoteSocialClient.SocialInteractionState) -> Boolean, count: (FynxRemoteSocialClient.SocialInteractionState) -> Int, action: suspend () -> Result<Pair<Boolean, Int>>, update: (FynxRemoteSocialClient.SocialInteractionState, Boolean, Int) -> FynxRemoteSocialClient.SocialInteractionState) {
         if (id in interactionBusy) return
@@ -437,7 +504,8 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }
             .collect { (lastVisibleIndex, totalItems) ->
                 if (lastVisibleIndex != null && lastVisibleIndex >= totalItems - 6 && !loading && !loadingMore && !discoveryLoadingMore && !feedRequestInFlight) {
-                    if (hasMore) loadMore() else if (discoveryHasMore) hydrateDiscovery(discoveryOffset)
+                    if (hasMore && !feedPaginationPaused) loadMore()
+                    else if (!hasMore && discoveryHasMore && !discoveryPaginationPaused) hydrateDiscovery(discoveryOffset)
                 }
             }
     }
@@ -473,16 +541,99 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
     }
 
+    LaunchedEffect(searchOpenedPostId, posts, loading, error, discoveryVideosError, postMediaError, offlineSnapshot, feedRequestInFlight) {
+        val target = searchOpenedPostId ?: return@LaunchedEffect
+        if (loading || feedRequestInFlight) return@LaunchedEffect
+        val targetPosition = posts.indexOfFirst { it.id == target }
+        if (targetPosition < 0) return@LaunchedEffect
+        val precedingInsertions = (0 until targetPosition).count { homeInsertions[it] != null }
+        val leadingItems = (if (header != null) 1 else 0) + 1 +
+            (if (loading) 1 else 0) + (if (error != null) 1 else 0) +
+            (if (offlineSnapshot) 1 else 0) + (if (searchOpenedPostId != null) 1 else 0) +
+            (if (postMediaError) 1 else 0) + (if (discoveryVideosError != null) 1 else 0) +
+            (if (!loading && posts.isEmpty() && error == null) 1 else 0)
+        feedListState.animateScrollToItem(leadingItems + targetPosition + precedingInsertions)
+    }
+
     LazyColumn(state = feedListState, modifier = modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp)) {
         header?.let { content -> item(key = "home_ai_status") { content() } }
         item(key = "feed_header") {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) { Text("Your feed", style = MaterialTheme.typography.titleMedium); Text("Real posts from your FYNX network", style = MaterialTheme.typography.bodySmall) }
-
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = FynxDesign.LargeCardShape,
+                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface, contentColor = FynxDesign.TextPrimary),
+                border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .45f))
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        modifier = Modifier.size(40.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = .12f)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    TextButton(
+                        onClick = onCreatePost,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            "What's on your mind?",
+                            modifier = Modifier.fillMaxWidth(),
+                            color = FynxDesign.TextSecondary,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Start
+                        )
+                    }
+                    IconButton(
+                        onClick = onCreatePost,
+                        modifier = Modifier.semantics { contentDescription = "Create post" }
+                    ) {
+                        Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Create post")
+                    }
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Your feed", style = MaterialTheme.typography.titleMedium)
+                    Text("Real posts from your FYNX network", style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
         if (loading) item(key = "feed_loading") { LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading Home feed" }) }
         error?.let { message -> item(key = "feed_error") { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Text("Retry") } } } } }
+        if (offlineSnapshot) item(key = "offline_feed_snapshot") {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = FynxDesign.CardShape) {
+                Text("Offline snapshot — posts and media may be out of date until FYNX reconnects.", Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        if (searchOpenedPostId != null) item(key = "search_opened_post_label") {
+            Text("Post opened from Search", Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+        }
+        if (postMediaError) item(key = "post_media_error") {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer), shape = FynxDesign.CardShape) {
+                Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Some post attachments couldn't be loaded.", Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { postMediaError = false; hydratePostMedia(posts) }, enabled = !loadingMore) { Text("Retry media") }
+                }
+            }
+        }
+        discoveryVideosError?.let { message -> item(key = "home_discovery_error") {
+            Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Discovery videos: $message", Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
+                    TextButton(onClick = { loadDiscoveryVideos(reset = true) }, enabled = !discoveryVideosLoading) { Text("Retry") }
+                }
+            }
+        } }
         if (!loading && posts.isEmpty() && error == null) item(key = "feed_empty") { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary), border = BorderStroke(1.dp, MaterialTheme.colorScheme.onPrimary.copy(alpha = .45f))) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Your feed is ready", style = MaterialTheme.typography.titleMedium); Text("There are no visible posts yet. Create a post or find real people to build your FYNX circle."); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = onCreatePost, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onPrimary, contentColor = MaterialTheme.colorScheme.primary)) { Text("Create Post") }; OutlinedButton(onClick = onOpenFindPeople, colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onPrimary), border = BorderStroke(1.dp, MaterialTheme.colorScheme.onPrimary.copy(alpha = .8f))) { Text("Find People") } } } } }
         posts.forEachIndexed { postIndex, post ->
             item(key = post.id) {
@@ -536,7 +687,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         if (loadingMore) item(key = "feed_loading_more") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
     }
     reportPost?.let { post -> AlertDialog(onDismissRequest = { if (!reportBusy) { reportPost = null; reportNotice = null } }, title = { Text("Report post") }, text = { Text(reportNotice ?: "Report this post to FYNX for review.") }, confirmButton = { TextButton(enabled = !reportBusy, onClick = { reportBusy = true; reportNotice = "Sending report…"; scope.launch { FynxDiscoveryClient.recordEvent(context, "REPORT", postId = post.id, metadata = JSONObject().put("reason", "user_report")).onSuccess { reportNotice = "Report submitted."; reportBusy = false; delay(700L); reportPost = null; reportNotice = null }.onFailure { reportNotice = it.message ?: "Report could not be submitted."; reportBusy = false } } }) { Text("Report post") } }, dismissButton = { TextButton(enabled = !reportBusy, onClick = { reportPost = null; reportNotice = null }) { Text("Cancel") } }) }
-    commentsPost?.let { post -> FynxHomeCommentsPanel(post = post, initialCommentId = initialCommentId, onClose = { commentsPost = null }, onCommentCountChanged = { newCount -> posts = posts.map { if (it.id == post.id) it.copy(commentCount = newCount) else it } }) }
+    commentsPost?.let { post -> FynxHomeCommentsPanel(post = post, initialCommentId = initialCommentId, onClose = { commentsPost = null }, onCommentCountChanged = { newCount -> posts = posts.map { if (it.id == post.id) it.copy(commentCount = newCount) else it } }, onOpenAuthorProfile = onOpenAuthorProfile) }
     reactionUsersPostId?.let { postId -> ReactionUsersDialog(context = context, postId = postId, onDismiss = { reactionUsersPostId = null }) }
     authorStatusViewer?.let { HomeAuthorStatusDialog(it, onDismiss = { authorStatusViewer = null }) }
     deletePost?.let { post -> AlertDialog(onDismissRequest = { if (post.id !in interactionBusy) deletePost = null }, title = { Text("Delete post?") }, text = { Text("This will permanently remove your post from FYNX. This action cannot be undone.") }, confirmButton = { TextButton(onClick = { runDelete(post.id) }, enabled = post.id !in interactionBusy) { Text("Delete") } }, dismissButton = { TextButton(onClick = { deletePost = null }, enabled = post.id !in interactionBusy) { Text("Cancel") } }) }
@@ -731,11 +882,35 @@ private fun VideoDiscoveryCard(video: FynxDiscoveryClient.TrendingPost, isSource
 @Composable
 private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsername: String, profilePhotoMediaId: String?, hasActiveStatus: Boolean, interactionState: FynxRemoteSocialClient.SocialInteractionState, reactionState: FynxHomePostReactionsClient.ReactionState, interactionBusy: Boolean, mediaItems: List<FynxHomePostMediaClient.PostMediaItem>, playbackActive: Boolean, onOpenProfile: () -> Unit, onOpenStatus: () -> Unit, onLike: (String) -> Unit, onComment: () -> Unit, onFollow: (Boolean) -> Unit, onDelete: () -> Unit, onReport: () -> Unit, onInterested: (String) -> Unit, onNotInterested: (String) -> Unit, onSave: (String, Boolean) -> Unit, onRepost: (String, Boolean) -> Unit, onShare: () -> Unit, onOpenReactionPicker: () -> Unit, onReact: (String, String) -> Unit, onOpenAudienceEditor: () -> Unit, reactionPickerOpen: Boolean, onOpenReactionUsers: () -> Unit, onOpenMarketplace: () -> Unit, onOpenVideoDiscovery: () -> Unit, onOpenMediaViewer: (List<FynxHomePostMediaClient.PostMediaItem>, Int) -> Unit) {
     val context = LocalContext.current
+    val rootView = LocalView.current
     var menuOpen by remember(post.id) { mutableStateOf(false) }
+    var sufficientlyVisible by remember(post.id) { mutableStateOf(false) }
+    var viewerCount by remember(post.id) { mutableIntStateOf(post.viewerCount) }
+    var viewRecorded by remember(post.id) { mutableStateOf(false) }
+    LaunchedEffect(post.id, sufficientlyVisible) {
+        if (sufficientlyVisible && !viewRecorded) {
+            delay(1_000L)
+            if (sufficientlyVisible && !viewRecorded) {
+                FynxRemoteSocialClient.recordPostView(context, post.id).onSuccess {
+                    viewerCount = it
+                    viewRecorded = true
+                }
+            }
+        }
+    }
     val marketplaceListingId = Regex("""(?m)^Listing ID:\s*(\d+)\s*$""").find(post.text)?.groupValues?.getOrNull(1)
     val mine = post.authorUsername.equals(currentUsername.removePrefix("@"), true); val marketplaceAd = post.text.startsWith(MARKETPLACE_AD_MARKER); val displayText = if (marketplaceAd) post.text.removePrefix(MARKETPLACE_AD_MARKER).trim() else post.text
     val openMarketplaceTarget: (() -> Unit)? = if (marketplaceAd) { { if (marketplaceListingId.isNullOrBlank()) onOpenMarketplace() else context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FynxDeepLinkParser.marketplaceAppLink(marketplaceListingId)))) } } else null
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
+    Column(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
+            .onGloballyPositioned { coordinates ->
+                val bounds = coordinates.boundsInWindow()
+                val viewportHeight = rootView.height.toFloat()
+                val visibleHeight = (minOf(bounds.bottom, viewportHeight) - maxOf(bounds.top, 0f)).coerceAtLeast(0f)
+                val impressionArea = minOf(bounds.height, viewportHeight)
+                sufficientlyVisible = impressionArea > 0f && visibleHeight / impressionArea >= 0.5f
+            }
+    ) {
         if (post.isDiscovery) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Explore, "Suggested for you", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(6.dp)); Text("Suggested for you", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = if (hasActiveStatus) onOpenStatus else onOpenProfile, modifier = Modifier.size(50.dp).semantics { contentDescription = if (hasActiveStatus) "Open ${post.authorDisplayName.ifBlank { post.authorUsername }} status" else "Open ${post.authorDisplayName.ifBlank { post.authorUsername }} profile" }) { Box(Modifier.size(50.dp).border(if (hasActiveStatus) 2.dp else 0.dp, if (hasActiveStatus) Color(0xFF22C55E) else Color.Transparent, CircleShape).padding(if (hasActiveStatus) 2.dp else 0.dp)) { FynxRemoteProfileAvatar(profilePhotoMediaId, post.authorDisplayName.ifBlank { post.authorUsername }, Modifier.size(46.dp).clip(CircleShape), ownerUsername = post.authorUsername) } }
@@ -799,20 +974,46 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
                 FynxExpandableCaption(displayText, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp))
             }
         }
-        if (mediaItems.isNotEmpty()) {
-            PostMediaGrid(mediaItems, playbackActive = playbackActive, onOpenMedia = { index -> onOpenMediaViewer(mediaItems, index) }, onOpenVideoDiscovery = onOpenVideoDiscovery.takeIf { mediaItems.size == 1 })
-        } else {
-            post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType, openMarketplaceTarget, if (openMarketplaceTarget == null && post.mediaType.equals("video", true)) onOpenVideoDiscovery else null, playbackActive = playbackActive) }
-        }
         if (!post.musicMediaId.isNullOrBlank()) MusicPostPlayer(post.musicMediaId!!, post.musicTitle.orEmpty(), post.musicArtist.orEmpty(), post.musicDurationMs)
+        val visualMediaItems = mediaItems.filter { it.mediaType.equals("image", true) || it.mediaType.equals("video", true) }
+        when {
+            visualMediaItems.isNotEmpty() -> PostMediaGrid(visualMediaItems, playbackActive = playbackActive, onOpenMedia = { index -> onOpenMediaViewer(visualMediaItems, index) }, onOpenVideoDiscovery = onOpenVideoDiscovery.takeIf { visualMediaItems.size == 1 && visualMediaItems[0].mediaType.equals("video", true) })
+            mediaItems.isNotEmpty() -> {
+                // Voice-note posts have normalized media rows too, but the photo/video grid
+                // intentionally excludes audio. Render the audio item instead of hiding it.
+                val audioMedia = mediaItems.first()
+                RemoteSocialMedia(audioMedia.mediaUrl, audioMedia.mediaType, onOpenMarketplace = null, playbackActive = playbackActive)
+            }
+            else -> post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType, openMarketplaceTarget, if (openMarketplaceTarget == null && post.mediaType.equals("video", true)) onOpenVideoDiscovery else null, playbackActive = playbackActive) }
+        }
         if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = { openMarketplaceTarget?.invoke() ?: onOpenMarketplace() }) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
+        if (mine) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Icon(Icons.Default.Visibility, contentDescription = "Unique viewers", modifier = Modifier.size(15.dp), tint = FynxDesign.TextSecondary)
+                Text(
+                    "$viewerCount viewers",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = FynxDesign.TextSecondary
+                )
+            }
+        }
         if (reactionPickerOpen) Surface(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), shape = MaterialTheme.shapes.large, tonalElevation = 2.dp) { Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) { ReactionChoice("👍", "LIKE", reactionState.currentReaction == "LIKE", onReact = { onReact(post.id, it) }); ReactionChoice("❤️", "LOVE", reactionState.currentReaction == "LOVE", onReact = { onReact(post.id, it) }); ReactionChoice("😂", "LAUGH", reactionState.currentReaction == "LAUGH", onReact = { onReact(post.id, it) }); ReactionChoice("😮", "WOW", reactionState.currentReaction == "WOW", onReact = { onReact(post.id, it) }); ReactionChoice("😢", "SAD", reactionState.currentReaction == "SAD", onReact = { onReact(post.id, it) }) } }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f), thickness = 0.7.dp)
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
             FeedActionButton(onClick = { onLike(post.id) }, onLongClick = onOpenReactionPicker, enabled = !interactionBusy, icon = if (post.likedByCurrentUser) Icons.Default.Favorite else Icons.Default.FavoriteBorder, label = "Like", longClickLabel = "Open post reactions", count = reactionState.total.coerceAtLeast(post.likeCount), active = post.likedByCurrentUser)
             FeedActionButton(onClick = onComment, enabled = !interactionBusy, icon = Icons.Default.ChatBubbleOutline, label = "Comment", count = post.commentCount)
             FeedActionButton(onClick = onShare, enabled = !interactionBusy, icon = Icons.Default.Share, label = "Share")
             FeedActionButton(onClick = { onSave(post.id, !interactionState.saved) }, enabled = !interactionBusy, icon = if (interactionState.saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, label = if (interactionState.saved) "Saved" else "Save", count = interactionState.savedCount, active = interactionState.saved)
         }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f), thickness = 0.5.dp)
         if (reactionState.total > 0) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) { Text(reactionSummary(reactionState), style = MaterialTheme.typography.labelMedium, color = FynxDesign.TextSecondary, modifier = Modifier.combinedClickable(role = Role.Button, onClickLabel = "Open people who reacted", onClick = onOpenReactionUsers)) }
     }
 }
@@ -828,7 +1029,7 @@ private fun PostMediaGrid(items: List<FynxHomePostMediaClient.PostMediaItem>, pl
     }
     when (visual.size) {
         1 -> Cell(visual[0], 0)
-        2 -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) { Cell(visual[0], 0); Cell(visual[1], 1) }
+        2 -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) { Box(Modifier.weight(1f)) { Cell(visual[0], 0) }; Box(Modifier.weight(1f)) { Cell(visual[1], 1) } }
         3 -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) { Box(Modifier.weight(1f)) { Cell(visual[0], 0) }; Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) { Cell(visual[1], 1); Cell(visual[2], 2) } }
         else -> Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) { Box(Modifier.weight(1f)) { Cell(visual[0], 0) }; Box(Modifier.weight(1f)) { Cell(visual[1], 1) } }; Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) { Box(Modifier.weight(1f)) { Cell(visual[2], 2) }; Box(Modifier.weight(1f)) { Cell(visual[3], 3) } } }
     }
@@ -841,10 +1042,23 @@ private fun reactionSummary(state: FynxHomePostReactionsClient.ReactionState): S
 
 @Composable
 private fun RowScope.FeedActionButton(onClick: () -> Unit, onLongClick: (() -> Unit)? = null, enabled: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, longClickLabel: String? = null, count: Int? = null, active: Boolean = false) {
-    Box(Modifier.heightIn(min = 50.dp).weight(1f).combinedClickable(enabled = enabled, role = Role.Button, onClickLabel = label, onLongClickLabel = longClickLabel, onLongClick = onLongClick, onClick = onClick), contentAlignment = Alignment.Center) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-            Icon(icon, contentDescription = label, modifier = Modifier.size(21.dp), tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-            if (count != null) { Spacer(Modifier.width(4.dp)); Text("$count", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
+    Box(
+        Modifier.heightIn(min = 48.dp).weight(1f)
+            .combinedClickable(enabled = enabled, role = Role.Button, onClickLabel = label, onLongClickLabel = longClickLabel, onLongClick = onLongClick, onClick = onClick)
+            .padding(horizontal = 1.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(4.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, maxLines = 1)
+            if (count != null) {
+                Spacer(Modifier.width(3.dp))
+                Text(count.toString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            }
         }
     }
 }
@@ -866,16 +1080,41 @@ private fun FynxFeedTextureVideo(
     val player = remember(file) { MediaPlayer() }
     var prepared by remember(file) { mutableStateOf(false) }
     var playing by remember(file) { mutableStateOf(false) }
+    var textureViewRef by remember(file) { mutableStateOf<TextureView?>(null) }
+
+    fun fitVideoInsideView(view: TextureView, videoWidth: Int, videoHeight: Int) {
+        val viewWidth = view.width
+        val viewHeight = view.height
+        if (viewWidth <= 0 || viewHeight <= 0 || videoWidth <= 0 || videoHeight <= 0) return
+        val viewRatio = viewWidth.toFloat() / viewHeight.toFloat()
+        val videoRatio = videoWidth.toFloat() / videoHeight.toFloat()
+        // Fill the feed surface edge-to-edge. Crop only the excess dimension,
+        // rather than shrinking the picture and exposing empty bars around it.
+        val scaleX = if (videoRatio > viewRatio) videoRatio / viewRatio else 1f
+        val scaleY = if (videoRatio < viewRatio) viewRatio / videoRatio else 1f
+        view.setTransform(Matrix().apply {
+            setScale(scaleX, scaleY, viewWidth / 2f, viewHeight / 2f)
+        })
+    }
 
     Box(Modifier.fillMaxSize()) {
         AndroidView(
             factory = { ctx ->
                 TextureView(ctx).apply {
+                    textureViewRef = this
                     isClickable = false
                     isFocusable = false
+                    addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                        fitVideoInsideView(this, player.videoWidth, player.videoHeight)
+                    }
                     setSurfaceTextureListener(object : TextureView.SurfaceTextureListener {
-                        override fun onSurfaceTextureAvailable(texture: android.graphics.SurfaceTexture, width: Int, height: Int) { textureState.value = texture }
-                        override fun onSurfaceTextureSizeChanged(texture: android.graphics.SurfaceTexture, width: Int, height: Int) = Unit
+                        override fun onSurfaceTextureAvailable(texture: android.graphics.SurfaceTexture, width: Int, height: Int) {
+                            textureState.value = texture
+                            fitVideoInsideView(this@apply, player.videoWidth, player.videoHeight)
+                        }
+                        override fun onSurfaceTextureSizeChanged(texture: android.graphics.SurfaceTexture, width: Int, height: Int) {
+                            fitVideoInsideView(this@apply, player.videoWidth, player.videoHeight)
+                        }
                         override fun onSurfaceTextureDestroyed(texture: android.graphics.SurfaceTexture): Boolean { textureState.value = null; return true }
                         override fun onSurfaceTextureUpdated(texture: android.graphics.SurfaceTexture) = Unit
                     })
@@ -915,6 +1154,7 @@ private fun FynxFeedTextureVideo(
             player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f)
             player.setOnPreparedListener {
                 prepared = true
+                textureViewRef?.let { view -> fitVideoInsideView(view, it.videoWidth, it.videoHeight) }
                 if (playbackActive) runCatching { it.start(); playing = true; onPlayingChanged(true) }
             }
             player.setOnCompletionListener { playing = false; onPlayingChanged(false) }
@@ -1067,26 +1307,18 @@ private fun relative(timestamp: Long): String { val minutes = TimeUnit.MILLISECO
 
 @Composable
 private fun MusicPostPlayer(mediaId: String, title: String, artist: String, durationMs: Long) {
-    val context = LocalContext.current
-    var file by remember(mediaId) { mutableStateOf<File?>(null) }
-    LaunchedEffect(mediaId) { file = withContext(Dispatchers.IO) { FynxMediaCache.getOrDownload(context, "/api/social/music/media/" + mediaId, "audio") } }
-    if (file != null) {
-        val player = remember(file) { MediaPlayer().apply { setDataSource(file!!.absolutePath); prepare() } }
-        var playing by remember(file) { mutableStateOf(false) }
-        DisposableEffect(player) {
-            player.setOnCompletionListener { playing = false; runCatching { player.seekTo(0) } }
-            onDispose { runCatching { player.release() } }
-        }
-        Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp)) {
-            Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
-                Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                    Text(title.ifBlank { "Music" }, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                    Text(artist.ifBlank { "Unknown artist" }, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary, maxLines = 1)
-                }
-                Text(formatMusicDuration(durationMs.takeIf { it > 0 } ?: player.duration.toLong()), style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
-                IconButton(onClick = { runCatching { if (player.isPlaying) { player.pause(); playing = false } else { if (player.currentPosition >= player.duration) player.seekTo(0); player.start(); playing = true } } }) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause music" else "Play music") }
+    Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp)) {
+        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+            Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                Text(title.ifBlank { "Music" }, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                Text(artist.ifBlank { "Unknown artist" }, style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary, maxLines = 1)
             }
+            FynxRemoteAudio(
+                mediaUrl = "/api/social/music/media/" + mediaId,
+                modifier = Modifier.width(132.dp),
+                maxDurationMs = durationMs.coerceAtLeast(1_000L)
+            )
         }
     }
 }

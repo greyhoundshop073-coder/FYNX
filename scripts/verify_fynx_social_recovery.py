@@ -22,7 +22,9 @@ def check(name, ok):
     checks.append((name, bool(ok)))
 
 check("post deep-link is one-shot when leaving Home", 'if (selected != "Home")' in app and 'postOpenId = null' in app and 'postOpenCommentId = null' in app)
-check("post/comment target is consumed only after the target post exists", 'LaunchedEffect(posts, initialPostId, initialCommentId)' in home and 'posts.firstOrNull { it.id == target }' in home and 'onInitialPostConsumed()' in home)
+check("post/comment target is consumed after the feed settles", 'LaunchedEffect(initialPostId, initialCommentId, loading, feedRequestInFlight, posts)' in home and 'posts.firstOrNull { it.id == target }' in home and 'FynxRemoteSocialClient.postById(context, target)' in home and 'onInitialPostConsumed()' in home)
+check("post-only deep link scrolls to the target instead of opening comments", 'searchOpenedPostId = post.id' in home and 'feedListState.animateScrollToItem(leadingItems + targetPosition + precedingInsertions)' in home)
+check("comment deep link remains separate from post-only navigation", 'if (!initialCommentId.isNullOrBlank())' in home)
 check("comment deep-link reaches the comments panel", 'FynxHomeCommentsPanel(post = post, initialCommentId = initialCommentId' in home)
 check("Home feed owns bottom system inset", 'LazyColumn(state = feedListState' in home and '.navigationBarsPadding()' in home)
 check("floating Home navigation owns system bottom inset", '.navigationBarsPadding()' in app and 'NavigationBar(' in app and 'windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)' in app)

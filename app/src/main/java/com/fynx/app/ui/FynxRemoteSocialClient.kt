@@ -8,9 +8,9 @@ import java.net.URLEncoder
 import java.util.Locale
 
 object FynxRemoteSocialClient {
-    data class RemotePost(val id: String, val authorId: String, val authorUsername: String, val authorDisplayName: String, val text: String, val visibility: String, val mediaId: String?, val mediaType: String?, val mediaUrl: String?, val timestamp: Long, val likeCount: Int, val commentCount: Int, val likedByCurrentUser: Boolean, val followedByCurrentUser: Boolean, val isDiscovery: Boolean = false, val discoveryScore: Double = 0.0, val textBackground: String? = null, val textBackgroundColor: Long? = null, val textForegroundColor: Long? = null, val location: String? = null, val musicMediaId: String? = null, val musicTitle: String? = null, val musicArtist: String? = null, val musicDurationMs: Long = 0L, val feelingActivityType: String? = null, val feelingActivity: String? = null)
+    data class RemotePost(val id: String, val authorId: String, val authorUsername: String, val authorDisplayName: String, val text: String, val visibility: String, val mediaId: String?, val mediaType: String?, val mediaUrl: String?, val timestamp: Long, val likeCount: Int, val commentCount: Int, val viewerCount: Int = 0, val likedByCurrentUser: Boolean, val followedByCurrentUser: Boolean, val isDiscovery: Boolean = false, val discoveryScore: Double = 0.0, val textBackground: String? = null, val textBackgroundColor: Long? = null, val textForegroundColor: Long? = null, val location: String? = null, val musicMediaId: String? = null, val musicTitle: String? = null, val musicArtist: String? = null, val musicDurationMs: Long = 0L, val feelingActivityType: String? = null, val feelingActivity: String? = null)
     data class FeedPage(val posts: List<RemotePost>, val hasMore: Boolean, val nextCursor: String? = null)
-    data class RemoteComment(val id: String, val text: String, val timestamp: Long, val authorId: String, val authorUsername: String, val authorDisplayName: String, val parentCommentId: String? = null)
+    data class RemoteComment(val id: String, val text: String, val timestamp: Long, val authorId: String, val authorUsername: String, val authorDisplayName: String, val parentCommentId: String? = null, val likeCount: Int = 0, val likedByCurrentUser: Boolean = false)
     data class CommentPage(val comments: List<RemoteComment>, val nextCursor: String?)
     data class RemoteUser(val id: String, val username: String, val displayName: String)
     data class MarketplaceListing(val id: String, val sellerId: String, val sellerUsername: String, val sellerDisplayName: String, val storeName: String, val title: String, val description: String, val price: Double, val currency: String, val category: String, val condition: String, val quantity: Int, val location: String, val deliveryAvailable: Boolean, val pickupAvailable: Boolean, val deliveryFee: Double?, val mediaIds: List<String>, val active: Boolean = true)
@@ -19,6 +19,7 @@ object FynxRemoteSocialClient {
 
     private const val FEED_PAGE_SIZE = 20
     private const val FEED_CACHE_TTL_MS = 120_000L
+    private const val FEED_CACHE_MAX_STALE_MS = 24L * 60L * 60L * 1000L
     private const val FEED_CACHE_KEY_PREFIX = "fynx_feed_cache_v1_"
     private const val FEED_CACHE_TIME_KEY_PREFIX = "fynx_feed_cache_time_v1_"
     private fun feedCacheAccountKey(context: Context): String? = FynxAuthStore.accountStorageKey(context)?.takeIf { it.isNotBlank() }
@@ -39,13 +40,34 @@ object FynxRemoteSocialClient {
         if (safeOffset == 0 && remote.isFailure) readStaleCachedFeed(context)?.let { return Result.success(it) }
         return remote
     }
+    suspend fun searchPosts(context: Context, query: String, limit: Int = 30, offset: Int = 0): Result<FeedPage> {
+        val q = query.trim().take(80)
+        if (q.length < 2) return Result.failure(IllegalArgumentException("Search needs at least 2 characters."))
+        val safeLimit = limit.coerceIn(1, 50)
+        val safeOffset = offset.coerceAtLeast(0)
+        val path = "/api/social/search?q=${URLEncoder.encode(q, "UTF-8")}&limit=$safeLimit&offset=$safeOffset"
+        return FynxBackendClient.getBounded(context, path).mapCatching(::parseFeedPage)
+    }
+
+    suspend fun postById(context: Context, postId: String): Result<RemotePost> {
+        val id = postId.trim()
+        if (id.isEmpty() || id.length > 20 || id.any { !it.isDigit() }) {
+            return Result.failure(IllegalArgumentException("Invalid post id."))
+        }
+        return FynxBackendClient.getBounded(context, "/api/social/posts/$id/detail")
+            .mapCatching { raw ->
+                parseFeedPage(raw).posts.firstOrNull()
+                    ?: throw IllegalStateException("This post is no longer available or you no longer have permission to view it.")
+            }
+    }
+
     private fun parseFeedPage(raw: String): FeedPage {
         val root = JSONObject(raw)
         val array = root.optJSONArray("posts") ?: JSONArray()
         val posts = buildList {
             for (i in 0 until array.length()) {
                 val o = array.getJSONObject(i)
-                add(RemotePost(o.optString("id"), o.optString("authorId"), o.optString("authorUsername"), o.optString("authorDisplayName"), o.optString("text"), o.optString("visibility"), o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaUrl").takeIf { it.isNotBlank() }, o.optDouble("timestamp", 0.0).toLong(), o.optInt("likeCount"), o.optInt("commentCount"), o.optBoolean("likedByCurrentUser"), o.optBoolean("followedByCurrentUser"), o.optBoolean("isDiscovery", false), o.optDouble("discoveryScore", 0.0), o.optString("textBackground").takeIf { it.isNotBlank() }, if (o.has("textBackgroundColor") && !o.isNull("textBackgroundColor")) o.optLong("textBackgroundColor") else null, if (o.has("textForegroundColor") && !o.isNull("textForegroundColor")) o.optLong("textForegroundColor") else null, o.optString("location").takeIf { it.isNotBlank() && it != "null" }, o.optString("musicMediaId").takeIf { it.isNotBlank() && it != "null" }, o.optString("musicTitle").takeIf { it.isNotBlank() && it != "null" }, o.optString("musicArtist").takeIf { it.isNotBlank() && it != "null" }, o.optLong("musicDurationMs", 0L), o.optString("feelingActivityType").takeIf { it.isNotBlank() && it != "null" }, o.optString("feelingActivity").takeIf { it.isNotBlank() && it != "null" }))
+                add(RemotePost(o.optString("id"), o.optString("authorId"), o.optString("authorUsername"), o.optString("authorDisplayName"), o.optString("text"), o.optString("visibility"), o.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaType").takeIf { it.isNotBlank() && it != "null" }, o.optString("mediaUrl").takeIf { it.isNotBlank() }, o.optDouble("timestamp", 0.0).toLong(), o.optInt("likeCount"), o.optInt("commentCount"), o.optInt("viewerCount"), o.optBoolean("likedByCurrentUser"), o.optBoolean("followedByCurrentUser"), o.optBoolean("isDiscovery", false), o.optDouble("discoveryScore", 0.0), o.optString("textBackground").takeIf { it.isNotBlank() }, if (o.has("textBackgroundColor") && !o.isNull("textBackgroundColor")) o.optLong("textBackgroundColor") else null, if (o.has("textForegroundColor") && !o.isNull("textForegroundColor")) o.optLong("textForegroundColor") else null, o.optString("location").takeIf { it.isNotBlank() && it != "null" }, o.optString("musicMediaId").takeIf { it.isNotBlank() && it != "null" }, o.optString("musicTitle").takeIf { it.isNotBlank() && it != "null" }, o.optString("musicArtist").takeIf { it.isNotBlank() && it != "null" }, o.optLong("musicDurationMs", 0L), o.optString("feelingActivityType").takeIf { it.isNotBlank() && it != "null" }, o.optString("feelingActivity").takeIf { it.isNotBlank() && it != "null" }))
             }
         }
         return FeedPage(posts, root.optBoolean("hasMore", posts.size >= FEED_PAGE_SIZE), root.optString("nextCursor").takeIf { it.isNotBlank() && it != "null" })
@@ -65,7 +87,11 @@ object FynxRemoteSocialClient {
     }.getOrNull()
     private fun readStaleCachedFeed(context: Context): FeedPage? = runCatching {
         val k = feedCacheKey(context) ?: return null
+        val t = feedCacheTimeKey(context) ?: return null
         val p = context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE)
+        val savedAt = p.getLong(t, 0L)
+        val age = System.currentTimeMillis() - savedAt
+        if (savedAt <= 0L || age < 0L || age > FEED_CACHE_MAX_STALE_MS) return null
         parseFeedPage(p.getString(k, null) ?: return null)
     }.getOrNull()
     private fun writeCachedFeed(context: Context, raw: String) { runCatching { val k = feedCacheKey(context) ?: return; val t = feedCacheTimeKey(context) ?: return; context.getSharedPreferences("fynx_feed_cache", Context.MODE_PRIVATE).edit().putString(k, raw).putLong(t, System.currentTimeMillis()).apply() } }
@@ -164,6 +190,11 @@ object FynxRemoteSocialClient {
     suspend fun disputeMarketplaceOrder(context: Context, id: String, reason: String, details: String): Result<Unit> { val safeReason = reason.trim().uppercase().takeIf { it in setOf("ITEM_NOT_RECEIVED", "WRONG_ITEM", "DAMAGED", "NOT_AS_DESCRIBED", "SUSPECTED_SCAM", "OTHER") } ?: "OTHER"; return FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/disputes", JSONObject().apply { put("reason", safeReason); put("details", details.trim().take(4000)) }.toString()).map { Unit } }
     suspend fun reviewMarketplaceOrder(context: Context, id: String, rating: Int, comment: String): Result<Unit> { require(rating in 1..5) { "Rating must be between 1 and 5." }; return FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/review", JSONObject().apply { put("rating", rating); put("comment", comment.trim().take(1000)) }.toString()).map { Unit } }
 
+    suspend fun recordPostView(context: Context, id: String): Result<Int> {
+        val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
+        return FynxBackendClient.postJson(context, "/api/social/posts/$numericId/view", "{}")
+            .mapCatching { JSONObject(it).optInt("viewerCount") }
+    }
     suspend fun like(context: Context, id: String, desired: Boolean? = null): Result<Pair<Boolean, Int>> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); val body = desired?.let { JSONObject().put("liked", it).toString() } ?: "{}"; return FynxBackendClient.postJson(context, "/api/social/posts/$numericId/like", body).mapCatching { val o = JSONObject(it); o.optBoolean("liked") to o.optInt("likeCount") } }
     suspend fun save(context: Context, id: String, saved: Boolean): Result<Pair<Boolean, Int>> {
         val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
@@ -206,13 +237,15 @@ object FynxRemoteSocialClient {
         val safe = text.trim().takeIf { it.isNotBlank() && it.length <= 1000 } ?: return Result.failure(IllegalArgumentException("Reply must be 1-1000 characters."))
         return FynxBackendClient.postJson(context, "/api/social/posts/$post/comments/$parent/replies", JSONObject().put("text", safe).toString()).mapCatching { parseRemoteComment(JSONObject(it).getJSONObject("comment")) }
     }
-    suspend fun replies(context: Context, postId: String, parentCommentId: String, limit: Int = 50): Result<List<RemoteComment>> {
+    suspend fun replies(context: Context, postId: String, parentCommentId: String, before: String? = null, limit: Int = 50): Result<CommentPage> {
         val post = postId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id"))
         val parent = parentCommentId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid parent comment id"))
         val safe = limit.coerceIn(1, 100)
-        return FynxBackendClient.get(context, "/api/social/posts/$post/comments/$parent/replies?limit=$safe").mapCatching { raw -> val a = JSONObject(raw).optJSONArray("comments") ?: JSONArray(); buildList { for (i in 0 until a.length()) add(parseRemoteComment(a.getJSONObject(i))) } }
+        val query = "?limit=$safe" + (if (before.isNullOrBlank()) "" else "&before=${URLEncoder.encode(before, "UTF-8")}")
+        return FynxBackendClient.get(context, "/api/social/posts/$post/comments/$parent/replies$query").mapCatching { raw -> val root = JSONObject(raw); val a = root.optJSONArray("comments") ?: JSONArray(); val list = buildList { for (i in 0 until a.length()) add(parseRemoteComment(a.getJSONObject(i))) }; CommentPage(list, root.optString("nextCursor").takeIf { it.isNotBlank() && it != "null" }) }
     }
-    private fun parseRemoteComment(o: JSONObject) = RemoteComment(o.optString("id"), o.optString("text"), o.optDouble("timestamp").toLong(), o.optString("authorId"), o.optString("authorUsername"), o.optString("authorDisplayName"), o.optString("parentCommentId").takeIf { it.isNotBlank() && it != "null" })
+    suspend fun likeComment(context: Context, postId: String, commentId: String, desired: Boolean): Result<Pair<Boolean, Int>> { val post = postId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); val comment = commentId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid comment id")); return FynxBackendClient.postJson(context, "/api/social/posts/$post/comments/$comment/like", JSONObject().put("liked", desired).toString()).mapCatching { val o = JSONObject(it); o.optBoolean("liked") to o.optInt("likeCount") } }
+    private fun parseRemoteComment(o: JSONObject) = RemoteComment(o.optString("id"), o.optString("text"), o.optDouble("timestamp").toLong(), o.optString("authorId"), o.optString("authorUsername"), o.optString("authorDisplayName"), o.optString("parentCommentId").takeIf { it.isNotBlank() && it != "null" }, o.optInt("likeCount"), o.optBoolean("likedByCurrentUser"))
     suspend fun likes(context: Context, id: String): Result<List<RemoteUser>> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); return FynxBackendClient.get(context, "/api/social/posts/$numericId/likes").mapCatching { raw -> val a = JSONObject(raw).optJSONArray("users") ?: JSONArray(); buildList { for (i in 0 until a.length()) { val o = a.getJSONObject(i); add(RemoteUser(o.optString("id"), o.optString("username"), o.optString("displayName"))) } } } }
     suspend fun follow(context: Context, username: String, following: Boolean): Result<Boolean> { val encoded = URLEncoder.encode(username.trim().removePrefix("@"), "UTF-8"); return if (following) FynxBackendClient.delete(context, "/api/social/follow/$encoded").map { false } else FynxBackendClient.postJson(context, "/api/social/follow/$encoded", "{}").map { true } }
     suspend fun deletePost(context: Context, id: String): Result<Unit> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); return FynxBackendClient.delete(context, "/api/social/posts/$numericId").map { Unit } }
