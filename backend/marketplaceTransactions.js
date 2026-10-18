@@ -127,7 +127,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       let storedValue = value;
       if (kind === 'PHOTO') {
         // PHOTO evidence must reference an actual uploaded image owned by this participant.
-        if (!/^\\d{1,18}$/.test(value)) return res.status(400).json({ error: 'PHOTO evidence must reference an uploaded image media ID', code: 'PHOTO_MEDIA_REQUIRED' });
+        if (!/^\d{1,18}$/.test(value)) return res.status(400).json({ error: 'PHOTO evidence must reference an uploaded image media ID', code: 'PHOTO_MEDIA_REQUIRED' });
         const mediaId = Number(value);
         if (!Number.isSafeInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: 'invalid photo media ID' });
         const media = (await pool.query(
@@ -135,7 +135,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
           [mediaId, req.user.sub]
         )).rows[0];
         if (!media) return res.status(403).json({ error: 'photo must be uploaded by the authenticated participant', code: 'PHOTO_MEDIA_NOT_OWNED' });
-        if (!/^image\\/(jpeg|png|webp|gif)$/.test(String(media.mime_type || '').toLowerCase())) {
+        if (!/^image\/(jpeg|png|webp|gif)$/.test(String(media.mime_type || '').toLowerCase())) {
           return res.status(400).json({ error: 'PHOTO evidence requires an image upload', code: 'PHOTO_MEDIA_TYPE_INVALID' });
         }
         storedValue = String(media.id);
