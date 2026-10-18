@@ -54,6 +54,14 @@ require(search_panel, "Marketplace search unavailable. Check your connection and
 require(social_routes, "const usernameTerm = normalized.length <= 32", "long display-name queries do not exceed username column limits")
 require(social_routes, "($1::text IS NOT NULL AND username ILIKE $1) OR display_name ILIKE $2", "username matching is bounded while full display-name matching remains available")
 
+for needle in ("app.get('/api/social/posts/:id/detail',auth,async(req,res)=>{", "await visibleSocialPost(id, req.user.sub)", "post not found"):
+    require(social_routes, needle, f"authorized single-post lookup contract {needle}")
+for needle in ("suspend fun postById(context: Context, postId: String)", '"/api/social/posts/$id/detail"'):
+    require(client, needle, f"single-post lookup client contract {needle}")
+require(home, "LaunchedEffect(initialPostId)", "search post navigation does not depend on feed list changes")
+require(home, "FynxRemoteSocialClient.postById(context, target)", "search post navigation fetches posts outside the loaded feed")
+require(home, "This post is unavailable. It may have been deleted or its audience may have changed.", "unavailable search results fail gracefully")
+
 for needle in ('onOpenPost = { postId -> postOpenId = postId; postOpenCommentId = null; selected = "Home" }', 'onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }'):
     require(app_shell, needle, f"search result opens the selected item {needle}")
 
