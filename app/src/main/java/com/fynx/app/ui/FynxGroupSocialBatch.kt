@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -20,6 +21,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.input.KeyboardType
 import kotlinx.coroutines.launch
 
 @Composable
@@ -247,7 +249,7 @@ fun createGroupMediaMessage(uri: Uri, type: String = "image"): ChatMessage = Cha
 
 
 @Composable
-private fun FynxGroupLocationShareDialog(onDismiss: () -> Unit, onShare: (String, String) -> Unit) {
+fun FynxGroupLocationShareDialog(onDismiss: () -> Unit, onShare: (String, String) -> Unit) {
     var place by remember { mutableStateOf("") }
     var details by remember { mutableStateOf("") }
     AlertDialog(
@@ -266,7 +268,7 @@ private fun FynxGroupLocationShareDialog(onDismiss: () -> Unit, onShare: (String
 }
 
 @Composable
-private fun FynxGroupContactShareDialog(onDismiss: () -> Unit, onShare: (String, String) -> Unit) {
+fun FynxGroupContactShareDialog(onDismiss: () -> Unit, onShare: (String, String) -> Unit) {
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     AlertDialog(
