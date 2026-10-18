@@ -402,9 +402,18 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       const order = (await pool.query('SELECT * FROM marketplace_orders WHERE id=$1', [id])).rows[0];
       if (!order) return res.status(404).json({ error: 'order not found' });
       if (!isBuyer(order, req.user.sub) && !isSeller(order, req.user.sub)) return res.status(403).json({ error: 'only the buyer or seller can view delivery details' });
+      const evidenceResult = await pool.query(
+        "SELECT evidence_type, value, created_at FROM marketplace_delivery_evidence WHERE order_id=$1 ORDER BY created_at ASC",
+        [id]
+      );
+      const evidence = evidenceResult.rows.map((row) => ({
+        type: row.evidence_type,
+        value: row.value,
+        createdAt: row.created_at
+      }));
       const assignment = (await pool.query(`SELECT a.*, u.username AS driver_username, u.display_name AS driver_display_name
         FROM marketplace_delivery_assignments a LEFT JOIN users u ON u.id=a.driver_id WHERE a.order_id=$1`, [id])).rows[0];
-      if (!assignment) return res.json({ assignment: null });
+      if (!assignment) return res.json({ assignment: null, evidence });
       const localDriver = (assignment.driver_type || 'FYNX_ACCOUNT') === 'SELLER_LOCAL';
       return res.json({ assignment: {
         driverType: localDriver ? 'SELLER_LOCAL' : 'FYNX_ACCOUNT',
@@ -419,7 +428,7 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
         assignedAt: assignment.assigned_at,
         handoverAt: assignment.handover_at,
         arrivalReportedAt: assignment.delivered_at
-      } });
+      }, evidence });
     } catch (error) { console.error('marketplace delivery details', error); return res.status(500).json({ error: 'delivery details could not load' }); }
   });
 
