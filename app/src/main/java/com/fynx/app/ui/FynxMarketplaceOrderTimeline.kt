@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,11 +49,12 @@ fun FynxMarketplaceOrderTimeline(
     orderId: String
 ) {
     var loading by remember(orderId) { mutableStateOf(true) }
+    var retryCount by remember(orderId) { mutableStateOf(0) }
     var error by remember(orderId) { mutableStateOf<String?>(null) }
     var events by remember(orderId) { mutableStateOf<List<MarketplaceTimelineEvent>>(emptyList()) }
     var deliveryEvidence by remember(orderId) { mutableStateOf<List<MarketplaceTimelineEvidence>>(emptyList()) }
 
-    LaunchedEffect(orderId) {
+    LaunchedEffect(orderId, retryCount) {
         loading = true
         error = null
         val result = withContext(Dispatchers.IO) {
@@ -111,7 +113,10 @@ fun FynxMarketplaceOrderTimeline(
         }
         when {
             loading -> Row { CircularProgressIndicator(Modifier.size(16.dp)); Spacer(Modifier.width(8.dp)); Text("Loading…") }
-            error != null -> Text(error!!)
+            error != null -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(error!!)
+                Button(onClick = { retryCount += 1 }) { Text("Retry") }
+            }
             events.isEmpty() -> Text("No fulfillment events have been recorded yet.")
             else -> events.forEach { event ->
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
