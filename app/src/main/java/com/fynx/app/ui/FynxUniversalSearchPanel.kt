@@ -45,8 +45,7 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}, onOpenPost: (
         scope.launch {
             loading = true
             message = null
-            val peopleQuery = q.take(32) // The username endpoint accepts at most 32 normalized characters; post/listing search keeps the full 80-character query.
-            val peopleResult = FynxSocialClient.searchUsers(context, peopleQuery)
+            val peopleResult = FynxSocialClient.searchUsers(context, q)
             val listingResult = FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query = q, category = "All", limit = 30, offset = 0).map { it.listings }
             val postResult = FynxRemoteSocialClient.searchPosts(context, q, limit = 50, offset = 0)
             if (generation != searchGeneration) return@launch
