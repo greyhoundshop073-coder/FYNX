@@ -41,6 +41,9 @@ for needle in ("COALESCE(l.category,'') ILIKE", "COALESCE(l.store_name,'') ILIKE
 for needle in ('suspend fun searchPosts(context: Context, query: String', '"/api/social/search?q='):
     require(client, needle, f"dedicated post-search client contract {needle}")
 for needle in ('FynxRemoteSocialClient.searchPosts(context, q', 'FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query = q', 'onOpenPost(post.id)', 'onOpenListing(listing.id)', 'Suggestions update as you type', 'Text("Suggestions"', 'heightIn(max = 220.dp)', 'people.take(2).forEach', 'posts.take(2).forEach', 'listings.take(2).forEach'):
+    require(search_panel, "query = it.take(80)", "search input matches the backend post-search maximum")
+    require(search_panel, "val peopleQuery = q.take(32)", "people search respects the username endpoint maximum without truncating post/listing search")
+    require(search_panel, "FynxSocialClient.searchUsers(context, peopleQuery)", "people lookup uses its validated query")
     require(search_panel, needle, f"live universal search result behavior {needle}")
 for needle in ('onOpenPost = { postId -> postOpenId = postId; postOpenCommentId = null; selected = "Home" }', 'onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }'):
     require(app_shell, needle, f"search result opens the selected item {needle}")
