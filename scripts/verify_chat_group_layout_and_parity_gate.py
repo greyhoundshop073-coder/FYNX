@@ -33,6 +33,9 @@ require("active group microphone requests runtime permission before recording", 
 require("active group microphone records AAC audio and sends it through the attachment pipeline", "MediaRecorder.AudioEncoder.AAC" in ACTIVE_GROUP and "sendGroupAttachment(Uri.fromFile(file), \"audio\")" in ACTIVE_GROUP)
 require("active group microphone has a stop/send control and rejects empty recordings", "Icons.Default.Stop" in ACTIVE_GROUP and "duration < 500L" in ACTIVE_GROUP and "Voice message" in ACTIVE_GROUP)
 require("active group voice recording is cleaned up when leaving the conversation", "DisposableEffect(groupId)" in ACTIVE_GROUP and "activeVoiceRecorder?.let" in ACTIVE_GROUP)
+require("active group Location action opens a location-share dialog and sends a map link", "showLocationShare = true" in ACTIVE_GROUP and "https://maps.google.com/?q=$mapsQuery" in ACTIVE_GROUP and "FynxGroupLocationShareDialog" in ACTIVE_GROUP)
+require("active group Contact action collects and sends selected contact details", "showContactShare = true" in ACTIVE_GROUP and "FynxGroupContactShareDialog" in ACTIVE_GROUP and "Phone: $phone" in ACTIVE_GROUP)
+require("active group Poll action opens the existing group content panel directly", "showPollsDirectly = true" in ACTIVE_GROUP and "openContentInitially = showPollsDirectly" in ACTIVE_GROUP and "mutableStateOf(openContentInitially)" in (UI / "FynxGroupSocialBatch.kt").read_text(encoding="utf-8"))
 
 # Shared private-chat and model contracts remain covered.
 require("private chat protects top system inset", "statusBarsPadding" in PRIVATE)
