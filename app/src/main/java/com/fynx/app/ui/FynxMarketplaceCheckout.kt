@@ -251,7 +251,7 @@ internal fun FynxMarketplaceCheckoutDialog(
                     if (q.marketplaceFeeSeller > 0) Text("Seller-paid FYNX fee (deducted from seller payout): ${q.currency} ${String.format(Locale.US, "%,.2f", q.marketplaceFeeSeller)}")
                     Text("Discount: ${q.currency} ${String.format(Locale.US, "%,.2f", q.discountAmount)}")
                     Text("Total: ${q.currency} ${String.format(Locale.US, "%,.2f", q.total)}", style = MaterialTheme.typography.titleLarge)
-                    Text("Payment is protected. Seller payout is released only after the buyer confirmation flow.", style = MaterialTheme.typography.bodySmall)
+                    Text("This creates an order only; payment has not been collected. Complete payment through an approved provider before the seller hands over the item.", style = MaterialTheme.typography.bodySmall)
                 }
                 message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
@@ -282,7 +282,7 @@ internal fun FynxMarketplaceCheckoutDialog(
                         busy = false
                     }
                 }
-            ) { Text("Place protected order") }
+            ) { Text("Create order (payment pending)") }
         },
         dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text("Cancel") } }
     )
