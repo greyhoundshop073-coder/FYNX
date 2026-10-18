@@ -232,7 +232,7 @@ let commentMentionSchemaPromise;
 
 async function ensureCommentMentionSchema(pool) {
   if (!commentMentionSchemaPromise) {
-    commentMentionSchemaPromise = pool.query(\`
+    commentMentionSchemaPromise = pool.query(`
       CREATE TABLE IF NOT EXISTS social_comment_mentions (
         comment_id BIGINT NOT NULL REFERENCES social_post_comments(id) ON DELETE CASCADE,
         mentioned_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -241,7 +241,7 @@ async function ensureCommentMentionSchema(pool) {
       );
       CREATE INDEX IF NOT EXISTS social_comment_mentions_user_idx
         ON social_comment_mentions(mentioned_user_id, created_at DESC);
-    \`).catch(error => { commentMentionSchemaPromise = undefined; throw error; });
+    `).catch(error => { commentMentionSchemaPromise = undefined; throw error; });
   }
   return commentMentionSchemaPromise;
 }
