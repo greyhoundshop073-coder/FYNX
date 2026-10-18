@@ -46,6 +46,8 @@ for needle in ('FynxRemoteSocialClient.searchPosts(context, q', 'FynxRemoteSocia
     require(search_panel, needle, f"live universal search result behavior {needle}")
 require(search_panel, "query = it.take(80)", "search input matches the backend post-search maximum")
 require(search_panel, "FynxSocialClient.searchUsers(context, q)", "people lookup receives the full search query")
+require(search_panel, "coroutineScope", "independent universal search sources run concurrently")
+require(search_panel, "Triple(peopleTask.await(), listingsTask.await(), postsTask.await())", "parallel search waits for all result sources")
 require(search_panel, "peopleFailed = peopleResult.isFailure", "people API failure is tracked separately from empty results")
 require(search_panel, "postsFailed = postResult.isFailure", "post API failure is tracked separately from empty results")
 require(search_panel, "listingsFailed = listingResult.isFailure", "Marketplace API failure is tracked separately from empty results")
@@ -58,9 +60,16 @@ for needle in ("app.get('/api/social/posts/:id/detail',auth,async(req,res)=>{", 
     require(social_routes, needle, f"authorized single-post lookup contract {needle}")
 for needle in ("suspend fun postById(context: Context, postId: String)", '"/api/social/posts/$id/detail"'):
     require(client, needle, f"single-post lookup client contract {needle}")
-require(home, "LaunchedEffect(initialPostId)", "search post navigation does not depend on feed list changes")
+require(home, "LaunchedEffect(initialPostId, initialCommentId, loading, feedRequestInFlight, posts)", "post and comment deep links wait for the feed request to settle")
 require(home, "FynxRemoteSocialClient.postById(context, target)", "search post navigation fetches posts outside the loaded feed")
+require(home, "searchOpenedPostId = post.id", "search result opens the post in Home rather than opening comments")
+require(home, "if (!initialCommentId.isNullOrBlank())", "comment deep links remain distinct from post-only navigation")
+require(home, "feedListState.animateScrollToItem(leadingItems + targetPosition + precedingInsertions)", "opened search posts scroll into view")
 require(home, "This post is unavailable. It may have been deleted or its audience may have changed.", "unavailable search results fail gracefully")
+require(home, "Some post attachments couldn't be loaded.", "failed post-media hydration has a visible recovery state")
+require(home, "Offline snapshot — posts and media may be out of date until FYNX reconnects.", "offline feed state is clearly identified")
+require(client, "FEED_CACHE_MAX_STALE_MS = 24L * 60L * 60L * 1000L", "offline cache has a bounded maximum age")
+require(client, "age > FEED_CACHE_MAX_STALE_MS", "stale cached feed is rejected after the retention limit")
 
 for needle in ('onOpenPost = { postId -> postOpenId = postId; postOpenCommentId = null; selected = "Home" }', 'onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }'):
     require(app_shell, needle, f"search result opens the selected item {needle}")
