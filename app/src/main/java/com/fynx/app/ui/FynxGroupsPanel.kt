@@ -294,6 +294,9 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var showMembers by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showTools by remember { mutableStateOf(false) }
+    var showPollsDirectly by remember { mutableStateOf(false) }
+    var showLocationShare by remember { mutableStateOf(false) }
+    var showContactShare by remember { mutableStateOf(false) }
     var showMore by remember { mutableStateOf(false) }
     var showPulse by remember { mutableStateOf(false) }
     var showCatchMeUp by remember { mutableStateOf(false) }
@@ -323,6 +326,27 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     val hasRemoteAccessToken = FynxBackendClient.hasAccessToken(context)
     val canSendMessages = canManageGroup || if (hasRemoteAccessToken) remotePermissions?.sendMessages == true else prefs.getBoolean("send_messages", true)
     val canSendMedia = canManageGroup || if (hasRemoteAccessToken) remotePermissions?.sendMedia == true else prefs.getBoolean("send_media", true)
+
+    fun shareGroupTextMessage(content: String) {
+        if (!canSendMessages) { syncMessage = "Sending messages is disabled in Group Settings."; return }
+        val message = ChatMessage(content, true, UUID.randomUUID().toString(), delivered = false, read = false)
+        messages = messages + message
+        FynxChatStore.save(context, "group_$groupId", messages)
+        scope.launch {
+            FynxGroupRemoteClient.sendMessage(context, groupId, message)
+                .onSuccess { remote ->
+                    val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
+                    messages = messages.map { if (it.id == message.id) serverMessage else it }
+                    FynxChatStore.save(context, "group_$groupId", messages)
+                    syncMessage = null
+                }
+                .onFailure { error ->
+                    messages = messages.map { if (it.id == message.id) it.copy(delivered = false, read = false) else it }
+                    FynxChatStore.save(context, "group_$groupId", messages)
+                    syncMessage = error.message ?: "Shared message could not be sent. Tap Retry to try again."
+                }
+        }
+    }
     fun sendGroupAttachment(uri: android.net.Uri, type: String) {
         if (!canSendMedia) {
             syncMessage = "Sending media and files is disabled in Group Settings."
@@ -902,13 +926,13 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 }
                             }
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(onClick = { showAttachmentMenu = false; showTools = true }, modifier = Modifier.weight(1f)) {
+                                OutlinedButton(onClick = { showAttachmentMenu = false; showLocationShare = true }, modifier = Modifier.weight(1f)) {
                                     Icon(Icons.Default.LocationOn, null); Spacer(Modifier.width(5.dp)); Text("Location")
                                 }
-                                OutlinedButton(onClick = { showAttachmentMenu = false; showTools = true }, modifier = Modifier.weight(1f)) {
+                                OutlinedButton(onClick = { showAttachmentMenu = false; showContactShare = true }, modifier = Modifier.weight(1f)) {
                                     Icon(Icons.Default.Contacts, null); Spacer(Modifier.width(5.dp)); Text("Contact")
                                 }
-                                OutlinedButton(onClick = { showAttachmentMenu = false; showTools = true }, modifier = Modifier.weight(1f)) {
+                                OutlinedButton(onClick = { showAttachmentMenu = false; showPollsDirectly = true; showTools = true }, modifier = Modifier.weight(1f)) {
                                     Icon(Icons.Default.Poll, null); Spacer(Modifier.width(5.dp)); Text("Poll")
                                 }
                             }
@@ -1022,7 +1046,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         if (showMembers) FynxGroupMembersDialog(groupForDialogs, currentUsername, { showMembers = false }) { updated -> if (FynxGroupsStore.updateGroup(context, updated)) { currentGroup = updated; scope.launch { FynxGroupRemoteClient.syncGroup(context, updated).onFailure { syncMessage = it.message } } } }
         if (showCatchMeUp) FynxCatchMeUpSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showCatchMeUp = false })
         if (showConversationMoments) FynxConversationMomentsSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showConversationMoments = false })
-        if (showTools) FynxGroupSocialDialog(groupForDialogs, { showTools = false }, onInvite = { username ->
+        if (showTools) FynxGroupSocialDialog(groupForDialogs, { showTools = false; showPollsDirectly = false }, onInvite = { username ->
             val cleanUsername = username.trim().removePrefix("@")
             if (!canAddMembers) {
                 syncMessage = "Adding members is disabled in Group Settings."
@@ -1051,7 +1075,16 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             if (!canSendMedia) syncMessage = "Sending media and files is disabled in Group Settings." else { val next = messages + createGroupMediaMessage(uri, type); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = it.message } } }
         }, onStoryShare = {
             if (!canSendMedia) syncMessage = "Media sharing is disabled in Group Settings." else { val next = messages + ChatMessage("Story shared to ${groupForDialogs.name}", true, UUID.randomUUID().toString(), delivered = true, read = true); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = it.message } } }
-        })
+        }, openContentInitially = showPollsDirectly)
+        if (showLocationShare) FynxGroupLocationShareDialog(onDismiss = { showLocationShare = false }) { label, details ->
+            val mapsQuery = java.net.URLEncoder.encode(listOf(label, details).filter { it.isNotBlank() }.joinToString(" "), "UTF-8")
+            shareGroupTextMessage("📍 Shared location: $label${if (details.isBlank()) "" else " — $details"}\nhttps://maps.google.com/?q=$mapsQuery")
+            showLocationShare = false
+        }
+        if (showContactShare) FynxGroupContactShareDialog(onDismiss = { showContactShare = false }) { name, phone ->
+            shareGroupTextMessage("👤 Shared contact: $name\nPhone: $phone")
+            showContactShare = false
+        }
     }
 }
 
