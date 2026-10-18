@@ -468,14 +468,84 @@ app.get("/api/media/:id", auth, async (req, res) => {
   try {
     const mediaId = Number(req.params.id);
     if (!Number.isInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: "invalid media id" });
-    const result = await pool.query(`SELECT mm.mime_type, mm.data FROM message_media mm LEFT JOIN messages m ON m.media_id = mm.id WHERE mm.id = $1 AND (mm.owner_id = $2 OR m.sender_id = $2 OR m.recipient_id = $2 OR EXISTS (SELECT 1 FROM users u LEFT JOIN privacy_settings ps ON ps.user_id = u.id WHERE u.id = mm.owner_id AND u.profile_photo_media_id = mm.id AND (u.id = $2 OR ((COALESCE(ps.profile_visibility, 'My friends') = 'Everyone' OR (COALESCE(ps.profile_visibility, 'My friends') = 'My friends' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id = u.id AND f.friend_id = $2) OR (f.user_id = $2 AND f.friend_id = u.id)) AND f.status = 'accepted')) AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $2 AND b.blocked_id = u.id) OR (b.blocked_id = $2 AND b.blocker_id = u.id)))) OR EXISTS (SELECT 1 FROM statuses s WHERE s.media_id = mm.id AND s.expires_at > NOW() AND (s.owner_id = $2 OR ((s.audience = 'EVERYONE' OR (s.audience = 'FRIENDS' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id = s.owner_id AND f.friend_id = $2) OR (f.user_id = $2 AND f.friend_id = s.owner_id)) AND f.status = 'accepted'))) AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $2 AND b.blocked_id = s.owner_id) OR (b.blocker_id = s.owner_id AND b.blocked_id = $2))))) ORDER BY m.id DESC LIMIT 1`, [mediaId, req.user.sub]);
+    const result = await pool.query(`
+      SELECT mm.mime_type, mm.data
+      FROM message_media mm
+      WHERE mm.id = $1
+        AND (
+          mm.owner_id = $2
+          OR EXISTS (
+            SELECT 1
+            FROM messages m
+            WHERE m.media_id = mm.id
+              AND (m.sender_id = $2 OR m.recipient_id = $2)
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM users u
+            LEFT JOIN privacy_settings ps ON ps.user_id = u.id
+            WHERE u.id = mm.owner_id
+              AND u.profile_photo_media_id = mm.id
+              AND (
+                u.id = $2
+                OR (
+                  (
+                    COALESCE(ps.profile_visibility, 'My friends') = 'Everyone'
+                    OR (
+                      COALESCE(ps.profile_visibility, 'My friends') = 'My friends'
+                      AND EXISTS (
+                        SELECT 1 FROM friendships f
+                        WHERE ((f.user_id = u.id AND f.friend_id = $2)
+                          OR (f.user_id = $2 AND f.friend_id = u.id))
+                          AND f.status = 'accepted'
+                      )
+                    )
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM blocks b
+                    WHERE (b.blocker_id = $2 AND b.blocked_id = u.id)
+                      OR (b.blocked_id = $2 AND b.blocker_id = u.id)
+                  )
+                )
+              )
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM statuses s
+            WHERE s.media_id = mm.id
+              AND s.expires_at > NOW()
+              AND (
+                s.owner_id = $2
+                OR (
+                  (
+                    s.audience = 'EVERYONE'
+                    OR (
+                      s.audience = 'FRIENDS'
+                      AND EXISTS (
+                        SELECT 1 FROM friendships f
+                        WHERE ((f.user_id = s.owner_id AND f.friend_id = $2)
+                          OR (f.user_id = $2 AND f.friend_id = s.owner_id))
+                          AND f.status = 'accepted'
+                      )
+                    )
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM blocks b
+                    WHERE (b.blocker_id = $2 AND b.blocked_id = s.owner_id)
+                      OR (b.blocker_id = s.owner_id AND b.blocked_id = $2)
+                  )
+                )
+              )
+          )
+        )
+      LIMIT 1
+    `, [mediaId, req.user.sub]);
     if (!result.rows[0]) return res.status(404).json({ error: "media not found" });
     res.set("Cache-Control", "private, no-store");
     res.type(result.rows[0].mime_type);
     return res.send(result.rows[0].data);
   } catch (error) { console.error("media fetch", error); return res.status(500).json({ error: "media fetch failed" }); }
 });
-
 function messageProjection() {
   return `SELECT m.id, m.sender_id, sender.username AS sender_username, sender.display_name AS sender_display_name, m.recipient_id, recipient.username AS recipient_username, recipient.display_name AS recipient_display_name, m.text, EXTRACT(EPOCH FROM m.created_at) * 1000 AS timestamp, m.delivered_at IS NOT NULL AS delivered, m.read_at IS NOT NULL AS read, m.edited, m.deleted, m.reply_to_id, m.media_id, m.media_type, m.voice_duration_ms, m.message_type, m.message_payload, m.reaction, m.pinned FROM messages m JOIN users sender ON sender.id = m.sender_id JOIN users recipient ON recipient.id = m.recipient_id`;
 }
