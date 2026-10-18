@@ -1,6 +1,9 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,7 +27,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import java.io.File
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -42,11 +48,20 @@ fun FynxMarketplaceOrderLifecycle(
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var deliveryDetails by remember(order.id) { mutableStateOf<JSONObject?>(null) }
+    var handoverPhotoMediaId by remember(order.id) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(order.id) {
         FynxBackendClient.get(context, "/api/marketplace/orders/${order.id}/delivery-details")
-            .onSuccess { raw -> deliveryDetails = JSONObject(raw).optJSONObject("assignment") }
+            .onSuccess { raw ->
+                val response = JSONObject(raw)
+                deliveryDetails = response.optJSONObject("assignment")
+                val evidence = response.optJSONArray("evidence")
+                handoverPhotoMediaId = if (evidence == null) null else (0 until evidence.length())
+                    .mapNotNull { evidence.optJSONObject(it) }
+                    .lastOrNull { it.optString("type") == "PHOTO_REFERENCE" }
+                    ?.optString("value")?.takeIf { it.toLongOrNull()?.let { id -> id > 0L } == true }
+            }
     }
 
     if (showFulfillment) {
@@ -129,6 +144,7 @@ fun FynxMarketplaceOrderLifecycle(
                         if (vehicle.isNotBlank()) Text("Vehicle: $vehicle")
                         details.optString("vehicleNote").takeIf { it.isNotBlank() && it != "null" }?.let { Text("Vehicle note: $it") }
                     }
+                    MarketplaceHandoverPhotoPreview(context, order.id, handoverPhotoMediaId)
                     FynxMarketplaceOrderTimeline(context = context, orderId = order.id)
                     when (order.status) {
                         "PAID" -> Text("Choose delivery or pickup so the seller can fulfill the order.")
@@ -264,4 +280,57 @@ private fun MarketplaceFulfillmentDialog(
         },
         dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text("Cancel") } }
     )
+}
+
+
+@Composable
+internal fun MarketplaceHandoverPhotoPreview(context: Context, orderId: String, mediaId: String?) {
+    var bitmap by remember(orderId, mediaId) { mutableStateOf<Bitmap?>(null) }
+    var loading by remember(orderId, mediaId) { mutableStateOf(false) }
+    var failed by remember(orderId, mediaId) { mutableStateOf(false) }
+
+    LaunchedEffect(orderId, mediaId) {
+        bitmap = null
+        failed = false
+        if (mediaId != null) {
+            loading = true
+            val id = mediaId.toLongOrNull()
+            if (id == null || id < 1L) {
+                failed = true
+            } else {
+                val file = File(context.cacheDir, "fynx-handover-$orderId-$id.img")
+                val result = FynxBackendClient.downloadToFile(
+                    context,
+                    "/api/marketplace/media/$id",
+                    file,
+                    12L * 1024L * 1024L
+                )
+                result.onSuccess { downloaded ->
+                    if (downloaded.contentType?.startsWith("image/") == true) {
+                        bitmap = BitmapFactory.decodeFile(file.absolutePath)
+                        if (bitmap == null) failed = true
+                    } else {
+                        failed = true
+                    }
+                }.onFailure { failed = true }
+            }
+            loading = false
+        }
+    }
+
+    if (mediaId != null) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            Text("Driver handover photo", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
+            when {
+                bitmap != null -> Image(
+                    bitmap = bitmap!!.asImageBitmap(),
+                    contentDescription = "Marketplace driver handover evidence",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp)
+                )
+                loading -> CircularProgressIndicator(Modifier.size(20.dp))
+                failed -> Text("Handover photo could not load. Check your connection and refresh.", style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
 }
