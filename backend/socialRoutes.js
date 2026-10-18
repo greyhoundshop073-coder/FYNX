@@ -160,7 +160,10 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const category = typeof req.query?.category === "string" ? req.query.category.trim().slice(0, 40) : "";
       const seller = typeof req.query?.seller === "string" ? req.query.seller.trim().toLowerCase().replace(/^@+/, "") : "";
       const params = [req.user.sub];
-      const where = ["l.active = TRUE", "l.quantity > 0", "l.seller_id <> $1", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')"];
+      const where = ["l.active = TRUE", "l.quantity > 0", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')"];
+      // Seller-store lookups must be able to show that seller’s own active listings.
+      // General discovery still hides the current user’s listings from their buyer feed.
+      if (!seller) where.push("l.seller_id <> $1");
       if (q) { params.push(`%${q}%`); where.push(`(l.title ILIKE $${params.length} OR l.description ILIKE $${params.length} OR u.username ILIKE $${params.length} OR u.display_name ILIKE $${params.length})`); }
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category = $${params.length}`); }
       if (seller) { params.push(seller); where.push(`u.username = $${params.length}`); }
