@@ -13,6 +13,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -51,9 +53,12 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}, onOpenPost: (
         scope.launch {
             loading = true
             message = null
-            val peopleResult = FynxSocialClient.searchUsers(context, q)
-            val listingResult = FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query = q, category = "All", limit = 30, offset = 0).map { it.listings }
-            val postResult = FynxRemoteSocialClient.searchPosts(context, q, limit = 50, offset = 0)
+            val (peopleResult, listingResult, postResult) = coroutineScope {
+                val peopleTask = async { FynxSocialClient.searchUsers(context, q) }
+                val listingsTask = async { FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query = q, category = "All", limit = 30, offset = 0).map { it.listings } }
+                val postsTask = async { FynxRemoteSocialClient.searchPosts(context, q, limit = 50, offset = 0) }
+                Triple(peopleTask.await(), listingsTask.await(), postsTask.await())
+            }
             if (generation != searchGeneration) return@launch
             people = peopleResult.getOrElse { emptyList() }
             listings = listingResult.getOrElse { emptyList() }
