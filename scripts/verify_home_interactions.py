@@ -77,8 +77,12 @@ for needle in ('Icons.Default.Favorite','Icons.Default.ChatBubbleOutline','Icons
     require(home, needle, f"Home reliability surface {needle}")
 for needle in ('feedPage(context, limit = 20, offset = 0','beforeCursor = feedNextCursor','discoveryFeed(context, 3, offset)','discoveryOffset','discoveryHasMore','val existing = posts.map { it.id }.toSet()','filterNot { it.id in existing }','lastVisibleIndex >= totalItems - 6','!loadingMore && !discoveryLoadingMore && !feedRequestInFlight','if (hasMore) loadMore() else if (discoveryHasMore) hydrateDiscovery(discoveryOffset)'):
     require(home, needle, f"feed recovery/pagination {needle}")
-for needle in ('var paginationPaused by remember { mutableStateOf(false) }','if (discoveryLoadingMore || paginationPaused) return','paginationPaused = true','!feedRequestInFlight && !paginationPaused','if (forceRefresh) paginationPaused = false'):
-    require(home, needle, f"pagination failure backoff {needle}")
+for needle in ('var feedPaginationPaused by remember { mutableStateOf(false) }','var discoveryPaginationPaused by remember { mutableStateOf(false) }','if (discoveryLoadingMore || discoveryPaginationPaused) return','discoveryPaginationPaused = true','feedPaginationPaused = true','if (hasMore && !feedPaginationPaused)','else if (!hasMore && discoveryHasMore && !discoveryPaginationPaused)','if (forceRefresh) { feedPaginationPaused = false; discoveryPaginationPaused = false }'):
+    require(home, needle, f"independent feed/discovery pagination recovery {needle}")
+require(home, 'if (!discoveryNetworkReady) {', "Home discovery does not request more posts while offline")
+require(home, 'RemoteSocialMedia(audioMedia.mediaUrl, audioMedia.mediaType', "voice-note post renders audio instead of disappearing inside the visual grid")
+require(home, 'val visualMediaItems = mediaItems.filter { it.mediaType.equals("image", true) || it.mediaType.equals("video", true) }', "Home multi-media grid contains only photos and videos")
+require(home, 'MusicPostPlayer(post.musicMediaId!!, post.musicTitle.orEmpty(), post.musicArtist.orEmpty(), post.musicDurationMs)', "catalogue music is displayed on photo/video posts")
 require(home, 'if (!activeNetworkReady) {', "Home pagination does not make requests while offline")
 require(home, 'error = if (posts.isEmpty()) "You\'re offline. Connect to a network to load your feed."', "Home offline state explains how to recover")
 for needle in ('FEED_CACHE_TTL_MS','readCachedFeed(context)','readStaleCachedFeed(context)','if (safeOffset == 0 && remote.isFailure)'):
