@@ -13,7 +13,7 @@ workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="ut
 checks = [
     ("Composer can publish a valid text-only post", 'text.isNotBlank()' in composer and '"/api/social/posts"' in client),
     ("Composer can publish a valid music-only post", 'selectedCatalogueMusic != null' in composer and '"musicMediaId"' in client and 'catalogueMusic?.mediaId' in client),
-    ("Composer still supports photo/video publishing", 'PickMultipleVisualMedia' in composer and 'mediaIds' in client and '"/api/social/posts/multi"' in client),
+    ("Composer still supports photo/video publishing", 'PickMultipleVisualMedia(4)' in composer and 'mediaIds' in client and '"/api/social/posts/multi"' in client),
     ("Camera uses the existing single capture implementation", 'FynxCameraCapturePanel(' in composer and 'FynxCameraCapturePanel' in camera),
     ("Voice recording uses the existing voice recorder path", 'FynxVoicePostRecorder(' in composer and 'Voice posts use one audio recording' in client),
     ("Voice posts cannot be mixed with visual media", 'hasAudio && (selected.size != 1 || index != 0)' in client),
