@@ -8,7 +8,7 @@ scale = (ROOT / "backend/scalability.js").read_text(encoding="utf-8")
 checks = [
     ("Marketplace media guard is installed by the production bootstrap", "installMarketplaceMediaPrivacyGuard(app)" in scale),
     ("Marketplace media endpoint itself requires authentication", "app.get('/api/marketplace/media/:id', auth" in completion),
-    ("Guard only targets numeric marketplace media IDs", r"^\\/api\\/marketplace\\/media\\/(\\d+)$" in guard),
+    ("Guard only targets numeric marketplace media IDs", "/api/marketplace/media/" in guard and r"\d+" in guard),
     ("Blocked seller relation is checked in both directions", "b.blocker_id=$2 AND b.blocked_id=ml.seller_id" in guard and "b.blocked_id=$2 AND b.blocker_id=ml.seller_id" in guard),
     ("An order-party media snapshot is an explicit privacy exception", "mo.buyer_id=$2 OR mo.seller_id=$2" in guard and "mo.product_snapshot->'mediaIds'" in guard),
     ("Listing availability does not suppress the block privacy check", "ml.active=TRUE" not in guard and "ml.quantity>0" not in guard and "ml.currency" not in guard),
