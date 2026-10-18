@@ -862,8 +862,10 @@ if not FAILURES:
                         exercise_notification_route("fynx://chat/" + route_username, "private-chat")
                 else:
                     report.append("- PASS private-chat notification-route test skipped because no real chat participant identifier was visible; no test data was fabricated")
-                run("adb","shell","am","force-stop",PACKAGE); run("adb","shell","am","start","-W","-a","android.intent.action.VIEW","-d","fynx://home",PACKAGE); time.sleep(2.5)
-                reset=dismiss_runtime_permission_prompt() or dump_ui("authenticated-home-chat-group-reset.xml") or xml
+                # The group-entry smoke test also cold-starts the app. Restore the
+                # debug-only session before looking for Home's Chat tab, otherwise the
+                # sign-in gate causes a second false failure unrelated to Groups.
+                reset=restore_home_after_restart("authenticated-home-chat-group-reset") or xml
                 groups_xml=tap_control(reset,["Chat"],"chat-for-group",["Messages and groups in one place"])
                 if groups_xml:
                     groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["New group"])
