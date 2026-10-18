@@ -55,6 +55,9 @@ checks = [
     ("protected orders expose cancellation for unpaid orders", "cancelMarketplaceOrder" in marketplace and "PAYMENT_PENDING" in marketplace),
     ("completed protected orders support seller reviews", "reviewMarketplaceOrder" in marketplace and "Submit review" in marketplace),
     ("seller publish still requires a real listing area", "location.trim().isNotBlank()" in marketplace and "validListing(title, desc, price.toDoubleOrNull(), quantity.toIntOrNull(), media)" in marketplace),
+    ("seller can set a searchable store name", 'Text("Store name (optional)")' in marketplace and "createMarketplaceListing(context, title, desc, storeName," in marketplace),
+    ("marketplace caches real catalogue data for account-scoped offline browsing", "FynxMarketplaceOfflineCache.read(context, cartOwnerKey)" in marketplace and "FynxMarketplaceOfflineCache.write(context, cartOwnerKey, listings)" in marketplace and "Saved catalogue — prices and stock may be outdated." in marketplace),
+    ("stale cached listings cannot enter protected checkout without refresh", 'if (catalogueIsStale) error = "Reconnect and refresh this listing before buying."' in marketplace and 'if (catalogueIsStale) { error = "Reconnect and refresh live prices and stock before checkout."' in marketplace),
     ("seller listing location remains human-readable and privacy-preserving", "FynxPostLocationClient.currentPlace(context)" in marketplace and "your exact GPS coordinates are not published with the listing." in marketplace),
     ("buyer nearby discovery resolves the user area and requests nearby listings with the active search/filter", "FynxPostLocationClient.currentPlace(context)" in marketplace and "FynxRemoteSocialClient.nearbyMarketplaceListings(context, requestQuery, requestCategory, requestNearbyLabel)" in marketplace),
 ]

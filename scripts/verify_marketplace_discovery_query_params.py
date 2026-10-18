@@ -6,7 +6,8 @@ end = source.index('app.get("/api/marketplace/listing/:id"', start)
 route = source[start:end]
 
 checks = {
-    "category filter uses a bound parameter": 'where.push(`l.category=$${params.length}`)' in route,
+    "category filter is case-insensitive and parameterized": "UPPER(COALESCE(l.category,''))=UPPER(${params.length})" in route,
+    "search includes store name and category": 'l.store_name ILIKE ${n} OR l.category ILIKE ${n}' in route,
     "location filter uses a bound parameter": 'where.push(`l.location ILIKE $${params.length}`)' in route,
     "limit uses a bound parameter": 'LIMIT $${params.length - 1} OFFSET $${params.length}' in route,
 }
