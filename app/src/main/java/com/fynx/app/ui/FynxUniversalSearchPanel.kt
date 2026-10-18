@@ -84,6 +84,35 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}, onOpenPost: (
         Text("Search FYNX", style = MaterialTheme.typography.headlineSmall)
         Text("Suggestions update as you type. Choose a result to open that person, post, or product.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         OutlinedTextField(value = query, onValueChange = { query = it.take(120) }, modifier = Modifier.fillMaxWidth(), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") }, placeholder = { Text("Search people, posts or products") }, trailingIcon = { TextButton(onClick = { search() }, enabled = query.trim().length >= 2) { Text("Search") } }, shape = FynxDesign.ControlShape)
+        if (query.trim().length >= 2 && !loading && (people.isNotEmpty() || posts.isNotEmpty() || listings.isNotEmpty())) {
+            Card(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f)),
+                shape = FynxDesign.CardShape
+            ) {
+                Column(Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Suggestions", modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (tab == "All" || tab == "People") people.take(2).forEach { person ->
+                        Row(Modifier.fillMaxWidth().clickable { onOpenProfile(person.username) }.padding(horizontal = 8.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(person.displayName.ifBlank { "@${person.username}" }, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                            Text("Person", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    if (tab == "All" || tab == "Posts") posts.take(2).forEach { post ->
+                        Row(Modifier.fillMaxWidth().clickable { onOpenPost(post.id) }.padding(horizontal = 8.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(post.text.ifBlank { post.mediaType?.let { "${it.replaceFirstChar(Char::uppercase)} post" } ?: "Post by @${post.authorUsername}" }.take(72), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                            Text("Post", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    if (tab == "All" || tab == "Marketplace") listings.take(2).forEach { listing ->
+                        Row(Modifier.fillMaxWidth().clickable { onOpenListing(listing.id) }.padding(horizontal = 8.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(listing.title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                            Text("Product", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("All", "People", "Posts", "Marketplace").forEach { value -> FilterChip(selected = tab == value, onClick = { tab = value }, label = { Text(value) }) } }
         message?.let { Text(it, color = if (it.contains("failed", true) || it.contains("unavailable", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         if (loading) {
