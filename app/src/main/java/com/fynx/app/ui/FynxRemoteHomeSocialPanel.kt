@@ -41,6 +41,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -878,11 +882,33 @@ private fun VideoDiscoveryCard(video: FynxDiscoveryClient.TrendingPost, isSource
 @Composable
 private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsername: String, profilePhotoMediaId: String?, hasActiveStatus: Boolean, interactionState: FynxRemoteSocialClient.SocialInteractionState, reactionState: FynxHomePostReactionsClient.ReactionState, interactionBusy: Boolean, mediaItems: List<FynxHomePostMediaClient.PostMediaItem>, playbackActive: Boolean, onOpenProfile: () -> Unit, onOpenStatus: () -> Unit, onLike: (String) -> Unit, onComment: () -> Unit, onFollow: (Boolean) -> Unit, onDelete: () -> Unit, onReport: () -> Unit, onInterested: (String) -> Unit, onNotInterested: (String) -> Unit, onSave: (String, Boolean) -> Unit, onRepost: (String, Boolean) -> Unit, onShare: () -> Unit, onOpenReactionPicker: () -> Unit, onReact: (String, String) -> Unit, onOpenAudienceEditor: () -> Unit, reactionPickerOpen: Boolean, onOpenReactionUsers: () -> Unit, onOpenMarketplace: () -> Unit, onOpenVideoDiscovery: () -> Unit, onOpenMediaViewer: (List<FynxHomePostMediaClient.PostMediaItem>, Int) -> Unit) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
     var menuOpen by remember(post.id) { mutableStateOf(false) }
+    var sufficientlyVisible by remember(post.id) { mutableStateOf(false) }
+    var viewerCount by remember(post.id) { mutableIntStateOf(post.viewerCount) }
+    var viewRecorded by remember(post.id) { mutableStateOf(false) }
+    LaunchedEffect(post.id, sufficientlyVisible) {
+        if (sufficientlyVisible && !viewRecorded) {
+            delay(1_000L)
+            if (sufficientlyVisible && !viewRecorded) {
+                FynxRemoteSocialClient.recordPostView(context, post.id).onSuccess { viewerCount = it }
+                viewRecorded = true
+            }
+        }
+    }
     val marketplaceListingId = Regex("""(?m)^Listing ID:\s*(\d+)\s*$""").find(post.text)?.groupValues?.getOrNull(1)
     val mine = post.authorUsername.equals(currentUsername.removePrefix("@"), true); val marketplaceAd = post.text.startsWith(MARKETPLACE_AD_MARKER); val displayText = if (marketplaceAd) post.text.removePrefix(MARKETPLACE_AD_MARKER).trim() else post.text
     val openMarketplaceTarget: (() -> Unit)? = if (marketplaceAd) { { if (marketplaceListingId.isNullOrBlank()) onOpenMarketplace() else context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FynxDeepLinkParser.marketplaceAppLink(marketplaceListingId)))) } } else null
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
+    Column(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)
+            .onGloballyPositioned { coordinates ->
+                val bounds = coordinates.boundsInWindow()
+                val viewportHeight = with(density) { configuration.screenHeightDp.dp.toPx() }
+                val visibleHeight = (minOf(bounds.bottom, viewportHeight) - maxOf(bounds.top, 0f)).coerceAtLeast(0f)
+                sufficientlyVisible = bounds.height > 0f && visibleHeight / bounds.height >= 0.5f
+            }
+    ) {
         if (post.isDiscovery) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Explore, "Suggested for you", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(6.dp)); Text("Suggested for you", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = if (hasActiveStatus) onOpenStatus else onOpenProfile, modifier = Modifier.size(50.dp).semantics { contentDescription = if (hasActiveStatus) "Open ${post.authorDisplayName.ifBlank { post.authorUsername }} status" else "Open ${post.authorDisplayName.ifBlank { post.authorUsername }} profile" }) { Box(Modifier.size(50.dp).border(if (hasActiveStatus) 2.dp else 0.dp, if (hasActiveStatus) Color(0xFF22C55E) else Color.Transparent, CircleShape).padding(if (hasActiveStatus) 2.dp else 0.dp)) { FynxRemoteProfileAvatar(profilePhotoMediaId, post.authorDisplayName.ifBlank { post.authorUsername }, Modifier.size(46.dp).clip(CircleShape), ownerUsername = post.authorUsername) } }
@@ -959,6 +985,20 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
             else -> post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType, openMarketplaceTarget, if (openMarketplaceTarget == null && post.mediaType.equals("video", true)) onOpenVideoDiscovery else null, playbackActive = playbackActive) }
         }
         if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = { openMarketplaceTarget?.invoke() ?: onOpenMarketplace() }) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
+        if (viewerCount > 0 || mine) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Icon(Icons.Default.Visibility, contentDescription = "Unique viewers", modifier = Modifier.size(15.dp), tint = FynxDesign.TextSecondary)
+                Text(
+                    "$viewerCount viewers",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = FynxDesign.TextSecondary
+                )
+            }
+        }
         if (reactionPickerOpen) Surface(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), shape = MaterialTheme.shapes.large, tonalElevation = 2.dp) { Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) { ReactionChoice("👍", "LIKE", reactionState.currentReaction == "LIKE", onReact = { onReact(post.id, it) }); ReactionChoice("❤️", "LOVE", reactionState.currentReaction == "LOVE", onReact = { onReact(post.id, it) }); ReactionChoice("😂", "LAUGH", reactionState.currentReaction == "LAUGH", onReact = { onReact(post.id, it) }); ReactionChoice("😮", "WOW", reactionState.currentReaction == "WOW", onReact = { onReact(post.id, it) }); ReactionChoice("😢", "SAD", reactionState.currentReaction == "SAD", onReact = { onReact(post.id, it) }) } }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f), thickness = 0.7.dp)
         Row(
