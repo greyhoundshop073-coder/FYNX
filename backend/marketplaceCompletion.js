@@ -165,6 +165,14 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
                   WHERE order_media_id = CAST(mm.id AS TEXT)
                 )
             )
+            OR EXISTS (
+              SELECT 1
+              FROM marketplace_delivery_evidence mde
+              JOIN marketplace_orders mo ON mo.id = mde.order_id
+              WHERE mde.evidence_type = 'PHOTO_REFERENCE'
+                AND mde.value = CAST(mm.id AS TEXT)
+                AND (mo.buyer_id = $2 OR mo.seller_id = $2)
+            )
           )
         LIMIT 1`, [mediaId, req.user.sub]);
       if (!result.rows[0]) return res.status(404).json({ error: 'marketplace media not found' });
