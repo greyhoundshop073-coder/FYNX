@@ -368,10 +368,22 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     LaunchedEffect(networkReady) {
         if (networkReady == true) reload()
     }
-    LaunchedEffect(posts, initialPostId, initialCommentId) {
+    LaunchedEffect(initialPostId) {
         val target = initialPostId?.trim()?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
-        val post = posts.firstOrNull { it.id == target } ?: return@LaunchedEffect
-        commentsPost = post
+        val loadedPost = posts.firstOrNull { it.id == target }
+        if (loadedPost != null) {
+            commentsPost = loadedPost
+            onInitialPostConsumed()
+            return@LaunchedEffect
+        }
+        FynxRemoteSocialClient.postById(context, target)
+            .onSuccess { post ->
+                commentsPost = post
+                error = null
+            }
+            .onFailure { failure ->
+                error = failure.message ?: "This post is unavailable. It may have been deleted or its audience may have changed."
+            }
         onInitialPostConsumed()
     }
 
