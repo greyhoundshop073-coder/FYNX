@@ -906,7 +906,8 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
                 val bounds = coordinates.boundsInWindow()
                 val viewportHeight = rootView.height.toFloat()
                 val visibleHeight = (minOf(bounds.bottom, viewportHeight) - maxOf(bounds.top, 0f)).coerceAtLeast(0f)
-                sufficientlyVisible = viewportHeight > 0f && bounds.height > 0f && visibleHeight / bounds.height >= 0.5f
+                val impressionArea = minOf(bounds.height, viewportHeight)
+                sufficientlyVisible = impressionArea > 0f && visibleHeight / impressionArea >= 0.5f
             }
     ) {
         if (post.isDiscovery) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Explore, "Suggested for you", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(6.dp)); Text("Suggested for you", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
