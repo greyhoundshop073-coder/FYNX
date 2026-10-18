@@ -45,7 +45,8 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}, onOpenPost: (
         scope.launch {
             loading = true
             message = null
-            val peopleResult = FynxSocialClient.searchUsers(context, q)
+            val peopleQuery = q.take(32) // The username endpoint accepts at most 32 normalized characters; post/listing search keeps the full 80-character query.
+            val peopleResult = FynxSocialClient.searchUsers(context, peopleQuery)
             val listingResult = FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query = q, category = "All", limit = 30, offset = 0).map { it.listings }
             val postResult = FynxRemoteSocialClient.searchPosts(context, q, limit = 50, offset = 0)
             if (generation != searchGeneration) return@launch
@@ -83,7 +84,7 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}, onOpenPost: (
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Search FYNX", style = MaterialTheme.typography.headlineSmall)
         Text("Suggestions update as you type. Choose a result to open that person, post, or product.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-        OutlinedTextField(value = query, onValueChange = { query = it.take(120) }, modifier = Modifier.fillMaxWidth(), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") }, placeholder = { Text("Search people, posts or products") }, trailingIcon = { TextButton(onClick = { search() }, enabled = query.trim().length >= 2) { Text("Search") } }, shape = FynxDesign.ControlShape)
+        OutlinedTextField(value = query, onValueChange = { query = it.take(80) }, modifier = Modifier.fillMaxWidth(), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") }, placeholder = { Text("Search people, posts or products") }, trailingIcon = { TextButton(onClick = { search() }, enabled = query.trim().length >= 2) { Text("Search") } }, shape = FynxDesign.ControlShape)
         if (query.trim().length >= 2 && !loading && (people.isNotEmpty() || posts.isNotEmpty() || listings.isNotEmpty())) {
             Card(
                 modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp),
