@@ -28,7 +28,7 @@ checks = [
     ("Marketplace ad creation preserves the canonical listing ID", "createMarketplaceAd" in remote and "Listing ID: $listingId" in remote),
     ("Marketplace ad creation uses the real social-post backend", '"/api/social/posts"' in remote),
     ("Marketplace seller center remains a real listing/inventory surface", "FynxMarketplaceSellerCenterPanel" in seller_center and "FynxMarketplaceClient.Listing" in seller_center),
-    ("Seller-specific Marketplace queries can show the seller own active inventory while general discovery hides it", 'if (!seller) where.push("l.seller_id <> $1")' in social_routes and 'if (seller) { params.push(seller); where.push(`u.username = ${params.length}`); }' in social_routes),
+    ("Seller-specific Marketplace queries can show the seller own active inventory while general discovery hides it", 'if (!seller) where.push("l.seller_id <> $1")' in social_routes and 'if (seller) { params.push(seller); where.push(`u.username = $${params.length}`); }' in social_routes),
     ("Marketplace media privacy filters marketplace listing responses", "/api/marketplace/listings" in privacy),
     ("Marketplace media access has a dedicated privacy guard", "marketplace_listings" in marketplace_privacy and "mediaId" in marketplace_privacy),
     ("Marketplace listing detail route is authenticated", 'app.get("/api/marketplace/listing/:id", auth' in discovery_routes),
