@@ -1283,7 +1283,27 @@ private fun createGroupVoiceMediaRecorder(context: android.content.Context): Med
 private suspend fun stagePendingGroupAttachment(context: android.content.Context, uri: Uri, type: String): Uri =
     withContext(Dispatchers.IO) {
         val directory = File(context.filesDir, "fynx_group_pending_media").apply { check(isDirectory || mkdirs()) { "Could not save attachment for retry." } }
-        val extension = when (type) { "audio" -> "m4a"; "video", "video_note" -> "mp4"; "document" -> "bin"; else -> "img" }
+        val originalName = runCatching {
+            context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        }.getOrNull().orEmpty()
+        val sourceExtension = originalName.substringAfterLast('.', "").lowercase().filter { it.isLetterOrDigit() }.take(10)
+        val mimeExtension = when (context.contentResolver.getType(uri)?.substringAfter('/')?.lowercase()) {
+            "jpeg", "jpg" -> "jpg"; "png" -> "png"; "gif" -> "gif"; "webp" -> "webp"; "heic" -> "heic"
+            "mp4" -> if (type == "audio") "m4a" else "mp4"; "quicktime" -> "mov"; "mpeg" -> "mp3"; "wav" -> "wav"
+            "pdf" -> "pdf"; "plain" -> "txt"; "zip" -> "zip"; "msword" -> "doc"
+            "vnd.openxmlformats-officedocument.wordprocessingml.document" -> "docx"
+            "vnd.ms-excel" -> "xls"; "vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> "xlsx"
+            "vnd.ms-powerpoint" -> "ppt"; "vnd.openxmlformats-officedocument.presentationml.presentation" -> "pptx"
+            else -> null
+        }
+        val extension = when (type) {
+            "audio" -> "m4a"
+            "video", "video_note" -> "mp4"
+            "document" -> sourceExtension.ifBlank { mimeExtension ?: "bin" }
+            else -> sourceExtension.ifBlank { mimeExtension ?: "jpg" }
+        }
         val destination = File(directory, "${UUID.randomUUID()}.$extension")
         try {
             val input = context.contentResolver.openInputStream(uri) ?: error("Could not read attachment. Choose it again.")
