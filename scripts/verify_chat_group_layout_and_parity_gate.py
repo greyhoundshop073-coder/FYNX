@@ -25,6 +25,7 @@ require("active group realtime connection is cancelled and closed with the scree
 require("failed group messages remain visible instead of being silently deleted", "it.copy(delivered = false, read = false)" in ACTIVE_GROUP and "messages = messages.map" in ACTIVE_GROUP)
 require("active group conversation exposes a retry action for unsent messages", 'TextButton(enabled = !sending, onClick = {' in ACTIVE_GROUP and 'Text("Retry")' in ACTIVE_GROUP)
 require("active group Gallery opens the device media picker", 'groupMediaPicker.launch("*/*")' in ACTIVE_GROUP and "ActivityResultContracts.GetContent()" in ACTIVE_GROUP)
+require("active group Camera picker sends captured media through the authenticated group pipeline", "FynxGroupCameraPicker(context, onMediaSelected" in ACTIVE_GROUP and "sendGroupAttachment(uri, type)" in ACTIVE_GROUP)
 require("active group Files opens the document picker", "groupDocumentPicker.launch(arrayOf(\"*/*\"))" in ACTIVE_GROUP and "ActivityResultContracts.OpenDocument()" in ACTIVE_GROUP)
 require("group media picker validates MIME type before sending", 'mime.startsWith("video/")' in ACTIVE_GROUP and 'mime.startsWith("image/")' in ACTIVE_GROUP)
 require("group attachments remain retryable after send failure", "it.copy(delivered = false, read = false)" in ACTIVE_GROUP and "Attachment could not be sent." in ACTIVE_GROUP)
