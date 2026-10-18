@@ -1101,6 +1101,7 @@ private fun MarketplaceOrders(context: android.content.Context, orders: List<Fyn
 private fun OrderActions(context: android.content.Context, order: FynxRemoteSocialClient.MarketplaceOrder, onChanged: () -> Unit, onClose: () -> Unit) {
     var dispute by remember { mutableStateOf(false) }
     var details by remember { mutableStateOf("") }
+    var disputeReason by remember { mutableStateOf("OTHER") }
     var rating by remember { mutableIntStateOf(5) }
     var comment by remember { mutableStateOf("") }
     var showLifecycle by remember { mutableStateOf(false) }
@@ -1119,7 +1120,15 @@ private fun OrderActions(context: android.content.Context, order: FynxRemoteSoci
                     Text(when (order.status) { "PAID" -> "Choose delivery or pickup so the seller can fulfill the order."; "SHIPPED" -> "Confirm the order when you receive it."; else -> "Inspect the order and complete it when everything is correct." }, style = MaterialTheme.typography.bodySmall)
                 }
                 when {
-                    dispute -> OutlinedTextField(value = details, onValueChange = { details = it }, label = { Text("What happened?") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+                    dispute -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Choose a reason so FYNX can route the case correctly.")
+                        listOf("ITEM_NOT_RECEIVED" to "Not received", "WRONG_ITEM" to "Wrong item", "DAMAGED" to "Damaged", "NOT_AS_DESCRIBED" to "Not as described", "SUSPECTED_SCAM" to "Suspected scam", "OTHER" to "Other").chunked(2).forEach { row ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                row.forEach { (code, label) -> FilterChip(selected = disputeReason == code, onClick = { disputeReason = code }, label = { Text(label) }) }
+                            }
+                        }
+                        OutlinedTextField(value = details, onValueChange = { details = it.take(4000) }, label = { Text("What happened?") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+                    }
                     order.status == "PAYMENT_PENDING" -> Text("You can cancel this unpaid order.")
                     order.status == "COMPLETED" -> {
                         Text("Rate seller")
@@ -1131,7 +1140,7 @@ private fun OrderActions(context: android.content.Context, order: FynxRemoteSoci
         },
         confirmButton = {
             when {
-                dispute -> Button(onClick = { scope.launch { FynxRemoteSocialClient.disputeMarketplaceOrder(context, order.id, "OTHER", details).onSuccess { onChanged() } } }) { Text("Open dispute") }
+                dispute -> Button(onClick = { scope.launch { FynxRemoteSocialClient.disputeMarketplaceOrder(context, order.id, disputeReason, details.trim()).onSuccess { onChanged() } } }) { Text("Open dispute") }
                 order.status == "PAYMENT_PENDING" -> Button(onClick = { scope.launch { FynxRemoteSocialClient.cancelMarketplaceOrder(context, order.id).onSuccess { onChanged() } } }) { Text("Cancel order") }
                 order.status == "PAID" || order.status == "SHIPPED" || order.status == "INSPECTION" -> Button(onClick = { showLifecycle = true }) { Text(when (order.status) { "PAID" -> "Choose fulfillment"; "SHIPPED" -> "Confirm received"; else -> "Complete order" }) }
                 order.status == "COMPLETED" -> Button(onClick = { scope.launch { FynxRemoteSocialClient.reviewMarketplaceOrder(context, order.id, rating, comment).onSuccess { onChanged() } } }) { Text("Submit review") }
