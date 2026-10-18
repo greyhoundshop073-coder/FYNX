@@ -73,7 +73,8 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var loading by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
     var hasMore by remember { mutableStateOf(false) }
-    var paginationPaused by remember { mutableStateOf(false) }
+    var feedPaginationPaused by remember { mutableStateOf(false) }
+    var discoveryPaginationPaused by remember { mutableStateOf(false) }
     var feedNextCursor by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var feedRequestInFlight by remember { mutableStateOf(false) }
@@ -291,7 +292,13 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         return result
     }
     fun hydrateDiscovery(offset: Int = 0, replace: Boolean = false) {
-        if (discoveryLoadingMore || paginationPaused) return
+        if (discoveryLoadingMore || discoveryPaginationPaused) return
+        val discoveryNetworkReady = networkReady ?: (FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE)
+        if (!discoveryNetworkReady) {
+            error = "You\u0027re offline. Connect to a network to load suggested posts."
+            discoveryPaginationPaused = true
+            return
+        }
         discoveryLoadingMore = true
         scope.launch {
             FynxRemoteSocialClient.discoveryFeed(context, 3, offset).onSuccess { suggested ->
@@ -303,19 +310,19 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                 posts = mergeDiscoveryPosts(base, mergedDiscovery)
                 discoveryOffset = offset + suggested.posts.size
                 discoveryHasMore = suggested.hasMore && suggested.posts.isNotEmpty()
-                paginationPaused = false
+                discoveryPaginationPaused = false
                 resolveAuthorPhotos(additions)
                 hydrateInteractionStates(additions)
                 hydrateReactionStates(additions)
                 hydratePostMedia(additions)
-            }.onFailure { error = it.message ?: "Unable to load suggested posts."; paginationPaused = true }
+            }.onFailure { error = it.message ?: "Unable to load suggested posts."; discoveryPaginationPaused = true }
             discoveryLoadingMore = false
         }
     }
 
     fun reload(forceRefresh: Boolean = false) {
         val now = System.currentTimeMillis(); if (feedRequestInFlight) return; if (forceRefresh && now - lastFeedRequestAt < FEED_REFRESH_DEBOUNCE_MS) return
-        if (forceRefresh) paginationPaused = false
+        if (forceRefresh) { feedPaginationPaused = false; discoveryPaginationPaused = false }
         feedRequestInFlight = true; lastFeedRequestAt = now
         scope.launch {
             loading = true
@@ -339,7 +346,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             var cachedRevalidationStarted = false
             FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
                 .onSuccess { page ->
-                    posts = page.posts; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; paginationPaused = false
+                    posts = page.posts; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; feedPaginationPaused = false
                     interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null
                     resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); hydratePostMedia(page.posts)
                     discoveryOffset = 0; discoveryHasMore = false
@@ -369,7 +376,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         reload(forceRefresh = publishRefreshKey > 0)
     }
     LaunchedEffect(networkReady) {
-        if (networkReady == true) { paginationPaused = false; reload() }
+        if (networkReady == true) { feedPaginationPaused = false; discoveryPaginationPaused = false; reload() }
     }
     LaunchedEffect(initialPostId) {
         val target = initialPostId?.trim()?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
@@ -391,15 +398,15 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     }
 
     fun loadMore() {
-        if (loading || loadingMore || paginationPaused || (!hasMore && !discoveryHasMore) || feedRequestInFlight) return
+        if (loading || loadingMore || feedPaginationPaused || (!hasMore && !discoveryHasMore) || feedRequestInFlight) return
         val activeNetworkReady = networkReady ?: (FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE)
         if (!activeNetworkReady) {
             error = if (posts.isEmpty()) "You're offline. Connect to a network to load your feed." else "You're offline. Connect to a network to load more posts."
-            paginationPaused = true
+            feedPaginationPaused = true
             return
         }
         feedRequestInFlight = true
-        scope.launch { loadingMore = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false, beforeCursor = feedNextCursor).onSuccess { page -> val existing = posts.map { it.id }.toSet(); val additions = page.posts.filterNot { it.id in existing }; posts = posts + additions; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; paginationPaused = false; resolveAuthorPhotos(additions); hydrateInteractionStates(additions); hydrateReactionStates(additions); hydratePostMedia(additions); if (!page.hasMore && discoveryHasMore) hydrateDiscovery(discoveryOffset) }.onFailure { error = it.message ?: "Unable to load more posts."; paginationPaused = true }; loadingMore = false; feedRequestInFlight = false }
+        scope.launch { loadingMore = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false, beforeCursor = feedNextCursor).onSuccess { page -> val existing = posts.map { it.id }.toSet(); val additions = page.posts.filterNot { it.id in existing }; posts = posts + additions; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; feedPaginationPaused = false; resolveAuthorPhotos(additions); hydrateInteractionStates(additions); hydrateReactionStates(additions); hydratePostMedia(additions); if (!page.hasMore && discoveryHasMore) hydrateDiscovery(discoveryOffset) }.onFailure { error = it.message ?: "Unable to load more posts."; feedPaginationPaused = true }; loadingMore = false; feedRequestInFlight = false }
     }
     fun runInteraction(id: String, desired: Boolean, isActive: (FynxRemoteSocialClient.SocialInteractionState) -> Boolean, count: (FynxRemoteSocialClient.SocialInteractionState) -> Int, action: suspend () -> Result<Pair<Boolean, Int>>, update: (FynxRemoteSocialClient.SocialInteractionState, Boolean, Int) -> FynxRemoteSocialClient.SocialInteractionState) {
         if (id in interactionBusy) return
@@ -457,8 +464,9 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     LaunchedEffect(feedListState, posts.size, hasMore, discoveryHasMore, loading, loadingMore, discoveryLoadingMore, feedRequestInFlight) {
         snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }
             .collect { (lastVisibleIndex, totalItems) ->
-                if (lastVisibleIndex != null && lastVisibleIndex >= totalItems - 6 && !loading && !loadingMore && !discoveryLoadingMore && !feedRequestInFlight && !paginationPaused) {
-                    if (hasMore) loadMore() else if (discoveryHasMore) hydrateDiscovery(discoveryOffset)
+                if (lastVisibleIndex != null && lastVisibleIndex >= totalItems - 6 && !loading && !loadingMore && !discoveryLoadingMore && !feedRequestInFlight) {
+                    if (hasMore && !feedPaginationPaused) loadMore()
+                    else if (!hasMore && discoveryHasMore && !discoveryPaginationPaused) hydrateDiscovery(discoveryOffset)
                 }
             }
     }
@@ -865,10 +873,16 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
                 FynxExpandableCaption(displayText, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp))
             }
         }
-        if (mediaItems.isNotEmpty()) {
-            PostMediaGrid(mediaItems, playbackActive = playbackActive, onOpenMedia = { index -> onOpenMediaViewer(mediaItems, index) }, onOpenVideoDiscovery = onOpenVideoDiscovery.takeIf { mediaItems.size == 1 })
-        } else {
-            post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType, openMarketplaceTarget, if (openMarketplaceTarget == null && post.mediaType.equals("video", true)) onOpenVideoDiscovery else null, playbackActive = playbackActive) }
+        val visualMediaItems = mediaItems.filter { it.mediaType.equals("image", true) || it.mediaType.equals("video", true) }
+        when {
+            visualMediaItems.isNotEmpty() -> PostMediaGrid(visualMediaItems, playbackActive = playbackActive, onOpenMedia = { index -> onOpenMediaViewer(visualMediaItems, index) }, onOpenVideoDiscovery = onOpenVideoDiscovery.takeIf { visualMediaItems.size == 1 && visualMediaItems[0].mediaType.equals("video", true) })
+            mediaItems.isNotEmpty() -> {
+                // Voice-note posts have normalized media rows too, but the photo/video grid
+                // intentionally excludes audio. Render the audio item instead of hiding it.
+                val audioMedia = mediaItems.first()
+                RemoteSocialMedia(audioMedia.mediaUrl, audioMedia.mediaType, onOpenMarketplace = null, playbackActive = playbackActive)
+            }
+            else -> post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType, openMarketplaceTarget, if (openMarketplaceTarget == null && post.mediaType.equals("video", true)) onOpenVideoDiscovery else null, playbackActive = playbackActive) }
         }
         if (!post.musicMediaId.isNullOrBlank()) MusicPostPlayer(post.musicMediaId!!, post.musicTitle.orEmpty(), post.musicArtist.orEmpty(), post.musicDurationMs)
         if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = { openMarketplaceTarget?.invoke() ?: onOpenMarketplace() }) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
