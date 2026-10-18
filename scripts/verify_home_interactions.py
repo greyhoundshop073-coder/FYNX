@@ -80,7 +80,7 @@ for needle in ('feedPage(context, limit = 20, offset = 0','beforeCursor = feedNe
 for needle in ('var feedPaginationPaused by remember { mutableStateOf(false) }','var discoveryPaginationPaused by remember { mutableStateOf(false) }','if (discoveryLoadingMore || discoveryPaginationPaused) return','discoveryPaginationPaused = true','feedPaginationPaused = true','if (hasMore && !feedPaginationPaused)','else if (!hasMore && discoveryHasMore && !discoveryPaginationPaused)','if (forceRefresh) { feedPaginationPaused = false; discoveryPaginationPaused = false }'):
     require(home, needle, f"independent feed/discovery pagination recovery {needle}")
 require(home, 'if (!discoveryNetworkReady) {', "Home discovery does not request more posts while offline")
-require(home, 'LaunchedEffect(posts.size, discoveryOffset, discoveryHasMore, discoveryPaginationPaused, feedRequestInFlight)', "Home loads the initial suggested-post page only after feed revalidation settles")
+require(home, 'LaunchedEffect(posts.size, discoveryOffset, discoveryHasMore, discoveryPaginationPaused, feedRequestInFlight, loading)', "Home loads the initial suggested-post page only after feed revalidation settles")
 require(home, 'hydrateDiscovery(0, replace = true)', "Home discovery starts from a clean first page after feed load")
 require(home, 'var discoveryVideosError by remember { mutableStateOf<String?>(null) }', "Home video discovery has an explicit error state")
 require(home, 'discoveryVideosError = failure.message ?: "Unable to load discovery videos."', "Home video discovery failures are not silently swallowed")
