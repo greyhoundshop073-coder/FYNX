@@ -508,7 +508,10 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
   app.post('/api/marketplace/orders/:id/driver-handover', auth, async (req, res) => {
     const id = parseUuid(req.params.id);
     const note = typeof req.body?.note === 'string' ? req.body.note.trim().slice(0, 1000) : '';
+    const rawPhotoReference = typeof req.body?.photoReference === 'string' ? req.body.photoReference.trim() : '';
+    const photoMediaId = rawPhotoReference ? Number(rawPhotoReference) : null;
     if (!id || !note) return res.status(400).json({ error: 'valid order id and handover note are required' });
+    if (rawPhotoReference && (!Number.isSafeInteger(photoMediaId) || photoMediaId < 1)) return res.status(400).json({ error: 'photo reference must be a valid uploaded media id' });
     const client = await pool.connect();
     try {
       await ensureSchema(); await client.query('BEGIN');
@@ -528,8 +531,15 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
         if (!assignment.accepted_at) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'driver must accept the assignment before handover' }); }
       }
       if (assignment.handover_at) { await client.query('COMMIT'); return res.json({ handedOver: true, handoverAt: assignment.handover_at, idempotent: true }); }
+      if (photoMediaId !== null) {
+        const media = (await client.query('SELECT mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1', [photoMediaId, req.user.sub])).rows[0];
+        if (!media) { await client.query('ROLLBACK'); return res.status(403).json({ error: 'handover photo must be uploaded by the signed-in seller' }); }
+        const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+        if (!allowedImageTypes.has(String(media.mime_type || '').trim().toLowerCase())) { await client.query('ROLLBACK'); return res.status(415).json({ error: 'handover evidence must be a JPEG, PNG, WebP or GIF image' }); }
+      }
       const updated = await client.query('UPDATE marketplace_delivery_assignments SET handover_at=NOW(),updated_at=NOW() WHERE order_id=$1 RETURNING handover_at', [id]);
       await client.query("INSERT INTO marketplace_delivery_evidence (order_id,submitted_by,evidence_type,value) VALUES ($1,$2,'HANDOVER_NOTE',$3)", [id, req.user.sub, note]);
+      if (photoMediaId !== null) await client.query("INSERT INTO marketplace_delivery_evidence (order_id,submitted_by,evidence_type,value) VALUES ($1,$2,'PHOTO_REFERENCE',$3)", [id, req.user.sub, String(photoMediaId)]);
       await recordFulfillmentEvent(client, id, req.user.sub, localDriver ? 'LOCAL_DRIVER_CUSTODY_HANDED_OVER' : 'DELIVERY_CUSTODY_HANDED_OVER', order.fulfillment_status || 'DISPATCHED', order.fulfillment_status || 'DISPATCHED', { driverType: localDriver ? 'SELLER_LOCAL' : 'FYNX_ACCOUNT', driverId: assignment.driver_id ? String(assignment.driver_id) : null, localDriverName: assignment.local_driver_name || null, pickupPoint: assignment.pickup_point || null, note });
       await client.query('COMMIT');
       return res.json({ handedOver: true, handoverAt: updated.rows[0].handover_at, driverId: assignment.driver_id ? String(assignment.driver_id) : null, driverType: localDriver ? 'SELLER_LOCAL' : 'FYNX_ACCOUNT' });
