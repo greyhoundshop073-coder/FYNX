@@ -48,6 +48,18 @@ object FynxRemoteSocialClient {
         return FynxBackendClient.getBounded(context, path).mapCatching(::parseFeedPage)
     }
 
+    suspend fun postById(context: Context, postId: String): Result<RemotePost> {
+        val id = postId.trim()
+        if (id.isEmpty() || id.length > 20 || id.any { !it.isDigit() }) {
+            return Result.failure(IllegalArgumentException("Invalid post id."))
+        }
+        return FynxBackendClient.getBounded(context, "/api/social/posts/$id/detail")
+            .mapCatching { raw ->
+                parseFeedPage(raw).posts.firstOrNull()
+                    ?: throw IllegalStateException("This post is no longer available or you no longer have permission to view it.")
+            }
+    }
+
     private fun parseFeedPage(raw: String): FeedPage {
         val root = JSONObject(raw)
         val array = root.optJSONArray("posts") ?: JSONArray()
