@@ -161,8 +161,8 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const seller = typeof req.query?.seller === "string" ? req.query.seller.trim().toLowerCase().replace(/^@+/, "") : "";
       const params = [req.user.sub];
       const where = ["l.active = TRUE", "l.quantity > 0", "l.seller_id <> $1", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')"];
-      if (q) { params.push(`%${q}%`); where.push(`(l.title ILIKE $${params.length} OR l.description ILIKE $${params.length} OR u.username ILIKE $${params.length} OR u.display_name ILIKE $${params.length})`); }
-      if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category = $${params.length}`); }
+      if (q) { params.push(`%${q}%`); where.push(`(l.title ILIKE ${params.length} OR l.description ILIKE ${params.length} OR l.store_name ILIKE ${params.length} OR l.category ILIKE ${params.length} OR u.username ILIKE ${params.length} OR u.display_name ILIKE ${params.length})`); }
+      if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`UPPER(COALESCE(l.category,'')) = UPPER(${params.length})`); }
       if (seller) { params.push(seller); where.push(`u.username = $${params.length}`); }
       const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, l.store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, l.created_at FROM marketplace_listings l JOIN users u ON u.id = l.seller_id WHERE ${where.join(" AND ")} ORDER BY l.created_at DESC LIMIT 100`, params);
       return res.json({ listings: result.rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [] })) });

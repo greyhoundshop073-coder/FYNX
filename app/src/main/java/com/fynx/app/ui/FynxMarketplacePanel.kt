@@ -194,7 +194,10 @@ private fun MarketplaceSmartDealsHero(
 fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, initialListingId: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var listings by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
+    val cartOwnerKey = currentUsername.removePrefix("@").trim().lowercase(Locale.US).ifBlank { "preview" }
+    val initialCatalogueCache = remember(context, cartOwnerKey) { FynxMarketplaceOfflineCache.read(context, cartOwnerKey) }
+    var listings by remember(cartOwnerKey) { mutableStateOf(initialCatalogueCache?.listings.orEmpty()) }
+    var catalogueIsStale by remember(cartOwnerKey) { mutableStateOf(initialCatalogueCache?.listings?.isNotEmpty() == true) }
     var hasMoreListings by remember { mutableStateOf(false) }
     var loadingMoreListings by remember { mutableStateOf(false) }
     var nextListingsOffset by remember { mutableIntStateOf(0) }
@@ -228,7 +231,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var showSell by remember { mutableStateOf(false) }
     var showOrders by remember { mutableStateOf(false) }
     // Keep saved carts isolated when multiple accounts use the same device.
-    val cartOwnerKey = currentUsername.removePrefix("@").trim().lowercase(Locale.US).ifBlank { "preview" }
     val restoredMarketplaceCart = remember(context, cartOwnerKey) { readFynxMarketplaceCart(context, cartOwnerKey) }
     var cart by remember(cartOwnerKey) { mutableStateOf(restoredMarketplaceCart.items) }
     var cartQuantities by remember(cartOwnerKey) { mutableStateOf(restoredMarketplaceCart.quantities) }
@@ -310,14 +312,34 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             }
             if (requestGeneration != listingRequestGeneration) return@launch
             if (result == null) {
-                error = "Marketplace is taking longer than expected. Check your connection and try again."
+                val cached = FynxMarketplaceOfflineCache.read(context, cartOwnerKey)
+                if (cached != null && !requestNearbyMode) {
+                    listings = FynxMarketplaceOfflineCache.filter(cached.listings, requestQuery, requestCategory)
+                    catalogueIsStale = listings.isNotEmpty()
+                    error = "Showing saved products. Prices and stock may have changed; reconnect and refresh before buying."
+                } else {
+                    error = "Marketplace is taking longer than expected. Check your connection and try again."
+                }
             } else {
                 result.onSuccess { (items, more, fallbackWarning) ->
                     listings = items.distinctBy { it.id }
+                    if (requestQuery.isBlank() && requestCategory.equals("All", ignoreCase = true) && !requestNearbyMode) {
+                        FynxMarketplaceOfflineCache.write(context, cartOwnerKey, listings)
+                    }
+                    catalogueIsStale = false
                     hasMoreListings = more
                     discoveryFallbackWarning = fallbackWarning
                     nextListingsOffset = advanceMarketplaceListingsOffset(0, 24)
-                }.onFailure { error = it.message ?: "Marketplace could not load." }
+                }.onFailure { failure ->
+                    val cached = FynxMarketplaceOfflineCache.read(context, cartOwnerKey)
+                    if (cached != null && !requestNearbyMode) {
+                        listings = FynxMarketplaceOfflineCache.filter(cached.listings, requestQuery, requestCategory)
+                        catalogueIsStale = listings.isNotEmpty()
+                        error = "Showing saved products. Prices and stock may have changed; reconnect and refresh before buying."
+                    } else {
+                        error = failure.message ?: "Marketplace could not load."
+                    }
+                }
             }
             // Listing visibility must not wait on the independent orders request.
             loading = false
@@ -342,6 +364,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             } else {
                 result.onSuccess { page ->
                     listings = appendDistinctMarketplacePage(listings, page.listings) { it.id }
+                    if (requestQuery.isBlank() && requestCategory.equals("All", ignoreCase = true)) {
+                        FynxMarketplaceOfflineCache.write(context, cartOwnerKey, listings)
+                    }
+                    catalogueIsStale = false
                     nextListingsOffset = advanceMarketplaceListingsOffset(nextListingsOffset, 24)
                     hasMoreListings = page.hasMore && page.listings.isNotEmpty()
                     error = null
@@ -421,7 +447,16 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         if (listingId.isNotBlank()) {
             loadExactMarketplaceListing(context, listingId)
                 .onSuccess { listing -> selected = listing }
-                .onFailure { error = it.message ?: "Marketplace listing could not be opened." }
+                .onFailure { failure ->
+                    val cached = FynxMarketplaceOfflineCache.read(context, cartOwnerKey)?.listings?.firstOrNull { it.id == listingId }
+                    if (cached != null) {
+                        selected = cached
+                        catalogueIsStale = true
+                        error = "Showing a saved copy. Reconnect to verify availability before buying."
+                    } else {
+                        error = failure.message ?: "Marketplace listing could not be opened."
+                    }
+                }
         }
     }
 
@@ -444,6 +479,18 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 nearbyLoading = nearbyLoading,
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
             )
+            if (catalogueIsStale && listings.isNotEmpty()) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer
+                ) {
+                    Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Saved catalogue — prices and stock may be outdated.", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                        TextButton(onClick = { reload() }) { Text("Refresh") }
+                    }
+                }
+            }
             if (query.isBlank() && recentSearches.isNotEmpty()) {
                 Row(
                     Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, bottom = 8.dp),
@@ -726,7 +773,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             sellerReputation = sellerReputations[sellerKey],
             onProfile = { sellerStoreUsername = listing.sellerUsername; selected = null },
             onContact = { contactSeller(listing.sellerUsername, listing.id) },
-            onBuyNow = { selected = null; checkoutListing = listing },
+            onBuyNow = { if (catalogueIsStale) { selected = null; error = "Reconnect and refresh this listing before buying." } else { selected = null; checkoutListing = listing } },
             onAddToCart = { if (cart.none { it.id == listing.id }) { if (cart.size >= 20) error = "Your FYNX cart can contain at most 20 different products." else { cart = cart + listing; cartQuantities = cartQuantities + (listing.id to 1) } }; selected = null },
             onBuyTogether = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(listing.id, listing.title)) },
             onLiveProof = { onLiveProof(listing.sellerUsername) },
@@ -765,7 +812,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     checkoutListing?.let { listing -> FynxMarketplaceCheckoutDialog(context = context, listing = listing, onProtectedOrder = { order -> checkoutListing = null; orders = listOf(order) + orders.filterNot { it.id == order.id }; paymentOrder = order }, onClose = { checkoutListing = null }) }
     paymentOrder?.let { order -> MarketplacePaymentDialog(context = context, order = order, onPaid = { paymentOrder = null; protectedOrder = order; reload() }, onClose = { paymentOrder = null }) }
     protectedOrder?.let { order -> MarketplaceProtectedOrderDialog(order = order, onViewOrder = { protectedOrder = null; showOrders = true }, onContinue = { protectedOrder = null }) }
-    if (showCart) MarketplaceCartDialog(items = cart, quantities = cartQuantities, onQuantityChange = { id, value -> cartQuantities = cartQuantities + (id to value) }, onRemove = { item -> cart = cart.filterNot { it.id == item.id }; cartQuantities = cartQuantities - item.id }, onCheckout = { selectedItems -> showCart = false; multiCheckoutItems = selectedItems }, onClose = { showCart = false })
+    if (showCart) MarketplaceCartDialog(items = cart, quantities = cartQuantities, onQuantityChange = { id, value -> cartQuantities = cartQuantities + (id to value) }, onRemove = { item -> cart = cart.filterNot { it.id == item.id }; cartQuantities = cartQuantities - item.id }, onCheckout = { selectedItems -> if (catalogueIsStale) { showCart = false; error = "Reconnect and refresh live prices and stock before checkout." } else { showCart = false; multiCheckoutItems = selectedItems } }, onClose = { showCart = false })
     multiCheckoutItems?.let { selectedItems -> FynxMarketplaceMultiCheckoutDialog(context, selectedItems, cartQuantities, onPaymentReady = { id, total, currency -> multiPaymentListingIds = selectedItems.map { it.id }.toSet(); multiCheckoutItems = null; multiPayment = Triple(id, total, currency) }, onClose = { multiCheckoutItems = null }) }
     multiPayment?.let { p -> MarketplaceMultiProductPaymentDialog(context, p.first, p.second, p.third, onPaid = { val paidIds = multiPaymentListingIds; cart = cart.filterNot { it.id in paidIds }; cartQuantities = cartQuantities.filterKeys { it !in paidIds }; multiPaymentListingIds = emptySet(); multiPayment = null; reload() }, onClose = { multiPaymentListingIds = emptySet(); multiPayment = null }) }
     if (showOrders) MarketplaceOrders(context, orders, onRefresh = { reload() }, onClose = { showOrders = false })
@@ -1035,7 +1082,7 @@ private fun MarketplacePaymentDialog(context: android.content.Context, order: Fy
 
 @Composable
 private fun MarketplaceSellDialog(context: android.content.Context, onPublished: () -> Unit, onCancel: () -> Unit) {
-    var title by remember { mutableStateOf("") }; var desc by remember { mutableStateOf("") }; var price by remember { mutableStateOf("") }; var currency by remember { mutableStateOf(FynxMarketplaceSellerFlowSupport.DEFAULT_CURRENCY) }; var quantity by remember { mutableStateOf("1") }; var category by remember { mutableStateOf("Electronics") }; var location by remember { mutableStateOf("") }; var delivery by remember { mutableStateOf(false) }; var pickup by remember { mutableStateOf(true) }; var media by remember { mutableStateOf<List<Uri>>(emptyList()) }; var showCamera by remember { mutableStateOf(false) }; var busy by remember { mutableStateOf(false) }; var locationLoading by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }; val scope = rememberCoroutineScope()
+    var title by remember { mutableStateOf("") }; var storeName by remember { mutableStateOf("") }; var desc by remember { mutableStateOf("") }; var price by remember { mutableStateOf("") }; var currency by remember { mutableStateOf(FynxMarketplaceSellerFlowSupport.DEFAULT_CURRENCY) }; var quantity by remember { mutableStateOf("1") }; var category by remember { mutableStateOf("Electronics") }; var location by remember { mutableStateOf("") }; var delivery by remember { mutableStateOf(false) }; var pickup by remember { mutableStateOf(true) }; var media by remember { mutableStateOf<List<Uri>>(emptyList()) }; var showCamera by remember { mutableStateOf(false) }; var busy by remember { mutableStateOf(false) }; var locationLoading by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }; val scope = rememberCoroutineScope()
     val sellerLocationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
         if (permissions.values.any { it }) {
             scope.launch {
@@ -1065,14 +1112,14 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         Text("Add product media, then enter the key details.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Text("Product media (${media.size}/${FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA})", style = MaterialTheme.typography.labelLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) { OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }, enabled = !busy && media.size < FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Collections, null); Spacer(Modifier.width(5.dp)); Text("Choose media") }; OutlinedButton(onClick = { showCamera = true }, enabled = !busy && media.size < FynxMarketplaceSellerFlowSupport.MAX_PRODUCT_MEDIA, modifier = Modifier.weight(1f)) { Icon(Icons.Default.PhotoCamera, null); Spacer(Modifier.width(5.dp)); Text("Camera") } }
         if (media.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp), contentPadding = PaddingValues(vertical = 2.dp)) { items(media, key = { it.toString() }) { uri -> Box(Modifier.width(78.dp).height(78.dp)) { val isVideo = contextIsVideo(LocalContext.current, uri); if (isVideo) Box(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant), Alignment.Center) { Icon(Icons.Default.Videocam, "Video") } else AndroidView(factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP } }, update = { imageView -> imageView.setImageURI(uri) }, modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))); IconButton(onClick = { media = media.filterNot { it == uri } }, modifier = Modifier.align(Alignment.TopEnd).size(28.dp)) { Icon(Icons.Default.Close, "Remove", tint = MaterialTheme.colorScheme.error) } } } }
-        OutlinedTextField(title, { title = it }, label = { Text("Product name") }, singleLine = true, modifier = Modifier.fillMaxWidth());
+        OutlinedTextField(title, { title = it }, label = { Text("Product name") }, singleLine = true, modifier = Modifier.fillMaxWidth()); OutlinedTextField(storeName, { storeName = it.take(120) }, label = { Text("Store name (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth());
         Text("Currency", style = MaterialTheme.typography.labelLarge); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FynxMarketplaceSellerFlowSupport.SUPPORTED_CURRENCIES.forEach { code -> FilterChip(selected = currency == code, onClick = { currency = code }, label = { Text(code) }) } }
         OutlinedTextField(price, { price = it }, label = { Text("Price ($currency)") }, singleLine = true, modifier = Modifier.fillMaxWidth()); OutlinedTextField(quantity, { quantity = it }, label = { Text("Quantity") }, singleLine = true, modifier = Modifier.fillMaxWidth()); OutlinedTextField(desc, { desc = it }, label = { Text("Description") }, minLines = 3, modifier = Modifier.fillMaxWidth()); OutlinedTextField(location, { location = it }, label = { Text("Listing area") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedButton(onClick = { useCurrentListingLocation() }, enabled = !busy && !locationLoading, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.LocationOn, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(if (locationLoading) "Finding your area..." else "Use my current area") }
         Text("FYNX uses a human-readable area for discovery; your exact GPS coordinates are not published with the listing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) { listOf("Electronics", "Fashion", "Home", "Beauty", "Vehicles", "Services").forEach { item -> FilterChip(category == item, { category = item }, label = { Text(item) }) } }
         Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(delivery, { delivery = it }); Text("Delivery") }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(pickup, { pickup = it }); Text("Pickup") }; error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(enabled = !busy && location.trim().isNotBlank() && FynxMarketplaceSellerFlowSupport.validListing(title, desc, price.toDoubleOrNull(), quantity.toIntOrNull(), media) && FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency), onClick = { busy = true; error = null; scope.launch { FynxRemoteSocialClient.createMarketplaceListing(context, title, desc, "", price.toDouble(), currency, category, "NEW", quantity.toIntOrNull() ?: 1, location, delivery, pickup, null, media).onSuccess { onPublished() }.onFailure { error = it.message ?: "Listing could not be published."; busy = false } } }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Publish") } }, dismissButton = { TextButton(onClick = onCancel, enabled = !busy) { Text("Cancel") } })
+    } }, confirmButton = { Button(enabled = !busy && location.trim().isNotBlank() && FynxMarketplaceSellerFlowSupport.validListing(title, desc, price.toDoubleOrNull(), quantity.toIntOrNull(), media) && FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency), onClick = { busy = true; error = null; scope.launch { FynxRemoteSocialClient.createMarketplaceListing(context, title, desc, storeName, price.toDouble(), currency, category, "NEW", quantity.toIntOrNull() ?: 1, location, delivery, pickup, null, media).onSuccess { onPublished() }.onFailure { error = it.message ?: "Listing could not be published."; busy = false } } }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Publish") } }, dismissButton = { TextButton(onClick = onCancel, enabled = !busy) { Text("Cancel") } })
     if (showCamera) Dialog(onDismissRequest = { showCamera = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) { Surface(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize().safeDrawingPadding()) { FynxCameraCapturePanel(onCaptured = { uri, _ -> media = FynxMarketplaceSellerFlowSupport.addMedia(context, media, uri); showCamera = false }, onDismiss = { showCamera = false }) } } }
 }
 
