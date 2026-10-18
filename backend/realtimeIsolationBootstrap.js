@@ -160,7 +160,7 @@ async function installHomeCommentBackend() {
            FROM social_post_comments c
            JOIN users u ON u.id=c.author_id
           WHERE c.post_id=$1
-            AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$2)\` + cursorClause + \`)
+            AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$2))\` + cursorClause + \`
           ORDER BY c.id DESC
           LIMIT $3\`,
         before === null ? [postId, req.user.sub, limit + 1] : [postId, req.user.sub, limit + 1, before]
