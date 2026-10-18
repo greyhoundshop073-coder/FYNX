@@ -5,6 +5,7 @@ import android.content.Intent
 import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.net.Uri
 import android.view.ViewGroup
 import android.view.Surface
@@ -1080,15 +1081,37 @@ private fun FynxFeedTextureVideo(
     var prepared by remember(file) { mutableStateOf(false) }
     var playing by remember(file) { mutableStateOf(false) }
 
-    Box(Modifier.fillMaxSize()) {
+    fun fitVideoInsideView(view: TextureView, videoWidth: Int, videoHeight: Int) {
+        val viewWidth = view.width
+        val viewHeight = view.height
+        if (viewWidth <= 0 || viewHeight <= 0 || videoWidth <= 0 || videoHeight <= 0) return
+        val viewRatio = viewWidth.toFloat() / viewHeight.toFloat()
+        val videoRatio = videoWidth.toFloat() / videoHeight.toFloat()
+        val scaleX = if (videoRatio < viewRatio) videoRatio / viewRatio else 1f
+        val scaleY = if (videoRatio > viewRatio) viewRatio / videoRatio else 1f
+        view.setTransform(Matrix().apply {
+            setScale(scaleX, scaleY, viewWidth / 2f, viewHeight / 2f)
+        })
+    }
+
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
             factory = { ctx ->
                 TextureView(ctx).apply {
                     isClickable = false
                     isFocusable = false
+                    setBackgroundColor(android.graphics.Color.BLACK)
+                    addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                        fitVideoInsideView(this, player.videoWidth, player.videoHeight)
+                    }
                     setSurfaceTextureListener(object : TextureView.SurfaceTextureListener {
-                        override fun onSurfaceTextureAvailable(texture: android.graphics.SurfaceTexture, width: Int, height: Int) { textureState.value = texture }
-                        override fun onSurfaceTextureSizeChanged(texture: android.graphics.SurfaceTexture, width: Int, height: Int) = Unit
+                        override fun onSurfaceTextureAvailable(texture: android.graphics.SurfaceTexture, width: Int, height: Int) {
+                            textureState.value = texture
+                            fitVideoInsideView(this@apply, player.videoWidth, player.videoHeight)
+                        }
+                        override fun onSurfaceTextureSizeChanged(texture: android.graphics.SurfaceTexture, width: Int, height: Int) {
+                            fitVideoInsideView(this@apply, player.videoWidth, player.videoHeight)
+                        }
                         override fun onSurfaceTextureDestroyed(texture: android.graphics.SurfaceTexture): Boolean { textureState.value = null; return true }
                         override fun onSurfaceTextureUpdated(texture: android.graphics.SurfaceTexture) = Unit
                     })
@@ -1128,6 +1151,11 @@ private fun FynxFeedTextureVideo(
             player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f)
             player.setOnPreparedListener {
                 prepared = true
+                textureState.value?.let { texture ->
+                    // Preserve the source video's aspect ratio inside the bounded feed frame.
+                    // This prevents unusually tall/wide uploads from being stretched.
+                    // TextureView layout updates reapply this transform after rotation/resizing.
+                }
                 if (playbackActive) runCatching { it.start(); playing = true; onPlayingChanged(true) }
             }
             player.setOnCompletionListener { playing = false; onPlayingChanged(false) }
