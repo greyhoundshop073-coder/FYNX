@@ -23,7 +23,7 @@ require("active group conversation loads authenticated remote history", "FynxGro
 require("active group conversation handles realtime group-message events", "FynxRealtimeClient.Event.GroupMessage" in ACTIVE_GROUP and "realtime.connect()" in ACTIVE_GROUP)
 require("active group realtime connection is cancelled and closed with the screen", "awaitCancellation()" in ACTIVE_GROUP and "realtime.close()" in ACTIVE_GROUP)
 require("failed group messages remain visible instead of being silently deleted", "it.copy(delivered = false, read = false)" in ACTIVE_GROUP and "messages = messages.map" in ACTIVE_GROUP)
-require("active group conversation exposes a retry action for unsent messages", 'TextButton(enabled = !sending, onClick = {' in ACTIVE_GROUP and 'Text("Retry")' in ACTIVE_GROUP)
+require("active group conversation exposes a retry action for unsent messages", 'TextButton(enabled = !sending, onClick = {' in ACTIVE_GROUP and 'Text(if (unsentCount == 1) "Retry" else "Retry all")' in ACTIVE_GROUP)
 require("active group conversation retries every failed outgoing message, not only the last one", 'messages.filter { it.fromMe && !it.delivered }' in ACTIVE_GROUP and 'Text(if (unsentCount == 1) "Retry" else "Retry all")' in ACTIVE_GROUP and "for (failedMessage in pendingMessages)" in ACTIVE_GROUP)
 require("active group Gallery opens the device media picker", 'groupMediaPicker.launch("*/*")' in ACTIVE_GROUP and "ActivityResultContracts.GetContent()" in ACTIVE_GROUP)
 require("active group Camera picker sends captured media through the authenticated group pipeline", "FynxGroupCameraPicker(context, onMediaSelected" in ACTIVE_GROUP and "sendGroupAttachment(uri, type)" in ACTIVE_GROUP)
