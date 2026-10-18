@@ -36,6 +36,8 @@ app_shell = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
 
 for needle in ("app.get('/api/social/search',auth,async(req,res)=>{", "p.text ILIKE $2", "COALESCE(p.media_type,'') ILIKE $2", "COALESCE(p.music_title,'') ILIKE $2", "COALESCE(p.feeling_activity,'') ILIKE $2", "social_post_audience a WHERE a.post_id=p.id AND a.user_id=$1", "NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$1))"):
     require(social_routes, needle, f"privacy-aware post search contract {needle}")
+for needle in ("COALESCE(l.category,'') ILIKE", "COALESCE(l.store_name,'') ILIKE"):
+    require(discovery, needle, f"Marketplace search includes product category and store name {needle}")
 for needle in ('suspend fun searchPosts(context: Context, query: String', '"/api/social/search?q='):
     require(client, needle, f"dedicated post-search client contract {needle}")
 for needle in ('FynxRemoteSocialClient.searchPosts(context, q', 'FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query = q', 'onOpenPost(post.id)', 'onOpenListing(listing.id)', 'Suggestions update as you type'):
