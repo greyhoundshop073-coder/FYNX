@@ -68,7 +68,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) -> Unit = {}) {
@@ -365,11 +367,27 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         messages = next
         FynxChatStore.save(context, "group_$groupId", next)
         scope.launch {
-            FynxGroupRemoteClient.sendMessage(context, groupId, optimistic)
+            var stagedUri: Uri? = null
+            runCatching { stagePendingGroupAttachment(context, uri, type) }
+                .onSuccess { durableUri ->
+                    stagedUri = durableUri
+                    messages = messages.map { if (it.id == optimistic.id) it.copy(attachmentUri = durableUri.toString()) else it }
+                    FynxChatStore.save(context, "group_$groupId", messages)
+                }
+                .onFailure { error ->
+                    messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
+                    FynxChatStore.save(context, "group_$groupId", messages)
+                    syncMessage = error.message ?: "Attachment could not be saved for retry. Choose it again."
+                }
+            if (stagedUri == null) return@launch
+            val stagedMessage = messages.firstOrNull { it.id == optimistic.id } ?: optimistic.copy(attachmentUri = stagedUri.toString())
+            FynxGroupRemoteClient.sendMessage(context, groupId, stagedMessage)
                 .onSuccess { remote ->
                     val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
                     messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
                     FynxChatStore.save(context, "group_$groupId", messages)
+                    deletePendingGroupAttachment(context, stagedUri.toString())
+                    if (uri.scheme == "file") runCatching { File(uri.path.orEmpty()).takeIf { it.name.startsWith("fynx_group_voice_") }?.delete() }
                     syncMessage = null
                 }
                 .onFailure { error ->
@@ -705,6 +723,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                         val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
                                         messages = messages.map { if (it.id == failedMessage.id) serverMessage else it }
                                         FynxChatStore.save(context, "group_$groupId", messages)
+                                        failedMessage.attachmentUri?.let { deletePendingGroupAttachment(context, it) }
                                     }
                                     .onFailure { error ->
                                         failedCount += 1
@@ -1259,3 +1278,30 @@ private fun FynxCatchMeUpSheet(
 @Suppress("DEPRECATION")
 private fun createGroupVoiceMediaRecorder(context: android.content.Context): MediaRecorder =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
+
+
+private suspend fun stagePendingGroupAttachment(context: android.content.Context, uri: Uri, type: String): Uri =
+    withContext(Dispatchers.IO) {
+        val directory = File(context.filesDir, "fynx_group_pending_media").apply { check(isDirectory || mkdirs()) { "Could not save attachment for retry." } }
+        val extension = when (type) { "audio" -> "m4a"; "video", "video_note" -> "mp4"; "document" -> "bin"; else -> "img" }
+        val destination = File(directory, "${UUID.randomUUID()}.$extension")
+        try {
+            val input = context.contentResolver.openInputStream(uri) ?: error("Could not read attachment. Choose it again.")
+            input.use { source -> destination.outputStream().use { output -> source.copyTo(output) } }
+            if (destination.length() <= 0L) error("Attachment is empty. Choose it again.")
+            Uri.fromFile(destination)
+        } catch (error: Throwable) {
+            destination.delete()
+            throw error
+        }
+    }
+
+private fun deletePendingGroupAttachment(context: android.content.Context, uriText: String) {
+    runCatching {
+        val uri = Uri.parse(uriText)
+        if (uri.scheme != "file") return@runCatching
+        val pendingDirectory = File(context.filesDir, "fynx_group_pending_media").canonicalFile
+        val candidate = File(uri.path.orEmpty()).canonicalFile
+        if (candidate.parentFile == pendingDirectory) candidate.delete()
+    }
+}
