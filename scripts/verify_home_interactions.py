@@ -38,6 +38,8 @@ for needle in ("app.get('/api/social/search',auth,async(req,res)=>{", "p.text IL
     require(social_routes, needle, f"privacy-aware post search contract {needle}")
 for needle in ("COALESCE(l.category,'') ILIKE", "COALESCE(l.store_name,'') ILIKE"):
     require(discovery, needle, f"Marketplace search includes product category and store name {needle}")
+for needle in ("l.title ILIKE $${n}", "l.description ILIKE $${n}", "COALESCE(l.category,'') ILIKE $${n}", "COALESCE(l.store_name,'') ILIKE $${n}", "u.username ILIKE $${n}", "u.display_name ILIKE $${n}", "l.category=$${params.length}", "l.location ILIKE $${params.length}"):
+    require(discovery, needle, f"Marketplace search uses valid PostgreSQL parameter placeholders {needle}")
 for needle in ('suspend fun searchPosts(context: Context, query: String', '"/api/social/search?q='):
     require(client, needle, f"dedicated post-search client contract {needle}")
 for needle in ('FynxRemoteSocialClient.searchPosts(context, q', 'FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query = q', 'onOpenPost(post.id)', 'onOpenListing(listing.id)', 'Suggestions update as you type', 'Text("Suggestions"', 'heightIn(max = 220.dp)', 'people.take(2).forEach', 'posts.take(2).forEach', 'listings.take(2).forEach'):
