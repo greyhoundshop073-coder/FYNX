@@ -1,6 +1,11 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import java.text.ParsePosition
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -111,8 +116,8 @@ fun FynxMarketplaceOrderTimeline(
             else -> events.forEach { event ->
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(formatTimelineEvent(event.eventType))
-                    event.toStatus?.let { Text("Status: ${it.replace('_', ' ')}") }
-                    event.createdAt?.let { Text(it.replace('T', ' ').substringBefore('.')) }
+                    event.toStatus?.let { Text("Order status: ${formatTimelineStatus(it)}") }
+                    event.createdAt?.let { formatTimelineDate(it)?.let { readable -> Text(readable) } }
                 }
                 Spacer(Modifier.height(2.dp))
             }
@@ -120,22 +125,80 @@ fun FynxMarketplaceOrderTimeline(
         if (!loading && error == null && deliveryEvidence.isNotEmpty()) {
             Text("Delivery evidence")
             deliveryEvidence.forEach { evidence ->
-                val label = when (evidence.type) {
-                    "RECIPIENT_NAME" -> "Recipient"
-                    "DELIVERY_NOTE" -> "Driver note"
-                    "HANDOVER_NOTE" -> "Seller handover note"
-                    "PHOTO_REFERENCE" -> "Photo reference"
-                    else -> evidence.type.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
+                when (evidence.type) {
+                    "RECIPIENT_NAME" -> Text("Recipient: ${evidence.value}")
+                    "DELIVERY_NOTE" -> Text("Driver note: ${evidence.value}")
+                    "HANDOVER_NOTE" -> Text("Seller handover note: ${evidence.value}")
+                    "PHOTO_REFERENCE" -> Text("Photo evidence attached securely")
+                    else -> Text("${evidence.type.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }}: ${evidence.value}")
                 }
-                Text("$label: ${evidence.value}")
-                evidence.createdAt?.let { Text(it.replace('T', ' ').substringBefore('.')) }
+                evidence.createdAt?.let { formatTimelineDate(it)?.let { readable -> Text(readable) } }
             }
         }
     }
 }
 
-private fun formatTimelineEvent(value: String): String = value
-    .removePrefix("FULFILLMENT_")
-    .replace('_', ' ')
-    .lowercase()
-    .replaceFirstChar { it.uppercase() }
+private fun formatTimelineEvent(value: String): String = when (value.uppercase()) {
+    "ORDER_CREATED" -> "Order placed"
+    "PAYMENT_INITIALIZED" -> "Payment started"
+    "PAYMENT_CONFIRMED" -> "Payment confirmed"
+    "PAYMENT_FAILED" -> "Payment failed"
+    "FULFILLMENT_PREPARING" -> "Seller is preparing the order"
+    "FULFILLMENT_DISPATCHED" -> "Order handed to the driver"
+    "FULFILLMENT_IN_TRANSIT" -> "Order is on the way"
+    "FULFILLMENT_DELIVERED" -> "Driver marked the order delivered"
+    "FULFILLMENT_READY_FOR_PICKUP" -> "Order is ready for pickup"
+    "FULFILLMENT_PICKUP_COMPLETED" -> "Pickup completed"
+    "FULFILLMENT_INSPECTION" -> "Waiting for buyer confirmation"
+    "FULFILLMENT_COMPLETED" -> "Order completed"
+    "FULFILLMENT_FAILED_DELIVERY" -> "Delivery attempt failed"
+    "FULFILLMENT_RETURNED" -> "Order marked for return"
+    "DISPUTE_OPENED" -> "Buyer opened a protection case"
+    "DISPUTE_RESOLVED" -> "Protection case resolved"
+    else -> value.removePrefix("FULFILLMENT_").replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
+}
+
+private fun formatTimelineStatus(value: String): String = when (value.uppercase()) {
+    "PAYMENT_PENDING" -> "Awaiting payment"
+    "PAID" -> "Payment confirmed"
+    "PREPARING" -> "Being prepared"
+    "DISPATCHED" -> "Handed to driver"
+    "IN_TRANSIT" -> "On the way"
+    "DELIVERED" -> "Marked delivered"
+    "READY_FOR_PICKUP" -> "Ready for pickup"
+    "PICKUP_COMPLETED" -> "Pickup completed"
+    "INSPECTION" -> "Waiting for buyer confirmation"
+    "COMPLETED" -> "Completed"
+    "FAILED_DELIVERY" -> "Delivery attempt failed"
+    "RETURNED" -> "Marked for return"
+    else -> value.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }
+}
+
+private fun formatTimelineDate(value: String): String? {
+    val input = value.trim()
+    if (input.isEmpty()) return null
+    val patterns = listOf(
+        "yyyy-MM-dd'T'HH:mm:ss.SSSX",
+        "yyyy-MM-dd'T'HH:mm:ssX",
+        "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+        "yyyy-MM-dd'T'HH:mm:ss'Z'"
+    )
+    for (pattern in patterns) {
+        try {
+            val parser = SimpleDateFormat(pattern, Locale.US).apply {
+                isLenient = false
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+            val position = ParsePosition(0)
+            val parsed: Date? = parser.parse(input, position)
+            if (parsed != null && position.index == input.length) {
+                return SimpleDateFormat("EEE, d MMM yyyy · h:mm a", Locale.getDefault())
+                    .apply { timeZone = TimeZone.getDefault() }
+                    .format(parsed)
+            }
+        } catch (_: IllegalArgumentException) {
+            // Try the next supported ISO timestamp shape.
+        }
+    }
+    return null
+}
