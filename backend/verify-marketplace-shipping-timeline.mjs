@@ -38,6 +38,7 @@ const checks = [
   ['checkout enforces destination coverage', completion.includes('isMarketplaceDestinationCovered')],
   ['seller fulfillment controls call the integrated progress route', sellerOrders.includes('/api/marketplace/orders/${order.id}/fulfillment-progress')],
   ['buyer timeline loads the existing protected timeline route', buyerTimeline.includes('/api/marketplace/orders/$orderId/timeline')],
+  ['buyer timeline retries failed loads without leaving the order screen', buyerTimeline.includes('LaunchedEffect(orderId, retryCount)') && buyerTimeline.includes('Button(onClick = { retryCount += 1 })')],
   ['buyer timeline explains failed delivery protection', buyerTimeline.includes('protected payment is not released')],
   ['buyer timeline maps common fulfillment events to plain-language labels', buyerTimeline.includes('"FULFILLMENT_DISPATCHED" -> "Order handed to the driver"') && buyerTimeline.includes('"FULFILLMENT_IN_TRANSIT" -> "Order is on the way"') && buyerTimeline.includes('"FULFILLMENT_INSPECTION" -> "Waiting for buyer confirmation"')],
   ['buyer timeline formats ISO timestamps in the device local time zone', buyerTimeline.includes('SimpleDateFormat("EEE, d MMM yyyy · h:mm a", Locale.getDefault())') && buyerTimeline.includes('TimeZone.getDefault()')],
