@@ -156,7 +156,8 @@ async function installHomeCommentBackend() {
       const cursorClause = before === null ? '' : ' AND c.id < $4';
       const result = await pool.query(
         \`SELECT c.id,c.post_id,c.parent_comment_id,c.text,EXTRACT(EPOCH FROM c.created_at)*1000 AS timestamp,
-                u.id AS author_id,u.username,u.display_name,\n                (SELECT COUNT(*)::int FROM social_comment_likes l WHERE l.comment_id=c.id) AS like_count,\n                EXISTS(SELECT 1 FROM social_comment_likes l WHERE l.comment_id=c.id AND l.user_id=$2) AS liked_by_current_user
+                u.id AS author_id,u.username,u.display_name,
+                (SELECT COUNT(*)::int FROM social_comment_likes l WHERE l.comment_id=c.id) AS like_count,\n                EXISTS(SELECT 1 FROM social_comment_likes l WHERE l.comment_id=c.id AND l.user_id=$2) AS liked_by_current_user
            FROM social_post_comments c
            JOIN users u ON u.id=c.author_id
           WHERE c.post_id=$1
