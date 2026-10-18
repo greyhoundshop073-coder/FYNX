@@ -26,7 +26,7 @@ checks = [
     ("product details show seller and fulfillment information", 'Text("Seller:' in marketplace and 'Text("Location:' in marketplace and "deliveryAvailable" in marketplace and "pickupAvailable" in marketplace),
     ("active Marketplace exposes the visible Message seller action wired to the real chat deep link", 'Text("Message seller")' in detail_components and "onContact = { contactSeller(listing.sellerUsername, listing.id) }" in marketplace and "FynxDeepLinkParser.chatAppLink" in marketplace and "Intent.ACTION_VIEW" in marketplace),
     ("active marketplace exposes Add to cart", "Add to cart" in marketplace and "cart = cart + listing" in marketplace),
-    ("active marketplace Buy now enters the real checkout", "onBuyNow = { selected = null; checkoutListing = listing }" in marketplace and "FynxMarketplaceCheckoutDialog" in marketplace),
+    ("active marketplace Buy now enters the real checkout after stale-cache guard", 'onBuyNow = { if (catalogueIsStale) { selected = null; error = "Reconnect and refresh this listing before buying." } else { selected = null; checkoutListing = listing } }' in marketplace and "FynxMarketplaceCheckoutDialog" in marketplace),
     ("active marketplace details are scrollable for phone screens", "verticalScroll(rememberScrollState())" in marketplace),
     ("active marketplace retains protected checkout", "FynxMarketplaceCheckoutDialog" in marketplace),
     ("active marketplace retains payment verification", "verifyMarketplacePayment" in marketplace),
