@@ -13,7 +13,7 @@ checks = [
     ("seller support removes duplicate media", ".distinct()" in support),
     ("seller support appends media through the shared guardrail", "fun addMedia(context: Context, existing: List<Uri>, uri: Uri)" in support and "normalizedMedia(context, existing + uri)" in support),
     ("seller support validates bounded title input", "MAX_TITLE_LENGTH = 120" in support and "title.length <= MAX_TITLE_LENGTH" in support),
-    ("seller support validates bounded description input", "MAX_DESCRIPTION_LENGTH = 5000" in support and "description.length <= MAX_DESCRIPTION_LENGTH" in support),
+    ("seller support validates bounded description input", "MAX_DESCRIPTION_LENGTH = 4000" in support and "description.length <= MAX_DESCRIPTION_LENGTH" in support),
     ("seller support validates finite positive price and bounded quantity", "price.isFinite()" in support and "MAX_QUANTITY = 1_000_000" in support and "quantity in 1..MAX_QUANTITY" in support),
     ("seller support validates the final media count", "media.size <= MAX_PRODUCT_MEDIA" in support),
     ("active seller flow uses multi-media picker", "PickMultipleVisualMedia" in marketplace and "MAX_PRODUCT_MEDIA" in marketplace),
