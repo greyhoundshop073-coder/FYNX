@@ -372,10 +372,10 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
     }
 
-    LaunchedEffect(posts.size, discoveryOffset, discoveryHasMore, discoveryPaginationPaused) {
+    LaunchedEffect(posts.size, discoveryOffset, discoveryHasMore, discoveryPaginationPaused, feedRequestInFlight) {
         // Suggested posts need an initial page before end-of-feed pagination can continue.
-        // Keep this independent from the primary feed cursor and retry state.
-        if (posts.isNotEmpty() && discoveryOffset == 0 && !discoveryHasMore && !discoveryPaginationPaused) {
+        // Wait for cache revalidation to finish so a fresh feed response cannot erase discovery posts.
+        if (!feedRequestInFlight && posts.isNotEmpty() && discoveryOffset == 0 && !discoveryHasMore && !discoveryPaginationPaused) {
             hydrateDiscovery(0, replace = true)
         }
     }
