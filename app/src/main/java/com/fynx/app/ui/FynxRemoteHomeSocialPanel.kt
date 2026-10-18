@@ -916,7 +916,7 @@ private fun PostMediaGrid(items: List<FynxHomePostMediaClient.PostMediaItem>, pl
     }
     when (visual.size) {
         1 -> Cell(visual[0], 0)
-        2 -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) { Cell(visual[0], 0); Cell(visual[1], 1) }
+        2 -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) { Box(Modifier.weight(1f)) { Cell(visual[0], 0) }; Box(Modifier.weight(1f)) { Cell(visual[1], 1) } }
         3 -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) { Box(Modifier.weight(1f)) { Cell(visual[0], 0) }; Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) { Cell(visual[1], 1); Cell(visual[2], 2) } }
         else -> Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) { Box(Modifier.weight(1f)) { Cell(visual[0], 0) }; Box(Modifier.weight(1f)) { Cell(visual[1], 1) } }; Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) { Box(Modifier.weight(1f)) { Cell(visual[2], 2) }; Box(Modifier.weight(1f)) { Cell(visual[3], 3) } } }
     }
