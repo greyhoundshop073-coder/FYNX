@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -55,6 +56,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     var replyNextCursors by remember(post.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
     val consumedReplyCursors = remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
     var authorPhotos by remember(post.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
+    var reactingCommentIds by remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
     var highlightedCommentId by remember(post.id, initialCommentId) { mutableStateOf(initialCommentId) }
     val consumedCursors = remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
     val replyingTo = replyingToId?.let { id -> comments.firstOrNull { it.id == id } }
@@ -176,6 +178,28 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
         if (expandedReplies.containsKey(comment.id)) { expandedReplies = expandedReplies - comment.id; replyNextCursors = replyNextCursors - comment.id; replyErrorId = null; return }
         loadReplies(comment.id)
     }
+    fun updateCommentCopies(commentId: String, transform: (FynxRemoteSocialClient.RemoteComment) -> FynxRemoteSocialClient.RemoteComment) {
+        comments = comments.map { if (it.id == commentId) transform(it) else it }
+        expandedReplies = expandedReplies.mapValues { (_, items) -> items.map { if (it.id == commentId) transform(it) else it } }
+    }
+    fun toggleCommentLike(comment: FynxRemoteSocialClient.RemoteComment) {
+        if (comment.id in reactingCommentIds) return
+        val desired = !comment.likedByCurrentUser
+        reactingCommentIds = reactingCommentIds + comment.id
+        updateCommentCopies(comment.id) { it.copy(likedByCurrentUser = desired, likeCount = (it.likeCount + if (desired) 1 else -1).coerceAtLeast(0)) }
+        scope.launch {
+            FynxRemoteSocialClient.likeComment(context, post.id, comment.id, desired)
+                .onSuccess { (liked, count) -> updateCommentCopies(comment.id) { it.copy(likedByCurrentUser = liked, likeCount = count) } }
+                .onFailure { failure -> updateCommentCopies(comment.id) { it.copy(likedByCurrentUser = comment.likedByCurrentUser, likeCount = comment.likeCount) }; error = failure.message ?: "Couldn't update comment like." }
+            reactingCommentIds = reactingCommentIds - comment.id
+        }
+    }
+    fun shareComment(comment: FynxRemoteSocialClient.RemoteComment) {
+        val author = comment.authorDisplayName.ifBlank { comment.authorUsername }
+        val payload = "$author on FYNX: ${comment.text}"
+        runCatching { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, payload), "Share comment")) }
+            .onFailure { error = "Unable to open sharing options." }
+    }
     LaunchedEffect(post.id) { comments = emptyList(); text = ""; commentCount = post.commentCount; replyingToId = null; authorPhotos = emptyMap(); resetPagingState(); loadComments() }
 
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
@@ -205,6 +229,8 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                             MentionText(comment.text, onOpenAuthorProfile = onOpenAuthorProfile)
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Text(relative(comment.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                TextButton(onClick = { toggleCommentLike(comment) }, enabled = comment.id !in reactingCommentIds) { Text(if (comment.likedByCurrentUser) "Liked · ${comment.likeCount}" else "Like · ${comment.likeCount}") }
+                                                TextButton(onClick = { shareComment(comment) }) { Text("Share") }
                                                 TextButton(onClick = { if (!sending) replyingToId = comment.id }) { Text("Reply") }
                                                 TextButton(onClick = { toggleReplies(comment) }, enabled = replyLoadingId == null && !sending) { val loadedReplyCount = expandedReplies[comment.id]?.size; Text(if (loadedReplyCount != null) { if (loadedReplyCount == 0) "No replies" else "$loadedReplyCount replies" } else "Replies") }
                                             }
@@ -213,7 +239,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                     expandedReplies[comment.id].orEmpty().forEach { reply ->
                                         Row(Modifier.fillMaxWidth().padding(start = 48.dp, top = 8.dp), verticalAlignment = Alignment.Top) {
                                             val photo = authorPhotos[reply.authorUsername.removePrefix("@").trim().lowercase()]
-                                            FynxRemoteProfileAvatar(photo, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium); MentionText(reply.text, onOpenAuthorProfile = onOpenAuthorProfile); Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                            FynxRemoteProfileAvatar(photo, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium); MentionText(reply.text, onOpenAuthorProfile = onOpenAuthorProfile); Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Row(verticalAlignment = Alignment.CenterVertically) { TextButton(onClick = { toggleCommentLike(reply) }, enabled = reply.id !in reactingCommentIds) { Text(if (reply.likedByCurrentUser) "Liked · ${reply.likeCount}" else "Like · ${reply.likeCount}") }; TextButton(onClick = { shareComment(reply) }) { Text("Share") } } }
                                         }
                                     }
                                     if (replyNextCursors[comment.id] != null) TextButton(onClick = { loadReplies(comment.id, replyNextCursors[comment.id]) }, enabled = replyLoadingId == null && !sending) { Text(if (replyLoadingId == comment.id) "Loading replies…" else "Load more replies") }
