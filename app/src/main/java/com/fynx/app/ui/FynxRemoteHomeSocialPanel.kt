@@ -1088,8 +1088,10 @@ private fun FynxFeedTextureVideo(
         if (viewWidth <= 0 || viewHeight <= 0 || videoWidth <= 0 || videoHeight <= 0) return
         val viewRatio = viewWidth.toFloat() / viewHeight.toFloat()
         val videoRatio = videoWidth.toFloat() / videoHeight.toFloat()
-        val scaleX = if (videoRatio < viewRatio) videoRatio / viewRatio else 1f
-        val scaleY = if (videoRatio > viewRatio) viewRatio / videoRatio else 1f
+        // Fill the feed surface edge-to-edge. Crop only the excess dimension,
+        // rather than shrinking the picture and exposing empty bars around it.
+        val scaleX = if (videoRatio > viewRatio) videoRatio / viewRatio else 1f
+        val scaleY = if (videoRatio < viewRatio) viewRatio / videoRatio else 1f
         view.setTransform(Matrix().apply {
             setScale(scaleX, scaleY, viewWidth / 2f, viewHeight / 2f)
         })
