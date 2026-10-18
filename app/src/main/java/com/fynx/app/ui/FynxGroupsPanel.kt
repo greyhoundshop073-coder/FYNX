@@ -531,6 +531,29 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
         permissionLoadError?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         syncMessage?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+        messages.lastOrNull { it.fromMe && !it.delivered }?.let { failedMessage ->
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("A group message is still unsent.", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                TextButton(enabled = !sending, onClick = {
+                    if (!sending) {
+                        sending = true
+                        scope.launch {
+                            FynxGroupRemoteClient.sendMessage(context, groupId, failedMessage)
+                                .onSuccess { remote ->
+                                    val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
+                                    messages = messages.map { if (it.id == failedMessage.id) serverMessage else it }
+                                    FynxChatStore.save(context, "group_$groupId", messages)
+                                    syncMessage = null
+                                }
+                                .onFailure { error ->
+                                    syncMessage = error.message ?: "Message could not be sent. Check your connection and retry."
+                                }
+                            sending = false
+                        }
+                    }
+                }) { Text("Retry") }
+            }
+        }
         if (!canSendMessages) Text("Only admins can send messages in this group.", Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
             if (visibleMessages.isEmpty() && searchQuery.isBlank()) {
@@ -808,9 +831,9 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                             syncMessage = null
                                         }
                                         .onFailure { error ->
-                                            messages = messages.filterNot { it.id == optimistic.id }
+                                            messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
                                             FynxChatStore.save(context, "group_$groupId", messages)
-                                            syncMessage = error.message ?: "Message could not be sent."
+                                            syncMessage = error.message ?: "Message could not be sent. Tap Retry to send it again."
                                         }
                                     sending = false
                                 }
@@ -839,9 +862,9 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                                 syncMessage = null
                                             }
                                             .onFailure { error ->
-                                                messages = messages.filterNot { it.id == optimistic.id }
+                                                messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
                                                 FynxChatStore.save(context, "group_$groupId", messages)
-                                                syncMessage = error.message ?: "Message could not be sent."
+                                                syncMessage = error.message ?: "Message could not be sent. Tap Retry to send it again."
                                             }
                                         sending = false
                                     }
