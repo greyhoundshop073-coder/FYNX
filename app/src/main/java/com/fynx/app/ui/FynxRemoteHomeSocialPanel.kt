@@ -573,7 +573,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Discovery videos: $message", Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
-                    TextButton(onClick = { loadDiscoveryVideos(reset = discoveryVideos.isEmpty()) }, enabled = !discoveryVideosLoading) { Text("Retry") }
+                    TextButton(onClick = { loadDiscoveryVideos(reset = true) }, enabled = !discoveryVideosLoading) { Text("Retry") }
                 }
             }
         } }
