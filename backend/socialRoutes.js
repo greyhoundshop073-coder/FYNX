@@ -12,6 +12,10 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     if (current.count >= COMMENT_RATE_LIMIT) return false;
     current.count += 1; return true;
   };
+  setInterval(() => {
+    const cutoff = Date.now() - COMMENT_RATE_WINDOW_MS;
+    for (const [key, value] of commentRate) if (value.startedAt < cutoff) commentRate.delete(key);
+  }, COMMENT_RATE_WINDOW_MS).unref();
   const ensureMarketplaceSchema = async () => {
     if (!marketplaceSchemaPromise) {
       marketplaceSchemaPromise = pool.query(`
