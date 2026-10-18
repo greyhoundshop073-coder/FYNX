@@ -44,6 +44,7 @@ const checks = [
   ['buyer receipt confirmation is a separate transition into inspection after driver evidence', completion.includes("UPDATE marketplace_orders SET status='INSPECTION'") && completion.includes("recordFulfillmentEvent(client, id, req.user.sub, 'BUYER_RECEIVED'") && completion.includes('inspectionHours: 48')],
   ['seller handover photo evidence is optional and validated against the authenticated media owner', completion.includes('rawPhotoReference') && completion.includes("SELECT mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1") && completion.includes('handover photo must be uploaded by the signed-in seller')],
   ['seller handover photo evidence accepts image MIME types only and records PHOTO_REFERENCE', completion.includes("new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])") && completion.includes("VALUES ($1,$2,'PHOTO_REFERENCE',$3)")],
+  ['handover photo retrieval is limited to the buyer or seller on that order', completion.includes("mde.evidence_type = 'PHOTO_REFERENCE'") && completion.includes('mde.value = CAST(mm.id AS TEXT)') && completion.includes('(mo.buyer_id = $2 OR mo.seller_id = $2)')],
   ['seller Android uploads the optional handover photo through the existing media uploader', sellerUi.includes('FynxProductionMessaging.uploadMedia(context, photoUri)') && sellerUi.includes('PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)') && sellerUi.includes('put("photoReference", photoReference)')]
 ];
 
