@@ -28,6 +28,9 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}, onOpenPost: (
     var posts by remember { mutableStateOf(emptyList<FynxRemoteSocialClient.RemotePost>()) }
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var peopleFailed by remember { mutableStateOf(false) }
+    var postsFailed by remember { mutableStateOf(false) }
+    var listingsFailed by remember { mutableStateOf(false) }
     var searchGeneration by remember { mutableIntStateOf(0) }
 
     fun search(searchQuery: String = query, expectedGeneration: Int? = null) {
@@ -39,6 +42,9 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}, onOpenPost: (
             listings = emptyList()
             posts = emptyList()
             loading = false
+            peopleFailed = false
+            postsFailed = false
+            listingsFailed = false
             message = if (q.isEmpty()) null else "Enter at least 2 characters to search FYNX."
             return
         }
@@ -52,6 +58,9 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}, onOpenPost: (
             people = peopleResult.getOrElse { emptyList() }
             listings = listingResult.getOrElse { emptyList() }
             posts = postResult.getOrElse { FynxRemoteSocialClient.FeedPage(emptyList(), false) }.posts.distinctBy { it.id }
+            peopleFailed = peopleResult.isFailure
+            listingsFailed = listingResult.isFailure
+            postsFailed = postResult.isFailure
             message = listOfNotNull(peopleResult.exceptionOrNull()?.message, listingResult.exceptionOrNull()?.message, postResult.exceptionOrNull()?.message).firstOrNull()
             loading = false
         }
@@ -67,12 +76,18 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}, onOpenPost: (
             listings = emptyList()
             posts = emptyList()
             loading = false
+            peopleFailed = false
+            postsFailed = false
+            listingsFailed = false
             message = if (q.isEmpty()) null else "Enter at least 2 characters to search FYNX."
             return@LaunchedEffect
         }
         people = emptyList()
         listings = emptyList()
         posts = emptyList()
+        peopleFailed = false
+        listingsFailed = false
+        postsFailed = false
         loading = true
         message = null
         delay(350L)
@@ -121,7 +136,7 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}, onOpenPost: (
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
                 if (tab == "All" || tab == "People") {
                     item { Text("People", style = MaterialTheme.typography.titleMedium) }
-                    if (people.isEmpty() && query.trim().length >= 2) item { Text("No matching people.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+                    if (people.isEmpty() && query.trim().length >= 2) item { Text(if (peopleFailed) "People search unavailable. Check your connection and try again." else "No matching people.", color = if (peopleFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                     items(people.take(20), key = { "person_${it.id.ifBlank { it.username }}" }) { person ->
                         Card(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f)), shape = FynxDesign.CardShape) {
                             Row(Modifier.fillMaxWidth().padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -135,7 +150,7 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}, onOpenPost: (
                 }
                 if (tab == "All" || tab == "Posts") {
                     item { Text("Posts", style = MaterialTheme.typography.titleMedium) }
-                    if (posts.isEmpty() && query.trim().length >= 2) item { Text("No matching recent posts.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+                    if (posts.isEmpty() && query.trim().length >= 2) item { Text(if (postsFailed) "Post search unavailable. Check your connection and try again." else "No matching recent posts.", color = if (postsFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                     items(posts.take(30), key = { "post_${it.id}" }) { post ->
                         Card(Modifier.fillMaxWidth().clickable { onOpenPost(post.id) }, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f)), shape = FynxDesign.CardShape) {
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { Text(post.authorDisplayName.ifBlank { post.authorUsername }, style = MaterialTheme.typography.titleSmall); Text("@${post.authorUsername.removePrefix("@")}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall); if (post.text.isNotBlank()) Text(post.text.take(1000), style = MaterialTheme.typography.bodyMedium) }
@@ -144,7 +159,7 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}, onOpenPost: (
                 }
                 if (tab == "All" || tab == "Marketplace") {
                     item { Text("Marketplace", style = MaterialTheme.typography.titleMedium) }
-                    if (listings.isEmpty() && query.trim().length >= 2) item { Text("No matching marketplace listings.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+                    if (listings.isEmpty() && query.trim().length >= 2) item { Text(if (listingsFailed) "Marketplace search unavailable. Check your connection and try again." else "No matching marketplace listings.", color = if (listingsFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                     items(listings.take(30), key = { "listing_${it.id}" }) { listing ->
                         Card(Modifier.fillMaxWidth().clickable { onOpenListing(listing.id) }, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f)), shape = FynxDesign.CardShape) {
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) { Text(listing.title, style = MaterialTheme.typography.titleSmall); Text("${listing.currency} ${String.format(java.util.Locale.US, "%,.2f", listing.price)}", style = MaterialTheme.typography.titleMedium); Text(listing.storeName.ifBlank { listing.sellerDisplayName }, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall); if (listing.location.isNotBlank()) Text(listing.location, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
