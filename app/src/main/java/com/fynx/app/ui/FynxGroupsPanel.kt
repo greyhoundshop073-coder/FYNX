@@ -800,8 +800,12 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Share in group", style = MaterialTheme.typography.labelLarge, color = glassPalette.messageMuted)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(onClick = { showAttachmentMenu = false; showTools = true }, modifier = Modifier.weight(1f)) {
-                                    Icon(Icons.Default.PhotoCamera, null); Spacer(Modifier.width(5.dp)); Text("Camera")
+                                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    FynxGroupCameraPicker(context, onMediaSelected = { uri, type ->
+                                        showAttachmentMenu = false
+                                        sendGroupAttachment(uri, type)
+                                    })
+                                    Text("Camera", style = MaterialTheme.typography.labelMedium)
                                 }
                                 OutlinedButton(onClick = { showAttachmentMenu = false; groupMediaPicker.launch("*/*") }, modifier = Modifier.weight(1f)) {
                                     Icon(Icons.Default.PhotoLibrary, null); Spacer(Modifier.width(5.dp)); Text("Gallery")
