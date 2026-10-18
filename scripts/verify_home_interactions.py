@@ -85,6 +85,9 @@ require(home, 'hydrateDiscovery(0, replace = true)', "Home discovery starts from
 require(home, 'RemoteSocialMedia(audioMedia.mediaUrl, audioMedia.mediaType', "voice-note post renders audio instead of disappearing inside the visual grid")
 require(home, 'val visualMediaItems = mediaItems.filter { it.mediaType.equals("image", true) || it.mediaType.equals("video", true) }', "Home multi-media grid contains only photos and videos")
 require(home, 'MusicPostPlayer(post.musicMediaId!!, post.musicTitle.orEmpty(), post.musicArtist.orEmpty(), post.musicDurationMs)', "catalogue music is displayed on photo/video posts")
+require(home, 'FynxRemoteAudio(\n                mediaUrl = "/api/social/music/media/" + mediaId', "post soundtrack uses asynchronous audio playback with visible loading/error feedback")
+if home.index('MusicPostPlayer(post.musicMediaId!!') > home.index('val visualMediaItems = mediaItems.filter'):
+    raise SystemExit("HOME INTERACTIONS RED: soundtrack attribution must appear before post media")
 require(home, 'Box(Modifier.weight(1f)) { Cell(visual[0], 0) }; Box(Modifier.weight(1f)) { Cell(visual[1], 1) }', "two-photo posts allocate equal-width media cells")
 require(home, 'if (!activeNetworkReady) {', "Home pagination does not make requests while offline")
 require(home, 'error = if (posts.isEmpty()) "You\'re offline. Connect to a network to load your feed."', "Home offline state explains how to recover")
