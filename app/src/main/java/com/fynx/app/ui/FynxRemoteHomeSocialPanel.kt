@@ -392,6 +392,12 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
 
     fun loadMore() {
         if (loading || loadingMore || paginationPaused || (!hasMore && !discoveryHasMore) || feedRequestInFlight) return
+        val activeNetworkReady = networkReady ?: (FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE)
+        if (!activeNetworkReady) {
+            error = if (posts.isEmpty()) "You're offline. Connect to a network to load your feed." else "You're offline. Connect to a network to load more posts."
+            paginationPaused = true
+            return
+        }
         feedRequestInFlight = true
         scope.launch { loadingMore = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false, beforeCursor = feedNextCursor).onSuccess { page -> val existing = posts.map { it.id }.toSet(); val additions = page.posts.filterNot { it.id in existing }; posts = posts + additions; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; paginationPaused = false; resolveAuthorPhotos(additions); hydrateInteractionStates(additions); hydrateReactionStates(additions); hydratePostMedia(additions); if (!page.hasMore && discoveryHasMore) hydrateDiscovery(discoveryOffset) }.onFailure { error = it.message ?: "Unable to load more posts."; paginationPaused = true }; loadingMore = false; feedRequestInFlight = false }
     }
