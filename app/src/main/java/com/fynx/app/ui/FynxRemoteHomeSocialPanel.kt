@@ -1080,6 +1080,7 @@ private fun FynxFeedTextureVideo(
     val player = remember(file) { MediaPlayer() }
     var prepared by remember(file) { mutableStateOf(false) }
     var playing by remember(file) { mutableStateOf(false) }
+    var textureViewRef by remember(file) { mutableStateOf<TextureView?>(null) }
 
     fun fitVideoInsideView(view: TextureView, videoWidth: Int, videoHeight: Int) {
         val viewWidth = view.width
@@ -1098,6 +1099,7 @@ private fun FynxFeedTextureVideo(
         AndroidView(
             factory = { ctx ->
                 TextureView(ctx).apply {
+                    textureViewRef = this
                     isClickable = false
                     isFocusable = false
                     setBackgroundColor(android.graphics.Color.BLACK)
@@ -1151,11 +1153,7 @@ private fun FynxFeedTextureVideo(
             player.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f)
             player.setOnPreparedListener {
                 prepared = true
-                textureState.value?.let { texture ->
-                    // Preserve the source video's aspect ratio inside the bounded feed frame.
-                    // This prevents unusually tall/wide uploads from being stretched.
-                    // TextureView layout updates reapply this transform after rotation/resizing.
-                }
+                textureViewRef?.let { view -> fitVideoInsideView(view, it.videoWidth, it.videoHeight) }
                 if (playbackActive) runCatching { it.start(); playing = true; onPlayingChanged(true) }
             }
             player.setOnCompletionListener { playing = false; onPlayingChanged(false) }
