@@ -303,7 +303,7 @@ internal fun MarketplaceHandoverPhotoPreview(context: Context, orderId: String, 
                 val file = File(context.cacheDir, "fynx-handover-$orderId-$id.img")
                 val result = FynxBackendClient.downloadToFile(
                     context,
-                    "/api/marketplace/media/$id",
+                    "/api/media/$id",
                     file,
                     12L * 1024L * 1024L
                 )
