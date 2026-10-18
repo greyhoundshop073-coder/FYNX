@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -19,6 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -33,7 +36,7 @@ private const val MAX_COMMENT_LENGTH = 1000
 private const val COMMENT_PAGE_SIZE = 50
 
 @Composable
-fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommentId: String? = null, onClose: () -> Unit, onCommentCountChanged: (Int) -> Unit = {}) {
+fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommentId: String? = null, onClose: () -> Unit, onCommentCountChanged: (Int) -> Unit = {}, onOpenAuthorProfile: (String) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -49,6 +52,8 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     var replyLoadingId by remember(post.id) { mutableStateOf<String?>(null) }
     var replyErrorId by remember(post.id) { mutableStateOf<String?>(null) }
     var expandedReplies by remember(post.id) { mutableStateOf<Map<String, List<FynxRemoteSocialClient.RemoteComment>>>(emptyMap()) }
+    var replyNextCursors by remember(post.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
+    val consumedReplyCursors = remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
     var authorPhotos by remember(post.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var highlightedCommentId by remember(post.id, initialCommentId) { mutableStateOf(initialCommentId) }
     val consumedCursors = remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
@@ -84,11 +89,11 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     fun resetPagingState() { nextCursor = null; consumedCursors.value = emptySet(); loadingMore = false }
     fun loadComments() {
         if (sending || loading) return
-        loading = true; error = null; replyLoadingId = null; replyErrorId = null; expandedReplies = emptyMap(); resetPagingState()
+        loading = true; error = null; replyLoadingId = null; replyErrorId = null; expandedReplies = emptyMap(); replyNextCursors = emptyMap(); consumedReplyCursors.value = emptySet(); resetPagingState()
         scope.launch {
             FynxRemoteSocialClient.commentsPage(context, post.id, null, COMMENT_PAGE_SIZE)
                 .onSuccess { page -> comments = page.comments.distinctBy { it.id }; resolveCommenterPhotos(comments); nextCursor = page.nextCursor }
-                .onFailure { failure -> comments = emptyList(); error = if (failure.message?.contains("404") == true) "This post is no longer available." else failure.message ?: "Unable to load comments." }
+                .onFailure { failure -> error = if (failure.message?.contains("404") == true) "This post is no longer available." else failure.message ?: "Unable to load comments." }
             loading = false
         }
     }
@@ -145,16 +150,31 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
         }
     }
 
-    fun toggleReplies(comment: FynxRemoteSocialClient.RemoteComment) {
+    fun loadReplies(commentId: String, cursor: String? = null) {
         if (replyLoadingId != null || sending) return
-        if (expandedReplies.containsKey(comment.id)) { expandedReplies = expandedReplies - comment.id; replyErrorId = null; return }
-        replyLoadingId = comment.id; replyErrorId = null; error = null
+        val key = commentId + ":" + (cursor ?: "initial")
+        if (cursor != null && consumedReplyCursors.value.contains(key)) return
+        if (cursor != null) consumedReplyCursors.value = consumedReplyCursors.value + key
+        replyLoadingId = commentId; replyErrorId = null; error = null
         scope.launch {
-            FynxRemoteSocialClient.replies(context, post.id, comment.id)
-                .onSuccess { loaded -> val unique = loaded.distinctBy { it.id }; expandedReplies = expandedReplies + mapOf(comment.id to unique); resolveCommenterPhotos(unique) }
-                .onFailure { failure -> replyErrorId = comment.id; error = failure.message ?: "Unable to load replies." }
+            FynxRemoteSocialClient.replies(context, post.id, commentId, cursor)
+                .onSuccess { page ->
+                    val merged = (expandedReplies[commentId].orEmpty() + page.comments).distinctBy { it.id }
+                    expandedReplies = expandedReplies + (commentId to merged)
+                    replyNextCursors = replyNextCursors + (commentId to page.nextCursor?.takeUnless { it == cursor || consumedReplyCursors.value.contains(commentId + ":" + it) })
+                    resolveCommenterPhotos(page.comments)
+                }
+                .onFailure { failure ->
+                    if (cursor != null) consumedReplyCursors.value = consumedReplyCursors.value - key
+                    replyErrorId = commentId; error = failure.message ?: "Unable to load replies."
+                }
             replyLoadingId = null
         }
+    }
+    fun toggleReplies(comment: FynxRemoteSocialClient.RemoteComment) {
+        if (replyLoadingId != null || sending) return
+        if (expandedReplies.containsKey(comment.id)) { expandedReplies = expandedReplies - comment.id; replyNextCursors = replyNextCursors - comment.id; replyErrorId = null; return }
+        loadReplies(comment.id)
     }
     LaunchedEffect(post.id) { comments = emptyList(); text = ""; commentCount = post.commentCount; replyingToId = null; authorPhotos = emptyMap(); resetPagingState(); loadComments() }
 
@@ -182,7 +202,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                         FynxRemoteProfileAvatar(photo, comment.authorDisplayName.ifBlank { comment.authorUsername }, Modifier.size(38.dp).clip(CircleShape), ownerUsername = comment.authorUsername); Spacer(Modifier.width(10.dp))
                                         Column(Modifier.weight(1f)) {
                                             Text(comment.authorDisplayName.ifBlank { comment.authorUsername }, style = MaterialTheme.typography.labelLarge)
-                                            Text(comment.text, style = MaterialTheme.typography.bodyMedium)
+                                            MentionText(comment.text, onOpenAuthorProfile = onOpenAuthorProfile)
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Text(relative(comment.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 TextButton(onClick = { if (!sending) replyingToId = comment.id }) { Text("Reply") }
@@ -193,9 +213,10 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                     expandedReplies[comment.id].orEmpty().forEach { reply ->
                                         Row(Modifier.fillMaxWidth().padding(start = 48.dp, top = 8.dp), verticalAlignment = Alignment.Top) {
                                             val photo = authorPhotos[reply.authorUsername.removePrefix("@").trim().lowercase()]
-                                            FynxRemoteProfileAvatar(photo, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium); Text(reply.text, style = MaterialTheme.typography.bodyMedium); Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                            FynxRemoteProfileAvatar(photo, reply.authorDisplayName.ifBlank { reply.authorUsername }, Modifier.size(30.dp).clip(CircleShape), ownerUsername = reply.authorUsername); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(reply.authorDisplayName.ifBlank { reply.authorUsername }, style = MaterialTheme.typography.labelMedium); MentionText(reply.text, onOpenAuthorProfile = onOpenAuthorProfile); Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                         }
                                     }
+                                    if (replyNextCursors[comment.id] != null) TextButton(onClick = { loadReplies(comment.id, replyNextCursors[comment.id]) }, enabled = replyLoadingId == null && !sending) { Text(if (replyLoadingId == comment.id) "Loading replies…" else "Load more replies") }
                                     if (replyLoadingId == comment.id) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(start = 48.dp, top = 4.dp))
                                     if (replyErrorId == comment.id && replyLoadingId == null) Row(Modifier.fillMaxWidth().padding(start = 48.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) { Text("Replies couldn't be loaded.", Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall); TextButton(onClick = { toggleReplies(comment) }, enabled = !sending) { Text("Retry") }
                                     }
@@ -239,4 +260,25 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
 private fun relative(timestamp: Long): String {
     val minutes = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L))
     return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" }
+
+@Composable
+private fun MentionText(text: String, onOpenAuthorProfile: (String) -> Unit) {
+    val regex = Regex("@([A-Za-z0-9_]{2,32})\\b")
+    val builder = AnnotatedString.Builder()
+    var cursor = 0
+    regex.findAll(text).forEach { match ->
+        if (match.range.first > cursor) builder.append(text.substring(cursor, match.range.first))
+        val username = match.groupValues[1]
+        builder.pushStringAnnotation("username", username)
+        builder.pushStyle(SpanStyle(color = MaterialTheme.colorScheme.primary))
+        builder.append(match.value)
+        builder.pop()
+        builder.pop()
+        cursor = match.range.last + 1
+    }
+    if (cursor < text.length) builder.append(text.substring(cursor))
+    val annotated = builder.toAnnotatedString()
+    ClickableText(text = annotated, style = MaterialTheme.typography.bodyMedium, onClick = { offset ->
+        annotated.getStringAnnotations("username", offset, offset).firstOrNull()?.let { onOpenAuthorProfile(it.item) }
+    })
 }
