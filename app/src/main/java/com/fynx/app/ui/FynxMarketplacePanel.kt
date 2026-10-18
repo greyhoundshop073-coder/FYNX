@@ -1207,7 +1207,9 @@ private data class FynxMarketplaceMultiQuoteItem(
     val shippingAddress: JSONObject?,
     val subtotal: Double,
     val deliveryFee: Double,
+    val marketplaceFee: Double,
     val marketplaceFeeBuyer: Double,
+    val marketplaceFeeSeller: Double,
     val total: Double
 )
 private data class FynxMarketplaceMultiQuote(
@@ -1217,7 +1219,9 @@ private data class FynxMarketplaceMultiQuote(
     val items: List<FynxMarketplaceMultiQuoteItem>,
     val subtotal: Double,
     val deliveryFee: Double,
+    val marketplaceFee: Double,
     val fee: Double,
+    val sellerFee: Double,
     val total: Double
 )
 
@@ -1259,7 +1263,9 @@ private suspend fun requestMultiQuote(context: android.content.Context, lines: L
                         shippingAddress = item.optJSONObject("shippingAddress"),
                         subtotal = item.optDouble("subtotal"),
                         deliveryFee = item.optDouble("deliveryFee"),
+                        marketplaceFee = item.optDouble("marketplaceFee"),
                         marketplaceFeeBuyer = item.optDouble("marketplaceFeeBuyer"),
+                        marketplaceFeeSeller = item.optDouble("marketplaceFeeSeller"),
                         total = item.optDouble("total")
                     )
                 )
@@ -1273,7 +1279,9 @@ private suspend fun requestMultiQuote(context: android.content.Context, lines: L
             items = items,
             subtotal = q.optDouble("subtotal"),
             deliveryFee = q.optDouble("deliveryFee"),
+            marketplaceFee = q.optDouble("marketplaceFee"),
             fee = q.optDouble("marketplaceFeeBuyer"),
+            sellerFee = q.optDouble("marketplaceFeeSeller"),
             total = q.optDouble("total")
         )
     }
@@ -1326,7 +1334,9 @@ private fun FynxMarketplaceMultiCheckoutDialog(context: android.content.Context,
                 Text("Unit price: "+quoted.currency+" "+String.format(Locale.US,"%,.2f",quoted.unitPrice))
                 Text("Line subtotal: "+quoted.currency+" "+String.format(Locale.US,"%,.2f",quoted.subtotal))
                 Text("Delivery: "+quoted.currency+" "+String.format(Locale.US,"%,.2f",quoted.deliveryFee))
-                Text("FYNX fee: "+quoted.currency+" "+String.format(Locale.US,"%,.2f",quoted.marketplaceFeeBuyer))
+                Text("Total FYNX marketplace fee: "+quoted.currency+" "+String.format(Locale.US,"%,.2f",quoted.marketplaceFee))
+                Text("Your FYNX fee share: "+quoted.currency+" "+String.format(Locale.US,"%,.2f",quoted.marketplaceFeeBuyer))
+                if (quoted.marketplaceFeeSeller > 0) Text("Seller-paid FYNX fee (deducted from seller payout): "+quoted.currency+" "+String.format(Locale.US,"%,.2f",quoted.marketplaceFeeSeller))
                 if (quoted.fulfillmentMethod == "DELIVERY") {
                     quoted.shippingAddress?.let { a ->
                         Text("Deliver to: "+a.optString("name")+" • "+a.optString("phone"))
@@ -1339,7 +1349,9 @@ private fun FynxMarketplaceMultiCheckoutDialog(context: android.content.Context,
     }
     Text("Subtotal: "+q.currency+" "+String.format(Locale.US,"%,.2f",q.subtotal))
     Text("Delivery: "+q.currency+" "+String.format(Locale.US,"%,.2f",q.deliveryFee))
-    Text("FYNX fee: "+q.currency+" "+String.format(Locale.US,"%,.2f",q.fee))
+    Text("Total FYNX marketplace fee: "+q.currency+" "+String.format(Locale.US,"%,.2f",q.marketplaceFee))
+    Text("Your FYNX fee share: "+q.currency+" "+String.format(Locale.US,"%,.2f",q.fee))
+    if (q.sellerFee > 0) Text("Seller-paid FYNX fee (deducted from seller payout): "+q.currency+" "+String.format(Locale.US,"%,.2f",q.sellerFee))
     Text("Total: "+q.currency+" "+String.format(Locale.US,"%,.2f",q.total),style=MaterialTheme.typography.titleLarge)
     Text("The amount above is the server-authoritative quote. FYNX will revalidate inventory and totals before creating the protected checkout.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
 };message?.let{Text(it,color=MaterialTheme.colorScheme.error)}}},confirmButton={Button(enabled=quote!=null&&!busy,onClick={val q=quote?:return@Button;if(marketplaceQuoteExpired(q.expiresAt)){quote=null;message="This quote has expired. Review the exact total again.";return@Button};busy=true;scope.launch{createMultiOrder(context,lines(),q.id).onSuccess{created->val c=created.getJSONObject("checkout");val serverId=c.optString("id").ifBlank{q.id};val serverTotal=c.optDouble("buyer_total",q.total);val serverCurrency=c.optString("currency",q.currency).uppercase(Locale.US);onPaymentReady(serverId,serverTotal,serverCurrency);busy=false}.onFailure{message=it.message?:"Protected checkout could not be created.";busy=false}}}){Text("Place order & pay")}},dismissButton={TextButton(onClick=onClose,enabled=!busy){Text("Cancel")}})
