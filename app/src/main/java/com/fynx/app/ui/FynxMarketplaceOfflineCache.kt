@@ -10,14 +10,14 @@ internal object FynxMarketplaceOfflineCache {
     private const val PREFS = "fynx_marketplace_catalogue_cache_v1"
     private const val MAX_CACHED_LISTINGS = 60
 
-    private fun accountKey(ownerKey: String): String = ownerKey.trim().lowercase(Locale.US)
+    private fun accountKey(ownerKey: String): String? = ownerKey.trim().lowercase(Locale.US)
         .filter { it.isLetterOrDigit() || it == '_' || it == '-' }
         .take(80)
-        .ifBlank { "preview" }
+        .takeIf { it.isNotBlank() && it != "preview" }
 
     fun read(context: Context, ownerKey: String): Snapshot? = runCatching {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val key = accountKey(ownerKey)
+        val key = accountKey(ownerKey) ?: return null
         val raw = prefs.getString("listings_$key", null) ?: return null
         val savedAt = prefs.getLong("saved_at_$key", 0L)
         if (savedAt <= 0L) return null
@@ -53,7 +53,7 @@ internal object FynxMarketplaceOfflineCache {
 
     fun write(context: Context, ownerKey: String, listings: List<FynxRemoteSocialClient.MarketplaceListing>) {
         runCatching {
-            val key = accountKey(ownerKey)
+            val key = accountKey(ownerKey) ?: return
             val array = JSONArray()
             listings.distinctBy { it.id }.take(MAX_CACHED_LISTINGS).forEach { item ->
                 array.put(JSONObject().apply {
