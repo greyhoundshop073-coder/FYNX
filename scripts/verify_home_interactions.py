@@ -31,6 +31,17 @@ saved_panel = read("app/src/main/java/com/fynx/app/ui/FynxSavedPostsPanel.kt")
 privacy_bootstrap = read("backend/homeCommentsPrivacyBootstrap.js")
 realtime_bootstrap = read("backend/realtimeIsolationBootstrap.js")
 backend_package = read("backend/package.json")
+search_panel = read("app/src/main/java/com/fynx/app/ui/FynxUniversalSearchPanel.kt")
+app_shell = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
+
+for needle in ("app.get('/api/social/search',auth,async(req,res)=>{", "p.text ILIKE $2", "COALESCE(p.media_type,'') ILIKE $2", "COALESCE(p.music_title,'') ILIKE $2", "COALESCE(p.feeling_activity,'') ILIKE $2", "social_post_audience a WHERE a.post_id=p.id AND a.user_id=$1", "NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$1))"):
+    require(social_routes, needle, f"privacy-aware post search contract {needle}")
+for needle in ('suspend fun searchPosts(context: Context, query: String', '"/api/social/search?q='):
+    require(client, needle, f"dedicated post-search client contract {needle}")
+for needle in ('FynxRemoteSocialClient.searchPosts(context, q', 'FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query = q', 'onOpenPost(post.id)', 'onOpenListing(listing.id)', 'Suggestions update as you type'):
+    require(search_panel, needle, f"live universal search result behavior {needle}")
+for needle in ('onOpenPost = { postId -> postOpenId = postId; postOpenCommentId = null; selected = "Home" }', 'onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }'):
+    require(app_shell, needle, f"search result opens the selected item {needle}")
 
 for route in ('app.post("/api/social/posts/:id/save"','app.delete("/api/social/posts/:id/save"','app.get("/api/social/saved"','app.post("/api/social/posts/:id/repost"','app.delete("/api/social/posts/:id/repost"','app.get("/api/social/posts/:id/interaction-state"'):
     require(discovery, route, f"durable interaction route {route}")
