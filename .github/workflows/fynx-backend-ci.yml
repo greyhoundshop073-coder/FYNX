@@ -2,10 +2,10 @@ name: FYNX Backend CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "fix/**" ]
     paths: ["backend/**", "scripts/**", ".github/workflows/fynx-backend-ci.yml"]
   pull_request:
-    branches: [ "main", "fix/network-authenticated-request-gate-20261017" ]
+    branches: [ "main", "fix/**" ]
     paths: ["backend/**", "scripts/**", ".github/workflows/fynx-backend-ci.yml"]
   workflow_dispatch:
     inputs:
