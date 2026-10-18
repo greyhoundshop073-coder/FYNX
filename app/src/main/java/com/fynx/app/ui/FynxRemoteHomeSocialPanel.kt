@@ -80,6 +80,10 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var feedRequestInFlight by remember { mutableStateOf(false) }
     var lastFeedRequestAt by remember { mutableLongStateOf(0L) }
     var commentsPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
+    var searchOpenedPostId by remember { mutableStateOf<String?>(null) }
+    var handledInitialPostId by remember { mutableStateOf<String?>(null) }
+    var postMediaError by remember { mutableStateOf(false) }
+    var offlineSnapshot by remember { mutableStateOf(false) }
     var authorPhotos by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var activeStatusOwners by remember { mutableStateOf<Set<String>>(emptySet()) }
     var peopleRecommendations by remember { mutableStateOf<List<HomePeopleRecommendation>>(emptyList()) }
@@ -254,8 +258,10 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         val targets = items.filter { it.id.isNotBlank() && !postMedia.containsKey(it.id) && !it.mediaUrl.isNullOrBlank() }
         if (targets.isEmpty()) return
         scope.launch {
-            val resolved = targets.map { post -> async(Dispatchers.IO) { post.id to FynxHomePostMediaClient.list(context, post.id).getOrNull().orEmpty() } }.awaitAll().toMap()
+            val outcomes = targets.map { post -> async(Dispatchers.IO) { post.id to FynxHomePostMediaClient.list(context, post.id) } }.awaitAll()
+            val resolved = outcomes.mapNotNull { (id, result) -> result.getOrNull()?.let { id to it } }.toMap()
             if (resolved.isNotEmpty()) postMedia = postMedia + resolved
+            postMediaError = postMediaError || outcomes.any { it.second.isFailure }
         }
     }
     fun loadDiscoveryVideos(reset: Boolean = false) {
@@ -332,6 +338,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             loading = true
             val activeNetworkReady = networkReady ?: (FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE)
             if (!activeNetworkReady) {
+                offlineSnapshot = true
                 val cachedPage = FynxRemoteSocialClient.cachedFeedPage(context)
                 if (posts.isEmpty() && cachedPage != null) {
                     posts = cachedPage.posts
@@ -350,9 +357,9 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             var cachedRevalidationStarted = false
             FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
                 .onSuccess { page ->
-                    posts = page.posts; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; feedPaginationPaused = false
+                    posts = page.posts; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; feedPaginationPaused = false; offlineSnapshot = false
                     interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null
-                    resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); hydratePostMedia(page.posts)
+                    resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); postMediaError = false; hydratePostMedia(page.posts)
                     discoveryOffset = 0; discoveryHasMore = false
                     if (hadFreshCache) {
                         // Keep pagination locked until cache revalidation settles. Otherwise a
@@ -391,23 +398,38 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     LaunchedEffect(networkReady) {
         if (networkReady == true) { feedPaginationPaused = false; discoveryPaginationPaused = false; reload() }
     }
-    LaunchedEffect(initialPostId) {
-        val target = initialPostId?.trim()?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
-        val loadedPost = posts.firstOrNull { it.id == target }
-        if (loadedPost != null) {
-            commentsPost = loadedPost
-            onInitialPostConsumed()
+    LaunchedEffect(initialPostId, initialCommentId, loading, feedRequestInFlight, posts) {
+        val target = initialPostId?.trim()?.takeIf { it.isNotBlank() }
+        if (target == null) {
+            handledInitialPostId = null
             return@LaunchedEffect
         }
-        FynxRemoteSocialClient.postById(context, target)
+        if (target == handledInitialPostId) return@LaunchedEffect
+        // Let the first feed request settle before resolving a search target so a feed refresh cannot overwrite it.
+        if (loading || feedRequestInFlight) return@LaunchedEffect
+        val loadedPost = posts.firstOrNull { it.id == target }
+        val postResult = if (loadedPost != null) Result.success(loadedPost) else FynxRemoteSocialClient.postById(context, target)
+        postResult
             .onSuccess { post ->
-                commentsPost = post
+                handledInitialPostId = target
                 error = null
+                if (!initialCommentId.isNullOrBlank()) {
+                    commentsPost = post
+                } else {
+                    if (posts.none { it.id == post.id }) posts = listOf(post) + posts
+                    searchOpenedPostId = post.id
+                    resolveAuthorPhotos(listOf(post))
+                    hydrateInteractionStates(listOf(post))
+                    hydrateReactionStates(listOf(post))
+                    hydratePostMedia(listOf(post))
+                }
+                onInitialPostConsumed()
             }
             .onFailure { failure ->
+                handledInitialPostId = target
                 error = failure.message ?: "This post is unavailable. It may have been deleted or its audience may have changed."
+                onInitialPostConsumed()
             }
-        onInitialPostConsumed()
     }
 
     fun loadMore() {
@@ -515,6 +537,20 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
     }
 
+    LaunchedEffect(searchOpenedPostId, posts, loading, error, discoveryVideosError, postMediaError, offlineSnapshot, feedRequestInFlight) {
+        val target = searchOpenedPostId ?: return@LaunchedEffect
+        if (loading || feedRequestInFlight) return@LaunchedEffect
+        val targetPosition = posts.indexOfFirst { it.id == target }
+        if (targetPosition < 0) return@LaunchedEffect
+        val precedingInsertions = (0 until targetPosition).count { homeInsertions[it] != null }
+        val leadingItems = (if (header != null) 1 else 0) + 1 +
+            (if (loading) 1 else 0) + (if (error != null) 1 else 0) +
+            (if (offlineSnapshot) 1 else 0) + (if (searchOpenedPostId != null) 1 else 0) +
+            (if (postMediaError) 1 else 0) + (if (discoveryVideosError != null) 1 else 0) +
+            (if (!loading && posts.isEmpty() && error == null) 1 else 0)
+        feedListState.animateScrollToItem(leadingItems + targetPosition + precedingInsertions)
+    }
+
     LazyColumn(state = feedListState, modifier = modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp)) {
         header?.let { content -> item(key = "home_ai_status") { content() } }
         item(key = "feed_header") {
@@ -570,6 +606,22 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
         if (loading) item(key = "feed_loading") { LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading Home feed" }) }
         error?.let { message -> item(key = "feed_error") { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Text("Retry") } } } } }
+        if (offlineSnapshot) item(key = "offline_feed_snapshot") {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = FynxDesign.CardShape) {
+                Text("Offline snapshot — posts and media may be out of date until FYNX reconnects.", Modifier.fillMaxWidth().padding(12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        if (searchOpenedPostId != null) item(key = "search_opened_post_label") {
+            Text("Post opened from Search", Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+        }
+        if (postMediaError) item(key = "post_media_error") {
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer), shape = FynxDesign.CardShape) {
+                Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Some post attachments couldn't be loaded.", Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { postMediaError = false; hydratePostMedia(posts) }, enabled = !loadingMore) { Text("Retry media") }
+                }
+            }
+        }
         discoveryVideosError?.let { message -> item(key = "home_discovery_error") {
             Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
