@@ -39,6 +39,9 @@ const checks = [
   ['seller fulfillment controls call the integrated progress route', sellerOrders.includes('/api/marketplace/orders/${order.id}/fulfillment-progress')],
   ['buyer timeline loads the existing protected timeline route', buyerTimeline.includes('/api/marketplace/orders/$orderId/timeline')],
   ['buyer timeline explains failed delivery protection', buyerTimeline.includes('protected payment is not released')],
+  ['buyer timeline maps common fulfillment events to plain-language labels', buyerTimeline.includes('"FULFILLMENT_DISPATCHED" -> "Order handed to the driver"') && buyerTimeline.includes('"FULFILLMENT_IN_TRANSIT" -> "Order is on the way"') && buyerTimeline.includes('"FULFILLMENT_INSPECTION" -> "Waiting for buyer confirmation"')],
+  ['buyer timeline formats ISO timestamps in the device local time zone', buyerTimeline.includes('SimpleDateFormat("EEE, d MMM yyyy · h:mm a", Locale.getDefault())') && buyerTimeline.includes('TimeZone.getDefault()')],
+  ['buyer timeline never exposes raw photo media IDs', buyerTimeline.includes('"PHOTO_REFERENCE" -> Text("Photo evidence attached securely")') && !buyerTimeline.includes('Text("$label: ${evidence.value}")')],
   ['payment-pending cancellation releases reserved inventory', transactions.includes("order.status!=='PAYMENT_PENDING'") && paymentExpiry.includes('reserved_quantity=GREATEST(0,reserved_quantity-$1)')],
   ['no specific carrier API is embedded in the shipping foundation', !shipping.includes('fedex') && !shipping.includes('ups.com') && !shipping.includes('dhl.com') && !shipping.includes('shippo.com')]
 ];
