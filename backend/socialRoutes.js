@@ -464,7 +464,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     try {
       await ensureSocialSchema();
       const id = String(req.params?.id || '').trim();
-      if (!/^\\d{1,20}$/.test(id)) return res.status(400).json({ error: 'invalid post id' });
+      if (!/^\d{1,20}$/.test(id)) return res.status(400).json({ error: 'invalid post id' });
       const post = await pool.query('SELECT author_id FROM social_posts WHERE id=$1 LIMIT 1', [id]);
       if (!post.rows[0] || !(await visibleSocialPost(id, req.user.sub))) return res.status(404).json({ error: 'post not found' });
       // Do not count an author's own view; unique viewers are deduplicated per post/account.
