@@ -683,27 +683,40 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
         permissionLoadError?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         syncMessage?.let { Text(it, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
-        messages.lastOrNull { it.fromMe && !it.delivered }?.let { failedMessage ->
+        val unsentCount = messages.count { it.fromMe && !it.delivered }
+        if (unsentCount > 0) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("A group message is still unsent.", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Text(
+                    if (unsentCount == 1) "1 group message is still unsent." else "$unsentCount group messages are still unsent.",
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
                 TextButton(enabled = !sending, onClick = {
                     if (!sending) {
                         sending = true
                         scope.launch {
-                            FynxGroupRemoteClient.sendMessage(context, groupId, failedMessage)
-                                .onSuccess { remote ->
-                                    val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
-                                    messages = messages.map { if (it.id == failedMessage.id) serverMessage else it }
-                                    FynxChatStore.save(context, "group_$groupId", messages)
-                                    syncMessage = null
-                                }
-                                .onFailure { error ->
-                                    syncMessage = error.message ?: "Message could not be sent. Check your connection and retry."
-                                }
+                            val pendingMessages = messages.filter { it.fromMe && !it.delivered }
+                            var failedCount = 0
+                            var lastError: String? = null
+                            for (failedMessage in pendingMessages) {
+                                FynxGroupRemoteClient.sendMessage(context, groupId, failedMessage)
+                                    .onSuccess { remote ->
+                                        val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
+                                        messages = messages.map { if (it.id == failedMessage.id) serverMessage else it }
+                                        FynxChatStore.save(context, "group_$groupId", messages)
+                                    }
+                                    .onFailure { error ->
+                                        failedCount += 1
+                                        lastError = error.message
+                                    }
+                            }
+                            syncMessage = if (failedCount == 0) null else
+                                lastError ?: "$failedCount group message(s) are still unsent. Check your connection and retry."
                             sending = false
                         }
                     }
-                }) { Text("Retry") }
+                }) { Text(if (unsentCount == 1) "Retry" else "Retry all") }
             }
         }
         if (!canSendMessages) Text("Only admins can send messages in this group.", Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
