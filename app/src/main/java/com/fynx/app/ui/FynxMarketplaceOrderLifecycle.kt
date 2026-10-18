@@ -31,7 +31,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 @Composable
@@ -307,7 +309,7 @@ internal fun MarketplaceHandoverPhotoPreview(context: Context, orderId: String, 
                 )
                 result.onSuccess { downloaded ->
                     if (downloaded.contentType?.startsWith("image/") == true) {
-                        bitmap = BitmapFactory.decodeFile(file.absolutePath)
+                        bitmap = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(file.absolutePath) }
                         if (bitmap == null) failed = true
                     } else {
                         failed = true
