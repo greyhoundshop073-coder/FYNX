@@ -19,6 +19,11 @@ checks = [
      'marketplaceFeeSeller = q.optDouble("marketplaceFeeSeller")' in client),
     ("single-product checkout labels the total FYNX fee and buyer share separately",
      "Total FYNX marketplace fee:" in client and "Your FYNX fee share:" in client),
+    ("single-product checkout does not claim payment is protected before provider collection",
+     "payment has not been collected" in client.lower() and "Create order (payment pending)" in client),
+    ("order-created dialog accurately reports payment pending rather than payment received",
+     "Order created — payment pending" in panel and "Payment has not been collected" in panel and
+     "Payment received" not in panel and "Your payment is protected by FYNX" not in panel),
     ("single-product checkout explains seller-paid fee is deducted from seller payout",
      "Seller-paid FYNX fee (deducted from seller payout)" in client),
     ("multi-product quote item maps total fee and both payer shares",
