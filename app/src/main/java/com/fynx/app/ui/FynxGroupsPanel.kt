@@ -295,7 +295,6 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var groupNotificationsEnabled by remember(groupId) { mutableStateOf(FynxConversationPreferences.groupNotifications(context, groupId)) }
     var showEmojiPanel by remember { mutableStateOf(false) }
     var showAttachmentMenu by remember { mutableStateOf(false) }
-    var showGroupCameraPicker by remember { mutableStateOf(false) }
     var reactionMessageId by remember { mutableStateOf<String?>(null) }
     var replyToId by remember { mutableStateOf<String?>(null) }
     val replySwipeOffsets = remember { mutableStateMapOf<String, Float>() }
@@ -804,7 +803,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 OutlinedButton(onClick = { showAttachmentMenu = false; showTools = true }, modifier = Modifier.weight(1f)) {
                                     Icon(Icons.Default.PhotoCamera, null); Spacer(Modifier.width(5.dp)); Text("Camera")
                                 }
-                                OutlinedButton(onClick = { showAttachmentMenu = false; groupMediaPicker.launch("image/*,video/*") }, modifier = Modifier.weight(1f)) {
+                                OutlinedButton(onClick = { showAttachmentMenu = false; groupMediaPicker.launch("*/*") }, modifier = Modifier.weight(1f)) {
                                     Icon(Icons.Default.PhotoLibrary, null); Spacer(Modifier.width(5.dp)); Text("Gallery")
                                 }
                                 OutlinedButton(onClick = { showAttachmentMenu = false; groupDocumentPicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f)) {
