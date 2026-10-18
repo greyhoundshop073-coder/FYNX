@@ -165,12 +165,12 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
         var handoverNote by remember(order.id) { mutableStateOf("") }
         var handoverPhotoMediaId by remember(order.id) { mutableStateOf<String?>(null) }
         var handoverPhotoUri by remember(order.id) { mutableStateOf<Uri?>(null) }
+        var message by remember(order.id) { mutableStateOf<String?>(null) }
         val handoverPhotoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
             handoverPhotoUri = uri
             if (uri != null) message = "Handover photo selected; it will upload when you confirm handover."
         }
         var busy by remember(order.id) { mutableStateOf(false) }
-        var message by remember(order.id) { mutableStateOf<String?>(null) }
         var settlementLoading by remember(order.id) { mutableStateOf(true) }
         var settlement by remember(order.id) { mutableStateOf<JSONObject?>(null) }
         var payoutQueued by remember(order.id) { mutableStateOf(false) }
