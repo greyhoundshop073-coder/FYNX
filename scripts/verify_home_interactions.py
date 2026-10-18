@@ -128,6 +128,8 @@ else:
     require(home, 'FynxHomeMarketplaceCarousel(', "Marketplace remains in the shared Home scroll surface")
     require(home, 'HomePeopleRecommendationsCard(', "People recommendations remain in the shared Home scroll surface")
     require(home, 'FynxHomeDiscoverySection(', "Discovery remains in the shared Home scroll surface")
+require_normalized(home, "Text(\"What's on your mind?\",", "Home keeps a persistent create-post entry above the feed")
+require(home, 'contentDescription = "Create post"', "Home create-post action remains accessible")
 require(home, 'networkReady: Boolean? = null', "Home feed receives the authoritative app connection state")
 require(home, 'val activeNetworkReady = networkReady ?: (FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE)', "Home feed uses a consistent offline gate")
 require(home, 'FynxRemoteSocialClient.cachedFeedPage(context)', "Home feed restores the account-scoped cached snapshot while offline")
