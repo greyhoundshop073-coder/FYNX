@@ -8,6 +8,7 @@ const transactions = read('./marketplaceTransactions.js');
 const settlement = read('./marketplaceSettlement.js');
 const inspection = read('./marketplaceInspectionExpiry.js');
 const paymentExpiry = read('./marketplacePaymentExpiry.js');
+const server = read('./server.js');
 
 const checks = [
   ['buyer can open a refund request', protection.includes("app.post('/api/marketplace/protection/order/:id/refund-request'") && protection.includes("only the buyer can request a refund")],
@@ -34,7 +35,10 @@ const checks = [
   ['admin seller resolution cannot race refund', resolution.includes('refundConflict') && resolution.includes("resolution === 'SELLER'")],
   ['admin cancellation cannot cancel active money movement', resolution.includes("resolution === 'CANCEL'") && resolution.includes('payoutConflict || refundConflict')],
   ['admin authorization is explicit', resolution.includes("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1") && !resolution.includes('ORDER BY id ASC LIMIT 1')],
-  ['payout remains buyer-completion gated', settlement.includes("order.status !== 'COMPLETED'") && settlement.includes('buyer completion is required')]
+  ['payout remains buyer-completion gated', settlement.includes("order.status !== 'COMPLETED'") && settlement.includes('buyer completion is required')],
+  ['PHOTO evidence must reference an uploaded image owned by the participant', transactions.includes('PHOTO evidence must reference an uploaded image media ID') && transactions.includes('PHOTO_MEDIA_NOT_OWNED') && transactions.includes('message_media WHERE id=$1 AND owner_id=$2')],
+  ['PHOTO evidence rejects non-image uploads', transactions.includes('PHOTO_MEDIA_TYPE_INVALID') && transactions.includes('image\\\\/(jpeg|png|webp|gif)')],
+  ['order evidence photos are readable only by authenticated order participants', server.includes("to_regclass('public.marketplace_order_evidence')") && server.includes("e.kind = 'PHOTO'") && server.includes('(o.buyer_id = $2 OR o.seller_id = $2)')]
 ];
 
 for (const [name, ok] of checks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);
