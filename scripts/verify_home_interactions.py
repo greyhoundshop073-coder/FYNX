@@ -30,6 +30,7 @@ client = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
 saved_panel = read("app/src/main/java/com/fynx/app/ui/FynxSavedPostsPanel.kt")
 privacy_bootstrap = read("backend/homeCommentsPrivacyBootstrap.js")
 realtime_bootstrap = read("backend/realtimeIsolationBootstrap.js")
+push = read("backend/notificationPush.js")
 backend_package = read("backend/package.json")
 search_panel = read("app/src/main/java/com/fynx/app/ui/FynxUniversalSearchPanel.kt")
 app_shell = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
@@ -252,5 +253,13 @@ require(ai_panel, 'FynxAiConversationClient.uploadImage(context, uri)', "real FY
 require(ai_panel, 'FynxFutureIntelligencePolicy.authorize(', "full FYNX AI authorization boundary")
 if 'TextToSpeech' in ai_panel or 'android.speech.tts' in ai_panel:
     raise SystemExit("HOME INTERACTIONS RED: Google Android TTS must not be reintroduced into FYNX AI")
+
+
+require(push, "notifyCommentMentions", "comment mention notification helper")
+require(realtime_bootstrap, "COMMENT_WRITE_RATE_LIMIT", "reply anti-spam rate limit")
+require(realtime_bootstrap, "nextCursor", "cursor-paginated replies")
+require(client, "before: String? = null, limit: Int = 50): Result<CommentPage>", "cursor-paginated reply client")
+require(comments_panel, "Load more replies", "reply pagination UI")
+require(comments_panel, "ClickableText", "tappable comment mentions")
 
 print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions including Save/Saved Posts continuity, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, clean-startup privacy boundaries, FYNX AI single-scroll/typing/security integration, and direct Create status -> existing composer wiring are present without duplicate vertical feed surfaces or client API secrets.")
