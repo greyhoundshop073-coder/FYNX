@@ -305,6 +305,13 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var searchOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     val selectedGroup = currentGroup
+    val myRole = selectedGroup?.members?.firstOrNull { it.username.equals(currentUsername, true) }?.role ?: FynxGroupRole.MEMBER
+    val isAdmin = myRole == FynxGroupRole.ADMIN
+    val canManageGroup = FynxGroupsBatch3.canManage(myRole)
+    val prefs = remember(groupId) { FynxConversationPreferences.group(context, groupId) }
+    val hasRemoteAccessToken = FynxBackendClient.hasAccessToken(context)
+    val canSendMessages = canManageGroup || if (hasRemoteAccessToken) remotePermissions?.sendMessages == true else prefs.getBoolean("send_messages", true)
+    val canSendMedia = canManageGroup || if (hasRemoteAccessToken) remotePermissions?.sendMedia == true else prefs.getBoolean("send_media", true)
     fun sendGroupAttachment(uri: android.net.Uri, type: String) {
         if (!canSendMedia) {
             syncMessage = "Sending media and files is disabled in Group Settings."
@@ -344,13 +351,6 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     val groupDocumentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) sendGroupAttachment(uri, "document")
     }
-    val myRole = selectedGroup?.members?.firstOrNull { it.username.equals(currentUsername, true) }?.role ?: FynxGroupRole.MEMBER
-    val isAdmin = myRole == FynxGroupRole.ADMIN
-    val canManageGroup = FynxGroupsBatch3.canManage(myRole)
-    val prefs = remember(groupId) { FynxConversationPreferences.group(context, groupId) }
-    val hasRemoteAccessToken = FynxBackendClient.hasAccessToken(context)
-    val canSendMessages = canManageGroup || if (hasRemoteAccessToken) remotePermissions?.sendMessages == true else prefs.getBoolean("send_messages", true)
-    val canSendMedia = canManageGroup || if (hasRemoteAccessToken) remotePermissions?.sendMedia == true else prefs.getBoolean("send_media", true)
     val canAddMembers = canManageGroup || if (hasRemoteAccessToken) {
         remotePermissions?.addMembers == true && remotePermissions?.approveNewMembers != true
     } else {
