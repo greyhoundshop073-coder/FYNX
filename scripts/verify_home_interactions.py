@@ -179,7 +179,7 @@ require(home, 'contentDescription = "Create post"', "Home create-post action rem
 require(home, 'networkReady: Boolean? = null', "Home feed receives the authoritative app connection state")
 require(home, 'val activeNetworkReady = networkReady ?: (FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE)', "Home feed uses a consistent offline gate")
 require(home, 'FynxRemoteSocialClient.cachedFeedPage(context)', "Home feed restores the account-scoped cached snapshot while offline")
-require(home, 'if (networkReady == true) { paginationPaused = false; reload() }', "Home feed automatically revalidates when the app connection returns and resumes pagination")
+require(home, 'if (networkReady == true) { feedPaginationPaused = false; discoveryPaginationPaused = false; reload() }', "Home feed and discovery automatically resume when the app connection returns")
 require(home, 'You\'re offline. Connect to a network to load your feed.', "Home feed shows a settled offline state instead of a permanent spinner")
 require(home, 'LaunchedEffect(publishRefreshKey) {\n        val network = FynxNetworkQuality.current(context)', "Home secondary refresh observes network quality")
 require(home, 'if (network == FynxNetworkQuality.Level.OFFLINE) return@LaunchedEffect', "Home secondary refresh preserves offline data")
