@@ -106,6 +106,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var postMedia by remember { mutableStateOf<Map<String, List<FynxHomePostMediaClient.PostMediaItem>>>(emptyMap()) }
     var discoveryVideos by remember { mutableStateOf<List<FynxDiscoveryClient.TrendingPost>>(emptyList()) }
     var discoveryVideosLoading by remember { mutableStateOf(false) }
+    var discoveryVideosError by remember { mutableStateOf<String?>(null) }
     var discoveryVideosHasMore by remember { mutableStateOf(true) }
     var discoveryVideosOffset by remember { mutableIntStateOf(0) }
     var homeDiscoveryViewerOpen by remember { mutableStateOf(false) }
@@ -268,6 +269,9 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                 discoveryVideos = (existing + videoPosts).distinctBy { it.id }
                 discoveryVideosOffset = offset + page.size
                 discoveryVideosHasMore = page.size >= 12
+                discoveryVideosError = null
+            }.onFailure { failure ->
+                discoveryVideosError = failure.message ?: "Unable to load discovery videos."
             }
             discoveryVideosLoading = false
         }
@@ -565,6 +569,14 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
         if (loading) item(key = "feed_loading") { LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading Home feed" }) }
         error?.let { message -> item(key = "feed_error") { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Text("Retry") } } } } }
+        discoveryVideosError?.let { message -> item(key = "home_discovery_error") {
+            Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Discovery videos: $message", Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
+                    TextButton(onClick = { loadDiscoveryVideos(reset = discoveryVideos.isEmpty()) }, enabled = !discoveryVideosLoading) { Text("Retry") }
+                }
+            }
+        } }
         if (!loading && posts.isEmpty() && error == null) item(key = "feed_empty") { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary), border = BorderStroke(1.dp, MaterialTheme.colorScheme.onPrimary.copy(alpha = .45f))) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Your feed is ready", style = MaterialTheme.typography.titleMedium); Text("There are no visible posts yet. Create a post or find real people to build your FYNX circle."); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = onCreatePost, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onPrimary, contentColor = MaterialTheme.colorScheme.primary)) { Text("Create Post") }; OutlinedButton(onClick = onOpenFindPeople, colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onPrimary), border = BorderStroke(1.dp, MaterialTheme.colorScheme.onPrimary.copy(alpha = .8f))) { Text("Find People") } } } } }
         posts.forEachIndexed { postIndex, post ->
             item(key = post.id) {
