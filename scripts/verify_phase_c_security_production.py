@@ -17,6 +17,8 @@ def check(name, ok):
 server = read("backend/server.js")
 realtime = read("backend/realtimeIsolationBootstrap.js")
 media_privacy = read("backend/mediaPrivacy.js")
+marketplace_completion = read("backend/marketplaceCompletion.js")
+marketplace_media_privacy = read("backend/marketplaceMediaPrivacy.js")
 client = read("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt")
 realtime_client = read("app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt")
 auth = read("app/src/main/java/com/fynx/app/ui/FynxAuthStore.kt")
@@ -42,6 +44,8 @@ media_route = media_route_match.group(1) if media_route_match else ""
 check("media authorization rules are separate EXISTS clauses without fragile joined ordering", "OR EXISTS (\n            SELECT 1 FROM messages m" in media_route and "OR EXISTS (\n            SELECT 1 FROM marketplace_listings ml" in media_route and "OR EXISTS (\n            SELECT 1 FROM statuses s" in media_route and "ORDER BY m.id" not in media_route)
 check("media route SQL parentheses are balanced", bool(media_route) and media_route.count("(") == media_route.count(")"))
 
+check("Marketplace media requires active in-stock NGN/USD listings", "ml.quantity > 0" in marketplace_completion and "ml.quantity>0" in marketplace_media_privacy and "ml.currency" in marketplace_completion and "ml.currency" in marketplace_media_privacy)
+check("Marketplace media authorization changes cannot be masked by a one-hour private cache", "private, no-store" in marketplace_completion and "max-age=3600" not in marketplace_completion)
 check("production transport security headers are enabled", "X-Content-Type-Options" in server and "Referrer-Policy" in server and "X-Frame-Options" in server and "Strict-Transport-Security" in server)
 check("request body size is bounded", 'express.json({ limit: "18mb"' in server)
 check("endpoint rate limiting is enabled", 'rateLimit("auth"' in server and 'rateLimit("assistant"' in server and 'rateLimit("media"' in server and 'rateLimit("messages"' in server)
