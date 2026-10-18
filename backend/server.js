@@ -467,7 +467,23 @@ app.get("/api/media/:id", auth, async (req, res) => {
   try {
     const mediaId = Number(req.params.id);
     if (!Number.isInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: "invalid media id" });
-    const result = await pool.query(`SELECT mm.mime_type, mm.data FROM message_media mm LEFT JOIN messages m ON m.media_id = mm.id WHERE mm.id = $1 AND (mm.owner_id = $2 OR m.sender_id = $2 OR m.recipient_id = $2 OR EXISTS (SELECT 1 FROM users u LEFT JOIN privacy_settings ps ON ps.user_id = u.id WHERE u.id = mm.owner_id AND u.profile_photo_media_id = mm.id AND (u.id = $2 OR ((COALESCE(ps.profile_visibility, 'My friends') = 'Everyone' OR (COALESCE(ps.profile_visibility, 'My friends') = 'My friends' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id = u.id AND f.friend_id = $2) OR (f.user_id = $2 AND f.friend_id = u.id)) AND f.status = 'accepted')) AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $2 AND b.blocked_id = u.id) OR (b.blocked_id = $2 AND b.blocker_id = u.id)))) OR EXISTS (SELECT 1 FROM statuses s WHERE s.media_id = mm.id AND s.expires_at > NOW() AND (s.owner_id = $2 OR ((s.audience = 'EVERYONE' OR (s.audience = 'FRIENDS' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id = s.owner_id AND f.friend_id = $2) OR (f.user_id = $2 AND f.friend_id = s.owner_id)) AND f.status = 'accepted'))) AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $2 AND b.blocked_id = s.owner_id) OR (b.blocker_id = s.owner_id AND b.blocked_id = $2))))) ORDER BY m.id DESC LIMIT 1`, [mediaId, req.user.sub]);
+    let result = await pool.query(`SELECT mm.mime_type, mm.data FROM message_media mm LEFT JOIN messages m ON m.media_id = mm.id WHERE mm.id = $1 AND (mm.owner_id = $2 OR m.sender_id = $2 OR m.recipient_id = $2 OR EXISTS (SELECT 1 FROM users u LEFT JOIN privacy_settings ps ON ps.user_id = u.id WHERE u.id = mm.owner_id AND u.profile_photo_media_id = mm.id AND (u.id = $2 OR ((COALESCE(ps.profile_visibility, 'My friends') = 'Everyone' OR (COALESCE(ps.profile_visibility, 'My friends') = 'My friends' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id = u.id AND f.friend_id = $2) OR (f.user_id = $2 AND f.friend_id = u.id)) AND f.status = 'accepted')) AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $2 AND b.blocked_id = u.id) OR (b.blocked_id = $2 AND b.blocker_id = u.id)))) OR EXISTS (SELECT 1 FROM statuses s WHERE s.media_id = mm.id AND s.expires_at > NOW() AND (s.owner_id = $2 OR ((s.audience = 'EVERYONE' OR (s.audience = 'FRIENDS' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id = s.owner_id AND f.friend_id = $2) OR (f.user_id = $2 AND f.friend_id = s.owner_id)) AND f.status = 'accepted'))) AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $2 AND b.blocked_id = s.owner_id) OR (b.blocker_id = s.owner_id AND b.blocked_id = $2))))) ORDER BY m.id DESC LIMIT 1`, [mediaId, req.user.sub]);
+    // Marketplace handover photos are not message/profile/status media. Allow only the
+    // buyer or seller on the specific order whose evidence references this media ID.
+    if (!result.rows[0]) {
+      try {
+        result = await pool.query(`SELECT mm.mime_type, mm.data
+          FROM message_media mm
+          JOIN marketplace_delivery_evidence e
+            ON e.evidence_type = 'PHOTO_REFERENCE' AND e.value = CAST(mm.id AS TEXT)
+          JOIN marketplace_orders mo ON mo.id = e.order_id
+          WHERE mm.id = $1 AND (mo.buyer_id = $2 OR mo.seller_id = $2)
+          LIMIT 1`, [mediaId, req.user.sub]);
+      } catch (marketplaceEvidenceError) {
+        // Marketplace schema may not exist yet on installations that have not opened Marketplace.
+        if (marketplaceEvidenceError.code !== '42P01') throw marketplaceEvidenceError;
+      }
+    }
     if (!result.rows[0]) return res.status(404).json({ error: "media not found" });
     res.set("Cache-Control", "private, no-store");
     res.type(result.rows[0].mime_type);
