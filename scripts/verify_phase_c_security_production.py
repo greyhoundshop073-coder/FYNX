@@ -36,7 +36,7 @@ check("API responses have bounded size", "MAX_RESPONSE_BYTES" in client and "tot
 check("media downloads have bounded size", "maxBytes" in client and "total += count" in client and "total > maxBytes" in client and "FYNX media is too large" in client)
 check("authenticated media endpoint exists", 'app.get("/api/media/:id", auth' in server)
 check("media ownership and visibility are server checked", "owner_id" in server and "sender_id" in server and "recipient_id" in server and "blocks" in media_privacy)
-check("active Marketplace listing media is readable by buyers without bypassing seller blocks", "marketplace_listings ml WHERE ml.active = TRUE AND ml.quantity > 0" in server and "ml.media_ids @> to_jsonb(ARRAY[mm.id::text])" in server and "ml.seller_id" in server and "ml.currency" in server)
+check("active Marketplace listing media is readable by buyers without bypassing seller blocks", re.search(r"marketplace_listings ml\\s+WHERE ml.active = TRUE\\s+AND ml.quantity > 0", server) is not None and "ml.media_ids @> to_jsonb(ARRAY[mm.id::text])" in server and "ml.seller_id" in server and "ml.currency" in server)
 media_route_match = re.search(r'app\.get\("/api/media/:id", auth, async \(req, res\) => \{(.*?)\n\}\);', server, re.S)
 media_route = media_route_match.group(1) if media_route_match else ""
 check("media authorization rules are separate EXISTS clauses without fragile joined ordering", "OR EXISTS (\n            SELECT 1 FROM messages m" in media_route and "OR EXISTS (\n            SELECT 1 FROM marketplace_listings ml" in media_route and "OR EXISTS (\n            SELECT 1 FROM statuses s" in media_route and "ORDER BY m.id" not in media_route)
