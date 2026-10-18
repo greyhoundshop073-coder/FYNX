@@ -85,7 +85,7 @@ require(home, 'hydrateDiscovery(0, replace = true)', "Home discovery starts from
 require(home, 'var discoveryVideosError by remember { mutableStateOf<String?>(null) }', "Home video discovery has an explicit error state")
 require(home, 'discoveryVideosError = failure.message ?: "Unable to load discovery videos."', "Home video discovery failures are not silently swallowed")
 require(home, 'Text("Discovery videos: $message"', "Home video discovery errors are visible")
-require(home, 'TextButton(onClick = { loadDiscoveryVideos(reset = discoveryVideos.isEmpty()) }, enabled = !discoveryVideosLoading)', "Home video discovery offers retry")
+require(home, 'TextButton(onClick = { loadDiscoveryVideos(reset = true) }, enabled = !discoveryVideosLoading)', "Home video discovery offers retry")
 require(home, 'RemoteSocialMedia(audioMedia.mediaUrl, audioMedia.mediaType', "voice-note post renders audio instead of disappearing inside the visual grid")
 require(home, 'val visualMediaItems = mediaItems.filter { it.mediaType.equals("image", true) || it.mediaType.equals("video", true) }', "Home multi-media grid contains only photos and videos")
 require(home, 'MusicPostPlayer(post.musicMediaId!!, post.musicTitle.orEmpty(), post.musicArtist.orEmpty(), post.musicDurationMs)', "catalogue music is displayed on photo/video posts")
