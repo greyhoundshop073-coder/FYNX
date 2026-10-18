@@ -29,6 +29,10 @@ require("active group Camera picker sends captured media through the authenticat
 require("active group Files opens the document picker", "groupDocumentPicker.launch(arrayOf(\"*/*\"))" in ACTIVE_GROUP and "ActivityResultContracts.OpenDocument()" in ACTIVE_GROUP)
 require("group media picker validates MIME type before sending", 'mime.startsWith("video/")' in ACTIVE_GROUP and 'mime.startsWith("image/")' in ACTIVE_GROUP)
 require("group attachments remain retryable after send failure", "it.copy(delivered = false, read = false)" in ACTIVE_GROUP and "Attachment could not be sent." in ACTIVE_GROUP)
+require("active group microphone requests runtime permission before recording", "ActivityResultContracts.RequestPermission()" in ACTIVE_GROUP and "Manifest.permission.RECORD_AUDIO" in ACTIVE_GROUP)
+require("active group microphone records AAC audio and sends it through the attachment pipeline", "MediaRecorder.AudioEncoder.AAC" in ACTIVE_GROUP and "sendGroupAttachment(Uri.fromFile(file), \"audio\")" in ACTIVE_GROUP)
+require("active group microphone has a stop/send control and rejects empty recordings", "Icons.Default.Stop" in ACTIVE_GROUP and "duration < 500L" in ACTIVE_GROUP and "Voice message" in ACTIVE_GROUP)
+require("active group voice recording is cleaned up when leaving the conversation", "DisposableEffect(groupId)" in ACTIVE_GROUP and "activeVoiceRecorder?.let" in ACTIVE_GROUP)
 
 # Shared private-chat and model contracts remain covered.
 require("private chat protects top system inset", "statusBarsPadding" in PRIVATE)

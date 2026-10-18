@@ -3,6 +3,11 @@ package com.fynx.app.ui
 // Chat/Group badge checkpoint: Conversation Moments is wired into the real group conversation flow.
 // Chat/Group recovery certification: unexpected entry/sync failures stay inside the screen.
 
+import android.Manifest
+import android.media.MediaRecorder
+import android.net.Uri
+import android.os.Build
+import java.io.File
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
@@ -31,6 +36,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Reply
@@ -302,6 +308,11 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var remotePermissions by remember(groupId) { mutableStateOf<FynxGroupRemoteClient.RemotePermissions?>(null) }
     var permissionLoadError by remember(groupId) { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
+    var voiceRecorder by remember { mutableStateOf<MediaRecorder?>(null) }
+    var voiceFile by remember { mutableStateOf<File?>(null) }
+    var voiceRecordingStartedAt by remember { mutableLongStateOf(0L) }
+    var voiceRecordingElapsed by remember { mutableLongStateOf(0L) }
+    var voiceRecording by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     val selectedGroup = currentGroup
@@ -317,7 +328,15 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             syncMessage = "Sending media and files is disabled in Group Settings."
             return
         }
-        val optimistic = createGroupMediaMessage(uri, type).copy(delivered = false, read = false)
+        val optimistic = ChatMessage(
+            text = when (type) { "audio" -> "Voice message"; "document" -> "File"; "video" -> "Video"; else -> "Photo" },
+            fromMe = true,
+            id = UUID.randomUUID().toString(),
+            delivered = false,
+            read = false,
+            attachmentUri = uri.toString(),
+            attachmentType = type
+        )
         val next = messages + optimistic
         messages = next
         FynxChatStore.save(context, "group_$groupId", next)
@@ -336,6 +355,74 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 }
         }
     }
+    fun beginGroupVoiceRecording() {
+        if (!canSendMedia) {
+            syncMessage = "Sending voice messages is disabled in Group Settings."
+            return
+        }
+        val file = File(context.cacheDir, "fynx_group_voice_${System.currentTimeMillis()}.m4a")
+        runCatching {
+            val recorder = createGroupVoiceMediaRecorder(context)
+            recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            recorder.setOutputFile(file.absolutePath)
+            recorder.prepare()
+            recorder.start()
+            voiceRecorder = recorder
+            voiceFile = file
+            voiceRecordingStartedAt = System.currentTimeMillis()
+            voiceRecordingElapsed = 0L
+            voiceRecording = true
+            syncMessage = "Recording voice message — tap Stop to send."
+        }.onFailure { error ->
+            voiceRecorder?.let { runCatching { it.release() } }
+            voiceRecorder = null
+            voiceFile = null
+            voiceRecording = false
+            file.delete()
+            syncMessage = error.message ?: "Could not start voice recording."
+        }
+    }
+
+    fun finishGroupVoiceRecording() {
+        val recorder = voiceRecorder ?: return
+        val file = voiceFile
+        val duration = System.currentTimeMillis() - voiceRecordingStartedAt
+        val stopped = runCatching { recorder.stop() }
+        runCatching { recorder.release() }
+        voiceRecorder = null
+        voiceFile = null
+        voiceRecording = false
+        voiceRecordingElapsed = 0L
+        if (stopped.isFailure || file == null || !file.exists() || file.length() <= 0L || duration < 500L) {
+            file?.delete()
+            syncMessage = "Voice recording was too short or could not be saved. Try again."
+            return
+        }
+        sendGroupAttachment(Uri.fromFile(file), "audio")
+    }
+
+    val groupVoicePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) beginGroupVoiceRecording()
+        else syncMessage = "Microphone permission is required to record a voice message."
+    }
+
+    LaunchedEffect(voiceRecording, voiceRecordingStartedAt) {
+        while (voiceRecording) {
+            voiceRecordingElapsed = (System.currentTimeMillis() - voiceRecordingStartedAt).coerceAtLeast(0L)
+            kotlinx.coroutines.delay(250L)
+        }
+    }
+    val activeVoiceRecorder by rememberUpdatedState(voiceRecorder)
+    val activeVoiceFile by rememberUpdatedState(voiceFile)
+    DisposableEffect(groupId) {
+        onDispose {
+            activeVoiceRecorder?.let { runCatching { it.stop() }; runCatching { it.release() } }
+            activeVoiceFile?.delete()
+        }
+    }
+
     val groupMediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             val mime = context.contentResolver.getType(uri)?.lowercase().orEmpty()
@@ -893,31 +980,36 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         IconButton(
                             enabled = canSendMessages,
                             onClick = {
-                                if (text.isNotBlank() && !sending && selectedGroup != null) {
-                                    val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
-                                    messages = messages + optimistic
-                                    FynxChatStore.save(context, "group_$groupId", messages)
-                                    text = ""; replyToId = null; sending = true
-                                    scope.launch {
-                                        FynxGroupRemoteClient.sendMessage(context, groupId, optimistic)
-                                            .onSuccess { remote ->
-                                                val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
-                                                messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
-                                                FynxChatStore.save(context, "group_$groupId", messages)
-                                                syncMessage = null
-                                            }
-                                            .onFailure { error ->
-                                                messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
-                                                FynxChatStore.save(context, "group_$groupId", messages)
-                                                syncMessage = error.message ?: "Message could not be sent. Tap Retry to send it again."
-                                            }
-                                        sending = false
+                                when {
+                                    voiceRecording -> finishGroupVoiceRecording()
+                                    text.isNotBlank() && !sending && selectedGroup != null -> {
+                                        val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
+                                        messages = messages + optimistic
+                                        FynxChatStore.save(context, "group_$groupId", messages)
+                                        text = ""; replyToId = null; sending = true
+                                        scope.launch {
+                                            FynxGroupRemoteClient.sendMessage(context, groupId, optimistic)
+                                                .onSuccess { remote ->
+                                                    val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
+                                                    messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
+                                                    FynxChatStore.save(context, "group_$groupId", messages)
+                                                    syncMessage = null
+                                                }
+                                                .onFailure { error ->
+                                                    messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
+                                                    FynxChatStore.save(context, "group_$groupId", messages)
+                                                    syncMessage = error.message ?: "Message could not be sent. Tap Retry to send it again."
+                                                }
+                                            sending = false
+                                        }
                                     }
+                                    !canSendMedia -> syncMessage = "Sending voice messages is disabled in Group Settings."
+                                    else -> groupVoicePermission.launch(Manifest.permission.RECORD_AUDIO)
                                 }
                             },
                             modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(Icons.Default.Mic, "Microphone", modifier = Modifier.size(23.dp), tint = Color.White)
+                            Icon(if (voiceRecording) Icons.Default.Stop else Icons.Default.Mic, if (voiceRecording) "Stop recording and send" else "Record voice message", modifier = Modifier.size(23.dp), tint = Color.White)
                         }
                     }
                 }
@@ -1116,3 +1208,8 @@ private fun FynxCatchMeUpSheet(
         }
     }
 }
+
+
+@Suppress("DEPRECATION")
+private fun createGroupVoiceMediaRecorder(context: android.content.Context): MediaRecorder =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
