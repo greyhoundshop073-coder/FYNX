@@ -79,7 +79,7 @@ function validReadOrAckPacket(raw, userId) {
 
 setInterval(() => {
   const cutoff = Date.now() - RATE_WINDOW_MS;
-  for (const map of [realtimeReadRate, realtimeAckRate]) {
+  for (const map of [realtimeReadRate, realtimeAckRate, commentWriteRate]) {
     for (const [key, value] of map) if (value.startedAt < cutoff) map.delete(key);
   }
 }, RATE_WINDOW_MS).unref();
