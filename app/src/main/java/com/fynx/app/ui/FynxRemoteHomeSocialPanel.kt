@@ -1095,14 +1095,13 @@ private fun FynxFeedTextureVideo(
         })
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier.fillMaxSize()) {
         AndroidView(
             factory = { ctx ->
                 TextureView(ctx).apply {
                     textureViewRef = this
                     isClickable = false
                     isFocusable = false
-                    setBackgroundColor(android.graphics.Color.BLACK)
                     addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
                         fitVideoInsideView(this, player.videoWidth, player.videoHeight)
                     }
