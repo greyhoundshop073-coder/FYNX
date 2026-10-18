@@ -13,6 +13,8 @@ const worker = read('./marketplaceSettlementWorker.js');
 const panel = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt');
 const lifecycle = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt');
 const seller = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerOrders.kt');
+const socialRoutes = read('./socialRoutes.js');
+const sellerSupport = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerFlowSupport.kt');
 
 const checks = [
   ['single-product checkout quote exists', checkout.includes("/api/marketplace/checkout/quote")],
@@ -37,7 +39,12 @@ const checks = [
   ['buyer UI performs server quote before multi-order creation', panel.includes("requestMultiQuote") && panel.includes("createMultiOrder")],
   ['buyer UI verifies the payment before treating checkout as paid', panel.includes("initializeMarketplaceCheckoutGroupPayment") && panel.includes("verifyMarketplaceCheckoutGroupPayment") && panel.includes("onPaid()")],
   ['buyer lifecycle remains server-authoritative', lifecycle.includes("FynxRemoteSocialClient") && !/UPDATE\s+marketplace_orders|INSERT\s+INTO\s+marketplace_orders/i.test(lifecycle)],
-  ['seller lifecycle remains server-authoritative', seller.includes("FynxBackendClient") && !/UPDATE\s+marketplace_orders|INSERT\s+INTO\s+marketplace_orders/i.test(seller)]
+  ['seller lifecycle remains server-authoritative', seller.includes("FynxBackendClient") && !/UPDATE\s+marketplace_orders|INSERT\s+INTO\s+marketplace_orders/i.test(seller)],
+  ['listing creation rejects zero quantity server-side', socialRoutes.includes('quantity < 1')],
+  ['listing creation requires delivery or pickup server-side', socialRoutes.includes('(!deliveryAvailable && !pickupAvailable)')],
+  ['seller UI collects store name and item condition', panel.includes('Store name (optional)') && panel.includes('Item condition') && panel.includes('createMarketplaceListing(context, title, desc, storeName')],
+  ['seller UI requires a fulfillment option and explicit delivery fee', panel.includes('(delivery || pickup)') && panel.includes('deliveryFee.toDoubleOrNull()')],
+  ['seller description limit matches backend contract', sellerSupport.includes('MAX_DESCRIPTION_LENGTH = 4000') && socialRoutes.includes('description.trim().slice(0, 4000)')]
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
