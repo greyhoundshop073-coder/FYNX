@@ -47,6 +47,7 @@ fun FynxMarketplaceOrderLifecycle(
     var showFulfillment by remember { mutableStateOf(order.status == "PAID") }
     var showDispute by remember { mutableStateOf(false) }
     var disputeDetails by remember { mutableStateOf("") }
+    var disputeReason by remember { mutableStateOf("OTHER") }
     var confirmOrderMatch by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -118,7 +119,12 @@ fun FynxMarketplaceOrderLifecycle(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (showDispute) {
-                    Text("Tell FYNX what went wrong. The protected order remains under the server-side dispute and settlement rules.")
+                    Text("Choose the problem that best matches your order. Opening a dispute places protected funds on hold while the case is reviewed.")
+                    listOf("ITEM_NOT_RECEIVED" to "Not received", "WRONG_ITEM" to "Wrong item", "DAMAGED" to "Damaged", "NOT_AS_DESCRIBED" to "Not as described", "SUSPECTED_SCAM" to "Suspected scam", "OTHER" to "Other").chunked(2).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            row.forEach { (code, label) -> FilterChip(selected = disputeReason == code, onClick = { disputeReason = code }, label = { Text(label) }, enabled = !busy) }
+                        }
+                    }
                     OutlinedTextField(
                         value = disputeDetails,
                         onValueChange = { disputeDetails = it.take(4000) },
@@ -177,7 +183,7 @@ fun FynxMarketplaceOrderLifecycle(
                             FynxRemoteSocialClient.disputeMarketplaceOrder(
                                 context,
                                 order.id,
-                                "OTHER",
+                                disputeReason,
                                 disputeDetails.trim()
                             )
                                 .onSuccess { onChanged() }
