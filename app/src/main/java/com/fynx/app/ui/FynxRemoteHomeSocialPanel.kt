@@ -960,12 +960,18 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
         }
         if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = { openMarketplaceTarget?.invoke() ?: onOpenMarketplace() }) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
         if (reactionPickerOpen) Surface(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), shape = MaterialTheme.shapes.large, tonalElevation = 2.dp) { Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) { ReactionChoice("👍", "LIKE", reactionState.currentReaction == "LIKE", onReact = { onReact(post.id, it) }); ReactionChoice("❤️", "LOVE", reactionState.currentReaction == "LOVE", onReact = { onReact(post.id, it) }); ReactionChoice("😂", "LAUGH", reactionState.currentReaction == "LAUGH", onReact = { onReact(post.id, it) }); ReactionChoice("😮", "WOW", reactionState.currentReaction == "WOW", onReact = { onReact(post.id, it) }); ReactionChoice("😢", "SAD", reactionState.currentReaction == "SAD", onReact = { onReact(post.id, it) }) } }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f), thickness = 0.7.dp)
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
             FeedActionButton(onClick = { onLike(post.id) }, onLongClick = onOpenReactionPicker, enabled = !interactionBusy, icon = if (post.likedByCurrentUser) Icons.Default.Favorite else Icons.Default.FavoriteBorder, label = "Like", longClickLabel = "Open post reactions", count = reactionState.total.coerceAtLeast(post.likeCount), active = post.likedByCurrentUser)
             FeedActionButton(onClick = onComment, enabled = !interactionBusy, icon = Icons.Default.ChatBubbleOutline, label = "Comment", count = post.commentCount)
             FeedActionButton(onClick = onShare, enabled = !interactionBusy, icon = Icons.Default.Share, label = "Share")
             FeedActionButton(onClick = { onSave(post.id, !interactionState.saved) }, enabled = !interactionBusy, icon = if (interactionState.saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, label = if (interactionState.saved) "Saved" else "Save", count = interactionState.savedCount, active = interactionState.saved)
         }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f), thickness = 0.5.dp)
         if (reactionState.total > 0) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) { Text(reactionSummary(reactionState), style = MaterialTheme.typography.labelMedium, color = FynxDesign.TextSecondary, modifier = Modifier.combinedClickable(role = Role.Button, onClickLabel = "Open people who reacted", onClick = onOpenReactionUsers)) }
     }
 }
@@ -994,10 +1000,23 @@ private fun reactionSummary(state: FynxHomePostReactionsClient.ReactionState): S
 
 @Composable
 private fun RowScope.FeedActionButton(onClick: () -> Unit, onLongClick: (() -> Unit)? = null, enabled: Boolean, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, longClickLabel: String? = null, count: Int? = null, active: Boolean = false) {
-    Box(Modifier.heightIn(min = 50.dp).weight(1f).combinedClickable(enabled = enabled, role = Role.Button, onClickLabel = label, onLongClickLabel = longClickLabel, onLongClick = onLongClick, onClick = onClick), contentAlignment = Alignment.Center) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-            Icon(icon, contentDescription = label, modifier = Modifier.size(21.dp), tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-            if (count != null) { Spacer(Modifier.width(4.dp)); Text("$count", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
+    Box(
+        Modifier.heightIn(min = 48.dp).weight(1f)
+            .combinedClickable(enabled = enabled, role = Role.Button, onClickLabel = label, onLongClickLabel = longClickLabel, onLongClick = onLongClick, onClick = onClick)
+            .padding(horizontal = 1.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(4.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, maxLines = 1)
+            if (count != null) {
+                Spacer(Modifier.width(3.dp))
+                Text(count.toString(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            }
         }
     }
 }
