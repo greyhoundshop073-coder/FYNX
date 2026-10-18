@@ -49,6 +49,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -293,6 +295,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var groupNotificationsEnabled by remember(groupId) { mutableStateOf(FynxConversationPreferences.groupNotifications(context, groupId)) }
     var showEmojiPanel by remember { mutableStateOf(false) }
     var showAttachmentMenu by remember { mutableStateOf(false) }
+    var showGroupCameraPicker by remember { mutableStateOf(false) }
     var reactionMessageId by remember { mutableStateOf<String?>(null) }
     var replyToId by remember { mutableStateOf<String?>(null) }
     val replySwipeOffsets = remember { mutableStateMapOf<String, Float>() }
@@ -303,6 +306,45 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var searchOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     val selectedGroup = currentGroup
+    fun sendGroupAttachment(uri: android.net.Uri, type: String) {
+        if (!canSendMedia) {
+            syncMessage = "Sending media and files is disabled in Group Settings."
+            return
+        }
+        val optimistic = createGroupMediaMessage(uri, type).copy(delivered = false, read = false)
+        val next = messages + optimistic
+        messages = next
+        FynxChatStore.save(context, "group_$groupId", next)
+        scope.launch {
+            FynxGroupRemoteClient.sendMessage(context, groupId, optimistic)
+                .onSuccess { remote ->
+                    val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
+                    messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
+                    FynxChatStore.save(context, "group_$groupId", messages)
+                    syncMessage = null
+                }
+                .onFailure { error ->
+                    messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
+                    FynxChatStore.save(context, "group_$groupId", messages)
+                    syncMessage = error.message ?: "Attachment could not be sent. Tap Retry to try again."
+                }
+        }
+    }
+    val groupMediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            val mime = context.contentResolver.getType(uri)?.lowercase().orEmpty()
+            val type = when {
+                mime.startsWith("video/") -> "video"
+                mime.startsWith("image/") -> "image"
+                else -> ""
+            }
+            if (type.isBlank()) syncMessage = "Choose a photo or video from Gallery."
+            else sendGroupAttachment(uri, type)
+        }
+    }
+    val groupDocumentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) sendGroupAttachment(uri, "document")
+    }
     val myRole = selectedGroup?.members?.firstOrNull { it.username.equals(currentUsername, true) }?.role ?: FynxGroupRole.MEMBER
     val isAdmin = myRole == FynxGroupRole.ADMIN
     val canManageGroup = FynxGroupsBatch3.canManage(myRole)
@@ -762,10 +804,10 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 OutlinedButton(onClick = { showAttachmentMenu = false; showTools = true }, modifier = Modifier.weight(1f)) {
                                     Icon(Icons.Default.PhotoCamera, null); Spacer(Modifier.width(5.dp)); Text("Camera")
                                 }
-                                OutlinedButton(onClick = { showAttachmentMenu = false; showTools = true }, modifier = Modifier.weight(1f)) {
+                                OutlinedButton(onClick = { showAttachmentMenu = false; groupMediaPicker.launch("image/*,video/*") }, modifier = Modifier.weight(1f)) {
                                     Icon(Icons.Default.PhotoLibrary, null); Spacer(Modifier.width(5.dp)); Text("Gallery")
                                 }
-                                OutlinedButton(onClick = { showAttachmentMenu = false; showTools = true }, modifier = Modifier.weight(1f)) {
+                                OutlinedButton(onClick = { showAttachmentMenu = false; groupDocumentPicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f)) {
                                     Icon(Icons.Default.AttachFile, null); Spacer(Modifier.width(5.dp)); Text("Files")
                                 }
                             }
