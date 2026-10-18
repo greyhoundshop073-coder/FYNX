@@ -258,6 +258,7 @@ if 'TextToSpeech' in ai_panel or 'android.speech.tts' in ai_panel:
 require(push, "notifyCommentMentions", "comment mention notification helper")
 require(realtime_bootstrap, "COMMENT_WRITE_RATE_LIMIT", "reply anti-spam rate limit")
 require(realtime_bootstrap, "nextCursor", "cursor-paginated replies")
+require(realtime_bootstrap, "String(result.rows[limit - 1].id) : null", "comment and reply cursors use the last returned row, not the lookahead row")
 require(client, "before: String? = null, limit: Int = 50): Result<CommentPage>", "cursor-paginated reply client")
 require(comments_panel, "Load more replies", "reply pagination UI")
 require(comments_panel, "ClickableText", "tappable comment mentions")
