@@ -156,7 +156,7 @@ async function installHomeCommentBackend() {
       const cursorClause = before === null ? '' : ' AND c.id < $4';
       const result = await pool.query(
         \`SELECT c.id,c.post_id,c.parent_comment_id,c.text,EXTRACT(EPOCH FROM c.created_at)*1000 AS timestamp,
-                u.id AS author_id,u.username,u.display_name
+                u.id AS author_id,u.username,u.display_name,\n                (SELECT COUNT(*)::int FROM social_comment_likes l WHERE l.comment_id=c.id) AS like_count,\n                EXISTS(SELECT 1 FROM social_comment_likes l WHERE l.comment_id=c.id AND l.user_id=$2) AS liked_by_current_user
            FROM social_post_comments c
            JOIN users u ON u.id=c.author_id
           WHERE c.post_id=$1
@@ -167,7 +167,7 @@ async function installHomeCommentBackend() {
       );
       const rows = result.rows.slice(0, limit).reverse();
       const nextCursor = result.rows.length > limit ? String(result.rows[limit - 1].id) : null;
-      return res.json({ comments: rows.map(row => ({ id: String(row.id), postId: String(row.post_id), parentCommentId: row.parent_comment_id == null ? null : String(row.parent_comment_id), text: row.text, timestamp: Number(row.timestamp), authorId: String(row.author_id), authorUsername: row.username, authorDisplayName: row.display_name })), nextCursor });
+      return res.json({ comments: rows.map(row => ({ id: String(row.id), postId: String(row.post_id), parentCommentId: row.parent_comment_id == null ? null : String(row.parent_comment_id), text: row.text, timestamp: Number(row.timestamp), authorId: String(row.author_id), authorUsername: row.username, authorDisplayName: row.display_name, likeCount: Number(row.like_count || 0), likedByCurrentUser: Boolean(row.liked_by_current_user) })), nextCursor });
     } catch (error) {
       console.error('social comments page', error);
       return res.status(500).json({ error: 'comments page failed' });
@@ -217,10 +217,10 @@ async function installHomeCommentBackend() {
       const before = req.query?.before == null || req.query.before === '' ? null : Number(req.query.before);
       if (before !== null && (!Number.isSafeInteger(before) || before < 1)) return res.status(400).json({ error: 'invalid reply cursor' });
       const cursorClause = before === null ? '' : ' AND c.id > $5';
-      const result = await pool.query(\`SELECT c.id,c.post_id,c.parent_comment_id,c.text,EXTRACT(EPOCH FROM c.created_at)*1000 AS timestamp, u.id AS author_id,u.username,u.display_name FROM social_post_comments c JOIN users u ON u.id=c.author_id WHERE c.post_id=$1 AND c.parent_comment_id=$2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$3 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$3))\${cursorClause} ORDER BY c.id ASC LIMIT $4\`, before === null ? [postId, parentId, req.user.sub, limit + 1] : [postId, parentId, req.user.sub, limit + 1, before]);
+      const result = await pool.query(\`SELECT c.id,c.post_id,c.parent_comment_id,c.text,EXTRACT(EPOCH FROM c.created_at)*1000 AS timestamp, u.id AS author_id,u.username,u.display_name, (SELECT COUNT(*)::int FROM social_comment_likes l WHERE l.comment_id=c.id) AS like_count, EXISTS(SELECT 1 FROM social_comment_likes l WHERE l.comment_id=c.id AND l.user_id=$3) AS liked_by_current_user FROM social_post_comments c JOIN users u ON u.id=c.author_id WHERE c.post_id=$1 AND c.parent_comment_id=$2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$3 AND b.blocked_id=c.author_id) OR (b.blocker_id=c.author_id AND b.blocked_id=$3))\${cursorClause} ORDER BY c.id ASC LIMIT $4\`, before === null ? [postId, parentId, req.user.sub, limit + 1] : [postId, parentId, req.user.sub, limit + 1, before]);
       const rows = result.rows.slice(0, limit);
       const nextCursor = result.rows.length > limit ? String(result.rows[limit - 1].id) : null;
-      return res.json({ comments: rows.map(row => ({ id: String(row.id), postId: String(row.post_id), parentCommentId: row.parent_comment_id == null ? null : String(row.parent_comment_id), text: row.text, timestamp: Number(row.timestamp), authorId: String(row.author_id), authorDisplayName: row.display_name, authorUsername: row.username })), nextCursor });
+      return res.json({ comments: rows.map(row => ({ id: String(row.id), postId: String(row.post_id), parentCommentId: row.parent_comment_id == null ? null : String(row.parent_comment_id), text: row.text, timestamp: Number(row.timestamp), authorId: String(row.author_id), authorDisplayName: row.display_name, authorUsername: row.username, likeCount: Number(row.like_count || 0), likedByCurrentUser: Boolean(row.liked_by_current_user) })), nextCursor });
     } catch (error) {
       console.error('social comment replies', error);
       return res.status(500).json({ error: 'replies lookup failed' });
