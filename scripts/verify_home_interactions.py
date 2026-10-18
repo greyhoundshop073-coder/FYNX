@@ -79,7 +79,8 @@ for needle in ('feedPage(context, limit = 20, offset = 0','beforeCursor = feedNe
     require(home, needle, f"feed recovery/pagination {needle}")
 for needle in ('var paginationPaused by remember { mutableStateOf(false) }','if (discoveryLoadingMore || paginationPaused) return','paginationPaused = true','!feedRequestInFlight && !paginationPaused','if (forceRefresh) paginationPaused = false'):
     require(home, needle, f"pagination failure backoff {needle}")
-require(home, 'if (!activeNetworkReady) { error = if (posts.isEmpty())', "Home pagination does not make requests while offline")
+require(home, 'if (!activeNetworkReady) {', "Home pagination does not make requests while offline")
+require(home, 'error = if (posts.isEmpty()) "You\'re offline. Connect to a network to load your feed."', "Home offline state explains how to recover")
 for needle in ('FEED_CACHE_TTL_MS','readCachedFeed(context)','readStaleCachedFeed(context)','if (safeOffset == 0 && remote.isFailure)'):
     require(client, needle, f"offline feed recovery {needle}")
 for needle in ('onCommentCountChanged','expandedReplies','parentCommentId','nextCursor'):
