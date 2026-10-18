@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,7 +18,7 @@ import kotlinx.coroutines.launch
 
 /** Account-scoped universal FYNX search using the existing authenticated people, marketplace and social-feed APIs. */
 @Composable
-fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}) {
+fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}, onOpenPost: (String) -> Unit = {}, onOpenListing: (String) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
@@ -45,25 +46,13 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}) {
             loading = true
             message = null
             val peopleResult = FynxSocialClient.searchUsers(context, q)
-            val listingResult = FynxRemoteSocialClient.listings(context, query = q)
-            val postMatches = mutableListOf<FynxRemoteSocialClient.RemotePost>()
-            var offset = 0
-            var more = true
-            var pages = 0
-            var postError: Throwable? = null
-            while (more && pages < 5 && postMatches.size < 50) {
-                val result = FynxRemoteSocialClient.feedPage(context, limit = 20, offset = offset, useCache = false)
-                result.onSuccess { page ->
-                    postMatches += page.posts.filter { post -> post.text.contains(q, ignoreCase = true) || post.authorUsername.contains(q, ignoreCase = true) || post.authorDisplayName.contains(q, ignoreCase = true) }
-                    more = page.hasMore; offset += page.posts.size; pages++
-                    if (page.posts.isEmpty()) more = false
-                }.onFailure { postError = it; more = false }
-            }
+            val listingResult = FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query = q, category = "All", limit = 30, offset = 0).map { it.listings }
+            val postResult = FynxRemoteSocialClient.searchPosts(context, q, limit = 50, offset = 0)
             if (generation != searchGeneration) return@launch
             people = peopleResult.getOrElse { emptyList() }
             listings = listingResult.getOrElse { emptyList() }
-            posts = postMatches.distinctBy { it.id }
-            message = listOfNotNull(peopleResult.exceptionOrNull()?.message, listingResult.exceptionOrNull()?.message, postError?.message).firstOrNull()
+            posts = postResult.getOrElse { FynxRemoteSocialClient.FeedPage(emptyList(), false) }.posts.distinctBy { it.id }
+            message = listOfNotNull(peopleResult.exceptionOrNull()?.message, listingResult.exceptionOrNull()?.message, postResult.exceptionOrNull()?.message).firstOrNull()
             loading = false
         }
     }
@@ -93,7 +82,7 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}) {
 
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Search FYNX", style = MaterialTheme.typography.headlineSmall)
-        Text("Find people, marketplace listings and recent social posts using real FYNX data.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        Text("Suggestions update as you type. Choose a result to open that person, post, or product.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         OutlinedTextField(value = query, onValueChange = { query = it.take(120) }, modifier = Modifier.fillMaxWidth(), singleLine = true, leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") }, placeholder = { Text("Search people, posts or products") }, trailingIcon = { TextButton(onClick = { search() }, enabled = query.trim().length >= 2) { Text("Search") } }, shape = FynxDesign.ControlShape)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("All", "People", "Posts", "Marketplace").forEach { value -> FilterChip(selected = tab == value, onClick = { tab = value }, label = { Text(value) }) } }
         message?.let { Text(it, color = if (it.contains("failed", true) || it.contains("unavailable", true)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
@@ -119,7 +108,7 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}) {
                     item { Text("Posts", style = MaterialTheme.typography.titleMedium) }
                     if (posts.isEmpty() && query.trim().length >= 2) item { Text("No matching recent posts.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                     items(posts.take(30), key = { "post_${it.id}" }) { post ->
-                        Card(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f)), shape = FynxDesign.CardShape) {
+                        Card(Modifier.fillMaxWidth().clickable { onOpenPost(post.id) }, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f)), shape = FynxDesign.CardShape) {
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { Text(post.authorDisplayName.ifBlank { post.authorUsername }, style = MaterialTheme.typography.titleSmall); Text("@${post.authorUsername.removePrefix("@")}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall); if (post.text.isNotBlank()) Text(post.text.take(1000), style = MaterialTheme.typography.bodyMedium) }
                         }
                     }
@@ -128,7 +117,7 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}) {
                     item { Text("Marketplace", style = MaterialTheme.typography.titleMedium) }
                     if (listings.isEmpty() && query.trim().length >= 2) item { Text("No matching marketplace listings.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                     items(listings.take(30), key = { "listing_${it.id}" }) { listing ->
-                        Card(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f)), shape = FynxDesign.CardShape) {
+                        Card(Modifier.fillMaxWidth().clickable { onOpenListing(listing.id) }, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f)), shape = FynxDesign.CardShape) {
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) { Text(listing.title, style = MaterialTheme.typography.titleSmall); Text("${listing.currency} ${String.format(java.util.Locale.US, "%,.2f", listing.price)}", style = MaterialTheme.typography.titleMedium); Text(listing.storeName.ifBlank { listing.sellerDisplayName }, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall); if (listing.location.isNotBlank()) Text(listing.location, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                         }
                     }
