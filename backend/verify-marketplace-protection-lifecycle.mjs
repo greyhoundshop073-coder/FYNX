@@ -16,6 +16,7 @@ const checks = [
   ['protected requests move escrow to DISPUTED', protection.includes("UPDATE marketplace_escrows SET status='DISPUTED'")],
   ['open protection cases are idempotent', protection.includes('idempotencyKey') && protection.includes('WHERE idempotency_key=$1') && protection.includes('idempotency_key TEXT NOT NULL UNIQUE')],
   ['evidence is stored against the order', transactions.includes('marketplace_order_evidence') && transactions.includes("app.post('/api/marketplace/orders/:id/evidence'")],
+  ['order evidence retrieval is restricted to authenticated participants', transactions.includes("app.get('/api/marketplace/orders/:id/evidence',auth") && transactions.includes('SELECT id,order_id,submitted_by,kind,value,created_at FROM marketplace_order_evidence WHERE order_id=$1')],
   ['seller alone can ship', completion.includes('only the seller can ship this order') && completion.includes("order.status !== 'PAID'")],
   ['buyer alone selects fulfillment', completion.includes('only the buyer can choose fulfillment')],
   ['delivery enters a protected inspection period', completion.includes("status='INSPECTION'") && completion.includes('inspection_deadline') && completion.includes('48 * 60 * 60 * 1000')],
