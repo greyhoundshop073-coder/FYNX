@@ -73,6 +73,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var loading by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
     var hasMore by remember { mutableStateOf(false) }
+    var paginationPaused by remember { mutableStateOf(false) }
     var feedNextCursor by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var feedRequestInFlight by remember { mutableStateOf(false) }
@@ -290,7 +291,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         return result
     }
     fun hydrateDiscovery(offset: Int = 0, replace: Boolean = false) {
-        if (discoveryLoadingMore) return
+        if (discoveryLoadingMore || paginationPaused) return
         discoveryLoadingMore = true
         scope.launch {
             FynxRemoteSocialClient.discoveryFeed(context, 3, offset).onSuccess { suggested ->
@@ -302,17 +303,19 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                 posts = mergeDiscoveryPosts(base, mergedDiscovery)
                 discoveryOffset = offset + suggested.posts.size
                 discoveryHasMore = suggested.hasMore && suggested.posts.isNotEmpty()
+                paginationPaused = false
                 resolveAuthorPhotos(additions)
                 hydrateInteractionStates(additions)
                 hydrateReactionStates(additions)
                 hydratePostMedia(additions)
-            }
+            }.onFailure { error = it.message ?: "Unable to load suggested posts."; paginationPaused = true }
             discoveryLoadingMore = false
         }
     }
 
     fun reload(forceRefresh: Boolean = false) {
         val now = System.currentTimeMillis(); if (feedRequestInFlight) return; if (forceRefresh && now - lastFeedRequestAt < FEED_REFRESH_DEBOUNCE_MS) return
+        if (forceRefresh) paginationPaused = false
         feedRequestInFlight = true; lastFeedRequestAt = now
         scope.launch {
             loading = true
@@ -336,7 +339,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             var cachedRevalidationStarted = false
             FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = !forceRefresh)
                 .onSuccess { page ->
-                    posts = page.posts; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null
+                    posts = page.posts; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; paginationPaused = false
                     interactionStates = emptyMap(); reactionStates = emptyMap(); reactionPickerPostId = null; reactionUsersPostId = null
                     resolveAuthorPhotos(page.posts); hydrateInteractionStates(page.posts); hydrateReactionStates(page.posts); postMedia = emptyMap(); hydratePostMedia(page.posts)
                     discoveryOffset = 0; discoveryHasMore = false
@@ -366,7 +369,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         reload(forceRefresh = publishRefreshKey > 0)
     }
     LaunchedEffect(networkReady) {
-        if (networkReady == true) reload()
+        if (networkReady == true) { paginationPaused = false; reload() }
     }
     LaunchedEffect(initialPostId) {
         val target = initialPostId?.trim()?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
@@ -388,9 +391,9 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     }
 
     fun loadMore() {
-        if (loading || loadingMore || (!hasMore && !discoveryHasMore) || feedRequestInFlight) return
+        if (loading || loadingMore || paginationPaused || (!hasMore && !discoveryHasMore) || feedRequestInFlight) return
         feedRequestInFlight = true
-        scope.launch { loadingMore = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false, beforeCursor = feedNextCursor).onSuccess { page -> val existing = posts.map { it.id }.toSet(); val additions = page.posts.filterNot { it.id in existing }; posts = posts + additions; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; resolveAuthorPhotos(additions); hydrateInteractionStates(additions); hydrateReactionStates(additions); hydratePostMedia(additions); if (!page.hasMore && discoveryHasMore) hydrateDiscovery(discoveryOffset) }.onFailure { error = it.message ?: "Unable to load more posts." }; loadingMore = false; feedRequestInFlight = false }
+        scope.launch { loadingMore = true; FynxRemoteSocialClient.feedPage(context, limit = 20, offset = 0, useCache = false, beforeCursor = feedNextCursor).onSuccess { page -> val existing = posts.map { it.id }.toSet(); val additions = page.posts.filterNot { it.id in existing }; posts = posts + additions; hasMore = page.hasMore; feedNextCursor = page.nextCursor; error = null; paginationPaused = false; resolveAuthorPhotos(additions); hydrateInteractionStates(additions); hydrateReactionStates(additions); hydratePostMedia(additions); if (!page.hasMore && discoveryHasMore) hydrateDiscovery(discoveryOffset) }.onFailure { error = it.message ?: "Unable to load more posts."; paginationPaused = true }; loadingMore = false; feedRequestInFlight = false }
     }
     fun runInteraction(id: String, desired: Boolean, isActive: (FynxRemoteSocialClient.SocialInteractionState) -> Boolean, count: (FynxRemoteSocialClient.SocialInteractionState) -> Int, action: suspend () -> Result<Pair<Boolean, Int>>, update: (FynxRemoteSocialClient.SocialInteractionState, Boolean, Int) -> FynxRemoteSocialClient.SocialInteractionState) {
         if (id in interactionBusy) return
@@ -448,7 +451,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     LaunchedEffect(feedListState, posts.size, hasMore, discoveryHasMore, loading, loadingMore, discoveryLoadingMore, feedRequestInFlight) {
         snapshotFlow { feedListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to feedListState.layoutInfo.totalItemsCount }
             .collect { (lastVisibleIndex, totalItems) ->
-                if (lastVisibleIndex != null && lastVisibleIndex >= totalItems - 6 && !loading && !loadingMore && !discoveryLoadingMore && !feedRequestInFlight) {
+                if (lastVisibleIndex != null && lastVisibleIndex >= totalItems - 6 && !loading && !loadingMore && !discoveryLoadingMore && !feedRequestInFlight && !paginationPaused) {
                     if (hasMore) loadMore() else if (discoveryHasMore) hydrateDiscovery(discoveryOffset)
                 }
             }
