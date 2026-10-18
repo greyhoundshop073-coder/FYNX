@@ -282,6 +282,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var currentGroup by remember(groupId) { mutableStateOf(group) }
     val groupTitle = currentGroup?.name ?: "Group"
     var messages by remember(groupId) { mutableStateOf(FynxChatStore.load(context, "group_$groupId", null)) }
+    val latestMessages by rememberUpdatedState(messages)
     var showMembers by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showTools by remember { mutableStateOf(false) }
@@ -405,6 +406,52 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             }
         }
     }
+    // Realtime is the fast path; the periodic REST refresh above remains a recovery path.
+    LaunchedEffect(groupId, currentUsername) {
+        if (!FynxBackendClient.hasAccessToken(context)) return@LaunchedEffect
+        val realtime = FynxRealtimeClient(
+            context = context,
+            onMessage = {},
+            onEvent = { event ->
+                if (event is FynxRealtimeClient.Event.GroupMessage && event.groupId == groupId) {
+                    scope.launch {
+                        FynxGroupRemoteClient.loadMessages(context, groupId)
+                            .onSuccess { remote ->
+                                val remoteMessages = remote.mapIndexedNotNull { index, item ->
+                                    runCatching {
+                                        FynxGroupRemoteClient.toChatMessage(
+                                            item,
+                                            currentUsername,
+                                            FynxBackendClient.baseUrl(context)
+                                        )
+                                    }.getOrNull()?.let { message ->
+                                        if (message.id.isBlank()) message.copy(id = "group-remote-" + index + "-" + message.timestamp) else message
+                                    }
+                                }
+                                val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
+                                val pendingLocal = latestMessages.filter { it.id !in remoteIds }
+                                val merged = (remoteMessages + pendingLocal).distinctBy { it.id }.sortedBy { it.timestamp }
+                                messages = merged
+                                FynxChatStore.save(context, "group_$groupId", merged)
+                                syncMessage = null
+                            }
+                            .onFailure {
+                                if (FynxBackendClient.hasAccessToken(context)) {
+                                    syncMessage = it.message ?: "New group messages could not be refreshed."
+                                }
+                            }
+                    }
+                }
+            }
+        )
+        realtime.connect()
+        try {
+            kotlinx.coroutines.awaitCancellation()
+        } finally {
+            realtime.close()
+        }
+    }
+
     LaunchedEffect(messages.size, searchQuery) {
         if (messages.isEmpty()) return@LaunchedEffect
         kotlinx.coroutines.delay(60L)
