@@ -43,6 +43,11 @@ for needle in ('suspend fun searchPosts(context: Context, query: String', '"/api
 for needle in ('FynxRemoteSocialClient.searchPosts(context, q', 'FynxRemoteSocialClient.marketplaceDiscoveryPage(context, query = q', 'onOpenPost(post.id)', 'onOpenListing(listing.id)', 'Suggestions update as you type', 'Text("Suggestions"', 'heightIn(max = 220.dp)', 'people.take(2).forEach', 'posts.take(2).forEach', 'listings.take(2).forEach'):
     require(search_panel, "query = it.take(80)", "search input matches the backend post-search maximum")
     require(search_panel, "FynxSocialClient.searchUsers(context, q)", "people lookup receives the full search query")
+    require(search_panel, "peopleFailed = peopleResult.isFailure", "people API failure is tracked separately from empty results")
+    require(search_panel, "postsFailed = postResult.isFailure", "post API failure is tracked separately from empty results")
+    require(search_panel, "listingsFailed = listingResult.isFailure", "Marketplace API failure is tracked separately from empty results")
+    require(search_panel, "Post search unavailable. Check your connection and try again.", "failed post search is not mislabeled as zero results")
+    require(search_panel, "Marketplace search unavailable. Check your connection and try again.", "failed Marketplace search is not mislabeled as zero results")
     require(social_routes, "const usernameTerm = normalized.length <= 32 ? `%${normalized}%` : null;", "long display-name queries do not exceed username column limits")
     require(social_routes, "($1::text IS NOT NULL AND username ILIKE $1) OR display_name ILIKE $2", "username matching is bounded while full display-name matching remains available")
     require(search_panel, needle, f"live universal search result behavior {needle}")
