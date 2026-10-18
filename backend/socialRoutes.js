@@ -442,6 +442,27 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
 
   const visibleSocialPost = async (id,userId) => { const r=await pool.query(`SELECT 1 FROM social_posts p WHERE p.id=$1 AND (p.author_id=$2 OR p.visibility='PUBLIC' OR (p.visibility='ONLY_ME' AND p.author_id=$2) OR (p.visibility='FRIENDS_ONLY' AND EXISTS(SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted')) OR (p.visibility='SELECTED_PEOPLE' AND EXISTS(SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$2))) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$2))`,[id,userId]); return Boolean(r.rowCount); };
 
+  app.get('/api/social/search',auth,async(req,res)=>{
+    try {
+      await ensureSocialSchema();
+      const q = typeof req.query?.q === 'string' ? req.query.q.trim().slice(0,80) : '';
+      if (q.length < 2) return res.status(400).json({ error: 'search query must be 2-80 characters' });
+      const limit = Math.min(Math.max(Number(req.query?.limit) || 30, 1), 50);
+      const offset = Math.min(Math.max(Number(req.query?.offset) || 0, 0), 1000000);
+      const term = `%${q}%`;
+      const r = await pool.query(`SELECT p.id,p.author_id,u.username author_username,u.display_name author_display_name,p.text,p.visibility,p.media_id,p.media_type,p.text_background,p.text_background_color,p.text_foreground_color,p.location,p.music_media_id,p.music_title,p.music_artist,p.music_duration_ms,p.feeling_activity_type,p.feeling_activity,p.created_at::text cursor_created_at,EXTRACT(EPOCH FROM p.created_at)*1000 timestamp,(SELECT COUNT(*) FROM social_post_likes l WHERE l.post_id=p.id) like_count,(SELECT COUNT(*) FROM social_post_comments c WHERE c.post_id=p.id) comment_count,EXISTS(SELECT 1 FROM social_post_likes l WHERE l.post_id=p.id AND l.user_id=$1) liked_by_current_user,EXISTS(SELECT 1 FROM social_follows f WHERE f.follower_id=$1 AND f.followed_id=p.author_id) followed_by_current_user
+        FROM social_posts p JOIN users u ON u.id=p.author_id
+        WHERE (p.author_id=$1 OR p.visibility='PUBLIC' OR (p.visibility='FRIENDS_ONLY' AND EXISTS(SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$1) OR (f.user_id=$1 AND f.friend_id=p.author_id)) AND f.status='accepted')) OR (p.visibility='SELECTED_PEOPLE' AND EXISTS(SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$1)))
+          AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$1))
+          AND (p.text ILIKE $2 OR u.username ILIKE $2 OR u.display_name ILIKE $2 OR COALESCE(p.media_type,'') ILIKE $2 OR COALESCE(p.location,'') ILIKE $2 OR COALESCE(p.music_title,'') ILIKE $2 OR COALESCE(p.music_artist,'') ILIKE $2 OR COALESCE(p.feeling_activity,'') ILIKE $2 OR COALESCE(p.feeling_activity_type,'') ILIKE $2)
+        ORDER BY CASE WHEN p.text ILIKE $2 THEN 0 WHEN u.username ILIKE $2 OR u.display_name ILIKE $2 THEN 1 ELSE 2 END,p.created_at DESC,p.id DESC
+        LIMIT $3 OFFSET $4`, [req.user.sub, term, limit + 1, offset]);
+      const hasMore = r.rows.length > limit;
+      const rows = hasMore ? r.rows.slice(0, limit) : r.rows;
+      res.set('Cache-Control', 'private, no-store');
+      return res.json({ posts: rows.map(x=>({id:String(x.id),authorId:String(x.author_id),authorUsername:x.author_username,authorDisplayName:x.author_display_name,text:x.text,visibility:x.visibility,mediaId:x.media_id==null?null:String(x.media_id),mediaType:x.media_type||null,mediaUrl:x.media_id==null?null:`/api/social/media/${x.media_id}`,textBackground:x.text_background||null,textBackgroundColor:x.text_background_color==null?null:Number(x.text_background_color),textForegroundColor:x.text_foreground_color==null?null:Number(x.text_foreground_color),location:x.location||null,musicMediaId:x.music_media_id==null?null:String(x.music_media_id),musicTitle:x.music_title||null,musicArtist:x.music_artist||null,musicDurationMs:x.music_duration_ms==null?0:Number(x.music_duration_ms),feelingActivityType:x.feeling_activity_type||null,feelingActivity:x.feeling_activity||null,timestamp:Number(x.timestamp),likeCount:Number(x.like_count),commentCount:Number(x.comment_count),likedByCurrentUser:Boolean(x.liked_by_current_user),followedByCurrentUser:Boolean(x.followed_by_current_user)})), hasMore });
+    } catch(e) { console.error('social search',e); return res.status(500).json({error:'social search failed'}); }
+  });
   app.get('/api/social/feed',auth,async(req,res)=>{
     try {
       await ensureSocialSchema();
