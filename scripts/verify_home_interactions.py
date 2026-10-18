@@ -262,5 +262,11 @@ require(realtime_bootstrap, "String(result.rows[limit - 1].id) : null", "comment
 require(client, "before: String? = null, limit: Int = 50): Result<CommentPage>", "cursor-paginated reply client")
 require(comments_panel, "Load more replies", "reply pagination UI")
 require(comments_panel, "ClickableText", "tappable comment mentions")
+require(social_routes, "CREATE TABLE IF NOT EXISTS social_comment_likes", "dedicated comment likes are persisted separately from post likes")
+require(social_routes, "commentId/like", "comment like endpoint validates post/comment visibility")
+require(client, "suspend fun likeComment(", "backend-backed comment reaction client")
+require(comments_panel, "toggleCommentLike(comment)", "comment like action with state reconciliation")
+require(comments_panel, "shareComment(comment)", "comment sharing through Android share sheet")
+require(realtime_bootstrap, "likedByCurrentUser: Boolean(row.liked_by_current_user)", "comment pages hydrate reaction state")
 
 print("HOME INTERACTIONS GREEN: Home 4D edge-case safeguards, 4E backend-backed interactions including Save/Saved Posts continuity, comments/replies, media, share/profile paths, refresh/pagination, offline recovery, rapid-tap protection, deletion confirmation, 4F design/accessibility surfaces, interaction-state re-entry, clean-startup privacy boundaries, FYNX AI single-scroll/typing/security integration, and direct Create status -> existing composer wiring are present without duplicate vertical feed surfaces or client API secrets.")
