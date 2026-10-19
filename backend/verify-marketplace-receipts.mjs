@@ -4,6 +4,7 @@ const source = fs.readFileSync(new URL('./marketplaceTransactions.js', import.me
 const profileSource = fs.readFileSync(new URL('./profileRoutes.js', import.meta.url), 'utf8');
 const androidReceiptSource = fs.readFileSync(new URL('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceReceipt.kt', import.meta.url), 'utf8');
 const paymentSource = fs.readFileSync(new URL('./marketplaceReputation.js', import.meta.url), 'utf8');
+const androidPanelSource = fs.readFileSync(new URL('../app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt', import.meta.url), 'utf8');
 const checks = [
   ['checkout group stores its Paystack reference before marking child payment evidence', paymentSource.includes("ALTER TABLE marketplace_checkout_groups ADD COLUMN IF NOT EXISTS payment_reference TEXT") && paymentSource.includes("SET payment_reference=$1,payment_authorization_url=$2,payment_access_code=$3") && paymentSource.includes("checkoutGroupId: String(group.id)") && paymentSource.includes("reference, provider: 'paystack'")],
   ['aggregate buyer receipt is scoped to the authenticated checkout buyer', source.includes("app.get('/api/marketplace/checkout/:id/receipt', auth") && source.includes("String(group.buyer_id) !== String(req.user.sub)")],
@@ -12,6 +13,12 @@ const checks = [
   ['aggregate receipt reconciles child totals against checkout totals', source.includes("sumCents('product_subtotal')") && source.includes("sumCents('buyer_total')")],
   ['public aggregate verification reconciles checkout and child totals', source.includes("sumCents('marketplace_fee_buyer') !== Math.round(Number(group.marketplace_fee) * 100)") && source.includes("sumCents('buyer_total') !== Math.round(Number(group.buyer_total) * 100)")],
   ['aggregate receipt has an independent public signature verifier', source.includes("/api/marketplace/checkout-receipts/:receiptId/verify") && source.includes('signCheckoutReceipt(group, lines, group.verified_payment_reference, group.payment_verified_at)')],
+  ['aggregate receipt exposes buyer identity and separate fulfillment and payout states', source.includes("buyer: { username: group.buyer_username") && source.includes("fulfillmentStatuses: [...new Set(lines.map((line) => String(line.status)))") && source.includes("payoutStatus: 'NOT_RECORDED'")],
+  ['aggregate public verification reports lifecycle without claiming payout release', source.includes("payoutStatus: 'NOT_RECORDED'") && source.includes("fulfillmentStatuses: [...new Set(lines.map((line) => String(line.status)))")],
+  ['Android fetches the authenticated aggregate checkout receipt', androidReceiptSource.includes("/api/marketplace/checkout/") && androidReceiptSource.includes("getJSONObject(\"receipt\")")],
+  ['aggregate receipt PDF includes all items across pages and a verification QR', androidReceiptSource.includes("val pageCount = ((items.length() + 4) / 5)") && androidReceiptSource.includes("val start = pageNumber * 5") && androidReceiptSource.includes("receipt.optString(\"verificationPath\")")],
+  ['buyer can reopen the last checkout receipt from Marketplace after payment', androidPanelSource.includes("MarketplaceCheckoutReceiptAction") && androidPanelSource.includes("last_checkout_receipt_id:$cartOwnerKey") && androidPanelSource.includes("completedCheckoutId = p.first")],
+  ['aggregate receipt preview and PDF disclose fulfillment and payout separately', androidReceiptSource.includes("Fulfillment: ") && androidReceiptSource.includes("Payout status: ")],
   ['receipt endpoint requires authentication', /app\.get\('\/api\/marketplace\/orders\/:id\/receipt',\s*auth/.test(source)],
   ['receipt endpoint checks order participation', source.includes('if (!isParticipant(row, req.user.sub))')],
   ['receipt only issues after recorded payment confirmation', source.includes('!receiptStatusAllowed(row.status) || !(row.verified_payment_reference || row.payment_reference) || !row.payment_verified_at')],
