@@ -148,6 +148,8 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var networkError by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
     var uploadedAttachmentCache by remember(chat.username) { mutableStateOf<Pair<String, FynxProductionMessaging.RemoteMedia>?>(null) }
+    var pendingVoiceRetry by remember(chat.username) { mutableStateOf<Pair<File, Long>?>(null) }
+    var uploadedVoiceCache by remember(chat.username) { mutableStateOf<Pair<String, FynxProductionMessaging.RemoteMedia>?>(null) }
     var typingSent by remember { mutableStateOf(false) }
     var marketplaceContextAttached by remember { mutableStateOf(false) }
     val replySwipeOffsets = remember { mutableStateMapOf<String, Float>() }
@@ -414,23 +416,39 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         recordingPausedTotalMs = 0L
         recordingElapsed = 0L
         if (file != null && file.exists() && file.length() > 0L && duration >= 300L) {
-            val pendingFile = file
-            conversationScope.launch {
-                sending = true
-                networkError = null
-                FynxProductionMessaging.uploadMedia(context, Uri.fromFile(pendingFile), "audio/mp4")
-                    .onSuccess { media ->
-                        FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), "", mediaId = media.id, mediaType = "audio", voiceDurationMs = duration)
-                            .onSuccess { remote ->
-                                isNewConversation = false
-                                currentUserId?.let { myId -> messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp } }
-                                pendingFile.delete()
-                            }.onFailure { networkError = it.message ?: "Voice message could not be sent" }
-                    }.onFailure { networkError = it.message ?: "Voice recording upload failed" }
-                sending = false
-            }
+            pendingVoiceRetry = file to duration
+            uploadedVoiceCache = null
+            retryVoiceMessage()
         } else file?.delete()
     }
+    fun retryVoiceMessage() {
+        val pending = pendingVoiceRetry ?: return
+        if (sending) return
+        conversationScope.launch {
+            sending = true
+            networkError = null
+            val (pendingFile, duration) = pending
+            val uploaded = uploadedVoiceCache?.takeIf { it.first == pendingFile.absolutePath }?.second
+                ?.let { Result.success(it) }
+                ?: FynxProductionMessaging.uploadMedia(context, Uri.fromFile(pendingFile), "audio/mp4")
+                    .onSuccess { media -> uploadedVoiceCache = pendingFile.absolutePath to media }
+            uploaded
+                .onSuccess { media ->
+                    FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), "", mediaId = media.id, mediaType = "audio", voiceDurationMs = duration)
+                        .onSuccess { remote ->
+                            isNewConversation = false
+                            currentUserId?.let { myId -> messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp } }
+                            pendingFile.delete()
+                            pendingVoiceRetry = null
+                            uploadedVoiceCache = null
+                        }
+                        .onFailure { networkError = it.message ?: "Voice message could not be sent. Tap Retry voice message." }
+                }
+                .onFailure { networkError = it.message ?: "Voice recording upload failed. Tap Retry voice message." }
+            sending = false
+        }
+    }
+
     stopRecordingAction = ::stopRecording
 
     val contactPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
@@ -682,6 +700,13 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             }
         }
         networkError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 3.dp)) }
+        if (pendingVoiceRetry != null) {
+            TextButton(
+                enabled = !sending,
+                onClick = { retryVoiceMessage() },
+                modifier = Modifier.padding(horizontal = 12.dp)
+            ) { Text(if (sending) "Sending voice message…" else "Retry voice message") }
+        }
 
         LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
             if (isNewConversation && searchQuery.isBlank()) {
