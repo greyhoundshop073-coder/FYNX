@@ -128,7 +128,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       const row = (await pool.query(receiptQuery, [id])).rows[0];
       if (!row) return res.status(404).json({ error: 'receipt unavailable' });
       if (!isParticipant(row, req.user.sub)) return res.status(403).json({ error: 'receipt unavailable' });
-      if (!receiptStatusAllowed(row.status) || !row.payment_reference) {
+      if (!receiptStatusAllowed(row.status) || !row.payment_reference || !row.payment_verified_at) {
         return res.status(409).json({ error: 'a receipt is available only after verified payment' });
       }
       if (!receiptAccountingReconciles(row)) {
@@ -174,7 +174,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
     try {
       await ensureMarketplaceTransactionSchema();
       const row = (await pool.query(`SELECT o.*, (SELECT MIN(e.created_at) FROM marketplace_order_events e WHERE e.order_id=o.id AND e.event_type='PAYMENT_CONFIRMED') AS payment_verified_at FROM marketplace_orders o WHERE REPLACE(UPPER(o.id::text), '-', '')=$1 LIMIT 1`, [id.toUpperCase()])).rows[0];
-      if (!row || !receiptStatusAllowed(row.status) || !row.payment_reference || !receiptAccountingReconciles(row)) {
+      if (!row || !receiptStatusAllowed(row.status) || !row.payment_reference || !row.payment_verified_at || !receiptAccountingReconciles(row)) {
         return res.status(404).json({ authentic: false, error: 'receipt could not be verified' });
       }
       if (!receiptSignatureMatches(row, req.query?.signature)) {
