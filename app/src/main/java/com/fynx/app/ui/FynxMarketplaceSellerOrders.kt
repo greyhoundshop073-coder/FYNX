@@ -173,6 +173,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
         var busy by remember(order.id) { mutableStateOf(false) }
         var settlementLoading by remember(order.id) { mutableStateOf(true) }
         var settlementRetryCount by remember(order.id) { mutableStateOf(0) }
+        var deliveryEvidenceRetryCount by remember(order.id) { mutableStateOf(0) }
         var settlementError by remember(order.id) { mutableStateOf<String?>(null) }
         var deliveryEvidenceError by remember(order.id) { mutableStateOf<String?>(null) }
         var settlement by remember(order.id) { mutableStateOf<JSONObject?>(null) }
@@ -182,12 +183,16 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
         LaunchedEffect(order.id, settlementRetryCount) {
             settlementLoading = true
             settlementError = null
-            deliveryEvidenceError = null
             settlement = null
-            handoverPhotoMediaId = null
             FynxBackendClient.get(context, "/api/marketplace/settlement/order/${order.id}")
                 .onSuccess { raw -> settlement = JSONObject(raw) }
                 .onFailure { settlementError = it.message ?: "Settlement details could not load." }
+            settlementLoading = false
+        }
+
+        LaunchedEffect(order.id, deliveryEvidenceRetryCount) {
+            deliveryEvidenceError = null
+            handoverPhotoMediaId = null
             FynxBackendClient.get(context, "/api/marketplace/orders/${order.id}/delivery-details")
                 .onSuccess { raw ->
                     val evidence = JSONObject(raw).optJSONArray("evidence")
@@ -197,7 +202,6 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         ?.optString("value")?.takeIf { it.toLongOrNull()?.let { id -> id > 0L } == true }
                 }
                 .onFailure { deliveryEvidenceError = it.message ?: "Delivery evidence could not load." }
-            settlementLoading = false
         }
 
         fun progress(state: String, note: String = "") {
@@ -238,7 +242,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                     }
                     if (!settlementLoading && deliveryEvidenceError != null) {
                         Text("Delivery evidence could not load: ${deliveryEvidenceError!!}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                        TextButton(enabled = !busy, onClick = { settlementRetryCount += 1 }) { Text("Retry delivery evidence") }
+                        TextButton(enabled = !busy, onClick = { deliveryEvidenceRetryCount += 1 }) { Text("Retry delivery evidence") }
                     }
                     settlement?.let { s ->
                         val accounting = s.optJSONObject("accounting")
