@@ -20,7 +20,7 @@ const checks = [
   ['public verification also requires recorded payment confirmation', source.includes('!row.payment_verified_at || !receiptAccountingReconciles(row)') && source.includes('!(row.verified_payment_reference || row.payment_reference)')],
   ['signature binds historical item and financial fields', source.includes('row.product_snapshot || {}') && source.includes('row.payment_reference') && source.includes('row.created_at')],
   ['receipt verification does not trust client-provided amount', source.includes('Number(row.buyer_total ?? row.total_amount)')],
-  ['group-paid child orders can prove payment from the verified checkout-group event', (source.match(/NULLIF\(e\.metadata->>\'checkoutGroupId\',\'\'\) IS NOT NULL/g) || []).length === 4],
+  ['group-paid child orders must match the real paid checkout group and its stored Paystack reference', (source.match(/cg\.payment_reference=e\.metadata->>\'reference\'/g) || []).length === 4 && (source.match(/cg\.status=\'PAID\'/g) || []).length === 4 && (source.match(/cg\.id::text=e\.metadata->>\'checkoutGroupId\'/g) || []).length === 4],
   ['receipt signature binds the verified group payment reference when child order has no individual reference', source.includes('row.verified_payment_reference || row.payment_reference ||')],
   ['receipt exposes the actual verified payment reference', source.includes('paymentReference: row.verified_payment_reference || row.payment_reference')]
 ];
