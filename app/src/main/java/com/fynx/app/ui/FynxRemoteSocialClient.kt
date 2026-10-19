@@ -129,6 +129,25 @@ object FynxRemoteSocialClient {
         val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
         return FynxBackendClient.get(context, "/api/marketplace/listings/$numericId/price-watch").mapCatching { JSONObject(it).optBoolean("watched") }
     }
+    suspend fun savedMarketplaceProducts(context: Context): Result<List<MarketplaceListing>> =
+        FynxBackendClient.get(context, "/api/marketplace/saved-products").mapCatching { raw ->
+            val root = JSONObject(raw)
+            root.put("listings", root.optJSONArray("products") ?: JSONArray())
+            parseListings(root.toString())
+        }
+    suspend fun marketplaceProductSaved(context: Context, listingId: String): Result<Boolean> {
+        val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
+        return FynxBackendClient.get(context, "/api/marketplace/listings/$numericId/saved").mapCatching { JSONObject(it).optBoolean("saved") }
+    }
+    suspend fun saveMarketplaceProduct(context: Context, listingId: String): Result<Boolean> {
+        val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
+        return FynxBackendClient.postJson(context, "/api/marketplace/listings/$numericId/saved", "{}").mapCatching { JSONObject(it).optBoolean("saved", true) }
+    }
+    suspend fun unsaveMarketplaceProduct(context: Context, listingId: String): Result<Boolean> {
+        val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
+        return FynxBackendClient.delete(context, "/api/marketplace/listings/$numericId/saved").mapCatching { JSONObject(it).optBoolean("saved", false) }
+    }
+
     suspend fun watchMarketplacePrice(context: Context, listingId: String): Result<Boolean> {
         val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
         return FynxBackendClient.postJson(context, "/api/marketplace/listings/$numericId/price-watch", "{}").mapCatching { JSONObject(it).optBoolean("watched", true) }
