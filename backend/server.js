@@ -9,6 +9,7 @@ import { registerSocialRoutes } from "./socialRoutes.js";
 import { registerMarketplaceTransactionRoutes } from "./marketplaceTransactions.js";
 import { registerMarketplaceReputationRoutes } from "./marketplaceReputation.js";
 import { registerMarketplaceCompletionRoutes } from "./marketplaceCompletion.js";
+import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.js";
 import { registerMoneyPlannerRoutes } from "./moneyPlanner.js";
 import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
@@ -793,6 +794,7 @@ if (pool) registerTrustSafetyRoutes({ app, pool, auth });
 if (pool) registerMarketplaceTransactionRoutes({ app, pool, auth });
 registerMarketplaceReputationRoutes({ app, pool, auth });
 registerMarketplaceCompletionRoutes({ app, pool, auth });
+if (pool) registerMarketplaceShopProfileRoutes({ app, pool, auth });
 if (pool) registerMoneyPlannerRoutes({ app, pool, auth });
 if (pool) registerMarketplaceAdvertisingRoutes({ app, pool, auth });
 
