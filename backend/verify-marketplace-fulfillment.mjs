@@ -35,7 +35,7 @@ const checks = [
     protection.includes("app.post('/api/marketplace/orders/:id/disputes'") &&
     protection.includes("app.post('/api/marketplace/protection/order/:id/refund-request'") &&
     protection.includes('marketplace_protection_cases')],
-  ['approved driver registry is idempotent and indexed', completion.includes('CREATE TABLE IF NOT EXISTS marketplace_approved_drivers') && completion.includes('marketplace_approved_drivers_driver_idx')],
+  ['approved driver registry is idempotent and indexed', completion.includes('CREATE TABLE IF NOT EXISTS marketplace_approved_drivers') && completion.includes('marketplace_approved_drivers_active_idx')],
   ['driver assignment and custody evidence tables are indexed', completion.includes('CREATE TABLE IF NOT EXISTS marketplace_delivery_assignments') && completion.includes('marketplace_delivery_assignments_driver_idx') && completion.includes('CREATE TABLE IF NOT EXISTS marketplace_delivery_evidence') && completion.includes('marketplace_delivery_evidence_order_idx')],
   ['admin approval and revocation routes require owner/admin access', completion.includes("app.get('/api/admin/marketplace/drivers'") && completion.includes("app.post('/api/admin/marketplace/drivers/:userId/approval'") && completion.includes('hasMarketplaceAdminAccess')],
   ['Android admin panel can approve and revoke drivers', adminClient.includes('FynxBackendClient.get(context, "/api/admin/marketplace/drivers")') && adminClient.includes('/api/admin/marketplace/drivers/') && adminPanel.includes('Approved delivery drivers')],
