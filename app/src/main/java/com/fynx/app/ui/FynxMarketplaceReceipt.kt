@@ -106,7 +106,7 @@ private suspend fun createMarketplaceCheckoutReceiptPdf(context: Context, receip
         require(items.length() in 1..20) { "Checkout receipt item list is invalid." }
         val qr = qrBitmap(FynxBackendClient.baseUrl(context).trimEnd('/') + receipt.optString("verificationPath"))
         val document = PdfDocument()
-        val pageCount = ((items.length() + 7) / 8).coerceAtLeast(1)
+        val pageCount = ((items.length() + 5) / 6).coerceAtLeast(1)
         val ink = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(15, 23, 42); textSize = 11f }
         val muted = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(71, 85, 105); textSize = 9f }
         val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(203, 213, 225); strokeWidth = 1f }
@@ -133,8 +133,8 @@ private suspend fun createMarketplaceCheckoutReceiptPdf(context: Context, receip
             ink.textSize = 12f; ink.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             canvas.drawText("PURCHASED ITEMS", 36f, 255f, ink)
             ink.textSize = 10f; ink.typeface = Typeface.DEFAULT
-            val start = pageNumber * 8
-            val end = minOf(items.length(), start + 8)
+            val start = pageNumber * 6
+            val end = minOf(items.length(), start + 6)
             var y = 282f
             for (index in start until end) {
                 val item = items.optJSONObject(index) ?: JSONObject()
@@ -150,7 +150,7 @@ private suspend fun createMarketplaceCheckoutReceiptPdf(context: Context, receip
                 y += 53f
             }
             if (pageNumber == pageCount - 1) {
-                y = maxOf(y + 8f, 710f - (if (pageCount > 1) 0f else 0f))
+                y += 8f
                 canvas.drawLine(36f, y, 559f, y, line)
                 y += 24f
                 ink.textSize = 11f; ink.typeface = Typeface.DEFAULT
@@ -403,23 +403,42 @@ private fun MarketplaceReceiptDialog(context: Context, receipt: JSONObject, onCl
         title = { Text("Verified FYNX receipt") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val checkoutReceipt = receipt.optString("receiptType") == "BUYER_CHECKOUT"
                 Text(receipt.optString("receiptId"), style = MaterialTheme.typography.titleSmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Buyer", style = MaterialTheme.typography.labelSmall)
-                        Text(buyer.optString("displayName", buyer.optString("username")), style = MaterialTheme.typography.bodyMedium)
+                if (checkoutReceipt) {
+                    Text("Combined multi-seller checkout", style = MaterialTheme.typography.titleMedium)
+                    val items = receipt.optJSONArray("items") ?: org.json.JSONArray()
+                    for (index in 0 until minOf(items.length(), 5)) {
+                        val item = items.optJSONObject(index) ?: JSONObject()
+                        Text("${index + 1}. " + item.optString("title", "FYNX marketplace item"), style = MaterialTheme.typography.bodyMedium)
+                        Text("Seller: " + item.optString("seller", "FYNX seller") + " • Qty " + item.optInt("quantity") + " • " + currency + " " + String.format(Locale.US, "%,.2f", item.optDouble("total")), style = MaterialTheme.typography.bodySmall)
                     }
-                    Column(Modifier.weight(1f)) {
-                        Text("Seller", style = MaterialTheme.typography.labelSmall)
-                        Text(seller.optString("displayName", seller.optString("username")), style = MaterialTheme.typography.bodyMedium)
+                    val remaining = (items.length() - 5).coerceAtLeast(0)
+                    if (remaining > 0) Text("$remaining more item(s) included in the complete PDF receipt.", style = MaterialTheme.typography.bodySmall)
+                    Text("Items: " + receipt.optInt("itemCount"))
+                    Text("Subtotal: " + money("subtotal"))
+                    Text("Delivery: " + money("deliveryFee"))
+                    Text("Buyer-paid FYNX fee: " + money("marketplaceFee"))
+                    Text("Total paid: " + money("buyerTotal"), style = MaterialTheme.typography.titleLarge)
+                    Text("Paystack reference: " + receipt.optString("paymentReference"), style = MaterialTheme.typography.bodySmall)
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Buyer", style = MaterialTheme.typography.labelSmall)
+                            Text(buyer.optString("displayName", buyer.optString("username")), style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("Seller", style = MaterialTheme.typography.labelSmall)
+                            Text(seller.optString("displayName", seller.optString("username")), style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
+                    Text(product.optString("title", "FYNX marketplace item"), style = MaterialTheme.typography.titleMedium)
+                    Text("Quantity: " + product.optInt("quantity"))
+                    Text("Subtotal: " + money("subtotal"))
+                    Text("Delivery: " + money("deliveryFee"))
+                    Text((if (receipt.optString("receiptType") == "SELLER_SALE") "Seller-borne FYNX fee: " else "Buyer-paid FYNX fee: ") + currency + " " + String.format(Locale.US, "%,.2f", receipt.optDouble(if (receipt.optString("receiptType") == "SELLER_SALE") "marketplaceFeeSeller" else "marketplaceFeeBuyer", 0.0)))
+                    Text((if (receipt.optString("receiptType") == "SELLER_SALE") "Seller net proceeds: " else "Total paid: ") + currency + " " + String.format(Locale.US, "%,.2f", if (receipt.optString("receiptType") == "SELLER_SALE") receipt.optDouble("sellerNet", 0.0) else receipt.optDouble("buyerTotal", 0.0)), style = MaterialTheme.typography.titleLarge)
                 }
-                Text(product.optString("title", "FYNX marketplace item"), style = MaterialTheme.typography.titleMedium)
-                Text("Quantity: " + product.optInt("quantity"))
-                Text("Subtotal: " + money("subtotal"))
-                Text("Delivery: " + money("deliveryFee"))
-                Text((if (receipt.optString("receiptType") == "SELLER_SALE") "Seller-borne FYNX fee: " else "Buyer-paid FYNX fee: ") + currency + " " + String.format(Locale.US, "%,.2f", receipt.optDouble(if (receipt.optString("receiptType") == "SELLER_SALE") "marketplaceFeeSeller" else "marketplaceFeeBuyer", 0.0)))
-                Text((if (receipt.optString("receiptType") == "SELLER_SALE") "Seller net proceeds: " else "Total paid: ") + currency + " " + String.format(Locale.US, "%,.2f", if (receipt.optString("receiptType") == "SELLER_SALE") receipt.optDouble("sellerNet", 0.0) else receipt.optDouble("buyerTotal", 0.0)), style = MaterialTheme.typography.titleLarge)
                 Text("Payment status: " + receipt.optString("paymentStatus"))
                 Text("Receipt authenticity is verified by FYNX. The signature and QR link can be checked independently.", style = MaterialTheme.typography.bodySmall)
                 message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
