@@ -166,6 +166,38 @@ async function ensureSchema() {
   return schemaPromise;
 }
 
+function payoutStatusFromSettlement(row) {
+  const escrow = String(row.escrow_status || 'NOT_INITIALIZED').toUpperCase();
+  const operation = String(row.payout_operation_status || '').toUpperCase();
+  if (escrow === 'RELEASED' || operation === 'SUCCEEDED') return 'RELEASED';
+  if (escrow === 'REFUNDED') return 'REFUNDED';
+  if (escrow === 'REFUND_PENDING') return 'REFUND_PENDING';
+  if (escrow === 'DISPUTED') return 'BLOCKED_DISPUTE';
+  if (escrow === 'CANCELLED') return 'CANCELLED';
+  if (escrow === 'RELEASE_PENDING' || operation === 'PENDING') return 'PENDING';
+  if (operation === 'FAILED') return 'FAILED';
+  if (operation === 'BLOCKED') return 'BLOCKED';
+  if (escrow === 'RELEASE_ELIGIBLE') return 'ELIGIBLE_NOT_RELEASED';
+  if (escrow === 'HELD') return 'HELD';
+  return 'NOT_INITIALIZED';
+}
+
+export async function getMarketplaceOrderPayoutStatuses(orderIds) {
+  const ids = [...new Set((Array.isArray(orderIds) ? orderIds : []).map((id) => String(id || '').trim()).filter((id) => /^[0-9a-f-]{36}$/i.test(id)))];
+  if (!ids.length) return new Map();
+  await ensureSchema();
+  const result = await pool.query(`
+    SELECT o.id AS order_id, e.status AS escrow_status,
+      (SELECT f.status FROM marketplace_financial_operations f
+       WHERE f.order_id=o.id AND f.operation_type='PAYOUT_RELEASE'
+       ORDER BY f.updated_at DESC, f.created_at DESC LIMIT 1) AS payout_operation_status
+    FROM marketplace_orders o
+    LEFT JOIN marketplace_escrows e ON e.order_id=o.id
+    WHERE o.id=ANY($1::uuid[])
+  `, [ids]);
+  return new Map(result.rows.map((row) => [String(row.order_id), payoutStatusFromSettlement(row)]));
+}
+
 function publicPayoutAccount(row) {
   return {
     id: String(row.id),
