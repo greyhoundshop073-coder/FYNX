@@ -255,6 +255,14 @@ app.get("/health", async (_req, res) => {
   res.status(database === "ready" ? 200 : 503).json({ ok: database === "ready", service: "fynx-backend", database });
 });
 
+// Presence snapshot for the signed-in client. IDs are limited to currently
+// connected sessions; profile visibility is checked by the client before display.
+app.get("/api/presence", auth, (_req, res) => {
+  return res.json({ onlineUserIds: [...clientsByUserId.entries()]
+    .filter(([, sockets]) => sockets && sockets.size > 0)
+    .map(([userId]) => String(userId)) });
+});
+
 app.post("/api/auth/register", async (req, res) => {
   try {
     requireConfig("DATABASE_URL", DATABASE_URL); requireConfig("JWT_SECRET", JWT_SECRET);
