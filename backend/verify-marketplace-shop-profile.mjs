@@ -7,6 +7,8 @@ const seller = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerC
 const storefront = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerStoreDialog.kt');
 const client = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceClient.kt');
 const social = read('./socialRoutes.js');
+const shipping = read('./marketplaceShipping.js');
+const shippingUi = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceShippingSettingsCard.kt');
 
 const checks = [
   ['shop profile table is idempotent and keyed to the seller account', shop.includes('CREATE TABLE IF NOT EXISTS marketplace_shop_profiles') && shop.includes('seller_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE')],
@@ -22,7 +24,11 @@ const checks = [
   ['shop profile module does not create duplicate listings or orders', !shop.includes('CREATE TABLE IF NOT EXISTS marketplace_listings') && !shop.includes('CREATE TABLE IF NOT EXISTS marketplace_orders')],
   ['Seller Center exposes an edit action for each existing listing', seller.includes('Icons.Default.Edit') && seller.includes('Icon(Icons.Default.Edit, "Edit listing")') && seller.includes('Text("Save changes")')],
   ['listing editor uses the existing authenticated seller-owned update endpoint', client.includes('FynxBackendClient.postJson(context, "/api/marketplace/listings/$id/update"') && social.includes('app.post("/api/marketplace/listings/:id/update", auth') && social.includes('WHERE id = $1 AND seller_id = $2 FOR UPDATE')],
-  ['listing edits validate price and stock and preserve other listing fields', client.includes('price <= 0.0') && client.includes('quantity < 0') && seller.includes('current.copy(') && seller.includes('quantity = quantity')]
+  ['listing edits validate price and stock and preserve other listing fields', client.includes('price <= 0.0') && client.includes('quantity < 0') && seller.includes('current.copy(') && seller.includes('quantity = quantity')],
+  ['Seller Center exposes delivery and pickup availability controls', shippingUi.includes('Switch(checked = deliveryEnabled') && shippingUi.includes('Switch(checked = pickupEnabled')],
+  ['shipping client sends and reads saved fulfillment availability', client.includes('.put("deliveryAvailable", settings.deliveryAvailable)') && client.includes('.put("pickupAvailable", settings.pickupAvailable)') && client.includes('s.optBoolean("deliveryAvailable", settings.deliveryAvailable)') && client.includes('s.optBoolean("pickupAvailable", settings.pickupAvailable)')],
+  ['authenticated seller shipping update persists fulfillment availability and preserves at least one method', shipping.includes("app.patch('/api/marketplace/listings/:id/shipping', auth") && shipping.includes('delivery_available=$7,pickup_available=$8') && shipping.includes('if (!deliveryAvailable && !pickupAvailable)') && shipping.includes('at least one fulfillment method must remain enabled')],
+  ['checkout still rejects disabled fulfillment methods', shipping.includes("fulfillmentMethod === 'DELIVERY' && !Boolean(listing.delivery_available)") && shipping.includes("fulfillmentMethod === 'PICKUP' && !Boolean(listing.pickup_available)")]
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
