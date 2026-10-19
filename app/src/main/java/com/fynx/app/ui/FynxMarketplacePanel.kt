@@ -1121,8 +1121,8 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         buildString {
             append(desc.trim())
             if (specifications.isNotEmpty()) {
-                append("\\n\\nProduct specifications\\n")
-                specifications.forEach { (label, value) -> append(label).append(": ").append(value.trim()).append('\\n') }
+                append("\n\nProduct specifications\n")
+                specifications.forEach { (label, value) -> append(label).append(": ").append(value.trim()).append('\n') }
             }
         }.trim().take(FynxMarketplaceSellerFlowSupport.MAX_DESCRIPTION_LENGTH)
     }
