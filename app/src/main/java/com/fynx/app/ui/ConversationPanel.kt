@@ -1265,8 +1265,18 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         rowItems.forEach { (label, icon, action) ->
                             Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Surface(onClick = action, modifier = Modifier.size(54.dp), shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurface) {
-                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(icon, label, Modifier.size(24.dp)) }
+                                val actionColor = when (label) {
+                                    "Camera" -> Color(0xFFE85D75)
+                                    "Gallery" -> Color(0xFF1685F8)
+                                    "Files" -> Color(0xFF8B6FF7)
+                                    "Location" -> Color(0xFF00A879)
+                                    "Contact" -> Color(0xFF00A8E8)
+                                    "Poll" -> Color(0xFFFFB938)
+                                    "Video note" -> Color(0xFFEF6C35)
+                                    else -> MaterialTheme.colorScheme.primary
+                                }
+                                Surface(onClick = action, modifier = Modifier.size(54.dp), shape = androidx.compose.foundation.shape.CircleShape, color = actionColor.copy(alpha = 0.16f), contentColor = actionColor) {
+                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(icon, label, Modifier.size(24.dp), tint = actionColor) }
                                 }
                                 Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                             }
