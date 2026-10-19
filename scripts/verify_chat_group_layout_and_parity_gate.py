@@ -6,6 +6,7 @@ UI = ROOT / "app/src/main/java/com/fynx/app/ui"
 PRIVATE = (UI / "ConversationPanel.kt").read_text(encoding="utf-8")
 ACTIVE_GROUP = (UI / "FynxGroupsPanel.kt").read_text(encoding="utf-8")
 APP = (UI / "FynxApp.kt").read_text(encoding="utf-8")
+CALLS = (UI / "FynxCallsPanel.kt").read_text(encoding="utf-8")
 MODELS = (UI / "ChatModels.kt").read_text(encoding="utf-8")
 
 checks = []
@@ -58,6 +59,7 @@ require("private chat Gallery uses the Android photo picker for images and video
 require("private chat maps selected MIME types to supported semantic media types and never guesses unknown files are images", 'attachmentType = context.contentResolver.getType(uris.first())?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: "application/octet-stream"' in PRIVATE and 'attachmentType?.startsWith("image/") == true -> "image"' in PRIVATE and 'attachmentType?.startsWith("video/") == true -> "video"' in PRIVATE and 'attachmentType?.startsWith("audio/") == true -> "audio"' in PRIVATE and 'else -> "document"' in PRIVATE and 'val selectedType = attachmentType ?: "image"' not in PRIVATE)
 require("private chat retries reuse the uploaded media for the same attachment and clear the cache after successful send", "uploadedAttachmentCache?.takeIf { it.first == selectedAttachment.toString() }" in PRIVATE and "uploadedAttachmentCache = selectedAttachment.toString() to media" in PRIVATE and "uploadedAttachmentCache = null" in PRIVATE)
 require("private voice messages remain available for explicit retry after upload or send failure and reuse uploaded media", "pendingVoiceRetry = file to duration" in PRIVATE and "uploadedVoiceCache?.takeIf { it.first == pendingFile.absolutePath }?.second" in PRIVATE and "pendingVoiceRetry = null" in PRIVATE and '"Retry voice message"' in PRIVATE)
+require("declining an incoming call sends a reject signal rather than an ended signal", "if (incoming) realtimeClient.sendCallReject(current.id, it, video)" in CALLS and "else realtimeClient.sendCallEnd(current.id, it, video)" in CALLS)
 require("group attachment actions use distinct colors for quick recognition", "tint = Color(0xFF1685F8)" in ACTIVE_GROUP and "tint = Color(0xFF8B6FF7)" in ACTIVE_GROUP and "tint = Color(0xFF00C99A)" in ACTIVE_GROUP and "tint = Color(0xFF00A8E8)" in ACTIVE_GROUP and "tint = Color(0xFFFFB938)" in ACTIVE_GROUP)
 require("group composer exposes a dedicated video-note camera action and sends it through the group attachment pipeline", "FynxGroupCameraPicker(context, videoNoteMode = true" in ACTIVE_GROUP and 'Text("Video note", style = MaterialTheme.typography.labelMedium, color = Color(0xFFEF6C35))' in ACTIVE_GROUP and "sendGroupAttachment(uri, type)" in ACTIVE_GROUP)
 require("chat attachment sheet gives each action its own recognizable color", '"Camera" -> Color(0xFFE85D75)' in PRIVATE and '"Gallery" -> Color(0xFF1685F8)' in PRIVATE and '"Files" -> Color(0xFF8B6FF7)' in PRIVATE and '"Location" -> Color(0xFF00A879)' in PRIVATE and '"Contact" -> Color(0xFF00A8E8)' in PRIVATE and '"Poll" -> Color(0xFFFFB938)' in PRIVATE and '"Video note" -> Color(0xFFEF6C35)' in PRIVATE)
