@@ -73,6 +73,7 @@ require('owner Status viewers endpoint is owner-only and excludes expired Status
 require('Status viewer identity list excludes accounts blocked in either direction','AND NOT EXISTS (' in interactions and 'b.blocker_id=$2 AND b.blocked_id=u.id' in interactions and 'b.blocker_id=u.id AND b.blocked_id=$2' in interactions)
 require('owner Status viewers include each viewer reaction and like','LEFT JOIN status_reactions r' in interactions and 'LEFT JOIN status_likes l' in interactions and 'viewedAtMillis:' in interactions and 'liked: Boolean(row.liked)' in interactions)
 require('Status viewer details client parses API response','suspend fun viewers(context: Context, statusId: String)' in client and 'getJSONArray("viewers")' in client and 'FynxStatusViewer(' in client)
+require('Status viewer list uses shared profile avatar identity','FynxRemoteProfileAvatar(' in timeline and 'ownerUsername = viewer.username' in timeline and 'contentDescription = viewer.displayName.ifBlank { viewer.username }' in timeline)
 require('Status owner can open viewer list from view count','FynxStatusClient.viewers(context, status.id)' in timeline and 'showViewers = true' in timeline and 'Text("Status viewers"' in timeline)
 require('Status viewer list shows reaction or like','viewer.reaction != null' in timeline and 'viewer.liked' in timeline and 'viewedAtMillis' in timeline)
 require('Status viewer loading state does not show a misleading zero count','Loading viewer details…' in timeline and 'viewersLoading -> "Loading viewer details…"' in timeline)
