@@ -167,6 +167,126 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
     }
   });
 
+
+  // One buyer receipt represents the whole multi-seller checkout, while seller receipts remain per order.
+  const checkoutReceiptPayload = (group, lines, verifiedReference, verifiedAt) => JSON.stringify([
+    String(group.id), String(group.buyer_id), String(group.currency || '').toUpperCase(),
+    Number(group.subtotal).toFixed(2), Number(group.delivery_fee).toFixed(2),
+    Number(group.marketplace_fee).toFixed(2), Number(group.buyer_total).toFixed(2),
+    String(verifiedReference || ''), new Date(verifiedAt).toISOString(),
+    lines.map((line) => [
+      String(line.order_id), String(line.seller_id), String(line.seller_username || ''),
+      String(line.product_snapshot?.title || 'FYNX marketplace item'), Number(line.quantity),
+      Number(line.unit_price).toFixed(2), Number(line.product_subtotal).toFixed(2),
+      Number(line.delivery_fee).toFixed(2), Number(line.marketplace_fee_buyer).toFixed(2),
+      Number(line.buyer_total ?? line.total_amount).toFixed(2)
+    ])
+  ]);
+  const signCheckoutReceipt = (group, lines, reference, verifiedAt) => {
+    const secret = receiptSigningSecret();
+    return secret ? crypto.createHmac('sha256', secret).update(checkoutReceiptPayload(group, lines, reference, verifiedAt)).digest('hex') : null;
+  };
+  const checkoutReceiptRows = async (checkoutId) => pool.query(`
+    SELECT cg.*, MIN(e.created_at) AS payment_verified_at,
+      MAX(e.metadata->>'reference') AS verified_payment_reference
+    FROM marketplace_checkout_groups cg
+    JOIN marketplace_checkout_group_items gi ON gi.checkout_id=cg.id
+    JOIN marketplace_order_events e ON e.order_id=gi.order_id
+    WHERE cg.id=$1 AND cg.status='PAID'
+      AND e.event_type='PAYMENT_CONFIRMED' AND e.to_status='PAID'
+      AND lower(COALESCE(e.metadata->>'provider',''))='paystack'
+      AND e.metadata->>'checkoutGroupId'=cg.id::text
+      AND e.metadata->>'reference'=cg.payment_reference
+    GROUP BY cg.id
+    HAVING COUNT(DISTINCT gi.order_id) = (
+      SELECT COUNT(*) FROM marketplace_checkout_group_items all_items WHERE all_items.checkout_id=cg.id
+    )
+  `, [checkoutId]);
+
+  app.get('/api/marketplace/checkout/:id/receipt', auth, async (req, res) => {
+    const id = parseUuid(req.params.id);
+    if (!id) return res.status(400).json({ error: 'valid checkout ID is required' });
+    try {
+      await ensureMarketplaceTransactionSchema();
+      const group = (await checkoutReceiptRows(id)).rows[0];
+      if (!group) return res.status(409).json({ error: 'a checkout receipt is available only after verified payment' });
+      if (String(group.buyer_id) !== String(req.user.sub)) return res.status(403).json({ error: 'receipt unavailable' });
+      const lines = (await pool.query(`
+        SELECT o.*, s.username AS seller_username
+        FROM marketplace_checkout_group_items gi
+        JOIN marketplace_orders o ON o.id=gi.order_id
+        JOIN users s ON s.id=o.seller_id
+        WHERE gi.checkout_id=$1
+        ORDER BY gi.listing_id, o.id
+      `, [id])).rows;
+      if (!lines.length || lines.length > 20 || lines.some((line) => !receiptStatusAllowed(line.status) || !receiptAccountingReconciles(line))) {
+        return res.status(409).json({ error: 'checkout receipt totals are not yet reconciled' });
+      }
+      const verifiedAt = group.payment_verified_at;
+      const reference = group.verified_payment_reference;
+      if (!reference || lines.some((line) => String(line.currency).toUpperCase() !== String(group.currency).toUpperCase())) {
+        return res.status(409).json({ error: 'checkout payment evidence could not be reconciled' });
+      }
+      const sumCents = (key) => lines.reduce((sum, line) => sum + Math.round(Number(line[key] || 0) * 100), 0);
+      if (sumCents('product_subtotal') !== Math.round(Number(group.subtotal) * 100)
+        || sumCents('delivery_fee') !== Math.round(Number(group.delivery_fee) * 100)
+        || sumCents('marketplace_fee_buyer') !== Math.round(Number(group.marketplace_fee) * 100)
+        || sumCents('buyer_total') !== Math.round(Number(group.buyer_total) * 100)) {
+        return res.status(409).json({ error: 'checkout receipt totals are not yet reconciled' });
+      }
+      const signature = signCheckoutReceipt(group, lines, reference, verifiedAt);
+      if (!signature) return res.status(503).json({ error: 'receipt signing is not configured' });
+      const receiptId = `FYNX-CHECKOUT-${String(group.id).replace(/-/g, '').toUpperCase()}`;
+      return res.json({ receipt: {
+        receiptId, checkoutId: String(group.id), receiptType: 'BUYER_CHECKOUT', issuedAt: new Date(verifiedAt).toISOString(),
+        paymentStatus: group.status, paymentReference: reference, currency: String(group.currency).toUpperCase(),
+        itemCount: lines.length, items: lines.map((line) => ({
+          orderId: String(line.id), seller: line.seller_username, title: line.product_snapshot?.title || 'FYNX marketplace item',
+          quantity: Number(line.quantity), unitPrice: Number(line.unit_price), subtotal: Number(line.product_subtotal),
+          deliveryFee: Number(line.delivery_fee), marketplaceFee: Number(line.marketplace_fee_buyer),
+          total: Number(line.buyer_total ?? line.total_amount)
+        })),
+        subtotal: Number(group.subtotal), deliveryFee: Number(group.delivery_fee),
+        marketplaceFee: Number(group.marketplace_fee), buyerTotal: Number(group.buyer_total),
+        signatureAlgorithm: 'HMAC-SHA256', signature,
+        verificationPath: `/api/marketplace/checkout-receipts/${encodeURIComponent(receiptId)}/verify?signature=${signature}`
+      }});
+    } catch (error) {
+      console.error('marketplace checkout receipt', error);
+      return res.status(500).json({ error: 'checkout receipt could not be prepared' });
+    }
+  });
+
+  app.get('/api/marketplace/checkout-receipts/:receiptId/verify', async (req, res) => {
+    const rawId = typeof req.params?.receiptId === 'string' ? req.params.receiptId.trim() : '';
+    const id = rawId.startsWith('FYNX-CHECKOUT-') ? rawId.slice('FYNX-CHECKOUT-'.length) : '';
+    if (!/^[A-F0-9]{32}$/i.test(id)) return res.status(400).json({ authentic: false, error: 'invalid checkout receipt ID' });
+    try {
+      await ensureMarketplaceTransactionSchema();
+      const group = (await checkoutReceiptRows(id.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5'))).rows[0];
+      if (!group) return res.status(404).json({ authentic: false, error: 'checkout receipt could not be verified' });
+      const lines = (await pool.query(`
+        SELECT o.*, s.username AS seller_username
+        FROM marketplace_checkout_group_items gi
+        JOIN marketplace_orders o ON o.id=gi.order_id
+        JOIN users s ON s.id=o.seller_id
+        WHERE gi.checkout_id=$1 ORDER BY gi.listing_id, o.id
+      `, [group.id])).rows;
+      if (!lines.length || lines.length > 20 || lines.some((line) => !receiptStatusAllowed(line.status) || !receiptAccountingReconciles(line))) {
+        return res.status(404).json({ authentic: false, error: 'checkout receipt could not be verified' });
+      }
+      const expected = signCheckoutReceipt(group, lines, group.verified_payment_reference, group.payment_verified_at);
+      const signature = req.query?.signature;
+      const matches = typeof signature === 'string' && /^[a-f0-9]{64}$/i.test(signature) && expected
+        && crypto.timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(signature, 'hex'));
+      if (!matches) return res.status(200).json({ authentic: false, receiptId: rawId, reason: 'SIGNATURE_MISMATCH' });
+      return res.json({ authentic: true, receiptId: rawId, paymentStatus: group.status, currency: String(group.currency).toUpperCase(), amount: Number(group.buyer_total), itemCount: lines.length, issuedAt: new Date(group.payment_verified_at).toISOString() });
+    } catch (error) {
+      console.error('marketplace checkout receipt verification', error);
+      return res.status(500).json({ authentic: false, error: 'checkout receipt verification unavailable' });
+    }
+  });
+
   // Public verification intentionally returns only minimal authenticity and payment data.
   app.get('/api/marketplace/receipts/:receiptId/verify', async (req, res) => {
     const rawId = typeof req.params?.receiptId === 'string' ? req.params.receiptId.trim() : '';
