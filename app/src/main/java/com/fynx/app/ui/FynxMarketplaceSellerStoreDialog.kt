@@ -67,6 +67,8 @@ internal fun FynxMarketplaceSellerStoreDialog(
     var profileName by remember(username) { mutableStateOf("") }
     var storeName by remember(username) { mutableStateOf("") }
     var profileBio by remember(username) { mutableStateOf("") }
+    var shopLocation by remember(username) { mutableStateOf("") }
+    var shopContactPhone by remember(username) { mutableStateOf("") }
     var profileLoading by remember(username) { mutableStateOf(true) }
     LaunchedEffect(username) {
         FynxProfileRemoteClient.get(context, username.removePrefix("@").trim()).onSuccess { profile ->
@@ -74,6 +76,16 @@ internal fun FynxMarketplaceSellerStoreDialog(
             profileBio = profile.bio.orEmpty()
         }
         storeName = listings.firstOrNull()?.storeName.orEmpty()
+        FynxBackendClient.get(context, "/api/marketplace/shops/" + username.removePrefix("@").trim())
+            .onSuccess { raw ->
+                val shop = org.json.JSONObject(raw).optJSONObject("shop")
+                if (shop != null) {
+                    storeName = shop.optString("shopName").ifBlank { storeName }
+                    profileBio = shop.optString("description").ifBlank { profileBio }
+                    shopLocation = shop.optString("location")
+                    shopContactPhone = shop.optString("contactPhone")
+                }
+            }
         profileLoading = false
     }
     val sellerListings = remember(listings, username) {
@@ -106,6 +118,8 @@ internal fun FynxMarketplaceSellerStoreDialog(
                             Text("@${username.removePrefix("@")}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (profileLoading) CircularProgressIndicator(Modifier.size(18.dp))
                             if (profileBio.isNotBlank()) Text(profileBio, style = MaterialTheme.typography.bodyMedium)
+                            if (shopLocation.isNotBlank()) Text("Location: " + shopLocation, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (shopContactPhone.isNotBlank()) Text("Shop contact: " + shopContactPhone, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(sellerListings.size.toString(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
