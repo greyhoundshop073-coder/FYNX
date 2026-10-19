@@ -111,5 +111,44 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
 
   app.post('/api/marketplace/orders/:id/disputes',auth,async(req,res)=>{const id=parseUuid(req.params.id);const allowedReasons=new Set(['ITEM_NOT_RECEIVED','WRONG_ITEM','DAMAGED','NOT_AS_DESCRIBED','SUSPECTED_SCAM','OTHER']);const reason=typeof req.body?.reason==='string'?req.body.reason.trim().toUpperCase():'';const details=typeof req.body?.details==='string'?req.body.details.trim().slice(0,4000):'';if(!id||!allowedReasons.has(reason))return res.status(400).json({error:'valid order id and dispute reason are required'});try{await ensureMarketplaceTransactionSchema();const order=(await pool.query('SELECT * FROM marketplace_orders WHERE id=$1',[id])).rows[0];if(!order)return res.status(404).json({error:'order not found'});if(!isParticipant(order, req.user.sub))return res.status(403).json({error:'order unavailable'});if(['CANCELLED','REFUNDED','COMPLETED'].includes(order.status))return res.status(409).json({error:'this order is no longer disputable'});const disputeId=crypto.randomUUID();const client=await pool.connect();try{await client.query('BEGIN');const updated=await client.query(`UPDATE marketplace_orders SET status='DISPUTED',updated_at=NOW() WHERE id=$1 AND status NOT IN ('CANCELLED','REFUNDED','COMPLETED') RETURNING *`,[id]);if(!updated.rows[0]){await client.query('ROLLBACK');return res.status(409).json({error:'order state changed; please retry'});}const dispute=await client.query(`INSERT INTO marketplace_order_disputes (id,order_id,opened_by,reason,details,status) VALUES ($1,$2,$3,$4,$5,'OPEN') RETURNING *`,[disputeId,id,req.user.sub,reason,details]);await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'DISPUTE_OPENED',$3,'DISPUTED',$4::jsonb)`,[id,req.user.sub,order.status,JSON.stringify({reason})]);await client.query('COMMIT');return res.status(201).json({order:publicOrder(updated.rows[0]),dispute:dispute.rows[0]});}catch(error){try{await client.query('ROLLBACK');}catch{}if(error?.code==='23505')return res.status(409).json({error:'an active dispute already exists for this order'});throw error;}finally{client.release();}}catch(error){console.error('marketplace dispute',error);return res.status(500).json({error:'dispute creation failed'});}});
 
-  app.post('/api/marketplace/orders/:id/evidence',auth,async(req,res)=>{const id=parseUuid(req.params.id);const allowedKinds=new Set(['PHOTO','VIDEO','DOCUMENT','MESSAGE_REFERENCE','TRACKING_REFERENCE','NOTE']);const kind=typeof req.body?.kind==='string'?req.body.kind.trim().toUpperCase():'';const value=typeof req.body?.value==='string'?req.body.value.trim().slice(0,4000):'';if(!id||!allowedKinds.has(kind)||!value)return res.status(400).json({error:'valid evidence is required'});try{await ensureMarketplaceTransactionSchema();const order=(await pool.query('SELECT * FROM marketplace_orders WHERE id=$1',[id])).rows[0];if(!order)return res.status(404).json({error:'order not found'});if(!isParticipant(order, req.user.sub))return res.status(403).json({error:'order unavailable'});const result=await pool.query(`INSERT INTO marketplace_order_evidence (order_id,submitted_by,kind,value) VALUES ($1,$2,$3,$4) RETURNING id,order_id,submitted_by,kind,value,created_at`,[id,req.user.sub,kind,value]);return res.status(201).json({evidence:result.rows[0]});}catch(error){console.error('marketplace evidence',error);return res.status(500).json({error:'evidence submission failed'});}});
+  app.post('/api/marketplace/orders/:id/evidence', auth, async (req, res) => {
+    const id = parseUuid(req.params.id);
+    const allowedKinds = new Set(['PHOTO', 'VIDEO', 'DOCUMENT', 'MESSAGE_REFERENCE', 'TRACKING_REFERENCE', 'NOTE']);
+    const kind = typeof req.body?.kind === 'string' ? req.body.kind.trim().toUpperCase() : '';
+    const value = typeof req.body?.value === 'string' ? req.body.value.trim().slice(0, 4000) : '';
+    if (!id || !allowedKinds.has(kind) || !value) return res.status(400).json({ error: 'valid evidence is required' });
+
+    try {
+      await ensureMarketplaceTransactionSchema();
+      const order = (await pool.query('SELECT * FROM marketplace_orders WHERE id=$1', [id])).rows[0];
+      if (!order) return res.status(404).json({ error: 'order not found' });
+      if (!isParticipant(order, req.user.sub)) return res.status(403).json({ error: 'order unavailable' });
+
+      let storedValue = value;
+      if (kind === 'PHOTO') {
+        // PHOTO evidence must reference an actual uploaded image owned by this participant.
+        if (!/^\d{1,18}$/.test(value)) return res.status(400).json({ error: 'PHOTO evidence must reference an uploaded image media ID', code: 'PHOTO_MEDIA_REQUIRED' });
+        const mediaId = Number(value);
+        if (!Number.isSafeInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: 'invalid photo media ID' });
+        const media = (await pool.query(
+          'SELECT id, mime_type FROM message_media WHERE id=$1 AND owner_id=$2',
+          [mediaId, req.user.sub]
+        )).rows[0];
+        if (!media) return res.status(403).json({ error: 'photo must be uploaded by the authenticated participant', code: 'PHOTO_MEDIA_NOT_OWNED' });
+        if (!/^image\/(jpeg|png|webp|gif)$/.test(String(media.mime_type || '').toLowerCase())) {
+          return res.status(400).json({ error: 'PHOTO evidence requires an image upload', code: 'PHOTO_MEDIA_TYPE_INVALID' });
+        }
+        storedValue = String(media.id);
+      }
+
+      const result = await pool.query(
+        'INSERT INTO marketplace_order_evidence (order_id,submitted_by,kind,value) VALUES ($1,$2,$3,$4) RETURNING id,order_id,submitted_by,kind,value,created_at',
+        [id, req.user.sub, kind, storedValue]
+      );
+      return res.status(201).json({ evidence: result.rows[0] });
+    } catch (error) {
+      console.error('marketplace evidence', error);
+      return res.status(500).json({ error: 'evidence submission failed' });
+    }
+  });
 }

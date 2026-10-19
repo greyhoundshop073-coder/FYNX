@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -68,17 +69,26 @@ internal fun FynxMarketplaceSellerStoreDialog(
     var storeName by remember(username) { mutableStateOf("") }
     var profileBio by remember(username) { mutableStateOf("") }
     var profileLoading by remember(username) { mutableStateOf(true) }
-    LaunchedEffect(username) {
+    var sellerListings by remember(username) { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
+    var listingsLoading by remember(username) { mutableStateOf(true) }
+    var listingsError by remember(username) { mutableStateOf<String?>(null) }
+    var reloadAttempt by remember(username) { mutableIntStateOf(0) }
+    LaunchedEffect(username, reloadAttempt) {
+        profileLoading = true
         FynxProfileRemoteClient.get(context, username.removePrefix("@").trim()).onSuccess { profile ->
             profileName = profile.displayName.orEmpty()
             profileBio = profile.bio.orEmpty()
         }
-        storeName = listings.firstOrNull()?.storeName.orEmpty()
         profileLoading = false
-    }
-    val sellerListings = remember(listings, username) {
-        listings.filter { it.active && it.sellerUsername.removePrefix("@").trim().equals(username.removePrefix("@").trim(), ignoreCase = true) }
-            .distinctBy { it.id }
+        listingsLoading = true
+        listingsError = null
+        FynxRemoteSocialClient.listings(context, category = "All", seller = username.removePrefix("@").trim())
+            .onSuccess { items ->
+                sellerListings = items.filter { it.active && it.sellerUsername.removePrefix("@").trim().equals(username.removePrefix("@").trim(), ignoreCase = true) }.distinctBy { it.id }
+                storeName = sellerListings.firstOrNull()?.storeName ?: listings.firstOrNull()?.storeName.orEmpty()
+            }
+            .onFailure { listingsError = "This seller’s products could not be loaded. Check your connection and retry." }
+        listingsLoading = false
     }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Column(
@@ -161,8 +171,12 @@ internal fun FynxMarketplaceSellerStoreDialog(
                             }
                         }
                     }
+                } else if (listingsLoading) {
+                    item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) { CircularProgressIndicator(Modifier.size(28.dp)); Text("Loading this seller’s products…", color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
+                } else if (listingsError != null) {
+                    item { Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(listingsError.orEmpty(), color = MaterialTheme.colorScheme.error); Button(onClick = { reloadAttempt++ }) { Text("Retry") } } }
                 } else if (sellerListings.isEmpty()) {
-                    item { Text("No active products from this seller are available in the currently loaded Marketplace results.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    item { Text("This seller has no active products available right now.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 } else {
                     items(sellerListings, key = { "seller-store-${it.id}" }) { listing ->
                         Surface(

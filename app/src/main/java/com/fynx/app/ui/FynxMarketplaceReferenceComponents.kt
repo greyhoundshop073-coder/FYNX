@@ -69,16 +69,16 @@ internal fun MarketplaceReferenceSearchBar(
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Surface(
             modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(14.dp),
             color = MaterialTheme.colorScheme.surface,
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
         ) {
-            Row(Modifier.padding(horizontal = 13.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(horizontal = 11.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(19.dp))
                 Spacer(Modifier.width(8.dp))
                 Box(Modifier.weight(1f)) {
                     if (value.isBlank()) {
-                        Text("Search products, sellers or categories", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        Text("Search products, sellers or categories", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, maxLines = 1, softWrap = false)
                     }
                     BasicTextField(
                         value = value,
@@ -98,8 +98,8 @@ internal fun MarketplaceReferenceSearchBar(
         androidx.compose.material3.BadgedBox(badge = {
             if (cartCount > 0) androidx.compose.material3.Badge { Text(cartCount.toString()) }
         }) {
-            IconButton(onClick = onCart) {
-                Icon(Icons.Default.ShoppingCart, "Cart", tint = MaterialTheme.colorScheme.onSurface)
+            IconButton(onClick = onCart, modifier = Modifier.size(42.dp)) {
+                Icon(Icons.Default.ShoppingCart, "Cart", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(21.dp))
             }
         }
     }

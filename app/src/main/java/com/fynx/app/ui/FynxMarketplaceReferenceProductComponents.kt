@@ -54,9 +54,9 @@ internal fun MarketplaceReferenceProductCard(
         Column {
             Box {
                 if (listing.mediaIds.isNotEmpty()) {
-                    RemoteMarketMedia(context, listing.mediaIds.first(), Modifier.fillMaxWidth().aspectRatio(0.92f).clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)))
+                    RemoteMarketMedia(context, listing.mediaIds.first(), Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)))
                 } else {
-                    Box(Modifier.fillMaxWidth().aspectRatio(0.92f).clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)), Alignment.Center) {
+                    Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)), Alignment.Center) {
                         Icon(Icons.Default.ShoppingBag, "Product", Modifier.size(42.dp), tint = FynxMarketplaceReferenceStyle.primarySoft)
                     }
                 }
@@ -73,7 +73,7 @@ internal fun MarketplaceReferenceProductCard(
                     }
                 }
             }
-            Column(Modifier.padding(11.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(listing.title, color = FynxMarketplaceReferenceStyle.text, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(listing.currency.uppercase() + " " + String.format(Locale.US, "%,.2f", listing.price), color = FynxMarketplaceReferenceStyle.primarySoft, fontWeight = FontWeight.Bold, style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
                 Row(verticalAlignment = Alignment.CenterVertically) {

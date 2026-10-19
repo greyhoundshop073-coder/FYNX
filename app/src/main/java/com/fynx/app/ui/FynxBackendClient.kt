@@ -24,7 +24,7 @@ object FynxBackendClient {
     private const val PREFS = "fynx_backend"
     private const val KEY_BASE_URL = "base_url"
     private const val LEGACY_ACCESS_TOKEN = "access_token"
-    private const val PRODUCTION_BASE_URL = "https://fynx-ai-backend.onrender.com"
+    private const val PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"
     private const val MAX_IDEMPOTENT_RETRIES = 2
     private const val RETRY_DELAY_MS = 750L
     private const val NETWORK_VALIDATION_WAIT_MS = 6_000L
@@ -42,7 +42,7 @@ object FynxBackendClient {
     data class DownloadedMedia(val contentType: String?, val byteCount: Long)
 
     fun availability(context: Context): FynxBackendAvailability = if (baseUrl(context).isBlank()) FynxBackendAvailability.DISABLED else FynxBackendAvailability.CONFIGURED
-    fun baseUrl(context: Context): String { val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE); val stored = prefs.getString(KEY_BASE_URL, null)?.trim()?.trimEnd('/'); val normalized = stored?.trimEnd('/')?.takeIf { it.isNotBlank() }; if (normalized == "https://ai-creative-studio-572v.onrender.com") { prefs.edit().remove(KEY_BASE_URL).apply(); return PRODUCTION_BASE_URL }; return normalized ?: PRODUCTION_BASE_URL }
+    fun baseUrl(context: Context): String { val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE); val stored = prefs.getString(KEY_BASE_URL, null)?.trim()?.trimEnd('/'); val normalized = stored?.trimEnd('/')?.takeIf { it.isNotBlank() }; if (normalized in setOf("https://ai-creative-studio-572v.onrender.com", "https://fynx-ai-backend.onrender.com")) { prefs.edit().remove(KEY_BASE_URL).apply(); return PRODUCTION_BASE_URL }; return normalized ?: PRODUCTION_BASE_URL }
     fun configureBaseUrl(context: Context, value: String) { val normalized = value.trim().trimEnd('/'); require(normalized.isBlank() || normalized.startsWith("https://")) { "FYNX backend must use HTTPS." }; context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_BASE_URL, normalized).apply() }
     fun saveAccessToken(context: Context, token: String?) { if (token.isNullOrBlank()) { FynxAuthStore.clear(context); return }; FynxSecureTokenStore.save(context, token) }
     fun accessToken(context: Context): String? = FynxSecureTokenStore.load(context) ?: migrateLegacyAccessToken(context)

@@ -12,7 +12,7 @@ import android.net.Uri
 internal object FynxMarketplaceSellerFlowSupport {
     const val MAX_PRODUCT_MEDIA = 12
     const val MAX_TITLE_LENGTH = 120
-    const val MAX_DESCRIPTION_LENGTH = 5000
+    const val MAX_DESCRIPTION_LENGTH = 4000
     const val MAX_QUANTITY = 1_000_000
     const val DEFAULT_CURRENCY = "NGN"
     val SUPPORTED_CURRENCIES = listOf("NGN", "USD")

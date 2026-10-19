@@ -6,14 +6,20 @@ support = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerFlowSu
 marketplace = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text()
 checkout = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCheckout.kt").read_text()
 detail_components = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceDetailComponents.kt").read_text()
+seller_orders = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerOrders.kt").read_text()
 
 checks = [
+    ("seller settlement details can be retried after a failed request", "var settlementRetryCount by remember(order.id)" in seller_orders and "LaunchedEffect(order.id, settlementRetryCount)" in seller_orders and "Retry settlement details" in seller_orders),
+    ("seller settlement retry clears stale data and resets its error state", "settlementError = null" in seller_orders and "settlement = null" in seller_orders and "settlementError = it.message ?: \"Settlement details could not load.\"" in seller_orders),
+    ("seller delivery-evidence failures are surfaced instead of silently hiding handover proof", "deliveryEvidenceError by remember(order.id)" in seller_orders and "onFailure { deliveryEvidenceError = it.message ?: \"Delivery evidence could not load.\" }" in seller_orders and "Delivery evidence could not load:" in seller_orders),
+    ("seller delivery evidence has an independent retry counter and request effect", "var deliveryEvidenceRetryCount by remember(order.id)" in seller_orders and "LaunchedEffect(order.id, deliveryEvidenceRetryCount)" in seller_orders and "Text(\"Retry delivery evidence\")" in seller_orders and "onClick = { deliveryEvidenceRetryCount += 1 }" in seller_orders),
+    ("seller delivery-evidence retry does not re-fetch settlement details", "LaunchedEffect(order.id, settlementRetryCount)" in seller_orders and "LaunchedEffect(order.id, deliveryEvidenceRetryCount)" in seller_orders and "onClick = { deliveryEvidenceRetryCount += 1 }" in seller_orders and "onClick = { settlementRetryCount += 1 }) { Text(\"Retry delivery evidence\") }" not in seller_orders),
     ("seller support keeps a bounded real media limit", "const val MAX_PRODUCT_MEDIA = 12" in support),
     ("seller support accepts image and video media", 'mime.startsWith("image/") || mime.startsWith("video/")' in support),
     ("seller support removes duplicate media", ".distinct()" in support),
     ("seller support appends media through the shared guardrail", "fun addMedia(context: Context, existing: List<Uri>, uri: Uri)" in support and "normalizedMedia(context, existing + uri)" in support),
     ("seller support validates bounded title input", "MAX_TITLE_LENGTH = 120" in support and "title.length <= MAX_TITLE_LENGTH" in support),
-    ("seller support validates bounded description input", "MAX_DESCRIPTION_LENGTH = 5000" in support and "description.length <= MAX_DESCRIPTION_LENGTH" in support),
+    ("seller support validates bounded description input", "MAX_DESCRIPTION_LENGTH = 4000" in support and "description.length <= MAX_DESCRIPTION_LENGTH" in support),
     ("seller support validates finite positive price and bounded quantity", "price.isFinite()" in support and "MAX_QUANTITY = 1_000_000" in support and "quantity in 1..MAX_QUANTITY" in support),
     ("seller support validates the final media count", "media.size <= MAX_PRODUCT_MEDIA" in support),
     ("active seller flow uses multi-media picker", "PickMultipleVisualMedia" in marketplace and "MAX_PRODUCT_MEDIA" in marketplace),
@@ -40,6 +46,9 @@ checks = [
     ("marketplace top sellers are derived from real successful sales", "successfulSales" in marketplace and "Top Sellers (Highest Sales)" in marketplace),
     ("marketplace filtered empty state can clear filters", "No matching products" in marketplace and "Clear filters" in marketplace),
     ("active marketplace retains order protection", "MarketplaceProtectedOrderDialog" in marketplace),
+    ("marketplace order history distinguishes loading, failure, empty and populated states", "var ordersLoading by remember" in marketplace and "var ordersError by remember" in marketplace and "Loading your orders" in marketplace and "Your orders could not be loaded." in marketplace and "No orders yet." in marketplace and "Text(if (loadError != null) \"Retry\" else \"Refresh\")" in marketplace and "onRefresh = { loadOrders() }" in marketplace),
+    ("single-item checkout requires an explicit fulfillment choice when delivery and pickup are both available", "listing.deliveryAvailable && listing.pickupAvailable -> \"\"" in checkout and "Choose delivery or pickup before reviewing your total." in checkout and "fulfillment.isNotBlank()" in checkout),
+    ("multi-item checkout requires a fulfillment choice for every product before requesting a quote", "it.deliveryAvailable && it.pickupAvailable -> \"\"" in marketplace and "methods.values.any{it.isBlank()}" in marketplace and "Choose delivery or pickup for every product" in marketplace and "methods.values.none{it.isBlank()}" in marketplace),
     ("marketplace cart opens from the real cart button", "showCart = true" in marketplace and "Icons.Default.ShoppingCart" in marketplace),
     ("marketplace cart prevents duplicate listing entries", "cart.none { it.id == listing.id }" in marketplace),
     ("marketplace cart passes selected products into multi-product checkout", "onCheckout = { selectedItems -> showCart = false; multiCheckoutItems = selectedItems }" in marketplace and "multiCheckoutItems?.let { selectedItems -> FynxMarketplaceMultiCheckoutDialog(context, selectedItems, cartQuantities" in marketplace and "multiPaymentListingIds = selectedItems.map { it.id }.toSet()" in marketplace),

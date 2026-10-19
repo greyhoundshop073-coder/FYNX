@@ -37,7 +37,7 @@ const checks = [
   ['seller lifecycle client stays server-authoritative', seller.includes('FynxBackendClient') && !/marketplace_orders.*UPDATE|UPDATE.*marketplace_orders/i.test(seller)],
   ['checkout UI does not expose provider secret material', panel.includes('password or payment secret is never requested here')],
   ['payment completion remains backend-verified', panel.includes('verifyMarketplacePayment(context, payment?.reference.orEmpty())')],
-  ['protected-order UI keeps funds gated until completion', panel.includes('funds remain protected until the order reaches the appropriate completion state')],
+  ['protected-order UI keeps funds gated until completion', panel.includes('Payment stays protected through the existing FYNX order lifecycle until the appropriate completion state.')],
   ['failed delivery does not bypass protection', completion.includes("FAILED_DELIVERY") && completion.includes('hasActiveProtectionCase') && completion.includes("status IN ('OPEN','UNDER_REVIEW')")],
   ['returned orders do not bypass protection', completion.includes("RETURNED") && completion.includes('hasActiveProtectionCase') && completion.includes("status IN ('OPEN','UNDER_REVIEW')")],
   ['seller payout route exists and is completion-gated', settlement.includes('/api/marketplace/settlement/release/:id') && settlement.includes("order.status !== 'COMPLETED'")],

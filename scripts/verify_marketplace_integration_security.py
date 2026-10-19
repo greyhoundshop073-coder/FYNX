@@ -10,6 +10,7 @@ lifecycle_ui = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLi
 deep_link = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt").read_text()
 discovery = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDiscoveryClient.kt").read_text()
 seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text()
+seller_store = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerStoreDialog.kt").read_text()
 privacy = (ROOT / "backend/mediaPrivacy.js").read_text()
 marketplace_privacy = (ROOT / "backend/marketplaceMediaPrivacy.js").read_text()
 discovery_routes = (ROOT / "backend/discoveryRoutes.js").read_text()
@@ -22,6 +23,7 @@ checks = [
     ("Marketplace keeps stable listing IDs in UI keys", ("items(listings, key = { it.id })" in panel or "gridItems(listings, key = { it.id })" in panel)),
     ("Marketplace listing seller opens the real seller-store dialog with contact and listing navigation", "onProfile = { sellerStoreUsername = listing.sellerUsername; selected = null }" in panel and "sellerStoreUsername?.let { username ->" in panel and "FynxMarketplaceSellerStoreDialog(" in panel and "onContact = { listing -> contactSeller(username, listing.id) }" in panel and "onOpenListing = { selected = it; sellerStoreUsername = null }" in panel),
     ("Marketplace contact seller uses the existing chat deep link", "FynxDeepLinkParser.chatAppLink" in panel and "Intent.ACTION_VIEW" in panel),
+    ("Seller storefront fetches seller-filtered inventory and distinguishes loading, failure, and empty state", 'FynxRemoteSocialClient.listings(context, category = "All", seller = username.removePrefix("@").trim())' in seller_store and "Loading this seller’s products" in seller_store and "This seller’s products could not be loaded" in seller_store and 'Button(onClick = { reloadAttempt++ })' in seller_store and "This seller has no active products available right now." in seller_store and "currently loaded Marketplace results" not in seller_store),
     ("Marketplace discovery has a dedicated backend route", "/api/marketplace/discovery" in discovery),
     ("Marketplace deep links have a canonical marketplace destination", "FynxDeepLinkDestination.Marketplace" in deep_link and "MARKETPLACE_PATH = \"/marketplace\"" in deep_link),
     ("Marketplace ad creation preserves the canonical listing ID", "createMarketplaceAd" in remote and "Listing ID: $listingId" in remote),

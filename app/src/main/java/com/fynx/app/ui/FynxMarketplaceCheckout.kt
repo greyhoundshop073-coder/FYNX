@@ -46,6 +46,7 @@ internal data class FynxMarketplaceCheckoutQuote(
     val deliveryFee: Double,
     val marketplaceFee: Double,
     val marketplaceFeeBuyer: Double,
+    val marketplaceFeeSeller: Double,
     val discountAmount: Double,
     val total: Double,
     val protectionText: String
@@ -102,6 +103,7 @@ internal suspend fun requestMarketplaceCheckoutQuote(
             deliveryFee = q.optDouble("deliveryFee"),
             marketplaceFee = q.optDouble("marketplaceFee"),
             marketplaceFeeBuyer = q.optDouble("marketplaceFeeBuyer"),
+            marketplaceFeeSeller = q.optDouble("marketplaceFeeSeller"),
             discountAmount = q.optDouble("discountAmount"),
             total = q.optDouble("total"),
             protectionText = q.optJSONObject("protection")?.optString("payout").orEmpty()
@@ -168,7 +170,7 @@ internal fun FynxMarketplaceCheckoutDialog(
     onClose: () -> Unit
 ) {
     var quantityText by remember { mutableStateOf("1") }
-    var fulfillment by remember { mutableStateOf(if (listing.pickupAvailable) "PICKUP" else "DELIVERY") }
+    var fulfillment by remember(listing.id) { mutableStateOf(when { listing.deliveryAvailable && listing.pickupAvailable -> ""; listing.deliveryAvailable -> "DELIVERY"; listing.pickupAvailable -> "PICKUP"; else -> "" }) }
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
@@ -182,6 +184,11 @@ internal fun FynxMarketplaceCheckoutDialog(
     val quantity = quantityText.toIntOrNull()?.coerceAtLeast(1) ?: 0
 
     fun refreshQuote() {
+        if (fulfillment.isBlank()) {
+            message = "Choose delivery or pickup before reviewing your total."
+            quote = null
+            return
+        }
         if (quantity <= 0 || quantity > listing.quantity) {
             message = "Choose a valid quantity (maximum ${listing.quantity})."
             quote = null
@@ -219,6 +226,9 @@ internal fun FynxMarketplaceCheckoutDialog(
                     if (listing.deliveryAvailable) FilterChip(selected = fulfillment == "DELIVERY", onClick = { fulfillment = "DELIVERY"; quote = null }, label = { Text("Delivery") })
                     if (listing.pickupAvailable) FilterChip(selected = fulfillment == "PICKUP", onClick = { fulfillment = "PICKUP"; quote = null }, label = { Text("Pickup") })
                 }
+                if (fulfillment.isBlank()) {
+                    Text("Choose delivery or pickup before reviewing your total.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 if (fulfillment == "DELIVERY") {
                     OutlinedTextField(name, { name = it }, label = { Text("Full name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(phone, { phone = it }, label = { Text("Phone") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -228,7 +238,7 @@ internal fun FynxMarketplaceCheckoutDialog(
                         OutlinedTextField(state, { state = it }, label = { Text("State") }, singleLine = true, modifier = Modifier.weight(1f))
                     }
                 }
-                Button(onClick = { refreshQuote() }, enabled = !busy && quantity > 0, modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { refreshQuote() }, enabled = !busy && quantity > 0 && fulfillment.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
                     if (busy) CircularProgressIndicator(Modifier.height(18.dp)) else Text("Review exact total")
                 }
                 quote?.let { q ->
@@ -236,10 +246,12 @@ internal fun FynxMarketplaceCheckoutDialog(
                     Text("Order summary", style = MaterialTheme.typography.titleSmall)
                     Text("Subtotal: ${q.currency} ${String.format(Locale.US, "%,.2f", q.subtotal)}")
                     Text("Delivery: ${q.currency} ${String.format(Locale.US, "%,.2f", q.deliveryFee)}")
-                    Text("FYNX fee: ${q.currency} ${String.format(Locale.US, "%,.2f", q.marketplaceFeeBuyer)}")
+                    Text("Total FYNX marketplace fee: ${q.currency} ${String.format(Locale.US, "%,.2f", q.marketplaceFee)}")
+                    Text("Your FYNX fee share: ${q.currency} ${String.format(Locale.US, "%,.2f", q.marketplaceFeeBuyer)}")
+                    if (q.marketplaceFeeSeller > 0) Text("Seller-paid FYNX fee (deducted from seller payout): ${q.currency} ${String.format(Locale.US, "%,.2f", q.marketplaceFeeSeller)}")
                     Text("Discount: ${q.currency} ${String.format(Locale.US, "%,.2f", q.discountAmount)}")
                     Text("Total: ${q.currency} ${String.format(Locale.US, "%,.2f", q.total)}", style = MaterialTheme.typography.titleLarge)
-                    Text("Payment is protected. Seller payout is released only after the buyer confirmation flow.", style = MaterialTheme.typography.bodySmall)
+                    Text("This creates an order only; payment has not been collected. Complete payment through an approved provider before the seller hands over the item.", style = MaterialTheme.typography.bodySmall)
                 }
                 message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
@@ -270,7 +282,7 @@ internal fun FynxMarketplaceCheckoutDialog(
                         busy = false
                     }
                 }
-            ) { Text("Place protected order") }
+            ) { Text("Create order (payment pending)") }
         },
         dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text("Cancel") } }
     )
