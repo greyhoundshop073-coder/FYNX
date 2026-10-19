@@ -95,22 +95,37 @@ private fun MarketplaceExploreCategoryTiles(
                 "services" -> Icons.Default.Build
                 else -> Icons.Default.Storefront
             }
+            val categoryTint = when (itemCategory.lowercase(Locale.US)) {
+                "electronics" -> MaterialTheme.colorScheme.tertiary
+                "fashion" -> MaterialTheme.colorScheme.secondary
+                "home" -> MaterialTheme.colorScheme.primary
+                "beauty" -> MaterialTheme.colorScheme.error
+                "vehicles" -> MaterialTheme.colorScheme.tertiary
+                "services" -> MaterialTheme.colorScheme.secondary
+                else -> MaterialTheme.colorScheme.primary
+            }
+            val categoryIconSurface = when (itemCategory.lowercase(Locale.US)) {
+                "electronics", "vehicles" -> MaterialTheme.colorScheme.tertiaryContainer
+                "fashion", "services" -> MaterialTheme.colorScheme.secondaryContainer
+                "beauty" -> MaterialTheme.colorScheme.errorContainer
+                else -> MaterialTheme.colorScheme.primaryContainer
+            }
             Surface(
                 onClick = { onSelect(itemCategory) },
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(14.dp),
                 color = if (selectedCategory == itemCategory) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.width(94.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 7.dp),
+                    modifier = Modifier.padding(vertical = 9.dp, horizontal = 7.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     Box(
-                        modifier = Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primaryContainer),
+                        modifier = Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(categoryIconSurface),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(23.dp))
+                        Icon(icon, contentDescription = null, tint = categoryTint, modifier = Modifier.size(21.dp))
                     }
                     Text(itemCategory, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
                 }
