@@ -234,6 +234,12 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var cartQuantities by remember(cartOwnerKey) { mutableStateOf(restoredMarketplaceCart.quantities) }
     var multiCheckoutItems by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>?>(null) }
     var multiPayment by remember { mutableStateOf<Triple<String, Double, String>?>(null) }
+    var completedCheckoutId by remember(cartOwnerKey) {
+        mutableStateOf(
+            context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+                .getString("last_checkout_receipt_id:$cartOwnerKey", null)
+        )
+    }
     var multiPaymentListingIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showCart by remember { mutableStateOf(false) }
     var priceWatchListingId by remember { mutableStateOf<String?>(null) }
@@ -455,6 +461,12 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+            }
+            completedCheckoutId?.let { checkoutId ->
+                MarketplaceCheckoutReceiptAction(
+                    context = context,
+                    checkoutId = checkoutId
                 )
             }
             MarketplaceReferenceCategoryRow(
@@ -805,7 +817,17 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     protectedOrder?.let { order -> MarketplaceProtectedOrderDialog(order = order, onViewOrder = { protectedOrder = null; showOrders = true }, onContinue = { protectedOrder = null }) }
     if (showCart) MarketplaceCartDialog(items = cart, quantities = cartQuantities, onQuantityChange = { id, value -> cartQuantities = cartQuantities + (id to value) }, onRemove = { item -> cart = cart.filterNot { it.id == item.id }; cartQuantities = cartQuantities - item.id }, onCheckout = { selectedItems -> showCart = false; multiCheckoutItems = selectedItems }, onClose = { showCart = false })
     multiCheckoutItems?.let { selectedItems -> FynxMarketplaceMultiCheckoutDialog(context, selectedItems, cartQuantities, onPaymentReady = { id, total, currency -> multiPaymentListingIds = selectedItems.map { it.id }.toSet(); multiCheckoutItems = null; multiPayment = Triple(id, total, currency) }, onClose = { multiCheckoutItems = null }) }
-    multiPayment?.let { p -> MarketplaceMultiProductPaymentDialog(context, p.first, p.second, p.third, onPaid = { val paidIds = multiPaymentListingIds; cart = cart.filterNot { it.id in paidIds }; cartQuantities = cartQuantities.filterKeys { it !in paidIds }; multiPaymentListingIds = emptySet(); multiPayment = null; reload() }, onClose = { multiPaymentListingIds = emptySet(); multiPayment = null }) }
+    multiPayment?.let { p -> MarketplaceMultiProductPaymentDialog(context, p.first, p.second, p.third, onPaid = {
+        val paidIds = multiPaymentListingIds
+        context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+            .edit().putString("last_checkout_receipt_id:$cartOwnerKey", p.first).apply()
+        completedCheckoutId = p.first
+        cart = cart.filterNot { it.id in paidIds }
+        cartQuantities = cartQuantities.filterKeys { it !in paidIds }
+        multiPaymentListingIds = emptySet()
+        multiPayment = null
+        reload()
+    }, onClose = { multiPaymentListingIds = emptySet(); multiPayment = null }) }
     if (showOrders) MarketplaceOrders(context, orders, onRefresh = { reload() }, onClose = { showOrders = false })
 }
 
