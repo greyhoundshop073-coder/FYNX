@@ -1223,6 +1223,9 @@ private fun OrderActions(context: android.content.Context, order: FynxRemoteSoci
                 Text(order.productTitle)
                 Text("Total: ${order.currency} ${String.format(Locale.US, "%,.2f", order.totalAmount)}")
                 Text("Protected order. Complete payment through an approved payment provider before shipment.", style = MaterialTheme.typography.bodySmall)
+                if (order.status in setOf("PAID", "SHIPPED", "DELIVERED", "INSPECTION", "COMPLETED", "DISPUTED", "REFUNDED")) {
+                    MarketplaceReceiptAction(context, order.id)
+                }
                 if (order.status == "PAID" || order.status == "SHIPPED" || order.status == "INSPECTION") {
                     Text("Next step", style = MaterialTheme.typography.labelLarge)
                     Text(when (order.status) { "PAID" -> "Choose delivery or pickup so the seller can fulfill the order."; "SHIPPED" -> "Confirm the order when you receive it."; else -> "Inspect the order and complete it when everything is correct." }, style = MaterialTheme.typography.bodySmall)
