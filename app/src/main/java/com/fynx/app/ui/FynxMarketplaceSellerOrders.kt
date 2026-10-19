@@ -229,6 +229,9 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                     Text("Buyer: ${order.buyerName}")
                     Text("Order total: ${money(order.currency, order.total)}")
                     Text("Fulfillment: ${fulfillmentLabel(order.fulfillmentStatus)}", style = MaterialTheme.typography.bodyMedium)
+                    if (order.status in setOf("PAID", "SHIPPED", "DELIVERED", "INSPECTION", "COMPLETED", "DISPUTED", "REFUNDED")) {
+                        MarketplaceReceiptAction(context, order.id)
+                    }
                     if (order.fulfillmentStatus == "FAILED_DELIVERY") {
                         Text("Payment remains protected. A failed delivery does not release seller funds or bypass the existing dispute/refund controls.", style = MaterialTheme.typography.bodySmall)
                     }
