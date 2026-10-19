@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -53,6 +54,7 @@ fun FynxMarketplaceSellerCenterPanel() {
     var moneyLoading by remember { mutableStateOf(true) }
     var moneyError by remember { mutableStateOf<String?>(null) }
     var moneyRecords by remember { mutableStateOf(emptyList<SellerMoneyRecord>()) }
+    var showDriverAssignments by remember { mutableStateOf(false) }
 
     fun loadMoney() {
         scope.launch {
@@ -152,6 +154,11 @@ fun FynxMarketplaceSellerCenterPanel() {
                     Text("Your Marketplace sales, protected funds and payout controls use your real FYNX account data.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick = { refresh() }) { Icon(Icons.Default.Refresh, "Refresh seller center") }
+            }
+            OutlinedButton(onClick = { showDriverAssignments = true }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Driver deliveries")
             }
         }
 
@@ -325,6 +332,9 @@ fun FynxMarketplaceSellerCenterPanel() {
             },
             dismissButton = { TextButton(enabled = !accountSaving, onClick = { showPayoutAccount = false }) { Text("Close") } }
         )
+    }
+    if (showDriverAssignments) {
+        FynxMarketplaceDriverAssignmentsDialog(context = context, onDismiss = { showDriverAssignments = false })
     }
 }
 
