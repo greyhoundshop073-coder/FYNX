@@ -177,30 +177,37 @@ class FynxWebRtcCallEngine(
             cameraCapturer?.startCapture(1280, 720, 30)
 
             videoTrack = factory.createVideoTrack("fynx-video", videoSource)
-            videoTrack?.setEnabled(true)
-            videoTrack?.let {
-                val pc = peerConnection
-                if (pc == null || pc.addTrack(it) == null) {
-                    it.setEnabled(false)
-                    callbacks.onError("Could not attach camera video to this call.")
-                    return
-                }
-                callbacks.onLocalVideoTrack(it)
+            val track = videoTrack
+            val pc = peerConnection
+            if (track == null || pc == null || pc.addTrack(track) == null) {
+                callbacks.onError("Could not attach camera video to this call. You can continue with voice if available.")
+                releaseLocalVideoResources()
+                return
             }
+            track.setEnabled(true)
+            callbacks.onLocalVideoTrack(track)
         } catch (error: Exception) {
-            videoTrack?.setEnabled(false)
-            runCatching { cameraCapturer?.stopCapture() }
-            runCatching { cameraCapturer?.dispose() }
-            cameraCapturer = null
-            runCatching { surfaceTextureHelper?.dispose() }
-            surfaceTextureHelper = null
-            runCatching { eglBase?.release() }
-            eglBase = null
+            releaseLocalVideoResources()
             callbacks.onError(
                 "Could not start camera video: " +
                     (error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName)
             )
         }
+    }
+
+    private fun releaseLocalVideoResources() {
+        runCatching { videoTrack?.setEnabled(false) }
+        runCatching { cameraCapturer?.stopCapture() }
+        runCatching { cameraCapturer?.dispose() }
+        cameraCapturer = null
+        runCatching { surfaceTextureHelper?.dispose() }
+        surfaceTextureHelper = null
+        runCatching { eglBase?.release() }
+        eglBase = null
+        runCatching { videoTrack?.dispose() }
+        videoTrack = null
+        runCatching { videoSource?.dispose() }
+        videoSource = null
     }
     override fun setMicrophoneEnabled(enabled: Boolean) { audioTrack?.setEnabled(enabled) }
     override fun setCameraEnabled(enabled: Boolean) { videoTrack?.setEnabled(enabled) }
