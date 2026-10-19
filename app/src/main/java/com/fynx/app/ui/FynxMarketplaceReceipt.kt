@@ -94,15 +94,16 @@ private fun drawReceiptAvatar(canvas: Canvas, bitmap: Bitmap?, label: String, le
     paint.style = Paint.Style.FILL
 }
 
-private suspend fun createMarketplaceReceiptPdf(context: Context, receipt: JSONObject): Result<File> = withContext(Dispatchers.IO) {
+private suspend fun createMarketplaceReceiptPdf(context: Context, receipt: JSONObject): Result<File> {
+    val buyer = receipt.optJSONObject("buyer") ?: JSONObject()
+    val seller = receipt.optJSONObject("seller") ?: JSONObject()
+    val buyerAvatar = receiptAvatar(context, buyer.optString("profilePhotoMediaId").takeIf { it.isNotBlank() && it != "null" })
+    val sellerAvatar = receiptAvatar(context, seller.optString("profilePhotoMediaId").takeIf { it.isNotBlank() && it != "null" })
+    return withContext(Dispatchers.IO) {
     runCatching {
-        val buyer = receipt.optJSONObject("buyer") ?: JSONObject()
-        val seller = receipt.optJSONObject("seller") ?: JSONObject()
         val product = receipt.optJSONObject("product") ?: JSONObject()
         val buyerName = buyer.optString("displayName").ifBlank { buyer.optString("username", "FYNX buyer") }
         val sellerName = seller.optString("displayName").ifBlank { seller.optString("username", "FYNX seller") }
-        val buyerAvatar = receiptAvatar(context, buyer.optString("profilePhotoMediaId").takeIf { it.isNotBlank() && it != "null" })
-        val sellerAvatar = receiptAvatar(context, seller.optString("profilePhotoMediaId").takeIf { it.isNotBlank() && it != "null" })
         val verificationPath = receipt.optString("verificationPath")
         val verificationUrl = FynxBackendClient.baseUrl(context).trimEnd('/') + verificationPath
         val qr = qrBitmap(verificationUrl)
@@ -189,6 +190,7 @@ private suspend fun createMarketplaceReceiptPdf(context: Context, receipt: JSONO
         sellerAvatar?.recycle()
         qr?.recycle()
         file
+    }
     }
 }
 
