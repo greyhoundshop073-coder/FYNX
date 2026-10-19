@@ -147,6 +147,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var realtimeState by remember(chat.username) { mutableStateOf(FynxRealtimeClient.State.DISCONNECTED) }
     var networkError by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
+    var uploadedAttachmentCache by remember(chat.username) { mutableStateOf<Pair<String, FynxProductionMessaging.RemoteMedia>?>(null) }
     var typingSent by remember { mutableStateOf(false) }
     var marketplaceContextAttached by remember { mutableStateOf(false) }
     val replySwipeOffsets = remember { mutableStateMapOf<String, Float>() }
@@ -501,8 +502,11 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         attachmentType == null -> "image"
                         else -> "document"
                     }
-                    FynxProductionMessaging.uploadMedia(context, selectedAttachment)
-                        .mapCatching { media ->
+                    (uploadedAttachmentCache?.takeIf { it.first == selectedAttachment.toString() }?.second
+                        ?.let { Result.success(it) }
+                        ?: FynxProductionMessaging.uploadMedia(context, selectedAttachment).onSuccess { media ->
+                            uploadedAttachmentCache = selectedAttachment.toString() to media
+                        }).mapCatching { media ->
                             if (selectedMessageType != null) {
                                 FynxProductionMessaging.sendStructuredMessage(
                                     context = context,
@@ -536,6 +540,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         attachment = null
                         attachmentType = null
                         attachmentMessageType = null
+                        uploadedAttachmentCache = null
                         composerVideoMode = false
                     }
                     .onFailure { networkError = it.message ?: "Message could not be sent" }
