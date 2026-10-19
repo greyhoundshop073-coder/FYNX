@@ -70,6 +70,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     val appConnectionState by appConnectionManager.state.collectAsState()
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf("Home") }
+    var profileAvatarMenuOpen by remember { mutableStateOf(false) }
     val currentSelected by rememberUpdatedState(selected)
     var openChat by remember { mutableStateOf<ChatPreview?>(null) }
     var openGroup by remember { mutableStateOf<String?>(null) }
@@ -371,9 +372,37 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = { selected = "Profile"; openProfileSettings = false }, modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "Open FYNX profile" }) {
-                            if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(40.dp))
-                            else FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(40.dp))
+                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                            IconButton(
+                                onClick = { selected = "Profile"; openProfileSettings = false },
+                                modifier = Modifier.size(44.dp).semantics(mergeDescendants = true) { contentDescription = "Open FYNX profile" }
+                            ) {
+                                if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(38.dp))
+                                else FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
+                            }
+                            Box(Modifier.align(Alignment.BottomEnd)) {
+                                IconButton(
+                                    onClick = { profileAvatarMenuOpen = true },
+                                    modifier = Modifier.size(22.dp).semantics { contentDescription = "Profile menu, three dots" }
+                                ) {
+                                    Icon(Icons.Default.MoreHoriz, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface)
+                                }
+                                DropdownMenu(
+                                    expanded = profileAvatarMenuOpen,
+                                    onDismissRequest = { profileAvatarMenuOpen = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Open profile") },
+                                        onClick = { profileAvatarMenuOpen = false; selected = "Profile"; openProfileSettings = false },
+                                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Profile settings") },
+                                        onClick = { profileAvatarMenuOpen = false; selected = "Profile"; openProfileSettings = true },
+                                        leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) }
+                                    )
+                                }
+                            }
                         }
                         Row(
                             verticalAlignment = Alignment.CenterVertically
