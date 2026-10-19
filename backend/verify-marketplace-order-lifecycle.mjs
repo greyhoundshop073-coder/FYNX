@@ -30,7 +30,7 @@ const checks = [
   ['buyer order UI exposes problem reporting', panel.includes('Report problem')],
   ['protection dispute endpoint exists', protection.includes('/api/marketplace/protection/order/:id/dispute')],
   ['existing Android dispute route is compatible', protection.includes('/api/marketplace/orders/:id/disputes')],
-  ['Android dispute client targets compatibility route', client.includes('/api/marketplace/orders/$id/disputes')],
+  ['Android dispute client targets the protected endpoint while the legacy route remains compatible', client.includes('/api/marketplace/protection/order/$id/dispute') && protection.includes('/api/marketplace/orders/:id/disputes')],
   ['marketplace orders remain protected before completion', completion.includes("order.status !== 'INSPECTION'") && completion.includes("status='COMPLETED'")],
   ['buyer lifecycle client stays server-authoritative', lifecycle.includes('FynxRemoteSocialClient') && !/marketplace_orders.*UPDATE|UPDATE.*marketplace_orders/i.test(lifecycle)],
   ['seller lifecycle client stays server-authoritative', seller.includes('FynxBackendClient') && !/marketplace_orders.*UPDATE|UPDATE.*marketplace_orders/i.test(seller)],
