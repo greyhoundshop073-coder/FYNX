@@ -140,7 +140,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       const sellerView = String(row.seller_id) === String(req.user.sub);
       return res.json({
         receipt: {
-          receiptId, orderId: String(row.id), issuedAt: new Date(row.created_at).toISOString(),
+          receiptId, orderId: String(row.id), receiptType: sellerView ? 'SELLER_SALE' : 'BUYER_PURCHASE', issuedAt: new Date(row.created_at).toISOString(),
           paymentStatus: row.status, paymentReference: row.payment_reference,
           currency: String(row.currency).toUpperCase(),
           buyer: { displayName: row.buyer_display_name || row.buyer_username, username: row.buyer_username, profilePhotoMediaId: row.buyer_profile_photo_media_id ? String(row.buyer_profile_photo_media_id) : null },
