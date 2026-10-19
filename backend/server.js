@@ -495,7 +495,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
                 u.id = $2
                 OR (
                   (
-                    COALESCE(ps.profile_visibility, 'My friends') = 'Everyone'
+                    COALESCE(ps.profile_photo_visibility, 'My friends') = 'Everyone'
                     OR (
                       COALESCE(ps.profile_visibility, 'My friends') = 'My friends'
                       AND EXISTS (
