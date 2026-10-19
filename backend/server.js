@@ -497,7 +497,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
                   (
                     COALESCE(ps.profile_photo_visibility, 'My friends') = 'Everyone'
                     OR (
-                      COALESCE(ps.profile_visibility, 'My friends') = 'My friends'
+                      COALESCE(ps.profile_photo_visibility, 'My friends') = 'My friends'
                       AND EXISTS (
                         SELECT 1 FROM friendships f
                         WHERE ((f.user_id = u.id AND f.friend_id = $2) OR (f.user_id = $2 AND f.friend_id = u.id))
