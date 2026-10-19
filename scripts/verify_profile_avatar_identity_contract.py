@@ -17,6 +17,13 @@ REQUIRED = {
     "FynxHomeCommentsPanel.kt": ["FynxRemoteProfileAvatar(", "profilePhotoMediaId"],
     "FynxStatusTimelinePanel.kt": ["FynxRemoteProfileAvatar(", "profilePhotoMediaId"],
     "FynxMarketplacePanel.kt": ["FynxProfileRemoteClient", "photoId"],
+    "HomePanel.kt": ["FynxRemoteProfileAvatar(", "FynxProfileRemoteClient"],
+    "FynxRemoteHomeSocialPanel.kt": ["FynxRemoteProfileAvatar(", "authorUsername"],
+    "FynxUniversalSearchPanel.kt": ["FynxRemoteProfileAvatar(", "person.profilePhotoMediaId"],
+    "FynxVisibleUpdatesPanel.kt": ["FynxRemoteProfileAvatar(", "ownerPhotoIds"],
+    "FynxProfileContent.kt": ["FynxRemoteProfileAvatar(", "profilePhotoId"],
+    "FynxVerifiedBadge.kt": ["fun FynxAvatar(", "FynxRemoteProfileAvatar("],
+    "FynxApp.kt": ["FynxRemoteProfileAvatar(", "remoteMyPhotoId"],
     "FynxProfileRemoteClient.kt": ["profilePhotoMediaId", "saveRemoteProfilePhotoId", "FynxAvatarIdentityStore.publish"],
     "FynxPreferencesStore.kt": ["loadRemoteProfilePhotoId", "saveRemoteProfilePhotoId"],
 }
