@@ -143,7 +143,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       return res.json({
         receipt: {
           receiptId, orderId: String(row.id), receiptType: sellerView ? 'SELLER_SALE' : 'BUYER_PURCHASE', issuedAt: new Date(row.payment_verified_at || row.created_at).toISOString(),
-          paymentStatus: row.status, paymentReference: row.verified_payment_reference || row.payment_reference,
+          paymentStatus: row.status === 'REFUNDED' ? 'REFUNDED' : 'PAID', fulfillmentStatus: row.status, payoutStatus: 'NOT_RECORDED', paymentReference: row.verified_payment_reference || row.payment_reference,
           currency: String(row.currency).toUpperCase(),
           buyer: { displayName: row.buyer_display_name || row.buyer_username, username: row.buyer_username, profilePhotoMediaId: row.buyer_profile_photo_media_id ? String(row.buyer_profile_photo_media_id) : null },
           seller: { displayName: row.seller_display_name || row.seller_username, username: row.seller_username, profilePhotoMediaId: row.seller_profile_photo_media_id ? String(row.seller_profile_photo_media_id) : null },
@@ -175,7 +175,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
     Number(group.marketplace_fee).toFixed(2), Number(group.buyer_total).toFixed(2),
     String(verifiedReference || ''), new Date(verifiedAt).toISOString(),
     lines.map((line) => [
-      String(line.order_id), String(line.seller_id), String(line.seller_username || ''),
+      String(line.id || line.order_id), String(line.seller_id), String(line.seller_username || ''),
       String(line.product_snapshot?.title || 'FYNX marketplace item'), Number(line.quantity),
       Number(line.unit_price).toFixed(2), Number(line.product_subtotal).toFixed(2),
       Number(line.delivery_fee).toFixed(2), Number(line.marketplace_fee_buyer).toFixed(2),
@@ -241,7 +241,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       const receiptId = `FYNX-CHECKOUT-${String(group.id).replace(/-/g, '').toUpperCase()}`;
       return res.json({ receipt: {
         receiptId, checkoutId: String(group.id), receiptType: 'BUYER_CHECKOUT', issuedAt: new Date(verifiedAt).toISOString(),
-        paymentStatus: group.status, paymentReference: reference, currency: String(group.currency).toUpperCase(),
+        paymentStatus: lines.every((line) => String(line.status) === 'REFUNDED') ? 'REFUNDED' : lines.some((line) => String(line.status) === 'REFUNDED') ? 'PARTIALLY_REFUNDED' : 'PAID', paymentReference: reference, currency: String(group.currency).toUpperCase(),
         itemCount: lines.length, items: lines.map((line) => ({
           orderId: String(line.id), seller: line.seller_username, title: line.product_snapshot?.title || 'FYNX marketplace item',
           quantity: Number(line.quantity), unitPrice: Number(line.unit_price), subtotal: Number(line.product_subtotal),
@@ -292,7 +292,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       const matches = typeof signature === 'string' && /^[a-f0-9]{64}$/i.test(signature) && expected
         && crypto.timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(signature, 'hex'));
       if (!matches) return res.status(200).json({ authentic: false, receiptId: rawId, reason: 'SIGNATURE_MISMATCH' });
-      return res.json({ authentic: true, receiptId: rawId, paymentStatus: group.status, currency: String(group.currency).toUpperCase(), amount: Number(group.buyer_total), itemCount: lines.length, fulfillmentStatuses: [...new Set(lines.map((line) => String(line.status)))], payoutStatus: 'NOT_RECORDED', issuedAt: new Date(group.payment_verified_at).toISOString() });
+      return res.json({ authentic: true, receiptId: rawId, paymentStatus: lines.every((line) => String(line.status) === 'REFUNDED') ? 'REFUNDED' : lines.some((line) => String(line.status) === 'REFUNDED') ? 'PARTIALLY_REFUNDED' : 'PAID', currency: String(group.currency).toUpperCase(), amount: Number(group.buyer_total), itemCount: lines.length, fulfillmentStatuses: [...new Set(lines.map((line) => String(line.status)))], payoutStatus: 'NOT_RECORDED', issuedAt: new Date(group.payment_verified_at).toISOString() });
     } catch (error) {
       console.error('marketplace checkout receipt verification', error);
       return res.status(500).json({ authentic: false, error: 'checkout receipt verification unavailable' });
