@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -57,9 +58,22 @@ internal fun FynxMarketplaceReferenceProductDetails(
                 Text("• ${listing.condition}", color = FynxMarketplaceReferenceStyle.textMuted)
             }
             Surface(Modifier.fillMaxWidth(), shape = FynxMarketplaceReferenceStyle.radius, color = FynxMarketplaceReferenceStyle.surface) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Seller", color = FynxMarketplaceReferenceStyle.text, fontWeight = FontWeight.Bold)
-                    Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, color = FynxMarketplaceReferenceStyle.text)
+                Row(
+                    Modifier.fillMaxWidth().padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    FynxRemoteProfileAvatar(
+                        null,
+                        listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") },
+                        Modifier.size(48.dp).clip(CircleShape),
+                        ownerUsername = listing.sellerUsername
+                    )
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("Seller", color = FynxMarketplaceReferenceStyle.textMuted, fontWeight = FontWeight.Medium)
+                        Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, color = FynxMarketplaceReferenceStyle.text, fontWeight = FontWeight.SemiBold)
+                        Text("@${listing.sellerUsername.removePrefix("@")}", color = FynxMarketplaceReferenceStyle.textMuted, style = MaterialTheme.typography.labelSmall)
+                    }
                     TextButton(onClick = onSeller) { Text("View seller") }
                 }
             }
