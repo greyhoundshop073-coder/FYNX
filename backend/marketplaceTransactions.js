@@ -71,7 +71,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
     Number(row.delivery_fee).toFixed(2), Number(row.marketplace_fee).toFixed(2),
     Number(row.marketplace_fee_buyer).toFixed(2), Number(row.marketplace_fee_seller).toFixed(2),
     Number(row.discount_amount).toFixed(2), Number(row.buyer_total ?? row.total_amount).toFixed(2),
-    Number(row.seller_net_amount).toFixed(2), String(row.payment_reference || ''),
+    Number(row.seller_net_amount).toFixed(2), String(row.verified_payment_reference || row.payment_reference || ''),
     new Date(row.payment_verified_at || row.created_at).toISOString(), row.product_snapshot || {}
   ]);
   const signReceipt = (row) => {
@@ -113,7 +113,8 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       seller.username AS seller_username,
       seller.display_name AS seller_display_name,
       (to_jsonb(seller)->>'profile_photo_media_id') AS seller_profile_photo_media_id,
-      (SELECT MIN(e.created_at) FROM marketplace_order_events e WHERE e.order_id=o.id AND e.event_type='PAYMENT_CONFIRMED' AND e.to_status='PAID' AND e.metadata->>'reference'=o.payment_reference AND lower(COALESCE(e.metadata->>'provider',''))='paystack') AS payment_verified_at
+      (SELECT MIN(e.created_at) FROM marketplace_order_events e WHERE e.order_id=o.id AND e.event_type='PAYMENT_CONFIRMED' AND e.to_status='PAID' AND ((e.metadata->>'reference'=o.payment_reference AND o.payment_reference IS NOT NULL) OR (o.payment_reference IS NULL AND NULLIF(e.metadata->>'checkoutGroupId','') IS NOT NULL)) AND lower(COALESCE(e.metadata->>'provider',''))='paystack') AS payment_verified_at,
+      (SELECT e.metadata->>'reference' FROM marketplace_order_events e WHERE e.order_id=o.id AND e.event_type='PAYMENT_CONFIRMED' AND e.to_status='PAID' AND ((e.metadata->>'reference'=o.payment_reference AND o.payment_reference IS NOT NULL) OR (o.payment_reference IS NULL AND NULLIF(e.metadata->>'checkoutGroupId','') IS NOT NULL)) AND lower(COALESCE(e.metadata->>'provider',''))='paystack' ORDER BY e.created_at ASC LIMIT 1) AS verified_payment_reference
     FROM marketplace_orders o
     JOIN users buyer ON buyer.id=o.buyer_id
     JOIN users seller ON seller.id=o.seller_id
@@ -142,7 +143,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       return res.json({
         receipt: {
           receiptId, orderId: String(row.id), receiptType: sellerView ? 'SELLER_SALE' : 'BUYER_PURCHASE', issuedAt: new Date(row.payment_verified_at || row.created_at).toISOString(),
-          paymentStatus: row.status, paymentReference: row.payment_reference,
+          paymentStatus: row.status, paymentReference: row.verified_payment_reference || row.payment_reference,
           currency: String(row.currency).toUpperCase(),
           buyer: { displayName: row.buyer_display_name || row.buyer_username, username: row.buyer_username, profilePhotoMediaId: row.buyer_profile_photo_media_id ? String(row.buyer_profile_photo_media_id) : null },
           seller: { displayName: row.seller_display_name || row.seller_username, username: row.seller_username, profilePhotoMediaId: row.seller_profile_photo_media_id ? String(row.seller_profile_photo_media_id) : null },
