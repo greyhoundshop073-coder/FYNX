@@ -10,6 +10,7 @@ const checks = [
   ['aggregate receipt covers all checkout items and enforces the 20-item cap', source.includes('lines.length > 20') && source.includes('COUNT(DISTINCT gi.order_id)')],
   ['aggregate receipt binds the stored paid checkout and Paystack reference', source.includes("cg.status='PAID'") && source.includes("e.metadata->>'reference'=cg.payment_reference") && source.includes("e.metadata->>'checkoutGroupId'=cg.id::text")],
   ['aggregate receipt reconciles child totals against checkout totals', source.includes("sumCents('product_subtotal')") && source.includes("sumCents('buyer_total')")],
+  ['public aggregate verification reconciles checkout and child totals', source.includes("sumCents('marketplace_fee_buyer') !== Math.round(Number(group.marketplace_fee) * 100)") && source.includes("sumCents('buyer_total') !== Math.round(Number(group.buyer_total) * 100)")],
   ['aggregate receipt has an independent public signature verifier', source.includes("/api/marketplace/checkout-receipts/:receiptId/verify") && source.includes('signCheckoutReceipt(group, lines, group.verified_payment_reference, group.payment_verified_at)')],
   ['receipt endpoint requires authentication', /app\.get\('\/api\/marketplace\/orders\/:id\/receipt',\s*auth/.test(source)],
   ['receipt endpoint checks order participation', source.includes('if (!isParticipant(row, req.user.sub))')],
