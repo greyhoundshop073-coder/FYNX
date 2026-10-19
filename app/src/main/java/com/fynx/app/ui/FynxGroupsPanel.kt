@@ -956,21 +956,21 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             showAttachmentMenu = false
                             groupMediaPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
                         }, modifier = Modifier.weight(1f)) {
-                                    Icon(Icons.Default.PhotoLibrary, null); Spacer(Modifier.width(5.dp)); Text("Gallery")
+                                    Icon(Icons.Default.PhotoLibrary, null, tint = Color(0xFF1685F8)); Spacer(Modifier.width(5.dp)); Text("Gallery")
                                 }
                                 OutlinedButton(onClick = { showAttachmentMenu = false; groupDocumentPicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f)) {
-                                    Icon(Icons.Default.AttachFile, null); Spacer(Modifier.width(5.dp)); Text("Files")
+                                    Icon(Icons.Default.AttachFile, null, tint = Color(0xFF8B6FF7)); Spacer(Modifier.width(5.dp)); Text("Files")
                                 }
                             }
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(onClick = { showAttachmentMenu = false; showLocationShare = true }, modifier = Modifier.weight(1f)) {
-                                    Icon(Icons.Default.LocationOn, null); Spacer(Modifier.width(5.dp)); Text("Location")
+                                    Icon(Icons.Default.LocationOn, null, tint = Color(0xFF00C99A)); Spacer(Modifier.width(5.dp)); Text("Location")
                                 }
                                 OutlinedButton(onClick = { showAttachmentMenu = false; showContactShare = true }, modifier = Modifier.weight(1f)) {
-                                    Icon(Icons.Default.Contacts, null); Spacer(Modifier.width(5.dp)); Text("Contact")
+                                    Icon(Icons.Default.Contacts, null, tint = Color(0xFF00A8E8)); Spacer(Modifier.width(5.dp)); Text("Contact")
                                 }
                                 OutlinedButton(onClick = { showAttachmentMenu = false; showPollsDirectly = true; showTools = true }, modifier = Modifier.weight(1f)) {
-                                    Icon(Icons.Default.Poll, null); Spacer(Modifier.width(5.dp)); Text("Poll")
+                                    Icon(Icons.Default.Poll, null, tint = Color(0xFFFFB938)); Spacer(Modifier.width(5.dp)); Text("Poll")
                                 }
                             }
                             Text("Group-specific sharing stays organized here so the message box remains simple.", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
