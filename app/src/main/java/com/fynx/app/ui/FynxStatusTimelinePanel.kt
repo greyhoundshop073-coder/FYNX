@@ -801,9 +801,12 @@ private fun FynxStatusStoryViewer(
                                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
                                     items(viewers, key = { it.username }) { viewer ->
                                         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.size(42.dp)) {
-                                                Box(contentAlignment = Alignment.Center) { Text(viewer.displayName.trim().firstOrNull()?.uppercase() ?: "?", fontWeight = FontWeight.SemiBold) }
-                                            }
+                                            FynxRemoteProfileAvatar(
+                                                mediaId = null,
+                                                contentDescription = viewer.displayName.ifBlank { viewer.username },
+                                                modifier = Modifier.size(42.dp),
+                                                ownerUsername = viewer.username
+                                            )
                                             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                                                 Text(viewer.displayName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1)
                                                 Text("@${viewer.username} · ${SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(viewer.viewedAtMillis))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
