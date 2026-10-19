@@ -93,7 +93,7 @@ object FynxMarketplaceClient {
                 put(JSONObject().put("country", it.country.trim()).put("state", it.state.trim()).put("city", it.city.trim()))
             }
         }
-        val body = JSONObject().put("method", settings.method.trim().uppercase().ifBlank { "SELLER_ARRANGED" }).put("note", settings.note.trim().take(500)).put("baseFee", settings.baseFee).put("additionalItemFee", settings.additionalItemFee).put("feeCap", settings.feeCap ?: JSONObject.NULL).put("coverage", coverage)
+        val body = JSONObject().put("method", settings.method.trim().uppercase().ifBlank { "SELLER_ARRANGED" }).put("note", settings.note.trim().take(500)).put("baseFee", settings.baseFee).put("additionalItemFee", settings.additionalItemFee).put("feeCap", settings.feeCap ?: JSONObject.NULL).put("deliveryAvailable", settings.deliveryAvailable).put("pickupAvailable", settings.pickupAvailable).put("coverage", coverage)
         return FynxBackendClient.patchJson(context, "/api/marketplace/listings/$id/shipping", body.toString()).mapCatching { raw ->
             val s = JSONObject(raw).getJSONObject("shipping")
             val rows = s.optJSONArray("coverage") ?: JSONArray()
@@ -103,7 +103,7 @@ object FynxMarketplaceClient {
                     add(Coverage(row.optString("country"), row.optString("state"), row.optString("city")))
                 }
             }
-            ShippingSettings(s.optString("method", "SELLER_ARRANGED"), s.optString("note"), s.optDouble("baseFee", 0.0), s.optDouble("additionalItemFee", 0.0), if (s.isNull("feeCap")) null else s.optDouble("feeCap"), settings.deliveryAvailable, settings.pickupAvailable, parsed)
+            ShippingSettings(s.optString("method", "SELLER_ARRANGED"), s.optString("note"), s.optDouble("baseFee", 0.0), s.optDouble("additionalItemFee", 0.0), if (s.isNull("feeCap")) null else s.optDouble("feeCap"), s.optBoolean("deliveryAvailable", settings.deliveryAvailable), s.optBoolean("pickupAvailable", settings.pickupAvailable), parsed)
         }
     }
 
