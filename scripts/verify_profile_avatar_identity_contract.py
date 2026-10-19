@@ -30,7 +30,7 @@ REQUIRED = {
     "FynxGroupsPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = member.username"],
     "ConversationPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = chat.username"],
     "FynxCallsPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = call.name"],
-    "FynxActiveCallPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = name"],
+    "FynxActiveCallPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = name", "FynxCallRemotePlaceholder(name, Modifier.fillMaxSize(), ownerUsername = name"],
     "FynxProfileRemoteClient.kt": ["profilePhotoMediaId", "saveRemoteProfilePhotoId", "FynxAvatarIdentityStore.publish"],
     "FynxPreferencesStore.kt": ["loadRemoteProfilePhotoId", "saveRemoteProfilePhotoId"],
 }
@@ -73,5 +73,5 @@ if errors:
     raise SystemExit(1)
 
 print("PROFILE AVATAR CONTRACT GREEN")
-print(f"Verified {len(REQUIRED)} identity surfaces use the shared remote-avatar contract, including marketplace product cards, seller stores, and listing details.")
+print(f"Verified {len(REQUIRED)} identity surfaces use the shared remote-avatar contract, including marketplace sellers, call history, and active-call video fallback.")
 print("Verified profile GET/UPDATE persist the server-authoritative profilePhotoMediaId and publish invalidation, including null removal.")
