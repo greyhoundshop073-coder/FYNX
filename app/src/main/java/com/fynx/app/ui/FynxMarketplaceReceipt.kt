@@ -55,6 +55,10 @@ private suspend fun fetchMarketplaceReceipt(context: Context, orderId: String): 
     FynxBackendClient.get(context, "/api/marketplace/orders/${Uri.encode(orderId)}/receipt")
         .mapCatching { JSONObject(it).getJSONObject("receipt") }
 
+private suspend fun fetchMarketplaceCheckoutReceipt(context: Context, checkoutId: String): Result<JSONObject> =
+    FynxBackendClient.get(context, "/api/marketplace/checkout/${Uri.encode(checkoutId)}/receipt")
+        .mapCatching { JSONObject(it).getJSONObject("receipt") }
+
 private suspend fun receiptAvatar(context: Context, mediaId: String?): Bitmap? = withContext(Dispatchers.IO) {
     val id = mediaId?.toLongOrNull() ?: return@withContext null
     val file = File(context.cacheDir, "receipt-avatar-$id.img")
@@ -95,7 +99,94 @@ private fun drawReceiptAvatar(canvas: Canvas, bitmap: Bitmap?, label: String, le
     paint.style = Paint.Style.FILL
 }
 
+private suspend fun createMarketplaceCheckoutReceiptPdf(context: Context, receipt: JSONObject): Result<File> = withContext(Dispatchers.IO) {
+    runCatching {
+        val currency = receipt.optString("currency", "NGN")
+        val items = receipt.optJSONArray("items") ?: org.json.JSONArray()
+        require(items.length() in 1..20) { "Checkout receipt item list is invalid." }
+        val qr = qrBitmap(FynxBackendClient.baseUrl(context).trimEnd('/') + receipt.optString("verificationPath"))
+        val document = PdfDocument()
+        val pageCount = ((items.length() + 7) / 8).coerceAtLeast(1)
+        val ink = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(15, 23, 42); textSize = 11f }
+        val muted = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(71, 85, 105); textSize = 9f }
+        val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(203, 213, 225); strokeWidth = 1f }
+        fun money(value: Double) = currency + " " + String.format(Locale.US, "%,.2f", value)
+        for (pageNumber in 0 until pageCount) {
+            val page = document.startPage(PdfDocument.PageInfo.Builder(595, 842, pageNumber + 1).create())
+            val canvas = page.canvas
+            canvas.drawColor(Color.WHITE)
+            ink.color = Color.rgb(30, 64, 175); ink.textSize = 23f; ink.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            canvas.drawText("FYNX", 36f, 48f, ink)
+            ink.color = Color.rgb(15, 23, 42); ink.textSize = 16f
+            canvas.drawText("MARKETPLACE CHECKOUT RECEIPT", 36f, 76f, ink)
+            muted.textSize = 10f
+            canvas.drawText("Digitally signed • Verify payment evidence before relying on this receipt", 36f, 96f, muted)
+            canvas.drawLine(36f, 112f, 559f, 112f, line)
+            ink.textSize = 11f; ink.typeface = Typeface.DEFAULT
+            canvas.drawText("Receipt ID: " + receipt.optString("receiptId"), 36f, 138f, ink)
+            canvas.drawText("Checkout ID: " + receipt.optString("checkoutId"), 36f, 158f, ink)
+            canvas.drawText("Payment status: " + receipt.optString("paymentStatus"), 36f, 178f, ink)
+            canvas.drawText("Paystack reference: " + receipt.optString("paymentReference").take(70), 36f, 198f, ink)
+            val issued = runCatching { SimpleDateFormat("yyyy-MM-dd HH:mm 'UTC'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(java.time.Instant.parse(receipt.optString("issuedAt")).toEpochMilli())) }.getOrDefault(receipt.optString("issuedAt"))
+            canvas.drawText("Issued: $issued    Page ${pageNumber + 1}/$pageCount", 36f, 218f, ink)
+            canvas.drawLine(36f, 232f, 559f, 232f, line)
+            ink.textSize = 12f; ink.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            canvas.drawText("PURCHASED ITEMS", 36f, 255f, ink)
+            ink.textSize = 10f; ink.typeface = Typeface.DEFAULT
+            val start = pageNumber * 8
+            val end = minOf(items.length(), start + 8)
+            var y = 282f
+            for (index in start until end) {
+                val item = items.optJSONObject(index) ?: JSONObject()
+                ink.color = Color.rgb(15, 23, 42); ink.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                canvas.drawText("${index + 1}. " + item.optString("title", "FYNX marketplace item").take(62), 36f, y, ink)
+                ink.typeface = Typeface.DEFAULT; ink.color = Color.rgb(71, 85, 105)
+                canvas.drawText("Seller: " + item.optString("seller", "FYNX seller").take(35) + " • Qty: " + item.optInt("quantity"), 36f, y + 16f, ink)
+                canvas.drawText("Subtotal: " + money(item.optDouble("subtotal")) + "  Delivery: " + money(item.optDouble("deliveryFee")), 36f, y + 32f, ink)
+                ink.textAlign = Paint.Align.RIGHT; ink.color = Color.rgb(15, 23, 42)
+                canvas.drawText("Line total: " + money(item.optDouble("total")), 559f, y + 16f, ink)
+                ink.textAlign = Paint.Align.LEFT
+                canvas.drawLine(36f, y + 42f, 559f, y + 42f, line)
+                y += 53f
+            }
+            if (pageNumber == pageCount - 1) {
+                y = maxOf(y + 8f, 710f - (if (pageCount > 1) 0f else 0f))
+                canvas.drawLine(36f, y, 559f, y, line)
+                y += 24f
+                ink.textSize = 11f; ink.typeface = Typeface.DEFAULT
+                canvas.drawText("Subtotal: " + money(receipt.optDouble("subtotal")), 36f, y, ink); y += 19f
+                canvas.drawText("Delivery: " + money(receipt.optDouble("deliveryFee")), 36f, y, ink); y += 19f
+                canvas.drawText("Buyer-paid FYNX fee: " + money(receipt.optDouble("marketplaceFee")), 36f, y, ink); y += 23f
+                ink.textSize = 15f; ink.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                canvas.drawText("TOTAL PAID", 36f, y, ink)
+                ink.textAlign = Paint.Align.RIGHT
+                canvas.drawText(money(receipt.optDouble("buyerTotal")), 559f, y, ink)
+                ink.textAlign = Paint.Align.LEFT
+                y += 24f
+                ink.textSize = 8f; ink.typeface = Typeface.DEFAULT; ink.color = Color.rgb(71, 85, 105)
+                canvas.drawText("HMAC-SHA256 signature:", 36f, y, ink); y += 12f
+                canvas.drawText(receipt.optString("signature").take(64), 36f, y, ink)
+                if (qr != null) canvas.drawBitmap(qr, null, Rect(448, 690, 552, 794), ink)
+                canvas.drawText("Scan QR to verify authenticity and current payment status.", 36f, 750f, ink)
+                canvas.drawText("A PDF or screenshot alone is not proof of payment.", 36f, 767f, ink)
+            } else {
+                muted.textSize = 9f
+                canvas.drawText("Continued on next page • FYNX Marketplace", 36f, 810f, muted)
+            }
+            document.finishPage(page)
+        }
+        val folder = File(context.cacheDir, "marketplace-receipts").apply { mkdirs() }
+        val safeId = receipt.optString("receiptId").replace(Regex("[^A-Za-z0-9_-]"), "").take(80)
+        val file = File(folder, "${safeId.ifBlank { "FYNX-checkout-receipt" }}.pdf")
+        FileOutputStream(file).use { document.writeTo(it) }
+        document.close()
+        qr?.recycle()
+        file
+    }
+}
+
 private suspend fun createMarketplaceReceiptPdf(context: Context, receipt: JSONObject): Result<File> {
+    if (receipt.optString("receiptType") == "BUYER_CHECKOUT") return createMarketplaceCheckoutReceiptPdf(context, receipt)
     val buyer = receipt.optJSONObject("buyer") ?: JSONObject()
     val seller = receipt.optJSONObject("seller") ?: JSONObject()
     val buyerAvatar = try { receiptAvatar(context, buyer.optString("profilePhotoMediaId").takeIf { it.isNotBlank() && it != "null" }) } catch (_: Exception) { null }
@@ -268,6 +359,33 @@ internal fun MarketplaceReceiptAction(context: Context, orderId: String) {
     receipt?.let { data ->
         MarketplaceReceiptDialog(context, data, onClose = { receipt = null })
     }
+}
+
+@Composable
+internal fun MarketplaceCheckoutReceiptAction(context: Context, checkoutId: String) {
+    var loading by remember { mutableStateOf(false) }
+    var receipt by remember { mutableStateOf<JSONObject?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    OutlinedButton(
+        enabled = !loading,
+        onClick = {
+            loading = true
+            error = null
+            scope.launch {
+                fetchMarketplaceCheckoutReceipt(context, checkoutId)
+                    .onSuccess { receipt = it }
+                    .onFailure { error = it.message ?: "Checkout receipt is not available yet. Please retry." }
+                loading = false
+            }
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        if (loading) CircularProgressIndicator()
+        else Text("View combined checkout receipt")
+    }
+    error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    receipt?.let { data -> MarketplaceReceiptDialog(context, data, onClose = { receipt = null }) }
 }
 
 @Composable
