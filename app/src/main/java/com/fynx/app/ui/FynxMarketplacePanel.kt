@@ -925,6 +925,13 @@ private fun MarketplaceDetails(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
+    var detailSellerPhotoId by remember(l.sellerUsername) { mutableStateOf<String?>(null) }
+    LaunchedEffect(l.sellerUsername) {
+        val sellerUsername = l.sellerUsername.removePrefix("@").trim()
+        if (sellerUsername.isNotBlank()) {
+            FynxProfileRemoteClient.get(context, sellerUsername).onSuccess { detailSellerPhotoId = it.profilePhotoMediaId }
+        }
+    }
     AlertDialog(onDismissRequest = onClose, title = { Text("Product details", maxLines = 1) }, text = { Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (l.mediaIds.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(l.mediaIds.take(12)) { mediaId -> RemoteMarketMedia(LocalContext.current, mediaId, Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(12.dp))) } }
         MarketplaceReferenceProductSummary(
@@ -934,7 +941,19 @@ private fun MarketplaceDetails(
             onShare = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title)) }
         )
         MarketplaceReferenceDescriptionCard(listing = l)
-        Text("Seller: ${l.sellerDisplayName.ifBlank { l.sellerUsername }}")
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            FynxRemoteProfileAvatar(
+                detailSellerPhotoId,
+                l.sellerDisplayName.ifBlank { l.sellerUsername.removePrefix("@") },
+                Modifier.size(42.dp).clip(RoundedCornerShape(50)),
+                ownerUsername = l.sellerUsername
+            )
+            Column(Modifier.weight(1f)) {
+                Text(l.sellerDisplayName.ifBlank { l.sellerUsername.removePrefix("@") }, fontWeight = FontWeight.SemiBold)
+                Text("Seller", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            TextButton(onClick = onProfile) { Text("View seller") }
+        }
         Text("${l.quantity} available • ${l.condition}")
         if (l.location.isNotBlank()) Text("Location: ${l.location}")
         if (l.deliveryAvailable) Text("Delivery available${l.deliveryFee?.let { " • ${l.currency} ${String.format(Locale.US, "%,.2f", it)} fee" } ?: ""}")
