@@ -19,7 +19,7 @@ REQUIRED = {
     "FynxMarketplacePanel.kt": ["FynxProfileRemoteClient", "photoId", "MarketplaceSellerCard"],
     "FynxMarketplaceReferenceProductComponents.kt": ["MarketplaceReferenceProductCard(", "FynxRemoteProfileAvatar(", "ownerUsername = listing.sellerUsername"],
     "FynxMarketplaceSellerStoreDialog.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = username"],
-    "FynxMarketplaceDetailsSearchReference.kt": ["FynxRemoteProfileAvatar(", "listing.sellerUsername"],
+    "FynxMarketplaceDetailsSearchReference.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = listing.sellerUsername"],
     "HomePanel.kt": ["FynxRemoteProfileAvatar(", "FynxProfileRemoteClient"],
     "FynxRemoteHomeSocialPanel.kt": ["FynxRemoteProfileAvatar(", "authorUsername"],
     "FynxUniversalSearchPanel.kt": ["FynxRemoteProfileAvatar(", "person.profilePhotoMediaId"],
