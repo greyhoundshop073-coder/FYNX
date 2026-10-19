@@ -76,15 +76,12 @@ fun FynxActiveCallPanel(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Spacer(Modifier.height(52.dp))
-                Box(
-                    Modifier
-                        .size(108.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(name.take(1).uppercase(), style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
-                }
+                FynxRemoteProfileAvatar(
+                    mediaId = null,
+                    contentDescription = name,
+                    modifier = Modifier.size(108.dp).clip(CircleShape),
+                    ownerUsername = name
+                )
                 Spacer(Modifier.height(18.dp))
                 Text(name, style = MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(6.dp))
