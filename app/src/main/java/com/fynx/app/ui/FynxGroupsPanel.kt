@@ -952,6 +952,13 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     })
                                     Text("Camera", style = MaterialTheme.typography.labelMedium)
                                 }
+                                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    FynxGroupCameraPicker(context, videoNoteMode = true, onMediaSelected = { uri, type ->
+                                        showAttachmentMenu = false
+                                        sendGroupAttachment(uri, type)
+                                    })
+                                    Text("Video note", style = MaterialTheme.typography.labelMedium, color = Color(0xFFEF6C35))
+                                }
                                 OutlinedButton(onClick = {
                             showAttachmentMenu = false
                             groupMediaPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
