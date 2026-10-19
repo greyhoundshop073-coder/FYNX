@@ -228,10 +228,19 @@ private fun StatusAvatar(
     modifier: Modifier = Modifier
 ) {
     val avatarOwnerUsername = status?.ownerUsername?.takeIf { it.isNotBlank() } ?: ownerUsername
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(avatarOwnerUsername) {
+        // The shared renderer reads the authoritative cache, but it does not fetch a
+        // profile by itself. Hydrate a cache miss so Status rows can resolve real photos.
+        if (avatarOwnerUsername.isNotBlank() &&
+            !FynxProfileRemoteClient.hasCachedProfilePhotoEntry(context, avatarOwnerUsername)
+        ) {
+            FynxProfileRemoteClient.get(context, avatarOwnerUsername)
+        }
+    }
     Box(modifier.size(58.dp)) {
         Box(Modifier.fillMaxSize().border(2.dp, Color(0xFF22C55E), CircleShape).padding(3.dp)) {
-            // Always use the shared avatar resolver, including when the local cache is empty.
-            // It fetches the authoritative profile and observes avatar revisions/removals.
+            // The shared resolver observes profile-photo changes and explicit removals.
             FynxRemoteProfileAvatar(
                 mediaId = null,
                 contentDescription = ownerDisplayName,

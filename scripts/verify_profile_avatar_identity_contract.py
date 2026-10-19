@@ -66,6 +66,13 @@ for needle in ("cachedOwnerPhotoExists", "cachedOwnerPhotoId", "else -> mediaId?
     if needle not in remote_media:
         errors.append(f"FynxRemoteMedia.kt: missing avatar ID fallback/removal safeguard: {needle}")
 
+status_timeline = (UI / "FynxStatusTimelinePanel.kt").read_text(encoding="utf-8")
+if "FynxProfileRemoteClient.get(context, avatarOwnerUsername)" not in status_timeline:
+    errors.append("Status avatar cache miss does not hydrate the authoritative profile photo")
+app = (UI / "FynxApp.kt").read_text(encoding="utf-8")
+if "remoteMyProfileLoaded" not in app or "else if (!remoteMyProfileLoaded) FynxProfileImage" not in app:
+    errors.append("app header may resurrect a stale local photo after authoritative remote-photo removal")
+
 if errors:
     print("PROFILE AVATAR CONTRACT RED")
     for error in errors:
