@@ -76,6 +76,42 @@ internal fun advanceMarketplaceListingsOffset(currentOffset: Int, requestedLimit
 
 
 @Composable
+private fun MarketplaceRecentSearches(
+    recentSearches: List<String>,
+    onSelect: (String) -> Unit,
+    onClear: () -> Unit,
+    onRemove: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Recent searches", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            TextButton(onClick = onClear) { Text("Clear") }
+        }
+        LazyRow(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, bottom = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(end = 16.dp)
+        ) {
+            items(recentSearches.distinctBy { it.lowercase(Locale.US) }, key = { "recent-search-${it.lowercase(Locale.US)}" }) { term ->
+                InputChip(
+                    selected = false,
+                    onClick = { onSelect(term) },
+                    label = { Text(term, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    trailingIcon = {
+                        IconButton(onClick = { onRemove(term) }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "Remove $term", modifier = Modifier.size(14.dp))
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun MarketplaceExploreCategoryTiles(
     categories: List<String>,
     selectedCategory: String,
@@ -456,43 +492,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            if (query.isBlank() && recentSearches.isNotEmpty()) {
-                Row(
-                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Recent searches", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    TextButton(onClick = {
-                        recentSearches = emptyList()
-                        context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
-                            .edit().remove(recentSearchesKey).apply()
-                    }) { Text("Clear") }
-                }
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, bottom = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(end = 16.dp)
-                ) {
-                    items(recentSearches, key = { "recent-search-$it" }) { term ->
-                        InputChip(
-                            selected = false,
-                            onClick = { query = term },
-                            label = { Text(term, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                            trailingIcon = {
-                                IconButton(
-                                    onClick = {
-                                        recentSearches = recentSearches.filterNot { it.equals(term, ignoreCase = true) }
-                                        val saved = JSONArray().apply { recentSearches.forEach(::put) }
-                                        context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
-                                            .edit().putString(recentSearchesKey, saved.toString()).apply()
-                                    },
-                                    modifier = Modifier.size(24.dp)
-                                ) { Icon(Icons.Default.Close, contentDescription = "Remove $term", modifier = Modifier.size(14.dp)) }
-                            }
-                        )
-                    }
-                }
-            }
             if (discoveryFallbackWarning != null && listings.isNotEmpty()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(discoveryFallbackWarning.orEmpty(), modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -513,6 +512,26 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
+                    if (query.isBlank() && recentSearches.isNotEmpty()) {
+                        item(key = "marketplace-recent-searches") {
+                            MarketplaceRecentSearches(
+                                recentSearches = recentSearches,
+                                onSelect = { query = it },
+                                onClear = {
+                                    recentSearches = emptyList()
+                                    context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+                                        .edit().remove(recentSearchesKey).apply()
+                                },
+                                onRemove = { term ->
+                                    val updated = recentSearches.filterNot { it.equals(term, ignoreCase = true) }
+                                    recentSearches = updated
+                                    val saved = JSONArray().apply { updated.forEach(::put) }
+                                    context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+                                        .edit().putString(recentSearchesKey, saved.toString()).apply()
+                                }
+                            )
+                        }
+                    }
                     item(key = "marketplace-search-controls") {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                         MarketplaceReferenceSearchBar(
@@ -579,6 +598,26 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
+                    if (query.isBlank() && recentSearches.isNotEmpty()) {
+                        item(key = "marketplace-recent-searches") {
+                            MarketplaceRecentSearches(
+                                recentSearches = recentSearches,
+                                onSelect = { query = it },
+                                onClear = {
+                                    recentSearches = emptyList()
+                                    context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+                                        .edit().remove(recentSearchesKey).apply()
+                                },
+                                onRemove = { term ->
+                                    val updated = recentSearches.filterNot { it.equals(term, ignoreCase = true) }
+                                    recentSearches = updated
+                                    val saved = JSONArray().apply { updated.forEach(::put) }
+                                    context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+                                        .edit().putString(recentSearchesKey, saved.toString()).apply()
+                                }
+                            )
+                        }
+                    }
                     item(key = "marketplace-search-controls") {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                         MarketplaceReferenceSearchBar(
@@ -629,6 +668,26 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
+                        if (query.isBlank() && recentSearches.isNotEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }, key = "marketplace-recent-searches") {
+                                MarketplaceRecentSearches(
+                                    recentSearches = recentSearches,
+                                    onSelect = { query = it },
+                                    onClear = {
+                                        recentSearches = emptyList()
+                                        context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+                                            .edit().remove(recentSearchesKey).apply()
+                                    },
+                                    onRemove = { term ->
+                                        val updated = recentSearches.filterNot { it.equals(term, ignoreCase = true) }
+                                        recentSearches = updated
+                                        val saved = JSONArray().apply { updated.forEach(::put) }
+                                        context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+                                            .edit().putString(recentSearchesKey, saved.toString()).apply()
+                                    }
+                                )
+                            }
+                        }
                         item(span = { GridItemSpan(maxLineSpan) }, key = "marketplace-search-controls") {
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                             MarketplaceReferenceSearchBar(
@@ -694,6 +753,26 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
+                    if (query.isBlank() && recentSearches.isNotEmpty()) {
+                        item(key = "marketplace-recent-searches") {
+                            MarketplaceRecentSearches(
+                                recentSearches = recentSearches,
+                                onSelect = { query = it },
+                                onClear = {
+                                    recentSearches = emptyList()
+                                    context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+                                        .edit().remove(recentSearchesKey).apply()
+                                },
+                                onRemove = { term ->
+                                    val updated = recentSearches.filterNot { it.equals(term, ignoreCase = true) }
+                                    recentSearches = updated
+                                    val saved = JSONArray().apply { updated.forEach(::put) }
+                                    context.getSharedPreferences("fynx_marketplace", android.content.Context.MODE_PRIVATE)
+                                        .edit().putString(recentSearchesKey, saved.toString()).apply()
+                                }
+                            )
+                        }
+                    }
                     item(key = "marketplace-search-controls") {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                         MarketplaceReferenceSearchBar(
