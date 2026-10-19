@@ -6,6 +6,11 @@ const androidReceiptSource = fs.readFileSync(new URL('../app/src/main/java/com/f
 const paymentSource = fs.readFileSync(new URL('./marketplaceReputation.js', import.meta.url), 'utf8');
 const checks = [
   ['checkout group stores its Paystack reference before marking child payment evidence', paymentSource.includes("ALTER TABLE marketplace_checkout_groups ADD COLUMN IF NOT EXISTS payment_reference TEXT") && paymentSource.includes("SET payment_reference=$1,payment_authorization_url=$2,payment_access_code=$3") && paymentSource.includes("checkoutGroupId: String(group.id)") && paymentSource.includes("reference, provider: 'paystack'")],
+  ['aggregate buyer receipt is scoped to the authenticated checkout buyer', /app\\.get\\('\/api\/marketplace\/checkout\/:id\/receipt', auth/.test(source) && source.includes("String(group.buyer_id) !== String(req.user.sub)")],
+  ['aggregate receipt covers all checkout items and enforces the 20-item cap', source.includes('lines.length > 20') && source.includes('COUNT(DISTINCT gi.order_id)')],
+  ['aggregate receipt binds the stored paid checkout and Paystack reference', source.includes("cg.status='PAID'") && source.includes("e.metadata->>'reference'=cg.payment_reference") && source.includes("e.metadata->>'checkoutGroupId'=cg.id::text")],
+  ['aggregate receipt reconciles child totals against checkout totals', source.includes("sumCents('product_subtotal')") && source.includes("sumCents('buyer_total')")],
+  ['aggregate receipt has an independent public signature verifier', source.includes("/api/marketplace/checkout-receipts/:receiptId/verify") && source.includes('signCheckoutReceipt(group, lines, group.verified_payment_reference, group.payment_verified_at)')],
   ['receipt endpoint requires authentication', /app\.get\('\/api\/marketplace\/orders\/:id\/receipt',\s*auth/.test(source)],
   ['receipt endpoint checks order participation', source.includes('if (!isParticipant(row, req.user.sub))')],
   ['receipt only issues after recorded payment confirmation', source.includes('!receiptStatusAllowed(row.status) || !(row.verified_payment_reference || row.payment_reference) || !row.payment_verified_at')],
