@@ -19,6 +19,7 @@ import org.webrtc.VideoTrack
 fun FynxActiveCallPanel(
     name: String,
     session: FynxCallSession,
+    currentUsername: String? = null,
     realtimeState: FynxRealtimeClient.State = FynxRealtimeClient.State.CONNECTED,
     localVideoTrack: VideoTrack? = null,
     remoteVideoTrack: VideoTrack? = null,
@@ -66,7 +67,7 @@ fun FynxActiveCallPanel(
                     if (localVideoTrack != null && session.cameraEnabled) {
                         FynxCallVideoSurface(localVideoTrack, Modifier.fillMaxSize(), mirror = true)
                     } else {
-                        FynxCallRemotePlaceholder("You", Modifier.fillMaxSize())
+                        FynxCallRemotePlaceholder("You", Modifier.fillMaxSize(), ownerUsername = currentUsername?.takeIf { it.isNotBlank() })
                     }
                 }
             }
