@@ -55,6 +55,14 @@ fun FynxMarketplaceSellerCenterPanel() {
     var moneyError by remember { mutableStateOf<String?>(null) }
     var moneyRecords by remember { mutableStateOf(emptyList<SellerMoneyRecord>()) }
     var showDriverAssignments by remember { mutableStateOf(false) }
+    var shopName by rememberSaveable { mutableStateOf("") }
+    var shopDescription by rememberSaveable { mutableStateOf("") }
+    var shopLocation by rememberSaveable { mutableStateOf("") }
+    var shopContactPhone by rememberSaveable { mutableStateOf("") }
+    var shopLoading by remember { mutableStateOf(true) }
+    var shopSaving by remember { mutableStateOf(false) }
+    var shopError by remember { mutableStateOf<String?>(null) }
+    var shopMessage by remember { mutableStateOf<String?>(null) }
 
     fun loadMoney() {
         scope.launch {
@@ -116,6 +124,18 @@ fun FynxMarketplaceSellerCenterPanel() {
             FynxMarketplaceClient.myListings(context)
                 .onSuccess { listings = it }
                 .onFailure { error = it.message ?: "Could not load your listings." }
+            shopLoading = true
+            shopError = null
+            FynxBackendClient.get(context, "/api/marketplace/my-shop")
+                .onSuccess { raw ->
+                    val profile = JSONObject(raw).optJSONObject("shop") ?: JSONObject()
+                    shopName = profile.optString("shopName")
+                    shopDescription = profile.optString("description")
+                    shopLocation = profile.optString("location")
+                    shopContactPhone = profile.optString("contactPhone")
+                }
+                .onFailure { shopError = it.message ?: "Shop profile could not load." }
+            shopLoading = false
             accountLoading = true
             FynxBackendClient.get(context, "/api/marketplace/settlement/payout-account")
                 .onSuccess { raw ->
@@ -159,6 +179,54 @@ fun FynxMarketplaceSellerCenterPanel() {
                 Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Driver deliveries")
+            }
+        }
+
+        item {
+            Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Shop identity", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        if (shopLoading) CircularProgressIndicator(Modifier.size(18.dp))
+                    }
+                    Text("Set a shop name and details that stay with your seller account. A Business Account is not required.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    shopError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    OutlinedTextField(value = shopName, onValueChange = { shopName = it.take(120); shopMessage = null }, label = { Text("Shop name") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
+                    OutlinedTextField(value = shopDescription, onValueChange = { shopDescription = it.take(800); shopMessage = null }, label = { Text("About your shop (optional)") }, modifier = Modifier.fillMaxWidth(), minLines = 2, enabled = !shopSaving)
+                    OutlinedTextField(value = shopLocation, onValueChange = { shopLocation = it.take(160); shopMessage = null }, label = { Text("Shop location (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
+                    OutlinedTextField(value = shopContactPhone, onValueChange = { shopContactPhone = it.take(40); shopMessage = null }, label = { Text("Public shop contact (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
+                    shopMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+                    Button(
+                        onClick = {
+                            shopSaving = true
+                            shopMessage = null
+                            scope.launch {
+                                val payload = JSONObject()
+                                    .put("shopName", shopName.trim())
+                                    .put("description", shopDescription.trim())
+                                    .put("location", shopLocation.trim())
+                                    .put("contactPhone", shopContactPhone.trim())
+                                FynxBackendClient.patchJson(context, "/api/marketplace/my-shop", payload.toString())
+                                    .onSuccess { raw ->
+                                        val profile = JSONObject(raw).optJSONObject("shop") ?: JSONObject()
+                                        shopName = profile.optString("shopName")
+                                        shopDescription = profile.optString("description")
+                                        shopLocation = profile.optString("location")
+                                        shopContactPhone = profile.optString("contactPhone")
+                                        shopMessage = "Shop profile saved."
+                                        shopError = null
+                                    }
+                                    .onFailure { shopError = it.message ?: "Shop profile could not be saved." }
+                                shopSaving = false
+                            }
+                        },
+                        enabled = !shopLoading && !shopSaving && shopName.trim().length >= 2,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (shopSaving) CircularProgressIndicator(Modifier.size(18.dp))
+                        else Text("Save shop details")
+                    }
+                }
             }
         }
 
