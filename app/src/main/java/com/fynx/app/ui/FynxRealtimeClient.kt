@@ -14,9 +14,34 @@ import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.IceCandidate
+import androidx.compose.runtime.mutableStateMapOf
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
+
+/**
+ * In-memory online state from the authenticated realtime connection and the
+ * authenticated presence snapshot. This is intentionally ephemeral; it is not
+ * persisted across accounts or app restarts.
+ */
+object FynxOnlinePresenceStore {
+    private val onlineUserIds = mutableStateMapOf<String, Boolean>()
+
+    fun setOnline(userId: String, online: Boolean) {
+        val id = userId.trim()
+        if (id.isBlank()) return
+        if (online) onlineUserIds[id] = true else onlineUserIds.remove(id)
+    }
+
+    fun replaceSnapshot(userIds: Set<String>) {
+        onlineUserIds.clear()
+        userIds.map(String::trim).filter(String::isNotBlank).forEach { onlineUserIds[it] = true }
+    }
+
+    fun isOnline(userId: String?): Boolean = !userId.isNullOrBlank() && onlineUserIds[userId.trim()] == true
+
+    fun clear() = onlineUserIds.clear()
+}
 
 /** Authenticated realtime transport for messages and ephemeral chat/call signals. */
 class FynxRealtimeClient(
