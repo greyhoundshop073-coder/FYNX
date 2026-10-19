@@ -53,3 +53,4 @@ print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len
 if failed:
     raise SystemExit("GATE RED: " + "; ".join(failed))
 print("GATE GREEN: active Chat/Group route, realtime, and layout contracts are present")
+require("group Gallery uses the Android photo picker for images and videos rather than a generic file picker", "PickMultipleVisualMedia(maxItems = 1)" in ACTIVE_GROUP and "PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)" in ACTIVE_GROUP and 'groupMediaPicker.launch("*/*")' not in ACTIVE_GROUP)
