@@ -37,7 +37,7 @@ class FynxWebRtcCallEngine(
         val onIceCandidate: (IceCandidate) -> Unit = {},
         val onLocalVideoTrack: (VideoTrack) -> Unit = {},
         val onRemoteAudioTrack: (AudioTrack) -> Unit = {},
-        val onRemoteVideoTrack: (VideoTrack) -> Unit = {},
+        val onRemoteVideoTrack: (VideoTrack?) -> Unit = {},
         val onConnectionState: (PeerConnection.IceConnectionState) -> Unit = {},
         val onError: (String) -> Unit = {}
     )
@@ -82,7 +82,7 @@ class FynxWebRtcCallEngine(
             override fun onIceCandidate(candidate: IceCandidate) { callbacks.onIceCandidate(candidate) }
             override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) = Unit
             override fun onAddStream(stream: MediaStream) { stream.audioTracks.firstOrNull()?.let(callbacks.onRemoteAudioTrack); stream.videoTracks.firstOrNull()?.let(callbacks.onRemoteVideoTrack) }
-            override fun onRemoveStream(stream: MediaStream) = Unit
+            override fun onRemoveStream(stream: MediaStream) { if (stream.videoTracks.isNotEmpty()) callbacks.onRemoteVideoTrack(null) }
             override fun onDataChannel(channel: org.webrtc.DataChannel) = Unit
             override fun onRenegotiationNeeded() = Unit
             override fun onAddTrack(receiver: org.webrtc.RtpReceiver, mediaStreams: Array<out MediaStream>) { when (val track = receiver.track()) { is AudioTrack -> callbacks.onRemoteAudioTrack(track); is VideoTrack -> callbacks.onRemoteVideoTrack(track) } }
