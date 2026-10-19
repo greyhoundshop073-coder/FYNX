@@ -45,6 +45,8 @@ jobs:
           node --check verify-marketplace-price-watch.mjs
           node --check profileRoutes.js
           node --check marketplaceTransactions.js
+          node --check marketplaceShopProfiles.js
+          node --check verify-marketplace-shop-profile.mjs
           node --check marketplaceReputation.js
           node --check verify-marketplace-multi-checkout-lifecycle.mjs
           node --check verify-marketplace-multi-payout-isolation.mjs
@@ -182,6 +184,8 @@ jobs:
         run: node verify-marketplace-failure-paths.mjs
       - name: Run R6-I state-machine verification
         run: node verify-marketplace-state-machine.mjs
+      - name: Run Marketplace persistent shop profile verification
+        run: node verify-marketplace-shop-profile.mjs
       - name: Run R6-D buyer-protection lifecycle verification
         run: node verify-marketplace-protection-lifecycle.mjs
       - name: Run R6-E accounting verification
