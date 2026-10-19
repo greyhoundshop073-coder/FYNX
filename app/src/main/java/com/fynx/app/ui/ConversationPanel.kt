@@ -398,29 +398,6 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             }.onFailure { networkError = it.message ?: "Recording could not be resumed" }
         }
     }
-    fun stopRecording() {
-        val r = recorder ?: return
-        val file = recordingFile
-        val now = System.currentTimeMillis()
-        val pausedNow = if (isRecordingPaused && recordingPausedAt > 0L) now - recordingPausedAt else 0L
-        val duration = (now - recordingStartedAt - recordingPausedTotalMs - pausedNow).coerceAtMost(120_000L)
-        runCatching { if (isRecordingPaused) r.resume() }
-        runCatching { r.stop() }
-        r.release()
-        recorder = null
-        isRecordingPaused = false
-        isRecording = false
-        recordingFile = null
-        recordingStartedAt = 0L
-        recordingPausedAt = 0L
-        recordingPausedTotalMs = 0L
-        recordingElapsed = 0L
-        if (file != null && file.exists() && file.length() > 0L && duration >= 300L) {
-            pendingVoiceRetry = file to duration
-            uploadedVoiceCache = null
-            retryVoiceMessage()
-        } else file?.delete()
-    }
     fun retryVoiceMessage() {
         val pending = pendingVoiceRetry ?: return
         if (sending) return
@@ -449,6 +426,29 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         }
     }
 
+    fun stopRecording() {
+        val r = recorder ?: return
+        val file = recordingFile
+        val now = System.currentTimeMillis()
+        val pausedNow = if (isRecordingPaused && recordingPausedAt > 0L) now - recordingPausedAt else 0L
+        val duration = (now - recordingStartedAt - recordingPausedTotalMs - pausedNow).coerceAtMost(120_000L)
+        runCatching { if (isRecordingPaused) r.resume() }
+        runCatching { r.stop() }
+        r.release()
+        recorder = null
+        isRecordingPaused = false
+        isRecording = false
+        recordingFile = null
+        recordingStartedAt = 0L
+        recordingPausedAt = 0L
+        recordingPausedTotalMs = 0L
+        recordingElapsed = 0L
+        if (file != null && file.exists() && file.length() > 0L && duration >= 300L) {
+            pendingVoiceRetry = file to duration
+            uploadedVoiceCache = null
+            retryVoiceMessage()
+        } else file?.delete()
+    }
     stopRecordingAction = ::stopRecording
 
     val contactPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
