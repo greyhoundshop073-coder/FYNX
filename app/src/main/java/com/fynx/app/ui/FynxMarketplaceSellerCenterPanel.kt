@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Refresh
@@ -41,6 +42,12 @@ fun FynxMarketplaceSellerCenterPanel() {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var deletingId by remember { mutableStateOf<String?>(null) }
+    var editingListing by remember { mutableStateOf<FynxMarketplaceClient.Listing?>(null) }
+    var editTitle by rememberSaveable { mutableStateOf("") }
+    var editPrice by rememberSaveable { mutableStateOf("") }
+    var editQuantity by rememberSaveable { mutableStateOf("") }
+    var editSaving by remember { mutableStateOf(false) }
+    var editError by remember { mutableStateOf<String?>(null) }
     var payoutAccount by remember { mutableStateOf<JSONObject?>(null) }
     var payoutAccounts by remember { mutableStateOf(emptyList<JSONObject>()) }
     var payoutCurrency by rememberSaveable { mutableStateOf("NGN") }
@@ -329,15 +336,24 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 Text("${listing.quantity} in stock • ${listing.category} • ${listing.condition}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             if (deletingId == listing.id) CircularProgressIndicator(Modifier.size(24.dp))
-                            else IconButton(onClick = {
-                                deletingId = listing.id
-                                scope.launch {
-                                    FynxMarketplaceClient.deleteListing(context, listing.id)
-                                        .onSuccess { listings = listings.filterNot { it.id == listing.id } }
-                                        .onFailure { error = it.message ?: "Listing could not be removed." }
-                                    deletingId = null
-                                }
-                            }) { Icon(Icons.Default.Delete, "Remove listing") }
+                            else Row {
+                                IconButton(onClick = {
+                                    editingListing = listing
+                                    editTitle = listing.title
+                                    editPrice = listing.price.toString()
+                                    editQuantity = listing.quantity.toString()
+                                    editError = null
+                                }) { Icon(Icons.Default.Edit, "Edit listing") }
+                                IconButton(onClick = {
+                                    deletingId = listing.id
+                                    scope.launch {
+                                        FynxMarketplaceClient.deleteListing(context, listing.id)
+                                            .onSuccess { listings = listings.filterNot { it.id == listing.id } }
+                                            .onFailure { error = it.message ?: "Listing could not be removed." }
+                                        deletingId = null
+                                    }
+                                }) { Icon(Icons.Default.Delete, "Remove listing") }
+                            }
                         }
                         FynxMarketplaceShippingSettingsCard(
                             context = context,
@@ -349,6 +365,80 @@ fun FynxMarketplaceSellerCenterPanel() {
                 }
             }
         }
+    }
+
+    if (editingListing != null) {
+        val selectedListing = editingListing!!
+        AlertDialog(
+            onDismissRequest = { if (!editSaving) editingListing = null },
+            title = { Text("Edit listing") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Update the product name, price and available stock. Existing orders and delivery settings are preserved.", style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = editTitle,
+                        onValueChange = { editTitle = it.take(160) },
+                        label = { Text("Product name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !editSaving
+                    )
+                    OutlinedTextField(
+                        value = editPrice,
+                        onValueChange = { editPrice = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                        label = { Text("Price (${selectedListing.currency})") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !editSaving
+                    )
+                    OutlinedTextField(
+                        value = editQuantity,
+                        onValueChange = { editQuantity = it.filter(Char::isDigit).take(9) },
+                        label = { Text("Available stock (0 = out of stock)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !editSaving
+                    )
+                    editError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !editSaving &&
+                        editTitle.trim().length >= 2 &&
+                        editPrice.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true &&
+                        editQuantity.toIntOrNull()?.let { it >= 0 } == true,
+                    onClick = {
+                        val price = editPrice.toDoubleOrNull() ?: return@Button
+                        val quantity = editQuantity.toIntOrNull() ?: return@Button
+                        editSaving = true
+                        editError = null
+                        scope.launch {
+                            FynxMarketplaceClient.updateListing(context, selectedListing.id, editTitle, price, quantity)
+                                .onSuccess {
+                                    listings = listings.map { current ->
+                                        if (current.id == selectedListing.id) current.copy(
+                                            title = editTitle.trim(),
+                                            price = price,
+                                            quantity = quantity
+                                        ) else current
+                                    }
+                                    editingListing = null
+                                    error = null
+                                }
+                                .onFailure { editError = it.message ?: "Listing could not be updated." }
+                            editSaving = false
+                        }
+                    }
+                ) {
+                    if (editSaving) CircularProgressIndicator(Modifier.size(18.dp))
+                    else Text("Save changes")
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !editSaving, onClick = { editingListing = null }) { Text("Cancel") }
+            }
+        )
     }
 
     if (showPayoutAccount) {
