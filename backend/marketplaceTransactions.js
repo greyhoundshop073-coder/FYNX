@@ -275,6 +275,13 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       if (!lines.length || lines.length > 20 || lines.some((line) => !receiptStatusAllowed(line.status) || !receiptAccountingReconciles(line))) {
         return res.status(404).json({ authentic: false, error: 'checkout receipt could not be verified' });
       }
+      const sumCents = (key) => lines.reduce((sum, line) => sum + Math.round(Number(line[key] || 0) * 100), 0);
+      if (sumCents('product_subtotal') !== Math.round(Number(group.subtotal) * 100)
+        || sumCents('delivery_fee') !== Math.round(Number(group.delivery_fee) * 100)
+        || sumCents('marketplace_fee_buyer') !== Math.round(Number(group.marketplace_fee) * 100)
+        || sumCents('buyer_total') !== Math.round(Number(group.buyer_total) * 100)) {
+        return res.status(404).json({ authentic: false, error: 'checkout receipt could not be verified' });
+      }
       const expected = signCheckoutReceipt(group, lines, group.verified_payment_reference, group.payment_verified_at);
       const signature = req.query?.signature;
       const matches = typeof signature === 'string' && /^[a-f0-9]{64}$/i.test(signature) && expected
