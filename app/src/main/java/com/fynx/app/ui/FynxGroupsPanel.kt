@@ -56,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
@@ -465,7 +466,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
     }
 
-    val groupMediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val groupMediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(maxItems = 1)) { uris ->
+        val uri = uris.firstOrNull()
         if (uri != null) {
             val mime = context.contentResolver.getType(uri)?.lowercase().orEmpty()
             val type = when {
@@ -950,7 +952,10 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     })
                                     Text("Camera", style = MaterialTheme.typography.labelMedium)
                                 }
-                                OutlinedButton(onClick = { showAttachmentMenu = false; groupMediaPicker.launch("*/*") }, modifier = Modifier.weight(1f)) {
+                                OutlinedButton(onClick = {
+                            showAttachmentMenu = false
+                            groupMediaPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                        }, modifier = Modifier.weight(1f)) {
                                     Icon(Icons.Default.PhotoLibrary, null); Spacer(Modifier.width(5.dp)); Text("Gallery")
                                 }
                                 OutlinedButton(onClick = { showAttachmentMenu = false; groupDocumentPicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f)) {
@@ -1280,6 +1285,9 @@ private fun createGroupVoiceMediaRecorder(context: android.content.Context): Med
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
 
 
+private const val MAX_STAGED_GROUP_ATTACHMENT_BYTES = 12L * 1024 * 1024
+private const val MAX_STAGED_GROUP_IMAGE_BYTES = 64L * 1024 * 1024
+
 private suspend fun stagePendingGroupAttachment(context: android.content.Context, uri: Uri, type: String): Uri =
     withContext(Dispatchers.IO) {
         val directory = File(context.filesDir, "fynx_group_pending_media").apply { check(isDirectory || mkdirs()) { "Could not save attachment for retry." } }
@@ -1307,7 +1315,23 @@ private suspend fun stagePendingGroupAttachment(context: android.content.Context
         val destination = File(directory, "${UUID.randomUUID()}.$extension")
         try {
             val input = context.contentResolver.openInputStream(uri) ?: error("Could not read attachment. Choose it again.")
-            input.use { source -> destination.outputStream().use { output -> source.copyTo(output) } }
+            input.use { source ->
+                destination.outputStream().use { output ->
+                    val buffer = ByteArray(32 * 1024)
+                    val maxBytes = if (type == "image") MAX_STAGED_GROUP_IMAGE_BYTES else MAX_STAGED_GROUP_ATTACHMENT_BYTES
+                    var totalBytes = 0L
+                    while (true) {
+                        val read = source.read(buffer)
+                        if (read < 0) break
+                        totalBytes += read
+                        require(totalBytes <= maxBytes) {
+                            if (type == "image") "Image is too large to prepare safely. Maximum source size is 64 MB."
+                            else "Attachment is too large. Maximum size is 12 MB."
+                        }
+                        output.write(buffer, 0, read)
+                    }
+                }
+            }
             if (destination.length() <= 0L) error("Attachment is empty. Choose it again.")
             Uri.fromFile(destination)
         } catch (error: Throwable) {
