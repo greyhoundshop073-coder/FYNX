@@ -106,7 +106,7 @@ private suspend fun createMarketplaceCheckoutReceiptPdf(context: Context, receip
         require(items.length() in 1..20) { "Checkout receipt item list is invalid." }
         val qr = qrBitmap(FynxBackendClient.baseUrl(context).trimEnd('/') + receipt.optString("verificationPath"))
         val document = PdfDocument()
-        val pageCount = ((items.length() + 5) / 6).coerceAtLeast(1)
+        val pageCount = ((items.length() + 4) / 5).coerceAtLeast(1)
         val ink = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(15, 23, 42); textSize = 11f }
         val muted = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(71, 85, 105); textSize = 9f }
         val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(203, 213, 225); strokeWidth = 1f }
@@ -135,8 +135,8 @@ private suspend fun createMarketplaceCheckoutReceiptPdf(context: Context, receip
             ink.textSize = 12f; ink.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             canvas.drawText("PURCHASED ITEMS", 36f, 275f, ink)
             ink.textSize = 10f; ink.typeface = Typeface.DEFAULT
-            val start = pageNumber * 6
-            val end = minOf(items.length(), start + 6)
+            val start = pageNumber * 5
+            val end = minOf(items.length(), start + 5)
             var y = 302f
             for (index in start until end) {
                 val item = items.optJSONObject(index) ?: JSONObject()
