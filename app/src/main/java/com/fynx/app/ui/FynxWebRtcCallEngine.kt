@@ -101,7 +101,12 @@ class FynxWebRtcCallEngine(
             delay(8000L)
             if (peerConnection === pc && pc.iceConnectionState() != PeerConnection.IceConnectionState.CONNECTED && pc.iceConnectionState() != PeerConnection.IceConnectionState.COMPLETED) {
                 iceRestartInFlight = false
+                // Clear the current job before scheduling the next attempt. Otherwise
+                // the active-job guard rejects the retry from this coroutine.
+                recoveryJob = null
                 scheduleIceRecovery()
+            } else if (recoveryJob?.isActive == true) {
+                recoveryJob = null
             }
         }
     }
