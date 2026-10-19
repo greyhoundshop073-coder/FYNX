@@ -57,7 +57,7 @@ private suspend fun fetchMarketplaceReceipt(context: Context, orderId: String): 
 private suspend fun receiptAvatar(context: Context, mediaId: String?): Bitmap? = withContext(Dispatchers.IO) {
     val id = mediaId?.toLongOrNull() ?: return@withContext null
     val file = File(context.cacheDir, "receipt-avatar-$id.img")
-    val downloaded = FynxBackendClient.downloadToFile(context, "/api/social/media/$id", file, 4L * 1024L * 1024L)
+    val downloaded = FynxBackendClient.downloadToFile(context, "/api/media/$id", file, 4L * 1024L * 1024L)
     if (downloaded.isFailure) return@withContext null
     BitmapFactory.decodeFile(file.absolutePath)
 }
@@ -97,8 +97,8 @@ private fun drawReceiptAvatar(canvas: Canvas, bitmap: Bitmap?, label: String, le
 private suspend fun createMarketplaceReceiptPdf(context: Context, receipt: JSONObject): Result<File> {
     val buyer = receipt.optJSONObject("buyer") ?: JSONObject()
     val seller = receipt.optJSONObject("seller") ?: JSONObject()
-    val buyerAvatar = receiptAvatar(context, buyer.optString("profilePhotoMediaId").takeIf { it.isNotBlank() && it != "null" })
-    val sellerAvatar = receiptAvatar(context, seller.optString("profilePhotoMediaId").takeIf { it.isNotBlank() && it != "null" })
+    val buyerAvatar = try { receiptAvatar(context, buyer.optString("profilePhotoMediaId").takeIf { it.isNotBlank() && it != "null" }) } catch (_: Exception) { null }
+    val sellerAvatar = try { receiptAvatar(context, seller.optString("profilePhotoMediaId").takeIf { it.isNotBlank() && it != "null" }) } catch (_: Exception) { null }
     return withContext(Dispatchers.IO) {
     runCatching {
         val product = receipt.optJSONObject("product") ?: JSONObject()
