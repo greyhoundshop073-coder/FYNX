@@ -125,23 +125,25 @@ private suspend fun createMarketplaceCheckoutReceiptPdf(context: Context, receip
             ink.textSize = 11f; ink.typeface = Typeface.DEFAULT
             canvas.drawText("Receipt ID: " + receipt.optString("receiptId"), 36f, 138f, ink)
             canvas.drawText("Checkout ID: " + receipt.optString("checkoutId"), 36f, 158f, ink)
-            canvas.drawText("Payment status: " + receipt.optString("paymentStatus"), 36f, 178f, ink)
-            canvas.drawText("Paystack reference: " + receipt.optString("paymentReference").take(70), 36f, 198f, ink)
+            val buyer = receipt.optJSONObject("buyer") ?: JSONObject()
+            canvas.drawText("Buyer: " + buyer.optString("displayName", buyer.optString("username", "FYNX buyer")).take(56), 36f, 178f, ink)
+            canvas.drawText("Payment status: " + receipt.optString("paymentStatus"), 36f, 198f, ink)
+            canvas.drawText("Paystack reference: " + receipt.optString("paymentReference").take(70), 36f, 218f, ink)
             val issued = runCatching { SimpleDateFormat("yyyy-MM-dd HH:mm 'UTC'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(java.time.Instant.parse(receipt.optString("issuedAt")).toEpochMilli())) }.getOrDefault(receipt.optString("issuedAt"))
-            canvas.drawText("Issued: $issued    Page ${pageNumber + 1}/$pageCount", 36f, 218f, ink)
-            canvas.drawLine(36f, 232f, 559f, 232f, line)
+            canvas.drawText("Issued: $issued    Page ${pageNumber + 1}/$pageCount", 36f, 238f, ink)
+            canvas.drawLine(36f, 252f, 559f, 252f, line)
             ink.textSize = 12f; ink.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            canvas.drawText("PURCHASED ITEMS", 36f, 255f, ink)
+            canvas.drawText("PURCHASED ITEMS", 36f, 275f, ink)
             ink.textSize = 10f; ink.typeface = Typeface.DEFAULT
             val start = pageNumber * 6
             val end = minOf(items.length(), start + 6)
-            var y = 282f
+            var y = 302f
             for (index in start until end) {
                 val item = items.optJSONObject(index) ?: JSONObject()
                 ink.color = Color.rgb(15, 23, 42); ink.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 canvas.drawText("${index + 1}. " + item.optString("title", "FYNX marketplace item").take(62), 36f, y, ink)
                 ink.typeface = Typeface.DEFAULT; ink.color = Color.rgb(71, 85, 105)
-                canvas.drawText("Seller: " + item.optString("seller", "FYNX seller").take(35) + " • Qty: " + item.optInt("quantity"), 36f, y + 16f, ink)
+                canvas.drawText("Seller: " + item.optString("seller", "FYNX seller").take(35) + " • Qty: " + item.optInt("quantity") + " • Fulfillment: " + item.optString("fulfillmentStatus", "UNKNOWN"), 36f, y + 16f, ink)
                 canvas.drawText("Subtotal: " + money(item.optDouble("subtotal")) + "  Delivery: " + money(item.optDouble("deliveryFee")), 36f, y + 32f, ink)
                 ink.textAlign = Paint.Align.RIGHT; ink.color = Color.rgb(15, 23, 42)
                 canvas.drawText("Line total: " + money(item.optDouble("total")), 559f, y + 16f, ink)
@@ -156,7 +158,8 @@ private suspend fun createMarketplaceCheckoutReceiptPdf(context: Context, receip
                 ink.textSize = 11f; ink.typeface = Typeface.DEFAULT
                 canvas.drawText("Subtotal: " + money(receipt.optDouble("subtotal")), 36f, y, ink); y += 19f
                 canvas.drawText("Delivery: " + money(receipt.optDouble("deliveryFee")), 36f, y, ink); y += 19f
-                canvas.drawText("Buyer-paid FYNX fee: " + money(receipt.optDouble("marketplaceFee")), 36f, y, ink); y += 23f
+                canvas.drawText("Buyer-paid FYNX fee: " + money(receipt.optDouble("marketplaceFee")), 36f, y, ink); y += 19f
+                canvas.drawText("Payout status: " + receipt.optString("payoutStatus", "NOT_RECORDED"), 36f, y, ink); y += 23f
                 ink.textSize = 15f; ink.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 canvas.drawText("TOTAL PAID", 36f, y, ink)
                 ink.textAlign = Paint.Align.RIGHT
@@ -407,11 +410,14 @@ private fun MarketplaceReceiptDialog(context: Context, receipt: JSONObject, onCl
                 Text(receipt.optString("receiptId"), style = MaterialTheme.typography.titleSmall)
                 if (checkoutReceipt) {
                     Text("Combined multi-seller checkout", style = MaterialTheme.typography.titleMedium)
+                    val buyer = receipt.optJSONObject("buyer") ?: JSONObject()
+                    Text("Buyer: " + buyer.optString("displayName", buyer.optString("username", "FYNX buyer")), style = MaterialTheme.typography.bodySmall)
                     val items = receipt.optJSONArray("items") ?: org.json.JSONArray()
                     for (index in 0 until minOf(items.length(), 5)) {
                         val item = items.optJSONObject(index) ?: JSONObject()
                         Text("${index + 1}. " + item.optString("title", "FYNX marketplace item"), style = MaterialTheme.typography.bodyMedium)
                         Text("Seller: " + item.optString("seller", "FYNX seller") + " • Qty " + item.optInt("quantity") + " • " + currency + " " + String.format(Locale.US, "%,.2f", item.optDouble("total")), style = MaterialTheme.typography.bodySmall)
+                        Text("Fulfillment: " + item.optString("fulfillmentStatus", "UNKNOWN"), style = MaterialTheme.typography.labelSmall)
                     }
                     val remaining = (items.length() - 5).coerceAtLeast(0)
                     if (remaining > 0) Text("$remaining more item(s) included in the complete PDF receipt.", style = MaterialTheme.typography.bodySmall)
@@ -419,6 +425,7 @@ private fun MarketplaceReceiptDialog(context: Context, receipt: JSONObject, onCl
                     Text("Subtotal: " + money("subtotal"))
                     Text("Delivery: " + money("deliveryFee"))
                     Text("Buyer-paid FYNX fee: " + money("marketplaceFee"))
+                    Text("Payout status: " + receipt.optString("payoutStatus", "NOT_RECORDED"), style = MaterialTheme.typography.bodySmall)
                     Text("Total paid: " + money("buyerTotal"), style = MaterialTheme.typography.titleLarge)
                     Text("Paystack reference: " + receipt.optString("paymentReference"), style = MaterialTheme.typography.bodySmall)
                 } else {
