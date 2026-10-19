@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +51,8 @@ fun FynxMarketplaceShippingSettingsCard(
     var error by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var method by remember { mutableStateOf("SELLER_ARRANGED") }
+    var deliveryEnabled by remember { mutableStateOf(deliveryAvailable) }
+    var pickupEnabled by remember { mutableStateOf(pickupAvailable) }
     var note by remember { mutableStateOf("") }
     var baseFee by remember { mutableStateOf("0") }
     var additionalItemFee by remember { mutableStateOf("0") }
@@ -67,6 +70,8 @@ fun FynxMarketplaceShippingSettingsCard(
             FynxMarketplaceClient.shippingSettings(context, listingId)
                 .onSuccess { settings ->
                     method = settings.method
+                    deliveryEnabled = settings.deliveryAvailable
+                    pickupEnabled = settings.pickupAvailable
                     note = settings.note
                     baseFee = settings.baseFee.toString()
                     additionalItemFee = settings.additionalItemFee.toString()
@@ -138,11 +143,20 @@ fun FynxMarketplaceShippingSettingsCard(
                 )
 
                 Text("Available fulfillment", fontWeight = FontWeight.SemiBold)
-                Text(
-                    "Delivery: ${if (deliveryAvailable) "Available" else "Disabled"} • Pickup: ${if (pickupAvailable) "Available" else "Disabled"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Delivery")
+                        Text("Seller-arranged delivery or local dispatch", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = deliveryEnabled, onCheckedChange = { deliveryEnabled = it; error = null; message = null }, enabled = !saving)
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Buyer pickup")
+                        Text("Buyer collects from an agreed point", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = pickupEnabled, onCheckedChange = { pickupEnabled = it; error = null; message = null }, enabled = !saving)
+                }
 
                 Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Text("Delivery coverage", Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
@@ -188,6 +202,11 @@ fun FynxMarketplaceShippingSettingsCard(
                         val base = baseFee.toDoubleOrNull()
                         val extra = additionalItemFee.toDoubleOrNull()
                         val cap = feeCap.trim().takeIf { it.isNotEmpty() }?.toDoubleOrNull()
+                        if (!deliveryEnabled && !pickupEnabled) {
+                            error = "Keep delivery or buyer pickup enabled so customers can fulfil an order."
+                            message = null
+                            return@Button
+                        }
                         if (base == null || extra == null || base < 0 || extra < 0 || (feeCap.isNotBlank() && cap == null) || (cap != null && cap < base)) {
                             error = "Enter valid non-negative shipping fees. The cap cannot be below the base fee."
                             message = null
@@ -206,8 +225,8 @@ fun FynxMarketplaceShippingSettingsCard(
                                     baseFee = base,
                                     additionalItemFee = extra,
                                     feeCap = cap,
-                                    deliveryAvailable = deliveryAvailable,
-                                    pickupAvailable = pickupAvailable,
+                                    deliveryAvailable = deliveryEnabled,
+                                    pickupAvailable = pickupEnabled,
                                     coverage = coverage.toList()
                                 )
                             ).onSuccess {
