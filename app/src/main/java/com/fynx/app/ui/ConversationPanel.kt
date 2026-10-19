@@ -167,7 +167,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             showEmojiPanel = false
         } else {
             attachment = uris.first()
-            attachmentType = context.contentResolver.getType(uris.first()) ?: "image/*"
+            attachmentType = context.contentResolver.getType(uris.first())?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: "application/octet-stream"
             attachmentMessageType = null
         }
     }
@@ -492,7 +492,15 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 val selectedAttachment = attachment
                 val selectedMessageType = attachmentMessageType
                 val sendResult = if (selectedAttachment != null) {
-                    val selectedType = attachmentType ?: "image"
+                    val selectedType = when {
+                        attachmentType == "video_note" -> "video_note"
+                        attachmentType?.startsWith("image/") == true -> "image"
+                        attachmentType?.startsWith("video/") == true -> "video"
+                        attachmentType?.startsWith("audio/") == true -> "audio"
+                        attachmentType == "sticker" || attachmentType == "gif" -> "image"
+                        attachmentType == null -> "image"
+                        else -> "document"
+                    }
                     FynxProductionMessaging.uploadMedia(context, selectedAttachment)
                         .mapCatching { media ->
                             if (selectedMessageType != null) {
