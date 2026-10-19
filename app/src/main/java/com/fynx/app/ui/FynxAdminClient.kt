@@ -45,6 +45,14 @@ object FynxAdminClient {
         val currency: String,
         val orderStatus: String
     )
+    data class MarketplaceDriver(
+        val userId: String,
+        val username: String,
+        val displayName: String,
+        val active: Boolean,
+        val approvedAt: String,
+        val updatedAt: String
+    )
 
     suspend fun announcements(context: Context): Result<List<Announcement>> =
         FynxBackendClient.get(context, "/api/announcements").mapCatching { raw ->
@@ -172,6 +180,31 @@ object FynxAdminClient {
             }
         }
     }
+
+    suspend fun marketplaceDrivers(context: Context): Result<List<MarketplaceDriver>> =
+        FynxBackendClient.get(context, "/api/admin/marketplace/drivers").mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("drivers") ?: return@mapCatching emptyList()
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    add(MarketplaceDriver(
+                        userId = item.optString("userId"),
+                        username = item.optString("username"),
+                        displayName = item.optString("displayName"),
+                        active = item.optBoolean("active"),
+                        approvedAt = item.optString("approvedAt"),
+                        updatedAt = item.optString("updatedAt")
+                    ))
+                }
+            }
+        }
+
+    suspend fun setMarketplaceDriverApproval(context: Context, userId: String, active: Boolean): Result<Unit> =
+        FynxBackendClient.postJson(
+            context,
+            "/api/admin/marketplace/drivers/${encode(userId)}/approval",
+            JSONObject().put("active", active).toString()
+        ).map { Unit }
 
     suspend fun resolveMarketplaceProtectionCase(context: Context, caseId: String, resolution: String, note: String = ""): Result<String> =
         FynxBackendClient.postJson(
