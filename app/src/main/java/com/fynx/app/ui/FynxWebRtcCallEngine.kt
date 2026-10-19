@@ -87,7 +87,18 @@ class FynxWebRtcCallEngine(
             override fun onRenegotiationNeeded() = Unit
             override fun onAddTrack(receiver: org.webrtc.RtpReceiver, mediaStreams: Array<out MediaStream>) { when (val track = receiver.track()) { is AudioTrack -> callbacks.onRemoteAudioTrack(track); is VideoTrack -> callbacks.onRemoteVideoTrack(track) } }
         })
-        createLocalAudio(); if (session.type == FynxCallType.VIDEO) createLocalVideo()
+        if (peerConnection == null) {
+            callbacks.onError("Could not establish the call connection. Please try again.")
+            disconnect()
+            return
+        }
+        createLocalAudio()
+        if (audioTrack == null) {
+            callbacks.onError("Could not initialize call audio. Check microphone permission and try again.")
+            disconnect()
+            return
+        }
+        if (session.type == FynxCallType.VIDEO) createLocalVideo()
     }
     private fun scheduleIceRecovery() {
         if (iceRestartInFlight || recoveryJob?.isActive == true || iceRecoveryAttempts >= 3) return
@@ -119,7 +130,30 @@ class FynxWebRtcCallEngine(
     fun applyAnswer(sdp: String) { val pc = peerConnection ?: return callbacks.onError("call media is not connected"); pc.setRemoteDescription(object : SdpObserverAdapter() { override fun onSetSuccess() { remoteDescriptionSet = true; iceRestartInFlight = false; flushRemoteCandidates(pc) }; override fun onSetFailure(error: String) { callbacks.onError(error) } }, SessionDescription(SessionDescription.Type.ANSWER, sdp)) }
     fun addRemoteIceCandidate(candidate: IceCandidate) { val pc = peerConnection ?: return callbacks.onError("call media is not connected"); if (!remoteDescriptionSet) { pendingRemoteCandidates += candidate; return }; if (!pc.addIceCandidate(candidate)) callbacks.onError("failed to add remote ICE candidate") }
     private fun flushRemoteCandidates(pc: PeerConnection) { val pending = pendingRemoteCandidates.toList(); pendingRemoteCandidates.clear(); pending.forEach { if (!pc.addIceCandidate(it)) callbacks.onError("failed to add remote ICE candidate") } }
-    private fun createLocalAudio() { audioSource = factory.createAudioSource(MediaConstraints()); audioTrack = factory.createAudioTrack("fynx-audio", audioSource); audioTrack?.setEnabled(true); audioTrack?.let { peerConnection?.addTrack(it) } }
+    private fun createLocalAudio() {
+        try {
+            audioSource = factory.createAudioSource(MediaConstraints())
+            audioTrack = factory.createAudioTrack("fynx-audio", audioSource)
+            val track = audioTrack
+            val pc = peerConnection
+            if (track == null || pc == null || pc.addTrack(track) == null) {
+                audioTrack?.dispose()
+                audioTrack = null
+                callbacks.onError("Could not attach call audio.")
+                return
+            }
+            track.setEnabled(true)
+        } catch (error: Exception) {
+            runCatching { audioTrack?.dispose() }
+            audioTrack = null
+            runCatching { audioSource?.dispose() }
+            audioSource = null
+            callbacks.onError(
+                "Could not initialize call audio: " +
+                    (error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName)
+            )
+        }
+    }
     private fun createLocalVideo() {
         try {
             val enumerator = Camera2Enumerator(appContext)
