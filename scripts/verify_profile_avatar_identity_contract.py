@@ -29,6 +29,8 @@ REQUIRED = {
     "FynxApp.kt": ["FynxRemoteProfileAvatar(", "remoteMyPhotoId", "ownerUsername = myProfile.username"],
     "FynxGroupsPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = member.username"],
     "ConversationPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = chat.username"],
+    "FynxCallsPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = call.name"],
+    "FynxActiveCallPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = name"],
     "FynxProfileRemoteClient.kt": ["profilePhotoMediaId", "saveRemoteProfilePhotoId", "FynxAvatarIdentityStore.publish"],
     "FynxPreferencesStore.kt": ["loadRemoteProfilePhotoId", "saveRemoteProfilePhotoId"],
 }
