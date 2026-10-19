@@ -1,12 +1,16 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -17,14 +21,21 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 @Composable
 fun FynxMarketplaceOrderLifecycle(
@@ -36,10 +47,26 @@ fun FynxMarketplaceOrderLifecycle(
     var showFulfillment by remember { mutableStateOf(order.status == "PAID") }
     var showDispute by remember { mutableStateOf(false) }
     var disputeDetails by remember { mutableStateOf("") }
+    var disputeReason by remember { mutableStateOf("OTHER") }
     var confirmOrderMatch by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var deliveryDetails by remember(order.id) { mutableStateOf<JSONObject?>(null) }
+    var handoverPhotoMediaId by remember(order.id) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(order.id) {
+        FynxBackendClient.get(context, "/api/marketplace/orders/${order.id}/delivery-details")
+            .onSuccess { raw ->
+                val response = JSONObject(raw)
+                deliveryDetails = response.optJSONObject("assignment")
+                val evidence = response.optJSONArray("evidence")
+                handoverPhotoMediaId = if (evidence == null) null else (0 until evidence.length())
+                    .mapNotNull { evidence.optJSONObject(it) }
+                    .lastOrNull { it.optString("type") == "PHOTO_REFERENCE" }
+                    ?.optString("value")?.takeIf { it.toLongOrNull()?.let { id -> id > 0L } == true }
+            }
+    }
 
     if (showFulfillment) {
         MarketplaceFulfillmentDialog(
@@ -92,7 +119,12 @@ fun FynxMarketplaceOrderLifecycle(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (showDispute) {
-                    Text("Tell FYNX what went wrong. The protected order remains under the server-side dispute and settlement rules.")
+                    Text("Choose the problem that best matches your order. Opening a dispute places protected funds on hold while the case is reviewed.")
+                    listOf("ITEM_NOT_RECEIVED" to "Not received", "WRONG_ITEM" to "Wrong item", "DAMAGED" to "Damaged", "NOT_AS_DESCRIBED" to "Not as described", "SUSPECTED_SCAM" to "Suspected scam", "OTHER" to "Other").chunked(2).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            row.forEach { (code, label) -> FilterChip(selected = disputeReason == code, onClick = { disputeReason = code }, label = { Text(label) }, enabled = !busy) }
+                        }
+                    }
                     OutlinedTextField(
                         value = disputeDetails,
                         onValueChange = { disputeDetails = it.take(4000) },
@@ -106,6 +138,22 @@ fun FynxMarketplaceOrderLifecycle(
                     Text("${order.currency} ${"%.2f".format(order.totalAmount)}")
                     Text("Fulfillment: ${order.fulfillmentMethod.ifBlank { "Not selected" }}")
                     order.trackingReference?.takeIf { it.isNotBlank() }?.let { Text("Tracking: $it") }
+                    deliveryDetails?.let { details ->
+                        Text("Delivery information", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
+                        Text("Driver type: ${if (details.optString("driverType") == "SELLER_LOCAL") "Local phone driver" else "FYNX driver"}")
+                        details.optString("driverName").takeIf { it.isNotBlank() && it != "null" }?.let { Text("Driver: $it") }
+                        details.optString("driverPhone").takeIf { it.isNotBlank() && it != "null" }?.let { Text("Driver phone: $it") }
+                        details.optString("pickupPoint").takeIf { it.isNotBlank() && it != "null" }?.let { Text("Agreed pickup point: $it") }
+                        details.optString("pickupInstructions").takeIf { it.isNotBlank() && it != "null" }?.let { Text("Pickup instructions: $it") }
+                        val vehicle = listOf(
+                            details.optString("vehicleType").takeIf { it.isNotBlank() && it != "null" },
+                            details.optString("vehicleColor").takeIf { it.isNotBlank() && it != "null" },
+                            details.optString("vehiclePlate").takeIf { it.isNotBlank() && it != "null" }?.let { "Plate $it" }
+                        ).filterNotNull().joinToString(" • ")
+                        if (vehicle.isNotBlank()) Text("Vehicle: $vehicle")
+                        details.optString("vehicleNote").takeIf { it.isNotBlank() && it != "null" }?.let { Text("Vehicle note: $it") }
+                    }
+                    MarketplaceHandoverPhotoPreview(context, order.id, handoverPhotoMediaId)
                     FynxMarketplaceOrderTimeline(context = context, orderId = order.id)
                     when (order.status) {
                         "PAID" -> Text("Choose delivery or pickup so the seller can fulfill the order.")
@@ -135,7 +183,7 @@ fun FynxMarketplaceOrderLifecycle(
                             FynxRemoteSocialClient.disputeMarketplaceOrder(
                                 context,
                                 order.id,
-                                "OTHER",
+                                disputeReason,
                                 disputeDetails.trim()
                             )
                                 .onSuccess { onChanged() }
@@ -241,4 +289,57 @@ private fun MarketplaceFulfillmentDialog(
         },
         dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text("Cancel") } }
     )
+}
+
+
+@Composable
+internal fun MarketplaceHandoverPhotoPreview(context: Context, orderId: String, mediaId: String?) {
+    var bitmap by remember(orderId, mediaId) { mutableStateOf<Bitmap?>(null) }
+    var loading by remember(orderId, mediaId) { mutableStateOf(false) }
+    var failed by remember(orderId, mediaId) { mutableStateOf(false) }
+
+    LaunchedEffect(orderId, mediaId) {
+        bitmap = null
+        failed = false
+        if (mediaId != null) {
+            loading = true
+            val id = mediaId.toLongOrNull()
+            if (id == null || id < 1L) {
+                failed = true
+            } else {
+                val file = File(context.cacheDir, "fynx-handover-$orderId-$id.img")
+                val result = FynxBackendClient.downloadToFile(
+                    context,
+                    "/api/media/$id",
+                    file,
+                    12L * 1024L * 1024L
+                )
+                result.onSuccess { downloaded ->
+                    if (downloaded.contentType?.startsWith("image/") == true) {
+                        bitmap = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(file.absolutePath) }
+                        if (bitmap == null) failed = true
+                    } else {
+                        failed = true
+                    }
+                }.onFailure { failed = true }
+            }
+            loading = false
+        }
+    }
+
+    if (mediaId != null) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            Text("Driver handover photo", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
+            when {
+                bitmap != null -> Image(
+                    bitmap = bitmap!!.asImageBitmap(),
+                    contentDescription = "Marketplace driver handover evidence",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp)
+                )
+                loading -> CircularProgressIndicator(Modifier.size(20.dp))
+                failed -> Text("Handover photo could not load. Check your connection and refresh.", style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
 }
