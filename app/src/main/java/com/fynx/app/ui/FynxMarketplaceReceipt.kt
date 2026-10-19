@@ -21,6 +21,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -406,7 +409,10 @@ private fun MarketplaceReceiptDialog(context: Context, receipt: JSONObject, onCl
         onDismissRequest = onClose,
         title = { Text("Verified FYNX receipt") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 val checkoutReceipt = receipt.optString("receiptType") == "BUYER_CHECKOUT"
                 Text(receipt.optString("receiptId"), style = MaterialTheme.typography.titleSmall)
                 if (checkoutReceipt) {
