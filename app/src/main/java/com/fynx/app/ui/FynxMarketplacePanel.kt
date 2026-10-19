@@ -238,6 +238,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var showCart by remember { mutableStateOf(false) }
     var priceWatchListingId by remember { mutableStateOf<String?>(null) }
     var priceWatchBusy by remember { mutableStateOf(false) }
+    var savedProductIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var savedProductBusy by remember { mutableStateOf(false) }
     var nearbyMode by remember { mutableStateOf(false) }
     var nearbyLabel by remember { mutableStateOf("") }
     var nearbyLoading by remember { mutableStateOf(false) }
@@ -737,6 +739,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         selected?.id?.let { listingId ->
             FynxRemoteSocialClient.marketplacePriceWatchState(context, listingId)
                 .onSuccess { watched -> priceWatchListingId = if (watched) listingId else null }
+            FynxRemoteSocialClient.marketplaceProductSaved(context, listingId)
+                .onSuccess { saved -> savedProductIds = if (saved) savedProductIds + listingId else savedProductIds - listingId }
         }
     }
 
@@ -753,6 +757,19 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             onLiveProof = { onLiveProof(listing.sellerUsername) },
             watchedPrice = priceWatchListingId == listing.id,
             priceWatchBusy = priceWatchBusy,
+            productSaved = listing.id in savedProductIds,
+            savedProductBusy = savedProductBusy,
+            onToggleSavedProduct = { listingId ->
+                if (!savedProductBusy) {
+                    savedProductBusy = true
+                    scope.launch {
+                        val result = if (listingId in savedProductIds) FynxRemoteSocialClient.unsaveMarketplaceProduct(context, listingId) else FynxRemoteSocialClient.saveMarketplaceProduct(context, listingId)
+                        result.onSuccess { saved -> savedProductIds = if (saved) savedProductIds + listingId else savedProductIds - listingId }
+                            .onFailure { error = it.message ?: "Saved Products could not be updated." }
+                        savedProductBusy = false
+                    }
+                }
+            },
             onWatchPrice = { listingId ->
                 if (!priceWatchBusy) {
                     priceWatchBusy = true
@@ -941,6 +958,9 @@ private fun MarketplaceDetails(
     onLiveProof: () -> Unit,
     watchedPrice: Boolean,
     priceWatchBusy: Boolean,
+    productSaved: Boolean,
+    savedProductBusy: Boolean,
+    onToggleSavedProduct: (String) -> Unit,
     onWatchPrice: (String) -> Unit,
     onOpenAssistant: (String) -> Unit,
     onClose: () -> Unit
@@ -983,6 +1003,13 @@ private fun MarketplaceDetails(
             busy = priceWatchBusy,
             onWatchPrice = { onWatchPrice(it) }
         )
+        OutlinedButton(
+            onClick = { onToggleSavedProduct(l.id) },
+            enabled = !savedProductBusy,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (savedProductBusy) "Updating saved products..." else if (productSaved) "Remove from Saved Products" else "Save product")
+        }
         FynxMarketplaceBuyingAssistant(
             listing = l,
             onOpenAssistant = { listingId -> onOpenAssistant(listingId) }

@@ -148,7 +148,7 @@ if 'OPENAI_API_KEY' in visible_updates or 'OPENAI_API_KEY' in ai_client:
 
 app_source = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
 require(app_source, 'private fun fynxBackDestination(', "secondary back navigation uses a contextual parent-destination resolver")
-require(app_source, '"Saved Posts", "Invite", "Gifts", "To-Do", "Share", "Announcements", "Admin" -> "Features"', "feature-owned secondary screens return to Features")
+require(app_source, '"Saved Posts", "Saved Products", "Invite", "Gifts", "To-Do", "Share", "Announcements", "Admin" -> "Features"', "feature-owned secondary screens return to Features")
 require(app_source, '"Contacts" -> "Chats"', "Contacts back returns to Chats")
 require(app_source, '"Privacy" -> "Profile"', "Privacy back returns to Profile")
 require(app_source, '"Notifications" -> if (notificationPreferencesOnly) "Profile" else "Home"', "Notifications back preserves its entry path")

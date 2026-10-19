@@ -36,6 +36,13 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
           PRIMARY KEY (user_id, listing_id)
         );
         CREATE INDEX IF NOT EXISTS marketplace_price_watches_listing_idx ON marketplace_price_watches (listing_id, created_at DESC);
+        CREATE TABLE IF NOT EXISTS marketplace_saved_products (
+          user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          listing_id BIGINT NOT NULL REFERENCES marketplace_listings(id) ON DELETE CASCADE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (user_id, listing_id)
+        );
+        CREATE INDEX IF NOT EXISTS marketplace_saved_products_listing_idx ON marketplace_saved_products (listing_id, created_at DESC);
       `).catch((error) => {
         marketplaceSchemaPromise = undefined;
         throw error;
@@ -160,7 +167,9 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const category = typeof req.query?.category === "string" ? req.query.category.trim().slice(0, 40) : "";
       const seller = typeof req.query?.seller === "string" ? req.query.seller.trim().toLowerCase().replace(/^@+/, "") : "";
       const params = [req.user.sub];
-      const where = ["l.active = TRUE", "l.quantity > 0", "l.seller_id <> $1", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')"];
+      const where = ["l.active = TRUE", "l.quantity > 0", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')"];
+      // Storefront queries include the requested seller; general discovery hides own listings.
+      if (!seller) where.push("l.seller_id <> $1");
       if (q) { params.push(`%${q}%`); where.push(`(l.title ILIKE $${params.length} OR l.description ILIKE $${params.length} OR u.username ILIKE $${params.length} OR u.display_name ILIKE $${params.length})`); }
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category = $${params.length}`); }
       if (seller) { params.push(seller); where.push(`u.username = $${params.length}`); }
@@ -201,6 +210,45 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     } catch (error) { console.error("create marketplace listing", error); return res.status(500).json({ error: "listing creation failed" }); }
   });
 
+  app.get("/api/marketplace/saved-products", auth, async (req, res) => {
+    try {
+      await ensureMarketplaceSchema();
+      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, l.store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, l.active, l.created_at, sp.created_at AS saved_at FROM marketplace_saved_products sp JOIN marketplace_listings l ON l.id = sp.listing_id JOIN users u ON u.id = l.seller_id WHERE sp.user_id = $1 ORDER BY sp.created_at DESC LIMIT 200`, [req.user.sub]);
+      return res.json({ products: result.rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [] })) });
+    } catch (error) { console.error("marketplace saved products", error); return res.status(500).json({ error: "saved products lookup failed" }); }
+  });
+
+  app.get("/api/marketplace/listings/:id/saved", auth, async (req, res) => {
+    try {
+      await ensureMarketplaceSchema();
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
+      const result = await pool.query("SELECT EXISTS (SELECT 1 FROM marketplace_saved_products WHERE user_id = $1 AND listing_id = $2) AS saved", [req.user.sub, id]);
+      return res.json({ saved: Boolean(result.rows[0]?.saved) });
+    } catch (error) { console.error("marketplace saved product state", error); return res.status(500).json({ error: "saved product state unavailable" }); }
+  });
+
+  app.post("/api/marketplace/listings/:id/saved", auth, async (req, res) => {
+    try {
+      await ensureMarketplaceSchema();
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
+      const listing = (await pool.query("SELECT id FROM marketplace_listings WHERE id = $1 AND active = TRUE", [id])).rows[0];
+      if (!listing) return res.status(404).json({ error: "listing not found" });
+      await pool.query("INSERT INTO marketplace_saved_products(user_id, listing_id) VALUES ($1,$2) ON CONFLICT(user_id,listing_id) DO NOTHING", [req.user.sub, id]);
+      return res.status(201).json({ saved: true, listingId: String(id) });
+    } catch (error) { console.error("marketplace save product", error); return res.status(500).json({ error: "product could not be saved" }); }
+  });
+
+  app.delete("/api/marketplace/listings/:id/saved", auth, async (req, res) => {
+    try {
+      await ensureMarketplaceSchema();
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
+      await pool.query("DELETE FROM marketplace_saved_products WHERE user_id = $1 AND listing_id = $2", [req.user.sub, id]);
+      return res.json({ saved: false, listingId: String(id) });
+    } catch (error) { console.error("marketplace unsave product", error); return res.status(500).json({ error: "saved product could not be removed" }); }
+  });
   app.get("/api/marketplace/listings/:id/price-watch", auth, async (req, res) => {
     try {
       await ensureMarketplaceSchema();

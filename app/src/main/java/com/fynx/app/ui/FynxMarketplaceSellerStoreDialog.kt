@@ -70,7 +70,10 @@ internal fun FynxMarketplaceSellerStoreDialog(
     var shopLocation by remember(username) { mutableStateOf("") }
     var shopContactPhone by remember(username) { mutableStateOf("") }
     var profileLoading by remember(username) { mutableStateOf(true) }
+    var storefrontListings by remember(username) { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>?>(null) }
     LaunchedEffect(username) {
+        FynxRemoteSocialClient.listings(context, seller = username.removePrefix("@").trim())
+            .onSuccess { fetched -> storefrontListings = fetched.filter { it.active && it.quantity > 0 } }
         FynxProfileRemoteClient.get(context, username.removePrefix("@").trim()).onSuccess { profile ->
             profileName = profile.displayName.orEmpty()
             profileBio = profile.bio.orEmpty()
@@ -88,8 +91,9 @@ internal fun FynxMarketplaceSellerStoreDialog(
             }
         profileLoading = false
     }
-    val sellerListings = remember(listings, username) {
-        listings.filter { it.active && it.sellerUsername.removePrefix("@").trim().equals(username.removePrefix("@").trim(), ignoreCase = true) }
+    val sellerListings = remember(listings, username, storefrontListings) {
+        (storefrontListings ?: listings.filter { it.active && it.sellerUsername.removePrefix("@").trim().equals(username.removePrefix("@").trim(), ignoreCase = true) })
+            .filter { it.active && it.quantity > 0 }
             .distinctBy { it.id }
     }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
@@ -176,7 +180,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                         }
                     }
                 } else if (sellerListings.isEmpty()) {
-                    item { Text("No active products from this seller are available in the currently loaded Marketplace results.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    item { Text("This seller has no active products available right now.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 } else {
                     items(sellerListings, key = { "seller-store-${it.id}" }) { listing ->
                         Surface(
