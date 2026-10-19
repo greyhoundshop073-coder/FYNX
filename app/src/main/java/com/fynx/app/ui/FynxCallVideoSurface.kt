@@ -10,6 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -27,24 +28,25 @@ fun FynxCallVideoSurface(track: VideoTrack?, modifier: Modifier = Modifier, mirr
         if (track == null) {
             Text("Waiting for video…", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            AndroidView(
-                factory = { ctx: Context ->
-                    SurfaceViewRenderer(ctx).apply {
-                        init(eglBase.eglBaseContext, null)
-                        setEnableHardwareScaler(true)
-                        setMirror(mirror)
+            key(track) {
+                AndroidView(
+                    factory = { ctx: Context ->
+                        SurfaceViewRenderer(ctx).apply {
+                            init(eglBase.eglBaseContext, null)
+                            setEnableHardwareScaler(true)
+                            setMirror(mirror)
+                            track.addSink(this)
+                        }
+                    },
+                    update = { renderer ->
+                        renderer.setMirror(mirror)
+                    },
+                    onRelease = { renderer ->
+                        track.removeSink(renderer)
+                        renderer.release()
                     }
-                },
-                update = { renderer ->
-                    renderer.setMirror(mirror)
-                    renderer.clearImage()
-                    track.addSink(renderer)
-                },
-                onRelease = { renderer ->
-                    track.removeSink(renderer)
-                    renderer.release()
-                }
-            )
+                )
+            }
         }
     }
     DisposableEffect(Unit) {
