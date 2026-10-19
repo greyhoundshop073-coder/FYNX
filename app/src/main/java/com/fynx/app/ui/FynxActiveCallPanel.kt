@@ -53,7 +53,7 @@ fun FynxActiveCallPanel(
                 if (remoteVideoTrack != null) {
                     FynxCallVideoSurface(remoteVideoTrack, Modifier.fillMaxSize(), mirror = false)
                 } else {
-                    FynxCallRemotePlaceholder(name, Modifier.fillMaxSize())
+                    FynxCallRemotePlaceholder(name, Modifier.fillMaxSize(), ownerUsername = name)
                 }
 
                 Box(
@@ -188,17 +188,26 @@ fun FynxActiveCallPanel(
 }
 
 @Composable
-private fun FynxCallRemotePlaceholder(name: String, modifier: Modifier) {
+private fun FynxCallRemotePlaceholder(name: String, modifier: Modifier, ownerUsername: String? = null) {
     Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(
-                Modifier
-                    .size(116.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surface),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(name.take(1).uppercase(), style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
+            if (ownerUsername != null) {
+                FynxRemoteProfileAvatar(
+                    mediaId = null,
+                    contentDescription = name,
+                    modifier = Modifier.size(116.dp).clip(CircleShape),
+                    ownerUsername = ownerUsername
+                )
+            } else {
+                Box(
+                    Modifier
+                        .size(116.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(name.take(1).uppercase(), style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
+                }
             }
             Spacer(Modifier.height(10.dp))
             Text("Waiting for video…", color = MaterialTheme.colorScheme.onSurfaceVariant)
