@@ -14,6 +14,7 @@ import android.provider.ContactsContract
 import android.annotation.SuppressLint
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.core.content.ContextCompat
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
@@ -169,6 +170,17 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             attachmentType = context.contentResolver.getType(uris.first()) ?: "image/*"
             attachmentMessageType = null
         }
+    }
+    val galleryPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(maxItems = 1)) { uris ->
+        val uri = uris.firstOrNull() ?: return@rememberLauncherForActivityResult
+        val mimeType = context.contentResolver.getType(uri)
+        if (mimeType.isNullOrBlank() || (!mimeType.startsWith("image/") && !mimeType.startsWith("video/"))) {
+            networkError = "Choose a photo or video from Gallery."
+            return@rememberLauncherForActivityResult
+        }
+        attachment = uri
+        attachmentType = mimeType
+        attachmentMessageType = null
     }
     var stopRecordingAction: (() -> Unit)? = null
 
@@ -1253,7 +1265,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         ) {
             val items = listOf(
                 Triple("Camera", Icons.Default.CameraAlt) { showAttachmentSheet = false; cameraInitialMode = CameraMode.PHOTO; showCamera = true },
-                Triple("Gallery", Icons.Default.PhotoLibrary) { showAttachmentSheet = false; mediaPicker.launch(arrayOf("image/*", "video/*")) },
+                Triple("Gallery", Icons.Default.PhotoLibrary) { showAttachmentSheet = false; galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
                 Triple("Files", Icons.Default.Description) { showAttachmentSheet = false; mediaPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) },
                 Triple("Location", Icons.Default.LocationOn) { showAttachmentSheet = false; locationPermission.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
                 Triple("Contact", Icons.Default.ContactPage) { showAttachmentSheet = false; contactPicker.launch(null) },
