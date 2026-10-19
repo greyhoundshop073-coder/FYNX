@@ -71,7 +71,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 onIceCandidate = { candidate -> val current = session; val target = targetUserId; if (current != null && target != null) realtimeClient.sendCallIce(current.id, target, candidate, current.type == FynxCallType.VIDEO) },
                 onLocalVideoTrack = { track -> localVideoTrack = track.apply { setEnabled(true) } },
                 onRemoteAudioTrack = { track: AudioTrack -> track.setEnabled(true) },
-                onRemoteVideoTrack = { track: VideoTrack -> remoteVideoTrack = track.apply { setEnabled(true) } },
+                onRemoteVideoTrack = { track: VideoTrack? -> remoteVideoTrack = track?.apply { setEnabled(true) } },
                 onConnectionState = { state ->
                     when (state) {
                         PeerConnection.IceConnectionState.CONNECTED, PeerConnection.IceConnectionState.COMPLETED -> session?.let { current -> session = current.copy(state = FynxCallState.CONNECTED); FynxCallsStore.updateStatus(context, current.id, "Connected", missed = false); calls = FynxCallsStore.load(context) }
