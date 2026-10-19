@@ -77,16 +77,27 @@ object FynxPreferencesStore {
     fun loadProfilePhoto(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_PROFILE_PHOTO, null)
     fun saveProfilePhoto(context: Context, uri: String?) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply { if (uri.isNullOrBlank()) remove(KEY_PROFILE_PHOTO) else putString(KEY_PROFILE_PHOTO, uri) }.apply() }
 
+    private const val NO_REMOTE_PROFILE_PHOTO = "__fynx_no_profile_photo__"
+
     /** Last authoritative server identity used to render immediately on cold start. */
-    fun loadRemoteProfilePhotoId(context: Context, username: String): String? =
+    fun loadRemoteProfilePhotoId(context: Context, username: String): String? {
+        val prefs = context.getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_${accountNamespace(context)}", Context.MODE_PRIVATE)
+        return prefs.getString(cacheKey(username), null)
+            ?.takeIf { it.isNotBlank() && it != NO_REMOTE_PROFILE_PHOTO }
+    }
+
+    /** Distinguishes a profile that has been authoritatively checked with no photo
+     * from a profile whose photo has not been cached on this device yet. */
+    fun hasRemoteProfilePhotoIdEntry(context: Context, username: String): Boolean =
         context.getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_${accountNamespace(context)}", Context.MODE_PRIVATE)
-            .getString(cacheKey(username), null)?.takeIf { it.isNotBlank() }
+            .contains(cacheKey(username))
 
     fun saveRemoteProfilePhotoId(context: Context, username: String, mediaId: String?) {
         val prefs = context.getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_${accountNamespace(context)}", Context.MODE_PRIVATE)
-        prefs.edit().apply {
-            if (mediaId.isNullOrBlank()) remove(cacheKey(username)) else putString(cacheKey(username), mediaId)
-        }.apply()
+        prefs.edit().putString(
+            cacheKey(username),
+            mediaId?.trim()?.takeIf { it.isNotBlank() } ?: NO_REMOTE_PROFILE_PHOTO
+        ).apply()
     }
 
     data class RemoteProfileStats(val postCount: Int, val followerCount: Int?, val followingCount: Int?)

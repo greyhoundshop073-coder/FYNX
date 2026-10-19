@@ -255,6 +255,14 @@ app.get("/health", async (_req, res) => {
   res.status(database === "ready" ? 200 : 503).json({ ok: database === "ready", service: "fynx-backend", database });
 });
 
+// Authenticated snapshot used by the Android Home status row. Presence is
+// ephemeral: a user is online only while at least one authenticated socket lives.
+app.get("/api/presence", auth, (_req, res) => {
+  return res.json({ onlineUserIds: [...clientsByUserId.entries()]
+    .filter(([, sockets]) => sockets && sockets.size > 0)
+    .map(([userId]) => String(userId)) });
+});
+
 app.post("/api/auth/register", async (req, res) => {
   try {
     requireConfig("DATABASE_URL", DATABASE_URL); requireConfig("JWT_SECRET", JWT_SECRET);
@@ -487,9 +495,9 @@ app.get("/api/media/:id", auth, async (req, res) => {
                 u.id = $2
                 OR (
                   (
-                    COALESCE(ps.profile_visibility, 'My friends') = 'Everyone'
+                    COALESCE(ps.profile_photo_visibility, 'My friends') = 'Everyone'
                     OR (
-                      COALESCE(ps.profile_visibility, 'My friends') = 'My friends'
+                      COALESCE(ps.profile_photo_visibility, 'My friends') = 'My friends'
                       AND EXISTS (
                         SELECT 1 FROM friendships f
                         WHERE ((f.user_id = u.id AND f.friend_id = $2) OR (f.user_id = $2 AND f.friend_id = u.id))

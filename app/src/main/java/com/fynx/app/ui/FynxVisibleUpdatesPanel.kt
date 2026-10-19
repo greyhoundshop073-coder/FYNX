@@ -73,18 +73,22 @@ fun FynxVisibleUpdatesPanel(
     var statuses by remember { mutableStateOf<List<FynxStatus>>(emptyList()) }
     var followingUsernames by remember { mutableStateOf<Set<String>>(emptySet()) }
     var ownerPhotoIds by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
+    var ownerUserIds by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var ownerActivityVisible by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
 
     fun resolveOwnerPhotos(items: List<FynxStatus>) {
         val names = items.map { it.ownerUsername.removePrefix("@").trim() }.filter { it.isNotBlank() }.distinct()
-        val missing = names.filterNot { ownerPhotoIds.containsKey(it.lowercase()) }
+        val missing = names.filterNot { ownerPhotoIds.containsKey(it.lowercase()) && ownerUserIds.containsKey(it.lowercase()) && ownerActivityVisible.containsKey(it.lowercase()) }
         if (missing.isEmpty()) return
         scope.launch {
             val resolved = missing.map { username ->
                 async(Dispatchers.IO) {
-                    username.lowercase() to FynxProfileRemoteClient.get(context, username).getOrNull()?.profilePhotoMediaId
+                    username.lowercase() to FynxProfileRemoteClient.get(context, username).getOrNull()
                 }
             }.awaitAll().toMap()
-            ownerPhotoIds = ownerPhotoIds + resolved
+            ownerPhotoIds = ownerPhotoIds + resolved.mapValues { it.value?.profilePhotoMediaId }
+            ownerUserIds = ownerUserIds + resolved.mapNotNull { (username, profile) -> profile?.id?.takeIf { it.isNotBlank() }?.let { username to it } }.toMap()
+            ownerActivityVisible = ownerActivityVisible + resolved.mapNotNull { (username, profile) -> profile?.let { username to it.activityVisible } }.toMap()
         }
     }
 
@@ -158,7 +162,14 @@ fun FynxVisibleUpdatesPanel(
                         )
                     }
                     items(grouped.filterNot { it.first.ownerUsername.removePrefix("@").trim().equals(current, ignoreCase = true) }, key = { it.first.ownerUsername.removePrefix("@").trim().lowercase() }) { (status, count) ->
-                        FynxStatusPreviewCircle(status, status.ownerUsername, status.ownerDisplayName.ifBlank { status.ownerUsername }, status.ownerUsername.removePrefix("@").trim().lowercase() in unseenOwners, { onOpenStatusOwner(status.ownerUsername.removePrefix("@").trim()) }, count, ownerPhotoIds[status.ownerUsername.removePrefix("@").trim().lowercase()])
+                        val ownerKey = status.ownerUsername.removePrefix("@").trim().lowercase()
+                        FynxStatusPreviewCircle(
+                            status, status.ownerUsername, status.ownerDisplayName.ifBlank { status.ownerUsername },
+                            status.ownerUsername.removePrefix("@").trim().lowercase() in unseenOwners,
+                            { onOpenStatusOwner(status.ownerUsername.removePrefix("@").trim()) }, count,
+                            ownerPhotoIds[ownerKey], ownerUserId = ownerUserIds[ownerKey],
+                            showOnline = ownerActivityVisible[ownerKey] == true && FynxOnlinePresenceStore.isOnline(ownerUserIds[ownerKey])
+                        )
                     }
                 }
             }
@@ -203,7 +214,7 @@ fun FynxVisibleUpdatesPanel(
 }
 
 @Composable
-private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: String, active: Boolean, onClick: () -> Unit, statusCount: Int = 0, profilePhotoMediaId: String? = null, isOwn: Boolean = false, onCreateStatus: () -> Unit = onClick) {
+private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: String, active: Boolean, onClick: () -> Unit, statusCount: Int = 0, profilePhotoMediaId: String? = null, isOwn: Boolean = false, onCreateStatus: () -> Unit = onClick, ownerUserId: String? = null, showOnline: Boolean = false) {
     val context = LocalContext.current
     var bitmap by remember(status?.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
     LaunchedEffect(status?.id, status?.contentUri, status?.type) {
@@ -222,6 +233,16 @@ private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: St
                 ) {
                     when { bitmap != null -> androidx.compose.foundation.Image(bitmap!!.asImageBitmap(), "Status media preview", Modifier.fillMaxWidth(), contentScale = ContentScale.Crop); status?.type == FynxStatusType.TEXT -> Text(status.text.orEmpty().take(20), color = Color(status.textStyle.foregroundColor), style = MaterialTheme.typography.labelSmall, maxLines = 3); status?.type == FynxStatusType.VIDEO -> Icon(Icons.Default.PlayArrow, "Video status", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp)); status?.type == FynxStatusType.VOICE -> Icon(Icons.Default.Mic, "Voice status", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp)); profilePhotoMediaId != null -> FynxRemoteProfileAvatar(profilePhotoMediaId, name, Modifier.size(64.dp).clip(CircleShape), ownerUsername = status?.ownerUsername); else -> FynxAvatar(name, Modifier.size(64.dp).clip(CircleShape), ownerUsername = status?.ownerUsername) }
                 }
+            }
+            if (showOnline && !ownerUserId.isNullOrBlank()) {
+                Box(
+                    Modifier.align(Alignment.BottomEnd)
+                        .padding(end = 2.dp, bottom = if (isOwn) 27.dp else 2.dp)
+                        .size(13.dp)
+                        .background(Color(0xFF22C55E), CircleShape)
+                        .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                        .semantics { contentDescription = "$label is online" }
+                )
             }
             if (isOwn) {
                 IconButton(onClick = onCreateStatus, modifier = Modifier.align(Alignment.BottomEnd).requiredSize(25.dp)

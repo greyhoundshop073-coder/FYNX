@@ -232,11 +232,19 @@ fun FynxRemoteProfileAvatar(
     val normalizedOwner = ownerUsername?.removePrefix("@")?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
     val avatarRevisions by FynxAvatarIdentityStore.revisions().collectAsState()
     val revision = normalizedOwner?.let { avatarRevisions[it] }
-    val resolvedMediaId = if (normalizedOwner != null) {
-        // Re-read the authoritative per-account cache whenever Profile publishes a change.
-        FynxProfileRemoteClient.cachedProfilePhotoId(context, normalizedOwner)
-    } else {
-        mediaId?.takeIf { it.isNotBlank() }
+    val cachedOwnerPhotoExists = normalizedOwner?.let {
+        FynxProfileRemoteClient.hasCachedProfilePhotoEntry(context, it)
+    } == true
+    val cachedOwnerPhotoId = normalizedOwner?.let {
+        FynxProfileRemoteClient.cachedProfilePhotoId(context, it)
+    }
+    // Some lists already carry the server photo ID before the per-account cache
+    // has been populated. Use that ID until we have an authoritative cache entry.
+    // Once a profile GET/UPDATE records an explicit null, respect the removal.
+    val resolvedMediaId = when {
+        normalizedOwner == null -> mediaId?.trim()?.takeIf { it.isNotBlank() }
+        cachedOwnerPhotoExists -> cachedOwnerPhotoId
+        else -> mediaId?.trim()?.takeIf { it.isNotBlank() }
     }
     var hasActiveStatus by remember(ownerUsername) { mutableStateOf(false) }
     LaunchedEffect(ownerUsername) {
