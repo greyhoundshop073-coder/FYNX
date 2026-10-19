@@ -190,7 +190,6 @@ object FynxRemoteSocialClient {
         return FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/driver-delivery", body.toString()).map { Unit }
     }
 
-    suspend fun confirmMarketplaceDelivery(context: Context, id: String): Result<Unit> = FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/confirm-delivery", "{}").map { Unit }
     suspend fun completeMarketplaceOrder(context: Context, id: String, receivedItemMatchesOrder: Boolean, quantityMatchesOrder: Boolean): Result<Unit> {
         require(receivedItemMatchesOrder && quantityMatchesOrder) { "Confirm that the received item and quantity match the order." }
         val body = JSONObject()
