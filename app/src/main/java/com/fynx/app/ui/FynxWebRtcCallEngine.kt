@@ -121,10 +121,52 @@ class FynxWebRtcCallEngine(
     private fun flushRemoteCandidates(pc: PeerConnection) { val pending = pendingRemoteCandidates.toList(); pendingRemoteCandidates.clear(); pending.forEach { if (!pc.addIceCandidate(it)) callbacks.onError("failed to add remote ICE candidate") } }
     private fun createLocalAudio() { audioSource = factory.createAudioSource(MediaConstraints()); audioTrack = factory.createAudioTrack("fynx-audio", audioSource); audioTrack?.setEnabled(true); audioTrack?.let { peerConnection?.addTrack(it) } }
     private fun createLocalVideo() {
-        val enumerator = Camera2Enumerator(appContext); val deviceName = enumerator.deviceNames.firstOrNull { enumerator.isFrontFacing(it) } ?: enumerator.deviceNames.firstOrNull() ?: return
-        cameraCapturer = enumerator.createCapturer(deviceName, FynxCallCameraEvents(callbacks.onError)); videoSource = factory.createVideoSource(false); videoTrack = factory.createVideoTrack("fynx-video", videoSource); videoTrack?.setEnabled(true)
-        videoTrack?.let { peerConnection?.addTrack(it); callbacks.onLocalVideoTrack(it) }
-        eglBase = org.webrtc.EglBase.create(); surfaceTextureHelper = SurfaceTextureHelper.create("FYNX-Camera", eglBase!!.eglBaseContext); cameraCapturer?.initialize(surfaceTextureHelper, appContext, videoSource?.capturerObserver); cameraCapturer?.startCapture(1280, 720, 30)
+        try {
+            val enumerator = Camera2Enumerator(appContext)
+            val deviceName = enumerator.deviceNames.firstOrNull { enumerator.isFrontFacing(it) }
+                ?: enumerator.deviceNames.firstOrNull()
+            if (deviceName == null) {
+                callbacks.onError("No camera is available. Check your camera or continue with voice if available.")
+                return
+            }
+
+            cameraCapturer = enumerator.createCapturer(deviceName, FynxCallCameraEvents(callbacks.onError))
+            if (cameraCapturer == null) {
+                callbacks.onError("Could not open the selected camera. Check camera permission and try again.")
+                return
+            }
+
+            eglBase = org.webrtc.EglBase.create()
+            surfaceTextureHelper = SurfaceTextureHelper.create("FYNX-Camera", eglBase!!.eglBaseContext)
+            videoSource = factory.createVideoSource(false)
+            cameraCapturer?.initialize(surfaceTextureHelper, appContext, videoSource?.capturerObserver)
+            cameraCapturer?.startCapture(1280, 720, 30)
+
+            videoTrack = factory.createVideoTrack("fynx-video", videoSource)
+            videoTrack?.setEnabled(true)
+            videoTrack?.let {
+                val pc = peerConnection
+                if (pc == null || pc.addTrack(it) == null) {
+                    it.setEnabled(false)
+                    callbacks.onError("Could not attach camera video to this call.")
+                    return
+                }
+                callbacks.onLocalVideoTrack(it)
+            }
+        } catch (error: Exception) {
+            videoTrack?.setEnabled(false)
+            runCatching { cameraCapturer?.stopCapture() }
+            runCatching { cameraCapturer?.dispose() }
+            cameraCapturer = null
+            runCatching { surfaceTextureHelper?.dispose() }
+            surfaceTextureHelper = null
+            runCatching { eglBase?.release() }
+            eglBase = null
+            callbacks.onError(
+                "Could not start camera video: " +
+                    (error.message?.takeIf { it.isNotBlank() } ?: error.javaClass.simpleName)
+            )
+        }
     }
     override fun setMicrophoneEnabled(enabled: Boolean) { audioTrack?.setEnabled(enabled) }
     override fun setCameraEnabled(enabled: Boolean) { videoTrack?.setEnabled(enabled) }
