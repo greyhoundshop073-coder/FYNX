@@ -307,7 +307,6 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var groupNotificationsEnabled by remember(groupId) { mutableStateOf(FynxConversationPreferences.groupNotifications(context, groupId)) }
     var showEmojiPanel by remember { mutableStateOf(false) }
     var showAttachmentMenu by remember { mutableStateOf(false) }
-    var showGroupVideoNoteCamera by remember { mutableStateOf(false) }
     var reactionMessageId by remember { mutableStateOf<String?>(null) }
     var replyToId by remember { mutableStateOf<String?>(null) }
     val replySwipeOffsets = remember { mutableStateMapOf<String, Float>() }
@@ -953,13 +952,12 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     })
                                     Text("Camera", style = MaterialTheme.typography.labelMedium)
                                 }
-                                OutlinedButton(onClick = {
-                                    showAttachmentMenu = false
-                                    showGroupVideoNoteCamera = true
-                                }, modifier = Modifier.weight(1f)) {
-                                    Icon(Icons.Default.Videocam, null, tint = Color(0xFFEF6C35))
-                                    Spacer(Modifier.width(4.dp))
-                                    Text("Video note")
+                                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    FynxGroupCameraPicker(context, videoNoteMode = true, onMediaSelected = { uri, type ->
+                                        showAttachmentMenu = false
+                                        sendGroupAttachment(uri, type)
+                                    })
+                                    Text("Video note", style = MaterialTheme.typography.labelMedium, color = Color(0xFFEF6C35))
                                 }
                                 OutlinedButton(onClick = {
                             showAttachmentMenu = false
@@ -1092,12 +1090,6 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         if (showMembers) FynxGroupMembersDialog(groupForDialogs, currentUsername, { showMembers = false }) { updated -> if (FynxGroupsStore.updateGroup(context, updated)) { currentGroup = updated; scope.launch { FynxGroupRemoteClient.syncGroup(context, updated).onFailure { syncMessage = it.message } } } }
         if (showCatchMeUp) FynxCatchMeUpSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showCatchMeUp = false })
         if (showConversationMoments) FynxConversationMomentsSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showConversationMoments = false })
-        if (showGroupVideoNoteCamera) {
-            FynxGroupCameraPicker(context, videoNoteMode = true, onMediaSelected = { uri, type ->
-                showGroupVideoNoteCamera = false
-                sendGroupAttachment(uri, type)
-            })
-        }
         if (showTools) FynxGroupSocialDialog(groupForDialogs, { showTools = false; showPollsDirectly = false }, onInvite = { username ->
             val cleanUsername = username.trim().removePrefix("@")
             if (!canAddMembers) {
