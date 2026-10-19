@@ -1525,14 +1525,3 @@ private fun MarketplaceMultiProductPaymentDialog(
         }
     )
 }
-private fun MarketplaceMultiProductPaymentDialog(context: android.content.Context, checkoutId: String, total: Double, currency: String, onPaid: ()->Unit, onClose: ()->Unit){var email by remember{mutableStateOf("")};var payment by remember{mutableStateOf<FynxMarketplacePayment?>(null)};var busy by remember{mutableStateOf(false)};var verifying by remember{mutableStateOf(false)};var message by remember{mutableStateOf<String?>(null)};val scope=rememberCoroutineScope();AlertDialog(onDismissRequest={if(!busy&&!verifying)onClose()},title={Text("Secure checkout")},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){Text("Multi-product Marketplace order",style=MaterialTheme.typography.titleMedium);Text(currency+" "+String.format(Locale.US,"%,.2f",total),style=MaterialTheme.typography.titleLarge);if(payment==null)OutlinedTextField(email,{email=it},label={Text("Payment email")},singleLine=true,modifier=Modifier.fillMaxWidth())else{Text("Complete payment in Paystack, then return to FYNX.");Text("Reference: "+payment?.reference.orEmpty(),style=MaterialTheme.typography.labelSmall)};message?.let{Text(it,color=MaterialTheme.colorScheme.error)}}},confirmButton={if(payment==null)Button(enabled=!busy,onClick={busy=true;scope.launch{initializeMarketplaceCheckoutGroupPayment(context,checkoutId,email).onSuccess{p->if(!p.currency.equals(currency,ignoreCase=true)||kotlin.math.abs(p.amount-total)>=0.005){message="The payment amount or currency does not match your reviewed total. Your payment was not opened. Please close checkout and review the order again."}else{payment=p;openMarketplaceCheckout(context,p.authorizationUrl).onFailure{payment=null;message=it.message?:"Could not open payment checkout."}}}.onFailure{message=it.message?:"Could not start payment."};busy=false}}){if(busy)CircularProgressIndicator(Modifier.size(18.dp))else Text("Continue to payment")}else Button(enabled=!verifying,onClick={verifying=true;scope.launch{verifyMarketplaceCheckoutGroupPayment(context,payment?.reference.orEmpty()).onSuccess{onPaid()}.onFailure{message=it.message?:"Payment is not verified yet."};verifying=false}}){if(verifying)CircularProgressIndicator(Modifier.size(18.dp))else Text("Verify payment")}},dismissButton={TextButton(onClick=onClose,enabled=!busy&&!verifying){Text("Close")}})}
-
-/** Append unseen marketplace listing keys, preserving order and the first occurrence. */
-internal fun <T, K> appendDistinctMarketplacePage(
-    existing: List<T>,
-    incoming: List<T>,
-    keySelector: (T) -> K
-): List<T> {
-    val knownKeys = existing.asSequence().map(keySelector).toMutableSet()
-    return existing + incoming.filter { knownKeys.add(keySelector(it)) }
-}
