@@ -10,6 +10,7 @@ const socialClient = read('../app/src/main/java/com/fynx/app/ui/FynxRemoteSocial
 const expiry = read('./marketplaceInspectionExpiry.js');
 const settlement = read('./marketplaceSettlement.js');
 const shippingTimeline = read('./marketplaceShippingTimeline.js');
+const server = read('./server.js');
 
 const checks = [
   ['fulfillment selection is buyer-only', completion.includes("only the buyer can choose fulfillment")],
@@ -69,6 +70,9 @@ const checks = [
   ['seller order API exposes driver acceptance and custody state', completion.includes('delivery_driver_accepted_at') && completion.includes('delivery_driver_handover_at') && completion.includes('delivery_driver_delivered_at')],
   ['seller can assign by username and confirm physical handover', completion.includes('driverUsername') && completion.includes("app.post('/api/marketplace/orders/:id/driver-handover'")],
   ['Android exposes driver assignment, acceptance and evidence actions', socialClient.includes('marketplaceDriverAssignments') && socialClient.includes('acceptMarketplaceDriverAssignment') && socialClient.includes('recordMarketplaceDriverDelivery')],
+  ['seller handover photo must be seller-owned and an image', completion.includes('handover photo must be uploaded by the signed-in seller') && completion.includes('allowedImageTypes.has') && completion.includes('PHOTO_REFERENCE')],
+  ['handover photo retrieval is restricted to buyer/seller participants', server.includes('JOIN marketplace_delivery_evidence e') && server.includes('(o.buyer_id = $2 OR o.seller_id = $2)') && server.includes('handover photos are separate from message/profile/status media')],
+  ['Android supports optional handover photo upload and retryable preview', read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerOrders.kt').includes('Add handover photo (optional)') && read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt').includes('MarketplaceHandoverPhotoPreview')],
 
 ];
 
