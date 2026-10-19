@@ -247,6 +247,7 @@ private fun StatusAvatar(
     }
 }
 
+@Composable
 private fun StatusArchiveDialog(
     statuses: List<FynxStatus>,
     loading: Boolean,
