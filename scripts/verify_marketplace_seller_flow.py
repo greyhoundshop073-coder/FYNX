@@ -11,6 +11,8 @@ seller_orders = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeller
 checks = [
     ("seller settlement details can be retried after a failed request", "var settlementRetryCount by remember(order.id)" in seller_orders and "LaunchedEffect(order.id, settlementRetryCount)" in seller_orders and "Retry settlement details" in seller_orders),
     ("seller settlement retry clears stale data and resets its error state", "settlementError = null" in seller_orders and "settlement = null" in seller_orders and "settlementError = it.message ?: \"Settlement details could not load.\"" in seller_orders),
+    ("seller delivery-evidence failures are surfaced instead of silently hiding handover proof", "deliveryEvidenceError by remember(order.id)" in seller_orders and "onFailure { deliveryEvidenceError = it.message ?: \"Delivery evidence could not load.\" }" in seller_orders and "Delivery evidence could not load:" in seller_orders),
+    ("seller delivery evidence can be retried after a failed request", "Text(\"Retry delivery evidence\")" in seller_orders and "deliveryEvidenceError = null" in seller_orders and "LaunchedEffect(order.id, settlementRetryCount)" in seller_orders),
     ("seller support keeps a bounded real media limit", "const val MAX_PRODUCT_MEDIA = 12" in support),
     ("seller support accepts image and video media", 'mime.startsWith("image/") || mime.startsWith("video/")' in support),
     ("seller support removes duplicate media", ".distinct()" in support),
