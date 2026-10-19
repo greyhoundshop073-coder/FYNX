@@ -476,3 +476,114 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
         )
     }
 }
+
+/** Driver-account queue. Local phone drivers remain supported without installing FYNX. */
+@Composable
+fun FynxMarketplaceDriverAssignmentsDialog(context: Context, onDismiss: () -> Unit) {
+    var assignments by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceDriverAssignment>>(emptyList()) }
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var refreshKey by remember { mutableIntStateOf(0) }
+    var busyOrderId by remember { mutableStateOf<String?>(null) }
+    var recipientNames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var deliveryNotes by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    val scope = rememberCoroutineScope()
+
+    fun loadAssignments() {
+        scope.launch {
+            loading = true
+            error = null
+            FynxRemoteSocialClient.marketplaceDriverAssignments(context)
+                .onSuccess { assignments = it }
+                .onFailure { error = it.message ?: "Driver deliveries could not load. Check that this account is approved." }
+            loading = false
+        }
+    }
+
+    LaunchedEffect(refreshKey) { loadAssignments() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Driver deliveries") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Accept assigned deliveries to reveal the buyer's delivery details. Record the recipient and handoff note after delivery.")
+                if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                if (!loading && error == null && assignments.isEmpty()) {
+                    Text("No active deliveries are assigned to this driver account. If this account should receive assignments, ask a FYNX admin to approve it.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(assignments, key = { it.orderId }) { assignment ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Text(assignment.productTitle, style = MaterialTheme.typography.titleMedium)
+                                Text("${assignment.quantity} item(s) • ${assignment.currency} ${String.format(Locale.US, "%,.2f", assignment.totalAmount)}")
+                                Text("Order: ${assignment.status} • delivery: ${assignment.fulfillmentStatus}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (assignment.acceptedAt.isNullOrBlank()) {
+                                    Button(
+                                        enabled = !loading && busyOrderId == null,
+                                        onClick = {
+                                            busyOrderId = assignment.orderId
+                                            error = null
+                                            scope.launch {
+                                                FynxRemoteSocialClient.acceptMarketplaceDriverAssignment(context, assignment.orderId)
+                                                    .onSuccess { refreshKey++ }
+                                                    .onFailure { error = it.message ?: "Assignment could not be accepted." }
+                                                busyOrderId = null
+                                            }
+                                        }
+                                    ) { if (busyOrderId == assignment.orderId) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Accept delivery") }
+                                } else {
+                                    val address = assignment.shippingAddress
+                                    if (address != null) {
+                                        Text("Buyer: ${address.optString("name").ifBlank { assignment.buyerName }}")
+                                        Text("Contact: ${address.optString("phone")}")
+                                        Text("Destination: ${address.optString("address")}, ${address.optString("city")}, ${address.optString("state")}, ${address.optString("country")}")
+                                    }
+                                    if (assignment.deliveredAt.isNullOrBlank()) {
+                                        OutlinedTextField(
+                                            value = recipientNames[assignment.orderId].orEmpty(),
+                                            onValueChange = { recipientNames = recipientNames + (assignment.orderId to it.take(120)) },
+                                            label = { Text("Recipient name") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        OutlinedTextField(
+                                            value = deliveryNotes[assignment.orderId].orEmpty(),
+                                            onValueChange = { deliveryNotes = deliveryNotes + (assignment.orderId to it.take(1000)) },
+                                            label = { Text("Delivery / handoff note") },
+                                            minLines = 2,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        Button(
+                                            enabled = !loading && busyOrderId == null && !recipientNames[assignment.orderId].isNullOrBlank() && !deliveryNotes[assignment.orderId].isNullOrBlank(),
+                                            onClick = {
+                                                busyOrderId = assignment.orderId
+                                                error = null
+                                                scope.launch {
+                                                    FynxRemoteSocialClient.recordMarketplaceDriverDelivery(
+                                                        context,
+                                                        assignment.orderId,
+                                                        recipientNames[assignment.orderId].orEmpty(),
+                                                        deliveryNotes[assignment.orderId].orEmpty()
+                                                    ).onSuccess { refreshKey++ }
+                                                        .onFailure { error = it.message ?: "Delivery evidence could not be recorded." }
+                                                    busyOrderId = null
+                                                }
+                                            }
+                                        ) { if (busyOrderId == assignment.orderId) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Record delivery evidence") }
+                                    } else {
+                                        Text("Delivery evidence recorded. The buyer can now confirm receipt and inspect the item.", color = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        dismissButton = { TextButton(enabled = !loading && busyOrderId == null, onClick = { refreshKey++ }) { Text("Refresh") } }
+    )
+}
