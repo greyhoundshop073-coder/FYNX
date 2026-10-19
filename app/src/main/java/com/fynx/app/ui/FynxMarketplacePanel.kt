@@ -1525,3 +1525,15 @@ private fun MarketplaceMultiProductPaymentDialog(
         }
     )
 }
+
+/**
+ * Appends a page while keeping the first occurrence of each stable item key.
+ */
+internal fun <T, K> appendDistinctMarketplacePage(
+    existing: List<T>,
+    incoming: List<T>,
+    keySelector: (T) -> K
+): List<T> {
+    val knownKeys = existing.asSequence().map(keySelector).toMutableSet()
+    return existing + incoming.filter { knownKeys.add(keySelector(it)) }
+}
