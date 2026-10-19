@@ -222,27 +222,28 @@ private suspend fun createMarketplaceReceiptPdf(context: Context, receipt: JSONO
         canvas.drawText(receipt.optString("receiptId"), 36f, 157f, paint)
         paint.typeface = Typeface.DEFAULT
         canvas.drawText("Order ID: " + receipt.optString("orderId"), 36f, 178f, paint)
-        canvas.drawText("Payment status: " + receipt.optString("paymentStatus"), 36f, 198f, paint)
-        canvas.drawText("Payment reference: " + receipt.optString("paymentReference"), 36f, 218f, paint)
+        canvas.drawText("Payment status: " + receipt.optString("paymentStatus") + " • Fulfillment: " + receipt.optString("fulfillmentStatus", "UNKNOWN"), 36f, 198f, paint)
+        canvas.drawText("Payout status: " + receipt.optString("payoutStatus", "NOT_RECORDED"), 36f, 218f, paint)
+        canvas.drawText("Payment reference: " + receipt.optString("paymentReference"), 36f, 238f, paint)
         val issued = runCatching { SimpleDateFormat("yyyy-MM-dd HH:mm 'UTC'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(java.time.Instant.parse(receipt.optString("issuedAt")).toEpochMilli())) }.getOrDefault(receipt.optString("issuedAt"))
-        canvas.drawText("Issued: $issued", 36f, 238f, paint)
-        canvas.drawLine(36f, 254f, 559f, 254f, line)
+        canvas.drawText("Issued: $issued", 36f, 258f, paint)
+        canvas.drawLine(36f, 274f, 559f, 274f, line)
         paint.textSize = 12f; paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("PARTICIPANTS", 36f, 278f, paint)
-        drawReceiptAvatar(canvas, buyerAvatar, buyerName, 36f, 292f, paint)
-        drawReceiptAvatar(canvas, sellerAvatar, sellerName, 310f, 292f, paint)
+        canvas.drawText("PARTICIPANTS", 36f, 298f, paint)
+        drawReceiptAvatar(canvas, buyerAvatar, buyerName, 36f, 312f, paint)
+        drawReceiptAvatar(canvas, sellerAvatar, sellerName, 310f, 312f, paint)
         paint.color = Color.rgb(15, 23, 42); paint.textSize = 11f; paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText(buyerName.take(32), 106f, 316f, paint)
-        canvas.drawText(sellerName.take(32), 380f, 316f, paint)
+        canvas.drawText(buyerName.take(32), 106f, 336f, paint)
+        canvas.drawText(sellerName.take(32), 380f, 336f, paint)
         paint.color = Color.rgb(71, 85, 105); paint.textSize = 9f; paint.typeface = Typeface.DEFAULT
-        canvas.drawText("Buyer", 106f, 334f, paint)
-        canvas.drawText("Seller", 380f, 334f, paint)
-        canvas.drawLine(36f, 365f, 559f, 365f, line)
+        canvas.drawText("Buyer", 106f, 354f, paint)
+        canvas.drawText("Seller", 380f, 354f, paint)
+        canvas.drawLine(36f, 385f, 559f, 385f, line)
         paint.color = Color.rgb(15, 23, 42); paint.textSize = 12f; paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("PURCHASE DETAILS", 36f, 389f, paint)
+        canvas.drawText("PURCHASE DETAILS", 36f, 409f, paint)
         paint.typeface = Typeface.DEFAULT; paint.textSize = 11f
-        canvas.drawText(product.optString("title", "FYNX marketplace item").take(64), 36f, 416f, paint)
-        canvas.drawText("Quantity: " + product.optInt("quantity").toString(), 36f, 438f, paint)
+        canvas.drawText(product.optString("title", "FYNX marketplace item").take(64), 36f, 436f, paint)
+        canvas.drawText("Quantity: " + product.optInt("quantity").toString(), 36f, 458f, paint)
         val currency = receipt.optString("currency", "NGN")
         fun money(key: String) = currency + " " + String.format(Locale.US, "%,.2f", receipt.optDouble(key, 0.0))
         val sellerReceipt = receipt.optString("receiptType") == "SELLER_SALE"
@@ -257,7 +258,7 @@ private suspend fun createMarketplaceReceiptPdf(context: Context, receipt: JSONO
             "Buyer-paid marketplace fee" to money("marketplaceFeeBuyer"),
             "Discount" to (currency + " " + String.format(Locale.US, "%,.2f", product.optDouble("discount", 0.0)))
         )
-        var y = 470f
+        var y = 490f
         for ((label, amount) in rows) {
             canvas.drawText(label, 36f, y, paint)
             paint.textAlign = Paint.Align.RIGHT
@@ -447,6 +448,10 @@ private fun MarketplaceReceiptDialog(context: Context, receipt: JSONObject, onCl
                     Text((if (receipt.optString("receiptType") == "SELLER_SALE") "Seller net proceeds: " else "Total paid: ") + currency + " " + String.format(Locale.US, "%,.2f", if (receipt.optString("receiptType") == "SELLER_SALE") receipt.optDouble("sellerNet", 0.0) else receipt.optDouble("buyerTotal", 0.0)), style = MaterialTheme.typography.titleLarge)
                 }
                 Text("Payment status: " + receipt.optString("paymentStatus"))
+                if (!checkoutReceipt) {
+                    Text("Fulfillment status: " + receipt.optString("fulfillmentStatus", "UNKNOWN"))
+                    Text("Payout status: " + receipt.optString("payoutStatus", "NOT_RECORDED"))
+                }
                 Text("Receipt authenticity is verified by FYNX. The signature and QR link can be checked independently.", style = MaterialTheme.typography.bodySmall)
                 message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             }
