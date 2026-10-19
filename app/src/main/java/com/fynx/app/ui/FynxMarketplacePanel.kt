@@ -1427,6 +1427,104 @@ private fun FynxMarketplaceMultiCheckoutDialog(context: android.content.Context,
 };message?.let{Text(it,color=MaterialTheme.colorScheme.error)}}},confirmButton={Button(enabled=quote!=null&&!busy,onClick={val q=quote?:return@Button;if(marketplaceQuoteExpired(q.expiresAt)){quote=null;message="This quote has expired. Review the exact total again.";return@Button};busy=true;scope.launch{createMultiOrder(context,lines(),q.id).onSuccess{created->val c=created.getJSONObject("checkout");val serverId=c.optString("id").ifBlank{q.id};val serverTotal=c.optDouble("buyer_total",q.total);val serverCurrency=c.optString("currency",q.currency).uppercase(Locale.US);onPaymentReady(serverId,serverTotal,serverCurrency);busy=false}.onFailure{message=it.message?:"Protected checkout could not be created.";busy=false}}}){Text("Place order & pay")}},dismissButton={TextButton(onClick=onClose,enabled=!busy){Text("Cancel")}})
 }
 @Composable
+private fun MarketplaceMultiProductPaymentDialog(
+    context: android.content.Context,
+    checkoutId: String,
+    total: Double,
+    currency: String,
+    onPaid: () -> Unit,
+    onClose: () -> Unit
+) {
+    var email by remember { mutableStateOf("") }
+    var payment by remember { mutableStateOf<FynxMarketplacePayment?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var verifying by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    AlertDialog(
+        onDismissRequest = { if (!busy && !verifying) onClose() },
+        title = { Text(if (payment == null) "Secure Marketplace checkout" else "Verify your payment") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Multi-product checkout", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "One protected payment covers the products in this cart, including the reviewed delivery and FYNX fee amounts.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text("TOTAL TO PAY", style = MaterialTheme.typography.labelMedium)
+                Text(
+                    currency + " " + String.format(Locale.US, "%,.2f", total),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                if (payment == null) {
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it.trim().take(160) },
+                        label = { Text("Paystack payment email") },
+                        singleLine = true,
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        "Review the amount before continuing. FYNX will confirm payment with the backend before showing your combined receipt.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                } else {
+                    Text("Complete payment in Paystack, then return here.")
+                    Text("Reference: " + payment?.reference.orEmpty(), style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        "If confirmation is delayed, verify this same payment again rather than paying twice.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = {
+            if (payment == null) {
+                Button(enabled = !busy && email.contains("@"), onClick = {
+                    busy = true
+                    message = null
+                    scope.launch {
+                        initializeMarketplaceCheckoutGroupPayment(context, checkoutId, email).onSuccess { p ->
+                            if (!p.currency.equals(currency, ignoreCase = true) || kotlin.math.abs(p.amount - total) >= 0.005) {
+                                message = "The payment amount or currency does not match the reviewed total. Payment was not opened. Close checkout and review the cart again."
+                            } else {
+                                payment = p
+                                openMarketplaceCheckout(context, p.authorizationUrl).onFailure {
+                                    payment = null
+                                    message = it.message ?: "Could not open Paystack checkout."
+                                }
+                            }
+                        }.onFailure { message = it.message ?: "Could not start protected payment." }
+                        busy = false
+                    }
+                }) {
+                    if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Continue to Paystack")
+                }
+            } else {
+                Button(enabled = !verifying, onClick = {
+                    verifying = true
+                    message = null
+                    scope.launch {
+                        verifyMarketplaceCheckoutGroupPayment(context, payment?.reference.orEmpty())
+                            .onSuccess { onPaid() }
+                            .onFailure { message = it.message ?: "Payment is not verified yet. You can retry verification." }
+                        verifying = false
+                    }
+                }) {
+                    if (verifying) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Verify payment")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onClose, enabled = !busy && !verifying) { Text("Close") }
+        }
+    )
+}
 private fun MarketplaceMultiProductPaymentDialog(context: android.content.Context, checkoutId: String, total: Double, currency: String, onPaid: ()->Unit, onClose: ()->Unit){var email by remember{mutableStateOf("")};var payment by remember{mutableStateOf<FynxMarketplacePayment?>(null)};var busy by remember{mutableStateOf(false)};var verifying by remember{mutableStateOf(false)};var message by remember{mutableStateOf<String?>(null)};val scope=rememberCoroutineScope();AlertDialog(onDismissRequest={if(!busy&&!verifying)onClose()},title={Text("Secure checkout")},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){Text("Multi-product Marketplace order",style=MaterialTheme.typography.titleMedium);Text(currency+" "+String.format(Locale.US,"%,.2f",total),style=MaterialTheme.typography.titleLarge);if(payment==null)OutlinedTextField(email,{email=it},label={Text("Payment email")},singleLine=true,modifier=Modifier.fillMaxWidth())else{Text("Complete payment in Paystack, then return to FYNX.");Text("Reference: "+payment?.reference.orEmpty(),style=MaterialTheme.typography.labelSmall)};message?.let{Text(it,color=MaterialTheme.colorScheme.error)}}},confirmButton={if(payment==null)Button(enabled=!busy,onClick={busy=true;scope.launch{initializeMarketplaceCheckoutGroupPayment(context,checkoutId,email).onSuccess{p->if(!p.currency.equals(currency,ignoreCase=true)||kotlin.math.abs(p.amount-total)>=0.005){message="The payment amount or currency does not match your reviewed total. Your payment was not opened. Please close checkout and review the order again."}else{payment=p;openMarketplaceCheckout(context,p.authorizationUrl).onFailure{payment=null;message=it.message?:"Could not open payment checkout."}}}.onFailure{message=it.message?:"Could not start payment."};busy=false}}){if(busy)CircularProgressIndicator(Modifier.size(18.dp))else Text("Continue to payment")}else Button(enabled=!verifying,onClick={verifying=true;scope.launch{verifyMarketplaceCheckoutGroupPayment(context,payment?.reference.orEmpty()).onSuccess{onPaid()}.onFailure{message=it.message?:"Payment is not verified yet."};verifying=false}}){if(verifying)CircularProgressIndicator(Modifier.size(18.dp))else Text("Verify payment")}},dismissButton={TextButton(onClick=onClose,enabled=!busy&&!verifying){Text("Close")}})}
 
 /** Append unseen marketplace listing keys, preserving order and the first occurrence. */
