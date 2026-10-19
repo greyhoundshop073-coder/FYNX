@@ -40,6 +40,18 @@ if "FynxPreferencesStore.saveRemoteProfilePhotoId(context, profile.username, pro
 if client.count("FynxAvatarIdentityStore.publish(") < 2:
     errors.append("profile GET and UPDATE must both publish avatar invalidation")
 
+preferences = (UI / "FynxPreferencesStore.kt").read_text(encoding="utf-8")
+for needle in ("NO_REMOTE_PROFILE_PHOTO", "hasRemoteProfilePhotoIdEntry", "putString("):
+    if needle not in preferences:
+        errors.append(f"FynxPreferencesStore.kt: missing tri-state avatar cache marker: {needle}")
+if "hasCachedProfilePhotoEntry" not in client:
+    errors.append("profile client does not expose whether avatar cache is authoritative")
+
+remote_media = (UI / "FynxRemoteMedia.kt").read_text(encoding="utf-8")
+for needle in ("cachedOwnerPhotoExists", "cachedOwnerPhotoId", "else -> mediaId?.trim()?.takeIf { it.isNotBlank() }"):
+    if needle not in remote_media:
+        errors.append(f"FynxRemoteMedia.kt: missing avatar ID fallback/removal safeguard: {needle}")
+
 if errors:
     print("PROFILE AVATAR CONTRACT RED")
     for error in errors:
