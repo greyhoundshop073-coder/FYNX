@@ -172,15 +172,20 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
         }
         var busy by remember(order.id) { mutableStateOf(false) }
         var settlementLoading by remember(order.id) { mutableStateOf(true) }
+        var settlementRetryCount by remember(order.id) { mutableStateOf(0) }
+        var settlementError by remember(order.id) { mutableStateOf<String?>(null) }
         var settlement by remember(order.id) { mutableStateOf<JSONObject?>(null) }
         var payoutQueued by remember(order.id) { mutableStateOf(false) }
         var retryQueued by remember(order.id) { mutableStateOf(false) }
 
-        LaunchedEffect(order.id) {
+        LaunchedEffect(order.id, settlementRetryCount) {
             settlementLoading = true
+            settlementError = null
+            settlement = null
+            handoverPhotoMediaId = null
             FynxBackendClient.get(context, "/api/marketplace/settlement/order/${order.id}")
                 .onSuccess { raw -> settlement = JSONObject(raw) }
-                .onFailure { message = it.message ?: "Settlement details could not load." }
+                .onFailure { settlementError = it.message ?: "Settlement details could not load." }
             FynxBackendClient.get(context, "/api/marketplace/orders/${order.id}/delivery-details")
                 .onSuccess { raw ->
                     val evidence = JSONObject(raw).optJSONArray("evidence")
@@ -224,6 +229,10 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         Text("Return recorded. Payment remains protected until the existing protection/settlement process reaches a verified outcome.", style = MaterialTheme.typography.bodySmall)
                     }
                     if (settlementLoading) CircularProgressIndicator(Modifier.size(20.dp))
+                    if (!settlementLoading && settlementError != null) {
+                        Text(settlementError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        TextButton(enabled = !busy, onClick = { settlementRetryCount += 1 }) { Text("Retry settlement details") }
+                    }
                     settlement?.let { s ->
                         val accounting = s.optJSONObject("accounting")
                         val protection = s.optJSONObject("protection")
