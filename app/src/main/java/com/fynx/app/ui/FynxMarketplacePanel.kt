@@ -1115,7 +1115,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
             "Home" -> listOf("Material" to material, "Dimensions" to dimensions, "Colour" to color)
             "Vehicles" -> listOf("Make / brand" to brand, "Model" to model, "Year" to vehicleYear, "Mileage" to mileage)
             "Beauty" -> listOf("Brand" to brand, "Size / volume" to size, "Product details" to beautyDetails)
-            "Services" -> listOf("Service details" to serviceDetails, "Service area" to location)
+            "Services" -> listOf("Service details" to serviceDetails)
             else -> listOf("Brand / maker" to brand, "Colour" to color, "Additional details" to generalDetails)
         }.filter { it.second.isNotBlank() }
         buildString {
