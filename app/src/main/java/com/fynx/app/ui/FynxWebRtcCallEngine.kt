@@ -213,6 +213,22 @@ class FynxWebRtcCallEngine(
     override fun setCameraEnabled(enabled: Boolean) { videoTrack?.setEnabled(enabled) }
     override fun switchCamera() { cameraCapturer?.switchCamera(null) }
     override fun setSpeakerEnabled(enabled: Boolean) { audioRouter.setSpeakerEnabled(enabled) }
-    override fun disconnect() { recoveryJob?.cancel(); recoveryJob = null; iceRestartInFlight = false; iceRecoveryAttempts = 0; runCatching { cameraCapturer?.stopCapture() }; cameraCapturer?.dispose(); cameraCapturer = null; surfaceTextureHelper?.dispose(); surfaceTextureHelper = null; eglBase?.release(); eglBase = null; peerConnection?.close(); peerConnection?.dispose(); peerConnection = null; pendingRemoteCandidates.clear(); remoteDescriptionSet = false; audioTrack?.dispose(); audioSource?.dispose(); videoTrack?.dispose(); videoSource?.dispose(); audioTrack = null; audioSource = null; videoTrack = null; videoSource = null; audioRouter.stop() }
+    override fun disconnect() {
+        recoveryJob?.cancel()
+        recoveryJob = null
+        iceRestartInFlight = false
+        iceRecoveryAttempts = 0
+        releaseLocalVideoResources()
+        runCatching { peerConnection?.close() }
+        runCatching { peerConnection?.dispose() }
+        peerConnection = null
+        pendingRemoteCandidates.clear()
+        remoteDescriptionSet = false
+        runCatching { audioTrack?.dispose() }
+        audioTrack = null
+        runCatching { audioSource?.dispose() }
+        audioSource = null
+        runCatching { audioRouter.stop() }
+    }
     private open class SdpObserverAdapter : SdpObserver { override fun onCreateSuccess(description: SessionDescription) = Unit; override fun onSetSuccess() = Unit; override fun onCreateFailure(error: String) = Unit; override fun onSetFailure(error: String) = Unit }
 }
