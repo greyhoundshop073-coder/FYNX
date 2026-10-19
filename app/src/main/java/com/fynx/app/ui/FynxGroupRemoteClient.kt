@@ -49,7 +49,7 @@ object FynxGroupRemoteClient {
             }
         }.distinctBy { it.id }
     }
-    suspend fun sendMessage(context:Context,groupId:String,message:ChatMessage):Result<RemoteMessage> = runCatching { var mediaId:String?=message.attachmentUri?.substringAfterLast('/').takeIf{it?.all(Char::isDigit)==true};var mediaType=message.attachmentType;if(mediaId==null&&message.attachmentUri!=null){val uri=Uri.parse(message.attachmentUri!!);val mime=context.contentResolver.getType(uri)?.lowercase()?:when(mediaType){"video","video_note"->"video/mp4";"audio"->"audio/mp4";else->"image/jpeg"};val uploaded=FynxProductionMessaging.uploadMedia(context,uri,mime).getOrThrow();mediaId=uploaded.id;mediaType=mediaType?:mime.substringBefore('/')};val body=JSONObject().apply{put("id",message.id);put("text",message.text);if(mediaId!=null)put("attachmentMediaId",mediaId);if(mediaType!=null)put("attachmentType",mediaType);if(message.replyToId!=null)put("replyToId",message.replyToId)};val result=runCatching{val o=JSONObject(FynxBackendClient.postJson(context,"/api/groups/$groupId/messages",body.toString()).getOrThrow()).getJSONObject("message");toRemoteMessage(o)};result.getOrElse{error->loadMessages(context,groupId).getOrNull()?.firstOrNull{it.id==message.id}?.let{return@getOrElse it};throw error} }
+    suspend fun sendMessage(context:Context,groupId:String,message:ChatMessage):Result<RemoteMessage> = runCatching { var mediaId:String?=message.attachmentUri?.substringAfterLast('/').takeIf{it?.all(Char::isDigit)==true};var mediaType=message.attachmentType;if(mediaId==null&&message.attachmentUri!=null){val uri=Uri.parse(message.attachmentUri!!);val mime=groupAttachmentMimeType(context,uri,mediaType);val uploaded=FynxProductionMessaging.uploadMedia(context,uri,mime).getOrThrow();mediaId=uploaded.id;mediaType=mediaType?:mime.substringBefore('/')};val body=JSONObject().apply{put("id",message.id);put("text",message.text);if(mediaId!=null)put("attachmentMediaId",mediaId);if(mediaType!=null)put("attachmentType",mediaType);if(message.replyToId!=null)put("replyToId",message.replyToId)};val result=runCatching{val o=JSONObject(FynxBackendClient.postJson(context,"/api/groups/$groupId/messages",body.toString()).getOrThrow()).getJSONObject("message");toRemoteMessage(o)};result.getOrElse{error->loadMessages(context,groupId).getOrNull()?.firstOrNull{it.id==message.id}?.let{return@getOrElse it};throw error} }
     suspend fun editMessage(context:Context,groupId:String,messageId:String,text:String):Result<RemoteMessage> = messageAction(context,groupId,messageId,JSONObject().apply{put("action","edit");put("text",text)})
     suspend fun reactToMessage(context:Context,groupId:String,messageId:String,reaction:String?):Result<RemoteMessage> = messageAction(context,groupId,messageId,JSONObject().apply{put("action","reaction");if(reaction!=null)put("reaction",reaction)})
     suspend fun setPinned(context:Context,groupId:String,messageId:String,pinned:Boolean):Result<RemoteMessage> = messageAction(context,groupId,messageId,JSONObject().apply{put("action","pin");put("pinned",pinned)})
@@ -75,4 +75,39 @@ object FynxGroupRemoteClient {
         return RemoteMessage(safeId,o.optString("text"),o.optString("senderUsername"),o.optLong("timestamp"),o.optString("attachmentMediaId").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentType").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentUrl").takeIf{it.isNotBlank()&&it!="null"},o.optString("replyToId").takeIf{it.isNotBlank()&&it!="null"},o.optString("reaction").takeIf{it.isNotBlank()&&it!="null"},o.optBoolean("edited"),o.optBoolean("deleted"),o.optBoolean("pinned"))
     }
     fun toChatMessage(m:RemoteMessage,currentUsername:String,baseUrl:String)=ChatMessage(m.text,m.senderUsername.equals(currentUsername.removePrefix("@"),true),m.id,m.timestamp,delivered=true,read=true,replyToId=m.replyToId,reaction=m.reaction,edited=m.edited,attachmentUri=m.attachmentUrl?.let{if(it.startsWith("http"))it else baseUrl.trimEnd('/')+it},attachmentType=m.attachmentType,senderUsername=m.senderUsername,pinned=m.pinned)
+}
+
+
+private fun groupAttachmentMimeType(context: Context, uri: Uri, mediaType: String?): String {
+    context.contentResolver.getType(uri)?.trim()?.lowercase()?.takeIf { '/' in it }?.let { return it }
+    val extension = (uri.lastPathSegment.orEmpty().substringAfterLast('.', "")).lowercase()
+    val byExtension = when (extension) {
+        "jpg", "jpeg" -> "image/jpeg"
+        "png" -> "image/png"
+        "gif" -> "image/gif"
+        "webp" -> "image/webp"
+        "heic" -> "image/heic"
+        "mp4", "m4v" -> "video/mp4"
+        "mov" -> "video/quicktime"
+        "m4a" -> "audio/mp4"
+        "mp3" -> "audio/mpeg"
+        "wav" -> "audio/wav"
+        "aac" -> "audio/aac"
+        "pdf" -> "application/pdf"
+        "txt", "log", "csv" -> "text/plain"
+        "zip" -> "application/zip"
+        "doc" -> "application/msword"
+        "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        "xls" -> "application/vnd.ms-excel"
+        "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        "ppt" -> "application/vnd.ms-powerpoint"
+        "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        else -> null
+    }
+    if (byExtension != null) return byExtension
+    return when (mediaType) {
+        "video", "video_note" -> "video/mp4"
+        "audio" -> "audio/mp4"
+        else -> "application/octet-stream"
+    }
 }
