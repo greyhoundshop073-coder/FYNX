@@ -143,9 +143,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
           receiptId, orderId: String(row.id), issuedAt: new Date(row.created_at).toISOString(),
           paymentStatus: row.status, paymentReference: row.payment_reference,
           currency: String(row.currency).toUpperCase(),
-          buyer: sellerView
-            ? { displayName: row.buyer_display_name || row.buyer_username, username: row.buyer_username }
-            : { displayName: row.buyer_display_name || row.buyer_username, username: row.buyer_username, profilePhotoMediaId: row.buyer_profile_photo_media_id ? String(row.buyer_profile_photo_media_id) : null },
+          buyer: { displayName: row.buyer_display_name || row.buyer_username, username: row.buyer_username, profilePhotoMediaId: row.buyer_profile_photo_media_id ? String(row.buyer_profile_photo_media_id) : null },
           seller: { displayName: row.seller_display_name || row.seller_username, username: row.seller_username, profilePhotoMediaId: row.seller_profile_photo_media_id ? String(row.seller_profile_photo_media_id) : null },
           product: {
             title: row.product_snapshot?.title || 'FYNX marketplace item',
