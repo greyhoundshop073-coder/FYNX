@@ -56,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
@@ -465,7 +466,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
     }
 
-    val groupMediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val groupMediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(maxItems = 1)) { uris ->
+        val uri = uris.firstOrNull()
         if (uri != null) {
             val mime = context.contentResolver.getType(uri)?.lowercase().orEmpty()
             val type = when {
@@ -950,7 +952,10 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     })
                                     Text("Camera", style = MaterialTheme.typography.labelMedium)
                                 }
-                                OutlinedButton(onClick = { showAttachmentMenu = false; groupMediaPicker.launch("*/*") }, modifier = Modifier.weight(1f)) {
+                                OutlinedButton(onClick = {
+                            showAttachmentMenu = false
+                            groupMediaPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                        }, modifier = Modifier.weight(1f)) {
                                     Icon(Icons.Default.PhotoLibrary, null); Spacer(Modifier.width(5.dp)); Text("Gallery")
                                 }
                                 OutlinedButton(onClick = { showAttachmentMenu = false; groupDocumentPicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f)) {
