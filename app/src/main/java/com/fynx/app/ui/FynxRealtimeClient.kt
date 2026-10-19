@@ -273,6 +273,7 @@ class FynxRealtimeClient(
     fun sendCallInvite(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "invite")
     fun sendCallAccept(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "accept")
     fun sendCallReject(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "reject")
+    fun sendCallBusy(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "busy")
     fun sendCallEnd(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "end")
     fun sendCallOffer(callId: String, targetUserId: String, sdp: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "offer", JSONObject().put("sdp", sdp))
     fun sendCallAnswer(callId: String, targetUserId: String, sdp: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "answer", JSONObject().put("sdp", sdp))

@@ -102,6 +102,9 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                             session = FynxCallSession(event.callId, event.fromUsername ?: event.fromUserId, listOf(incomingName), if (video) FynxCallType.VIDEO else FynxCallType.VOICE, FynxCallState.RINGING)
                             FynxCallsStore.add(context, FynxCallRecord(event.callId, "@$incomingName", if (video) "Video call" else "Voice call", "Just now", missed = true, status = "Incoming"))
                             calls = FynxCallsStore.load(context)
+                        } else if (session != null && event.callId != session?.id) {
+                            // Do not silently drop a second incoming invite while this user is busy.
+                            realtimeClient.sendCallBusy(event.callId, event.fromUserId, event.callType.equals("video", true))
                         }
                         "accept" -> if (session?.id == event.callId) {
                             val current = session!!
