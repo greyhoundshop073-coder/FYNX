@@ -187,9 +187,11 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
     return secret ? crypto.createHmac('sha256', secret).update(checkoutReceiptPayload(group, lines, reference, verifiedAt)).digest('hex') : null;
   };
   const checkoutReceiptRows = async (checkoutId) => pool.query(`
-    SELECT cg.*, MIN(e.created_at) AS payment_verified_at,
+    SELECT cg.*, b.username AS buyer_username, b.display_name AS buyer_display_name,
+      MIN(e.created_at) AS payment_verified_at,
       MAX(e.metadata->>'reference') AS verified_payment_reference
     FROM marketplace_checkout_groups cg
+    JOIN users b ON b.id=cg.buyer_id
     JOIN marketplace_checkout_group_items gi ON gi.checkout_id=cg.id
     JOIN marketplace_order_events e ON e.order_id=gi.order_id
     WHERE cg.id=$1 AND cg.status='PAID'
@@ -197,7 +199,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       AND lower(COALESCE(e.metadata->>'provider',''))='paystack'
       AND e.metadata->>'checkoutGroupId'=cg.id::text
       AND e.metadata->>'reference'=cg.payment_reference
-    GROUP BY cg.id
+    GROUP BY cg.id, b.username, b.display_name
     HAVING COUNT(DISTINCT gi.order_id) = (
       SELECT COUNT(*) FROM marketplace_checkout_group_items all_items WHERE all_items.checkout_id=cg.id
     )
@@ -244,8 +246,11 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
           orderId: String(line.id), seller: line.seller_username, title: line.product_snapshot?.title || 'FYNX marketplace item',
           quantity: Number(line.quantity), unitPrice: Number(line.unit_price), subtotal: Number(line.product_subtotal),
           deliveryFee: Number(line.delivery_fee), marketplaceFee: Number(line.marketplace_fee_buyer),
-          total: Number(line.buyer_total ?? line.total_amount)
+          total: Number(line.buyer_total ?? line.total_amount), fulfillmentStatus: String(line.status)
         })),
+        buyer: { username: group.buyer_username || '', displayName: group.buyer_display_name || group.buyer_username || 'FYNX buyer' },
+        fulfillmentStatuses: [...new Set(lines.map((line) => String(line.status)))],
+        payoutStatus: 'NOT_RECORDED',
         subtotal: Number(group.subtotal), deliveryFee: Number(group.delivery_fee),
         marketplaceFee: Number(group.marketplace_fee), buyerTotal: Number(group.buyer_total),
         signatureAlgorithm: 'HMAC-SHA256', signature,
@@ -287,7 +292,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       const matches = typeof signature === 'string' && /^[a-f0-9]{64}$/i.test(signature) && expected
         && crypto.timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(signature, 'hex'));
       if (!matches) return res.status(200).json({ authentic: false, receiptId: rawId, reason: 'SIGNATURE_MISMATCH' });
-      return res.json({ authentic: true, receiptId: rawId, paymentStatus: group.status, currency: String(group.currency).toUpperCase(), amount: Number(group.buyer_total), itemCount: lines.length, issuedAt: new Date(group.payment_verified_at).toISOString() });
+      return res.json({ authentic: true, receiptId: rawId, paymentStatus: group.status, currency: String(group.currency).toUpperCase(), amount: Number(group.buyer_total), itemCount: lines.length, fulfillmentStatuses: [...new Set(lines.map((line) => String(line.status)))], payoutStatus: 'NOT_RECORDED', issuedAt: new Date(group.payment_verified_at).toISOString() });
     } catch (error) {
       console.error('marketplace checkout receipt verification', error);
       return res.status(500).json({ authentic: false, error: 'checkout receipt verification unavailable' });
