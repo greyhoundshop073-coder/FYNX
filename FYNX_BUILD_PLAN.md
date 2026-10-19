@@ -163,3 +163,46 @@ AI image generation and AI video generation are NOT part of the FYNX roadmap. Do
 - [ ] No common API credentials/private keys are committed to Android source or manifest
 - [ ] Exact-commit APK publication remains success-gated
 - [ ] Badge is not complete until the consolidated workflow is GREEN
+
+
+### Marketplace Push 22 — Itemised buyer/seller receipts, exact financial reconciliation, and checkout presentation (PLANNED; not implemented yet)
+
+**Carry-forward register — do not silently drop these requirements**
+- [x] Push 15 — driver custody foundation (previously completed; preserve existing implementation).
+- [x] Push 16 — My Shop entry point (previously completed).
+- [x] Push 17 — persistent shop identity (previously completed; merge commit `83ca55a5fb76c409beef76f8497fa794867179df`).
+- [x] Push 18 — My Shop listing editor (previously completed; merge commit `0f267b8747ae65ee06321ecd496c1500be40d8cd`).
+- [x] Push 19 — fulfillment availability controls (previously completed; merge commit `fc1f403e7673257ef4858e5a3dd3008334a78d02`).
+- [x] Push 20 — public storefront and Saved Products (PR #267; previously reported merged).
+- [x] Push 21 — category-specific listing forms (PR #269; merge commit `aa1d15453d84cb5b39c0983d99763f9e38bd8b97`). Canonical integration checks verified green: Android run 39282820730, Backend run 39282820713, Chat/Group parity run 39282820786.
+- [ ] Push 22 — inspect current implementation first; add buyer and seller itemised financial receipts, PDF export/download, Android share-sheet sharing (including FYNX chats where existing chat attachment flow supports it), receipt re-open access from buyer orders and seller sales, and the agreed neat single-item/multi-item checkout and payment UI. Do not create a parallel order/payment system.
+
+**Receipt correctness checklist**
+- [ ] Receipt is issued/displayed as a financial receipt only after backend-authoritative payment verification; never on button tap or from a client-only success state.
+- [ ] Use the canonical order/sub-order and provider payment references; stable, unique receipt ID; idempotent receipt generation and repeat download/share.
+- [ ] Record and display transaction timestamp from the authoritative backend. Persist UTC; render with an explicit timezone/offset so the time is not ambiguous.
+- [ ] Item rows show product title/identity, seller/shop, quantity, unit price, line amount, and applicable line discount. Preserve the historical purchase snapshot even if a listing is later edited or removed.
+- [ ] Financial calculation uses integer minor units (kobo/cents) or the backend's canonical decimal-safe money representation; never binary floating-point for authoritative totals. Apply documented currency rounding once at the defined boundary.
+- [ ] For every line: line gross = unit price × quantity; line net = line gross − allocated line discount. Validate quantity is positive and bounded; validate all money is finite, non-negative where applicable, and within currency limits.
+- [ ] Buyer order total reconciles as: merchandise subtotal − discounts + applicable delivery charges + buyer-paid fees + applicable taxes only when actually charged = amount paid. Do not invent a tax or fee.
+- [ ] Every fee/discount is sourced from the server quote/order snapshot and shown once only. Do not add a fee again if already included in the provider amount or line/order total.
+- [ ] For multi-seller carts, keep one complete buyer order breakdown and seller-specific receipts/sub-orders. Allocate delivery and discounts according to the backend's recorded allocation rules; the sum of seller allocations plus separately identified platform/provider amounts must reconcile to the canonical order total.
+- [ ] Enforce same-currency carts (NGN or USD as supported); never add NGN and USD values together. Format with correct currency code/symbol and precision.
+- [ ] Seller receipt shows only that seller's items and authorized transaction details. Seller proceeds come from the authoritative settlement/ledger record, not a client-side recomputation: gross sale, fee payer and fee amounts, provider deductions only when actually charged to seller, refunds/adjustments if any, net proceeds, and payout state.
+- [ ] Never deduct a buyer-paid fee from seller proceeds a second time. Clearly distinguish payment verified, fulfillment/delivery state, dispute state, settlement eligibility, and payout paid/pending/failed/reversed. Payment receipt must not claim delivery or payout happened unless those events are independently confirmed.
+- [ ] Buyer and seller see only their authorized receipt; no leakage of another seller's items, buyer private address/phone, payment secrets, or another account's data.
+- [ ] Receipt verification shows a safe canonical order/receipt reference and verified status; do not expose tokens, internal secrets, or unrestricted private endpoints.
+- [ ] PDF has readable layout, item rows, totals, timestamp/timezone, currency, parties, order and payment references, status labels, and page-break handling for long carts. Download saves to a user-accessible phone location; share uses Android's supported content URI/share flow, not a raw private filesystem path.
+- [ ] Provide clear loading/error/retry states; repeated share/download must not create duplicate financial events or receipts.
+- [ ] Checkout/payment UI follows the accepted tidy layout for both single-product and multi-product flows: aligned fields, itemised summary, clear fulfillment selection, fees/discounts, prominent exact total and secure-payment explanation. Do not alter payment-provider verification or claim control over the provider-hosted page.
+
+**Required verification before Push 22 can be marked complete**
+- [ ] Backend tests for server-authoritative receipt eligibility, ownership isolation, stable receipt identity, idempotency, and historical item snapshots.
+- [ ] Calculation tests for quantity × unit price; multiple lines; zero/partial/full discount; delivery charge allocation; buyer-paid vs seller-paid fee; refund/adjustment; NGN and USD precision; large quantities/amount bounds; and rounding boundaries.
+- [ ] Multi-seller reconciliation test: buyer total equals the sum of the recorded seller/platform/provider allocations under the current fee policy, with no duplicated delivery, fee or discount.
+- [ ] Negative tests for pending/failed/unverified payment, mismatched amount/currency/reference, duplicate verification/webhook, unauthorized buyer/seller, and attempts to read another seller's receipt.
+- [ ] PDF/share/download tests and UI regression checks for empty/long carts, long product names, large totals, and both checkout variants.
+- [ ] Run Android Build, Backend CI, Chat/Group parity, marketplace security/lifecycle verifiers, and real instrumentation required by the existing workflow. Fix every red check before starting another push.
+- [ ] Verify the exact successful commit's APK artifact. Do not call it phone/runtime-proven unless an authenticated real-device/emulator flow actually demonstrates it.
+
+**Calculation gate:** do not implement totals by guessing the fee policy. First inspect the current quote response, order snapshot, checkout-group allocation, provider amount, ledger/settlement fields and refund rules. Document the actual formulas and field mapping in tests; where authoritative inputs are absent or contradictory, fail closed and fix the backend contract before generating a receipt.
