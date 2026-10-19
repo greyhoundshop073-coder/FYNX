@@ -72,7 +72,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
     Number(row.marketplace_fee_buyer).toFixed(2), Number(row.marketplace_fee_seller).toFixed(2),
     Number(row.discount_amount).toFixed(2), Number(row.buyer_total ?? row.total_amount).toFixed(2),
     Number(row.seller_net_amount).toFixed(2), String(row.payment_reference || ''),
-    new Date(row.created_at).toISOString(), row.product_snapshot || {}
+    new Date(row.payment_verified_at || row.created_at).toISOString(), row.product_snapshot || {}
   ]);
   const signReceipt = (row) => {
     const secret = receiptSigningSecret();
@@ -112,7 +112,8 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       (to_jsonb(buyer)->>'profile_photo_media_id') AS buyer_profile_photo_media_id,
       seller.username AS seller_username,
       seller.display_name AS seller_display_name,
-      (to_jsonb(seller)->>'profile_photo_media_id') AS seller_profile_photo_media_id
+      (to_jsonb(seller)->>'profile_photo_media_id') AS seller_profile_photo_media_id,
+      (SELECT MIN(e.created_at) FROM marketplace_order_events e WHERE e.order_id=o.id AND e.event_type='PAYMENT_CONFIRMED') AS payment_verified_at
     FROM marketplace_orders o
     JOIN users buyer ON buyer.id=o.buyer_id
     JOIN users seller ON seller.id=o.seller_id
@@ -140,7 +141,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       const sellerView = String(row.seller_id) === String(req.user.sub);
       return res.json({
         receipt: {
-          receiptId, orderId: String(row.id), receiptType: sellerView ? 'SELLER_SALE' : 'BUYER_PURCHASE', issuedAt: new Date(row.created_at).toISOString(),
+          receiptId, orderId: String(row.id), receiptType: sellerView ? 'SELLER_SALE' : 'BUYER_PURCHASE', issuedAt: new Date(row.payment_verified_at || row.created_at).toISOString(),
           paymentStatus: row.status, paymentReference: row.payment_reference,
           currency: String(row.currency).toUpperCase(),
           buyer: { displayName: row.buyer_display_name || row.buyer_username, username: row.buyer_username, profilePhotoMediaId: row.buyer_profile_photo_media_id ? String(row.buyer_profile_photo_media_id) : null },
@@ -172,7 +173,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
     if (!/^[A-F0-9]{32}$/i.test(id)) return res.status(400).json({ authentic: false, error: 'invalid receipt ID' });
     try {
       await ensureMarketplaceTransactionSchema();
-      const row = (await pool.query('SELECT * FROM marketplace_orders WHERE REPLACE(UPPER(id::text), \'-\', \'\')=$1 LIMIT 1', [id.toUpperCase()])).rows[0];
+      const row = (await pool.query(\`SELECT o.*, (SELECT MIN(e.created_at) FROM marketplace_order_events e WHERE e.order_id=o.id AND e.event_type='PAYMENT_CONFIRMED') AS payment_verified_at FROM marketplace_orders o WHERE REPLACE(UPPER(o.id::text), '-', '')=$1 LIMIT 1\`, [id.toUpperCase()])).rows[0];
       if (!row || !receiptStatusAllowed(row.status) || !row.payment_reference || !receiptAccountingReconciles(row)) {
         return res.status(404).json({ authentic: false, error: 'receipt could not be verified' });
       }
