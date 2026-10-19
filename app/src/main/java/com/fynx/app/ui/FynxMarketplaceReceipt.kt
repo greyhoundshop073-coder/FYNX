@@ -162,7 +162,7 @@ private suspend fun createMarketplaceCheckoutReceiptPdf(context: Context, receip
                 canvas.drawText("Subtotal: " + money(receipt.optDouble("subtotal")), 36f, y, ink); y += 19f
                 canvas.drawText("Delivery: " + money(receipt.optDouble("deliveryFee")), 36f, y, ink); y += 19f
                 canvas.drawText("Buyer-paid FYNX fee: " + money(receipt.optDouble("marketplaceFee")), 36f, y, ink); y += 19f
-                canvas.drawText("Payout status: " + receipt.optString("payoutStatus", "NOT_RECORDED"), 36f, y, ink); y += 23f
+                canvas.drawText("Payout status: " + receipt.optString("payoutStatus", "NOT_INITIALIZED"), 36f, y, ink); y += 23f
                 ink.textSize = 15f; ink.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 canvas.drawText("TOTAL PAID", 36f, y, ink)
                 ink.textAlign = Paint.Align.RIGHT
@@ -425,6 +425,7 @@ private fun MarketplaceReceiptDialog(context: Context, receipt: JSONObject, onCl
                         Text("${index + 1}. " + item.optString("title", "FYNX marketplace item"), style = MaterialTheme.typography.bodyMedium)
                         Text("Seller: " + item.optString("seller", "FYNX seller") + " • Qty " + item.optInt("quantity") + " • " + currency + " " + String.format(Locale.US, "%,.2f", item.optDouble("total")), style = MaterialTheme.typography.bodySmall)
                         Text("Fulfillment: " + item.optString("fulfillmentStatus", "UNKNOWN"), style = MaterialTheme.typography.labelSmall)
+                        Text("Payout: " + item.optString("payoutStatus", "NOT_INITIALIZED"), style = MaterialTheme.typography.labelSmall)
                     }
                     val remaining = (items.length() - 5).coerceAtLeast(0)
                     if (remaining > 0) Text("$remaining more item(s) included in the complete PDF receipt.", style = MaterialTheme.typography.bodySmall)
@@ -432,7 +433,7 @@ private fun MarketplaceReceiptDialog(context: Context, receipt: JSONObject, onCl
                     Text("Subtotal: " + money("subtotal"))
                     Text("Delivery: " + money("deliveryFee"))
                     Text("Buyer-paid FYNX fee: " + money("marketplaceFee"))
-                    Text("Payout status: " + receipt.optString("payoutStatus", "NOT_RECORDED"), style = MaterialTheme.typography.bodySmall)
+                    Text("Payout status: " + receipt.optString("payoutStatus", "NOT_INITIALIZED"), style = MaterialTheme.typography.bodySmall)
                     Text("Total paid: " + money("buyerTotal"), style = MaterialTheme.typography.titleLarge)
                     Text("Paystack reference: " + receipt.optString("paymentReference"), style = MaterialTheme.typography.bodySmall)
                 } else {
