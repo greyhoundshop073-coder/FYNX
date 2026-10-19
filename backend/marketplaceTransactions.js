@@ -173,7 +173,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
     if (!/^[A-F0-9]{32}$/i.test(id)) return res.status(400).json({ authentic: false, error: 'invalid receipt ID' });
     try {
       await ensureMarketplaceTransactionSchema();
-      const row = (await pool.query(\`SELECT o.*, (SELECT MIN(e.created_at) FROM marketplace_order_events e WHERE e.order_id=o.id AND e.event_type='PAYMENT_CONFIRMED') AS payment_verified_at FROM marketplace_orders o WHERE REPLACE(UPPER(o.id::text), '-', '')=$1 LIMIT 1\`, [id.toUpperCase()])).rows[0];
+      const row = (await pool.query(`SELECT o.*, (SELECT MIN(e.created_at) FROM marketplace_order_events e WHERE e.order_id=o.id AND e.event_type='PAYMENT_CONFIRMED') AS payment_verified_at FROM marketplace_orders o WHERE REPLACE(UPPER(o.id::text), '-', '')=$1 LIMIT 1`, [id.toUpperCase()])).rows[0];
       if (!row || !receiptStatusAllowed(row.status) || !row.payment_reference || !receiptAccountingReconciles(row)) {
         return res.status(404).json({ authentic: false, error: 'receipt could not be verified' });
       }
@@ -183,7 +183,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       return res.json({
         authentic: true, receiptId: rawId, paymentStatus: row.status,
         currency: String(row.currency).toUpperCase(), amount: Number(row.buyer_total ?? row.total_amount),
-        issuedAt: new Date(row.created_at).toISOString()
+        issuedAt: new Date(row.payment_verified_at || row.created_at).toISOString()
       });
     } catch (error) {
       console.error('marketplace receipt verification', error);
