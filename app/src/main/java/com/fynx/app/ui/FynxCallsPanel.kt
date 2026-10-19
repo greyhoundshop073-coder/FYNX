@@ -29,7 +29,7 @@ import org.webrtc.VideoTrack
 enum class FynxCallHistoryFilter { ALL, MISSED, VIDEO, VOICE }
 
 @Composable
-fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, initialOutgoing: Boolean = false, initialIncomingCallId: String? = null, initialIncomingUserId: String? = null, onIncomingCallConsumed: (String) -> Unit = {}) {
+fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, initialOutgoing: Boolean = false, initialIncomingCallId: String? = null, initialIncomingUserId: String? = null, currentUsername: String? = null, onIncomingCallConsumed: (String) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var activeCall by remember { mutableStateOf(initialName?.removePrefix("@").orEmpty().ifBlank { initialName }) }
@@ -233,7 +233,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     }
 
     if (activeCall != null && session != null) {
-        FynxActiveCallPanel(name = activeCall!!, session = session!!, realtimeState = realtimeState, localVideoTrack = localVideoTrack, remoteVideoTrack = remoteVideoTrack,
+        FynxActiveCallPanel(name = activeCall!!, session = session!!, currentUsername = currentUsername, realtimeState = realtimeState, localVideoTrack = localVideoTrack, remoteVideoTrack = remoteVideoTrack,
             onAnswer = {
                 val current = session!!
                 val required = if (video) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)
