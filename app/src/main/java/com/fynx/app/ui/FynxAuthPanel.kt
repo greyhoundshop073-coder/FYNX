@@ -36,7 +36,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
 
-    fun finish(result: Result<FynxRemoteAuthClient.ResultData>, allowOfflineEntry: Boolean = false) {
+    fun finish(result: Result<FynxRemoteAuthClient.ResultData>) {
         result.onSuccess { account ->
             FynxBackendClient.saveAccessToken(context, account.token)
             FynxAuthStore.saveAccount(context, account.displayName.ifBlank { displayName.trim() }, account.username, account.phone.ifBlank { phone.trim() })
@@ -46,19 +46,10 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
             onAuthenticated(account.username)
         }.onFailure { failure ->
             busy = false
-            // Offline entry is only a debug-build convenience for network failures.
-            // Invalid credentials and other server responses must never create a local session.
-            val localUsername = if (allowOfflineEntry && isLoginNetworkFailure(failure)) {
-                localDebugAccountForLogin(context, username)
-            } else null
-            if (localUsername != null) {
-                FynxAuthStore.save(context, localUsername)
-                error = null
-                onAuthenticated(localUsername)
-            } else {
-                error = failure.message?.substringAfter(": ")?.trim()?.removePrefix("{")?.removeSuffix("}")
-                    ?: "FYNX could not complete the account request."
-            }
+            // A failed server sign-in must remain visible as a failure. Debug/offline
+            // entry is available only through its separate, explicit control below.
+            error = failure.message?.substringAfter(": ")?.trim()?.removePrefix("{")?.removeSuffix("}")
+                ?: "FYNX could not complete the account request."
         }
     }
 
@@ -170,11 +161,11 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                             Spacer(Modifier.height(18.dp))
                             FynxAuthField(username, { username = it.replace(" ", "").removePrefix("@") }, "Username", "@")
                             Spacer(Modifier.height(10.dp))
+                            FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
+                            Spacer(Modifier.height(10.dp))
                             if (localDebugLoginAvailable) {
-                                Text("Saved-device login for this debug APK", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
-                            } else {
-                                FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
-                                Spacer(Modifier.height(10.dp))
+                                Text("A saved local account is available on this debug APK.", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
+                                Spacer(Modifier.height(6.dp))
                             }
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                             Spacer(Modifier.height(14.dp))
@@ -183,20 +174,30 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                 val savedLocalUsername = localDebugAccountForLogin(context, requestedUsername)
                                 when {
                                     requestedUsername.isBlank() -> error = "Enter your username."
-                                    savedLocalUsername != null -> {
-                                        // Use the saved-device path immediately: no remote request or timeout.
-                                        FynxAuthStore.save(context, savedLocalUsername)
-                                        error = null
-                                        onAuthenticated(savedLocalUsername)
-                                    }
                                     password.isBlank() -> error = "Enter your username and password."
                                     else -> {
                                         busy = true
                                         error = null
-                                        scope.launch { finish(FynxRemoteAuthClient.login(context, requestedUsername, password), allowOfflineEntry = true) }
+                                        scope.launch { finish(FynxRemoteAuthClient.login(context, requestedUsername, password)) }
                                     }
                                 }
                             }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Signing in…" else "Sign In") }
+                            if (localDebugLoginAvailable) {
+                                TextButton(
+                                    onClick = {
+                                        val savedLocalUsername = localDebugAccountForLogin(context, username)
+                                        if (savedLocalUsername != null) {
+                                            FynxAuthStore.save(context, savedLocalUsername)
+                                            error = null
+                                            onAuthenticated(savedLocalUsername)
+                                        } else {
+                                            error = "No matching saved local account is available."
+                                        }
+                                    },
+                                    enabled = !busy,
+                                    colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = .8f))
+                                ) { Text("Continue offline (debug only)") }
+                            }
                             TextButton(onClick = { error = null; page = FynxAuthPage.REGISTER }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = .8f))) { Text("Create a new account") }
                         }
                     }
@@ -240,27 +241,14 @@ private fun FynxAuthField(value: String, onValueChange: (String) -> Unit, label:
 }
 
 /**
- * Release builds always authenticate with the server. Debug builds can restore
- * a saved local account, or enter the local UI when no account is stored.
+ * Debug-only offline access is limited to an account previously saved on this
+ * device. It never substitutes for server authentication on the Sign In action.
  */
 private fun localDebugAccountForLogin(context: android.content.Context, requestedUsername: String): String? {
     val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
     if (!isDebuggable || requestedUsername.isBlank()) return null
 
     val normalizedUsername = requestedUsername.trim().removePrefix("@")
-    val saved = FynxAuthStore.storedUsername(context)?.trim()?.takeIf { it.isNotBlank() }
-    return when {
-        saved == null -> normalizedUsername
-        saved.equals(normalizedUsername, ignoreCase = true) -> saved
-        else -> null
-    }
+    val saved = FynxAuthStore.storedUsername(context)?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    return saved.takeIf { it.equals(normalizedUsername, ignoreCase = true) }
 }
-
-private fun isLoginNetworkFailure(error: Throwable): Boolean =
-    generateSequence(error) { it.cause }.any { cause ->
-        cause is java.net.SocketTimeoutException ||
-            cause is java.net.UnknownHostException ||
-            cause is java.net.ConnectException ||
-            (cause is java.io.IOException &&
-                cause.message?.contains("network connection is unavailable", ignoreCase = true) == true)
-    }

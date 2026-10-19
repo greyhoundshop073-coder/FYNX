@@ -494,18 +494,18 @@ def login():
     # Debug APKs intentionally expose a saved-device/offline entry path while the
     # backend is unavailable. In that mode the Password field is hidden by the app;
     # treat it as a distinct local session, never as real server authentication.
-    local_debug_entry = bool(find_control(xml,["Saved-device login for this debug APK"]))
+    local_debug_entry = bool(find_control(xml,["Saved-device login for this debug APK","Continue offline (debug only)"]))
     if local_debug_entry:
         LOCAL_DEBUG_LOGIN_USED=True
-    else:
-        pass_control=find_control(xml,["Password"])
-        if not pass_control:
-            fields=find_edit_fields(xml)
-            if len(fields)<2: return xml,f"password control was not visible after username entry (edittexts found {len(fields)})"
-            pass_control=("password",fields[1][0],fields[1][1])
-        _,x,y=pass_control; run("adb","shell","input","tap",str(x),str(y)); time.sleep(.3)
-        result=input_text(PASSWORD)
-        if result.returncode!=0: return xml,"adb input text failed for password"
+        return xml,"debug offline/saved-device control appeared during clean server-auth certification; refusing to count a local session as login"
+    pass_control=find_control(xml,["Password"])
+    if not pass_control:
+        fields=find_edit_fields(xml)
+        if len(fields)<2: return xml,f"password control was not visible after username entry (edittexts found {len(fields)})"
+        pass_control=("password",fields[1][0],fields[1][1])
+    _,x,y=pass_control; run("adb","shell","input","tap",str(x),str(y)); time.sleep(.3)
+    result=input_text(PASSWORD)
+    if result.returncode!=0: return xml,"adb input text failed for password"
     run("adb","shell","input","keyevent","4"); time.sleep(1)
     xml=dump_ui("authenticated-login-filled.xml"); screenshot("authenticated-login-filled.png")
     sign_in=find_control(xml,["Sign In"])
@@ -607,6 +607,16 @@ install=run("adb","install","-r","app/build/outputs/apk/debug/app-debug.apk")
 report.append(f"- APK install: {'PASS' if install.returncode==0 else 'FAIL'}")
 if install.returncode!=0:
     report.append("- "+install.stdout.strip().replace("\n"," | ")); raise SystemExit(1)
+
+# Authentication certification must start without persisted tokens or a saved
+# debug account; otherwise the UI can take the offline route and skip the server.
+clear_data=run("adb","shell","pm","clear",PACKAGE)
+if clear_data.returncode!=0 or "Success" not in clear_data.stdout:
+    report.append("- FAIL could not clear app data before server-authentication certification")
+    report.append("- "+clear_data.stdout.strip().replace("\n"," | "))
+    (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")
+    print("\n".join(report)); raise SystemExit(1)
+report.append("- PASS app data cleared before login to prevent saved-device state from bypassing server authentication")
 
 xml,error=login()
 if error:

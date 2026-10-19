@@ -43,8 +43,9 @@ permissions:
   id-token: write
 
 concurrency:
-  group: fynx-android-${{ github.workflow }}-${{ github.sha }}
-  cancel-in-progress: false
+  # Push and pull_request events share the backend test account; serialize by source branch.
+  group: fynx-android-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 
 env:
   GOOGLE_CLOUD_PROJECT: fynx-f0868
@@ -107,11 +108,9 @@ jobs:
       - name: Verify debug offline login and backend-independent APK contract
         run: python3 scripts/verify_debug_offline_login.py
       - name: Verify live production backend reachability
-        # This optional remote-service probe does not validate local APK compilation or UI.
-        # Run it only for explicit full-runtime dispatches or [home-cert] pushes; normal APK
-        # builds remain server-independent while Backend CI reports live service availability.
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]')) }}
-        continue-on-error: true
+        # This probe does not replace APK/UI tests. Run it for full-runtime certification,
+        # [home-cert] pushes, and the network-fix branch so its live backend dependency is tested.
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]')) || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'fix/network-health-probe-and-transport-detection-')) || (github.event_name == 'push' && startsWith(github.ref_name, 'fix/network-health-probe-and-transport-detection-')) }}
         run: node scripts/verify_production_backend_reachability.mjs
       - name: Verify consolidated FCM notification phase
         run: python3 scripts/verify_fcm_notifications.py
@@ -264,17 +263,17 @@ jobs:
       - name: Fast build, test and lint
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
       - name: Full build, test and lint
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'upgrade/status-ui-polish-20261015')) || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[home-cert]') || github.ref_name == 'main' || startsWith(github.ref_name, 'upgrade/status-ui-polish-20261015'))) }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && (startsWith(github.head_ref, 'upgrade/status-ui-polish-20261015') || startsWith(github.head_ref, 'fix/network-health-probe-and-transport-detection-'))) || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[home-cert]') || github.ref_name == 'main' || (startsWith(github.ref_name, 'upgrade/status-ui-polish-20261015') || startsWith(github.ref_name, 'fix/network-health-probe-and-transport-detection-')))) }}
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug assembleDebugAndroidTest --no-daemon --build-cache
       - name: Enable KVM permissions for Android emulator
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'upgrade/status-ui-polish-20261015')) || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[home-cert]') || github.ref_name == 'main' || startsWith(github.ref_name, 'upgrade/status-ui-polish-20261015'))) }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && (startsWith(github.head_ref, 'upgrade/status-ui-polish-20261015') || startsWith(github.head_ref, 'fix/network-health-probe-and-transport-detection-'))) || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[home-cert]') || github.ref_name == 'main' || (startsWith(github.ref_name, 'upgrade/status-ui-polish-20261015') || startsWith(github.ref_name, 'fix/network-health-probe-and-transport-detection-')))) }}
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           if [ -e /dev/kvm ]; then ls -l /dev/kvm; else echo 'ERROR: /dev/kvm is unavailable on this runner'; exit 1; fi
       - name: Run Android instrumentation tests and capture the real FYNX UI
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'upgrade/status-ui-polish-20261015')) || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[home-cert]') || github.ref_name == 'main' || startsWith(github.ref_name, 'upgrade/status-ui-polish-20261015'))) }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && (startsWith(github.head_ref, 'upgrade/status-ui-polish-20261015') || startsWith(github.head_ref, 'fix/network-health-probe-and-transport-detection-'))) || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[home-cert]') || github.ref_name == 'main' || (startsWith(github.ref_name, 'upgrade/status-ui-polish-20261015') || startsWith(github.ref_name, 'fix/network-health-probe-and-transport-detection-')))) }}
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 35
@@ -283,7 +282,7 @@ jobs:
           profile: pixel_7_pro # [home-cert]
           script: ./gradlew connectedDebugAndroidTest --no-daemon --build-cache && python3 scripts/verify_authenticated_runtime_navigation.py
       - name: Upload FYNX runtime screenshots and UI hierarchies
-        if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'upgrade/status-ui-polish-20261015')) || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[home-cert]') || github.ref_name == 'main' || startsWith(github.ref_name, 'upgrade/status-ui-polish-20261015')))) }}
+        if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true') || (github.event_name == 'pull_request' && (startsWith(github.head_ref, 'upgrade/status-ui-polish-20261015') || startsWith(github.head_ref, 'fix/network-health-probe-and-transport-detection-'))) || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[home-cert]') || github.ref_name == 'main' || (startsWith(github.ref_name, 'upgrade/status-ui-polish-20261015') || startsWith(github.ref_name, 'fix/network-health-probe-and-transport-detection-'))))) }}
         uses: actions/upload-artifact@v4
         with:
           name: FYNX-runtime-visual-check-${{ github.sha }}

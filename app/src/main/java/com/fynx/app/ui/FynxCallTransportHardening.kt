@@ -12,8 +12,10 @@ object FynxCallTransportHardening {
     // Retry only transient/transport-level closes. Protocol, payload-size and
     // policy failures are deterministic and retrying them just creates a
     // reconnect loop while the underlying socket contract is still invalid.
+    // The backend closes a superseded session with 4001. Retrying that policy close
+    // makes the old client evict the newer socket repeatedly, creating a reconnect loop.
     fun shouldRetrySocket(closeCode: Int): Boolean = when (closeCode) {
-        1000, 1002, 1003, 1007, 1008, 1009 -> false
+        1000, 1002, 1003, 1007, 1008, 1009, 4001 -> false
         1001, 1011, 1012, 1013, 1014, 1006 -> true
         else -> true
     }
