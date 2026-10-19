@@ -16,7 +16,10 @@ REQUIRED = {
     "NotificationPanel.kt": ["FynxRemoteProfileAvatar(", "FynxProfileRemoteClient"],
     "FynxHomeCommentsPanel.kt": ["FynxRemoteProfileAvatar(", "profilePhotoMediaId"],
     "FynxStatusTimelinePanel.kt": ["FynxRemoteProfileAvatar(", "profilePhotoMediaId"],
-    "FynxMarketplacePanel.kt": ["FynxProfileRemoteClient", "photoId"],
+    "FynxMarketplacePanel.kt": ["FynxProfileRemoteClient", "photoId", "MarketplaceSellerCard"],
+    "FynxMarketplaceReferenceProductComponents.kt": ["MarketplaceReferenceProductCard(", "FynxRemoteProfileAvatar(", "ownerUsername = listing.sellerUsername"],
+    "FynxMarketplaceSellerStoreDialog.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = username"],
+    "FynxMarketplaceDetailsSearchReference.kt": ["FynxRemoteProfileAvatar(", "listing.sellerUsername"],
     "HomePanel.kt": ["FynxRemoteProfileAvatar(", "FynxProfileRemoteClient"],
     "FynxRemoteHomeSocialPanel.kt": ["FynxRemoteProfileAvatar(", "authorUsername"],
     "FynxUniversalSearchPanel.kt": ["FynxRemoteProfileAvatar(", "person.profilePhotoMediaId"],
@@ -66,5 +69,5 @@ if errors:
     raise SystemExit(1)
 
 print("PROFILE AVATAR CONTRACT GREEN")
-print(f"Verified {len(REQUIRED)} identity surfaces use the shared remote-avatar contract.")
+print(f"Verified {len(REQUIRED)} identity surfaces use the shared remote-avatar contract, including marketplace product cards, seller stores, and listing details.")
 print("Verified profile GET/UPDATE persist the server-authoritative profilePhotoMediaId and publish invalidation, including null removal.")
