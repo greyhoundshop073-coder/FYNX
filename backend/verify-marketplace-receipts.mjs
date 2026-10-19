@@ -19,7 +19,10 @@ const checks = [
   ['profile photo route checks privacy and blocks', profileSource.includes('app.get(\'/api/social/profile-photo/:id\'') && profileSource.includes('photo_visibility') && profileSource.includes('FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2)')],
   ['public verification also requires recorded payment confirmation', source.includes('!row.payment_verified_at || !receiptAccountingReconciles(row)')],
   ['signature binds historical item and financial fields', source.includes('row.product_snapshot || {}') && source.includes('row.payment_reference') && source.includes('row.created_at')],
-  ['receipt verification does not trust client-provided amount', source.includes('Number(row.buyer_total ?? row.total_amount)')]
+  ['receipt verification does not trust client-provided amount', source.includes('Number(row.buyer_total ?? row.total_amount)')],
+  ['group-paid child orders can prove payment from the verified checkout-group event', (source.match(/NULLIF\(e\.metadata->>\'checkoutGroupId\',\'\'\) IS NOT NULL/g) || []).length === 4],
+  ['receipt signature binds the verified group payment reference when child order has no individual reference', source.includes('row.verified_payment_reference || row.payment_reference ||')],
+  ['receipt exposes the actual verified payment reference', source.includes('paymentReference: row.verified_payment_reference || row.payment_reference')]
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
