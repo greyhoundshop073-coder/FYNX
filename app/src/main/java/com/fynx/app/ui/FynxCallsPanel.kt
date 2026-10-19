@@ -75,7 +75,19 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 onConnectionState = { state ->
                     when (state) {
                         PeerConnection.IceConnectionState.CONNECTED, PeerConnection.IceConnectionState.COMPLETED -> session?.let { current -> session = current.copy(state = FynxCallState.CONNECTED); FynxCallsStore.updateStatus(context, current.id, "Connected", missed = false); calls = FynxCallsStore.load(context) }
-                        PeerConnection.IceConnectionState.FAILED -> errorMessage = "The call connection failed. Please try again."
+                        PeerConnection.IceConnectionState.FAILED -> scope.launch {
+                            val failed = session ?: return@launch
+                            errorMessage = "The call connection failed. Please try again."
+                            mediaEngine.disconnect()
+                            mediaConnected = false
+                            localVideoTrack = null
+                            remoteVideoTrack = null
+                            FynxCallsStore.updateStatus(context, failed.id, "Failed", missed = false)
+                            calls = FynxCallsStore.load(context)
+                            activeCall = null
+                            session = null
+                            pendingIncomingAccept = false
+                        }
                         PeerConnection.IceConnectionState.DISCONNECTED -> if (session?.state == FynxCallState.CONNECTED) errorMessage = "The call connection was interrupted."
                         else -> Unit
                     }
