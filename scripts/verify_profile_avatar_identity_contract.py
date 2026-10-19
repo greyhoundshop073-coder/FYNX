@@ -29,8 +29,8 @@ REQUIRED = {
     "FynxApp.kt": ["FynxRemoteProfileAvatar(", "remoteMyPhotoId", "ownerUsername = myProfile.username", "currentUsername = authSession.username"],
     "FynxGroupsPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = member.username"],
     "ConversationPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = chat.username"],
-    "FynxCallsPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = call.name", "currentUsername: String? = null", "currentUsername = currentUsername"],
-    "FynxActiveCallPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = name", "FynxCallRemotePlaceholder(name, Modifier.fillMaxSize(), ownerUsername = name", "ownerUsername = currentUsername?.takeIf { it.isNotBlank() }"],
+    "FynxCallsPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = call.username", "username = username", "currentUsername: String? = null", "currentUsername = currentUsername", "avatarUsername = targetAvatarUsername"],
+    "FynxActiveCallPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = avatarUsername", "FynxCallRemotePlaceholder(name, Modifier.fillMaxSize(), ownerUsername = avatarUsername", "ownerUsername = currentUsername?.takeIf { it.isNotBlank() }"],
     "FynxProfileRemoteClient.kt": ["profilePhotoMediaId", "saveRemoteProfilePhotoId", "FynxAvatarIdentityStore.publish"],
     "FynxPreferencesStore.kt": ["loadRemoteProfilePhotoId", "saveRemoteProfilePhotoId"],
 }
