@@ -58,7 +58,7 @@ private suspend fun fetchMarketplaceReceipt(context: Context, orderId: String): 
 private suspend fun receiptAvatar(context: Context, mediaId: String?): Bitmap? = withContext(Dispatchers.IO) {
     val id = mediaId?.toLongOrNull() ?: return@withContext null
     val file = File(context.cacheDir, "receipt-avatar-$id.img")
-    val downloaded = FynxBackendClient.downloadToFile(context, "/api/media/$id", file, 4L * 1024L * 1024L)
+    val downloaded = FynxBackendClient.downloadToFile(context, "/api/social/profile-photo/$id", file, 4L * 1024L * 1024L)
     if (downloaded.isFailure) return@withContext null
     BitmapFactory.decodeFile(file.absolutePath)
 }
