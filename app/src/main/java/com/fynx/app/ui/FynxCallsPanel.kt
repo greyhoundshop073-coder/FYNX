@@ -170,7 +170,11 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 calls = FynxCallsStore.load(context)
             }
         } else {
+            val declinedIncoming = pendingIncomingAccept
             pendingIncomingAccept = false
+            if (declinedIncoming) {
+                targetUserId?.let { realtimeClient.sendCallReject(current.id, it, video) }
+            }
             errorMessage = if (video) "Camera and microphone access are needed for video calls." else "Microphone access is needed for voice calls."
             FynxCallsStore.updateStatus(context, current.id, "Permission denied", missed = false)
             activeCall = null; session = null; calls = FynxCallsStore.load(context)
