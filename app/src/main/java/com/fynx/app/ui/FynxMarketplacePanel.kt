@@ -614,7 +614,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        if (visibleSellerListings.isNotEmpty()) {                        item(span = { GridItemSpan(maxLineSpan) }, key = "marketplace-search-controls") {
+                        item(span = { GridItemSpan(maxLineSpan) }, key = "marketplace-search-controls") {
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                             MarketplaceReferenceSearchBar(
                                                 value = query,
