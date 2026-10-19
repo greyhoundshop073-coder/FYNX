@@ -15,7 +15,7 @@ const checks = [
   ['receipt endpoint requires authentication', /app\.get\('\/api\/marketplace\/orders\/:id\/receipt',\s*auth/.test(source)],
   ['receipt endpoint checks order participation', source.includes('if (!isParticipant(row, req.user.sub))')],
   ['receipt only issues after recorded payment confirmation', source.includes('!receiptStatusAllowed(row.status) || !(row.verified_payment_reference || row.payment_reference) || !row.payment_verified_at')],
-  ['payment evidence binds confirmed event to the stored Paystack reference', (source.match(/e\\.metadata->>'reference'=o\\.payment_reference/g) || []).length === 4 && (source.match(/e\\.to_status='PAID'/g) || []).length >= 4 && (source.match(/lower\\(COALESCE\\(e\\.metadata->>'provider',''\\)\\)='paystack'/g) || []).length >= 4],
+  ['payment evidence binds confirmed event to the stored Paystack reference', source.includes("e.metadata->>'reference'=o.payment_reference") && source.includes("e.to_status='PAID'") && source.includes("cg.payment_reference=e.metadata->>'reference'") && source.includes("provider',''))='paystack'")],
   ['receipt accounting reconciles before issue', source.includes('if (!receiptAccountingReconciles(row))')],
   ['receipt signature uses HMAC-SHA256', source.includes("createHmac('sha256', secret)")],
   ['receipt signature comparison is timing-safe', source.includes('crypto.timingSafeEqual(a, b)')],
