@@ -129,6 +129,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 context = context,
                 onMessage = {},
                 onEvent = { event ->
+                    if (event is FynxRealtimeClient.Event.Presence) {
+                        FynxOnlinePresenceStore.setOnline(event.userId, event.online)
+                    }
                     if (event is FynxRealtimeClient.Event.Call &&
                         FynxIncomingCallRouting.shouldRouteInvite(
                             signalType = event.signalType,
@@ -277,6 +280,22 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                 FynxNotificationStore.save(context, feed.notifications)
             }
             kotlinx.coroutines.delay(15_000L)
+        }
+    }
+    LaunchedEffect(authSession.state, authSession.username) {
+        if (authSession.state != AuthState.SIGNED_IN || !FynxBackendClient.hasAccessToken(context)) {
+            FynxOnlinePresenceStore.clear()
+            return@LaunchedEffect
+        }
+        while (true) {
+            FynxBackendClient.get(context, "/api/presence").onSuccess { raw ->
+                val ids = runCatching {
+                    val users = org.json.JSONObject(raw).optJSONArray("onlineUserIds")
+                    buildSet { if (users != null) for (i in 0 until users.length()) add(users.optString(i).trim()) }
+                }.getOrDefault(emptySet())
+                FynxOnlinePresenceStore.replaceSnapshot(ids)
+            }
+            kotlinx.coroutines.delay(20_000L)
         }
     }
     LaunchedEffect(authSession.state, authSession.username, profileVersion) {
