@@ -45,6 +45,7 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -129,7 +130,7 @@ private suspend fun createMarketplaceReceiptPdf(context: Context, receipt: JSONO
         canvas.drawText("Order ID: " + receipt.optString("orderId"), 36f, 178f, paint)
         canvas.drawText("Payment status: " + receipt.optString("paymentStatus"), 36f, 198f, paint)
         canvas.drawText("Payment reference: " + receipt.optString("paymentReference"), 36f, 218f, paint)
-        val issued = runCatching { SimpleDateFormat("yyyy-MM-dd HH:mm 'UTC'", Locale.US).format(Date(java.time.Instant.parse(receipt.optString("issuedAt")).toEpochMilli())) }.getOrDefault(receipt.optString("issuedAt"))
+        val issued = runCatching { SimpleDateFormat("yyyy-MM-dd HH:mm 'UTC'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(java.time.Instant.parse(receipt.optString("issuedAt")).toEpochMilli())) }.getOrDefault(receipt.optString("issuedAt"))
         canvas.drawText("Issued: $issued", 36f, 238f, paint)
         canvas.drawLine(36f, 254f, 559f, 254f, line)
         paint.textSize = 12f; paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -150,10 +151,16 @@ private suspend fun createMarketplaceReceiptPdf(context: Context, receipt: JSONO
         canvas.drawText("Quantity: " + product.optInt("quantity").toString(), 36f, 438f, paint)
         val currency = receipt.optString("currency", "NGN")
         fun money(key: String) = currency + " " + String.format(Locale.US, "%,.2f", receipt.optDouble(key, 0.0))
-        val rows = listOf(
+        val sellerReceipt = receipt.optString("receiptType") == "SELLER_SALE"
+        val rows = if (sellerReceipt) listOf(
+            "Gross merchandise" to money("subtotal"),
+            "Delivery allocation" to money("deliveryFee"),
+            "Seller-borne marketplace fee" to (currency + " " + String.format(Locale.US, "%,.2f", receipt.optDouble("marketplaceFeeSeller", 0.0))),
+            "Discount allocated" to (currency + " " + String.format(Locale.US, "%,.2f", product.optDouble("discount", 0.0)))
+        ) else listOf(
             "Subtotal" to money("subtotal"),
             "Delivery" to money("deliveryFee"),
-            "FYNX marketplace fee" to money("marketplaceFeeBuyer"),
+            "Buyer-paid marketplace fee" to money("marketplaceFeeBuyer"),
             "Discount" to (currency + " " + String.format(Locale.US, "%,.2f", product.optDouble("discount", 0.0)))
         )
         var y = 470f
@@ -167,9 +174,9 @@ private suspend fun createMarketplaceReceiptPdf(context: Context, receipt: JSONO
         canvas.drawLine(36f, y, 559f, y, line)
         y += 29f
         paint.textSize = 15f; paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        canvas.drawText("TOTAL PAID", 36f, y, paint)
+        canvas.drawText(if (sellerReceipt) "SELLER NET PROCEEDS" else "TOTAL PAID", 36f, y, paint)
         paint.textAlign = Paint.Align.RIGHT
-        canvas.drawText(currency + " " + String.format(Locale.US, "%,.2f", receipt.optDouble("buyerTotal", 0.0)), 559f, y, paint)
+        canvas.drawText(currency + " " + String.format(Locale.US, "%,.2f", if (sellerReceipt) receipt.optDouble("sellerNet", 0.0) else receipt.optDouble("buyerTotal", 0.0)), 559f, y, paint)
         paint.textAlign = Paint.Align.LEFT
         y += 30f
         paint.textSize = 9f; paint.typeface = Typeface.DEFAULT; paint.color = Color.rgb(71, 85, 105)
@@ -294,7 +301,7 @@ private fun MarketplaceReceiptDialog(context: Context, receipt: JSONObject, onCl
                 Text("Subtotal: " + money("subtotal"))
                 Text("Delivery: " + money("deliveryFee"))
                 Text("FYNX fee: " + money("marketplaceFeeBuyer"))
-                Text("Total paid: " + money("buyerTotal"), style = MaterialTheme.typography.titleLarge)
+                Text((if (receipt.optString("receiptType") == "SELLER_SALE") "Seller net proceeds: " else "Total paid: ") + currency + " " + String.format(Locale.US, "%,.2f", if (receipt.optString("receiptType") == "SELLER_SALE") receipt.optDouble("sellerNet", 0.0) else receipt.optDouble("buyerTotal", 0.0)), style = MaterialTheme.typography.titleLarge)
                 Text("Payment status: " + receipt.optString("paymentStatus"))
                 Text("Receipt authenticity is verified by FYNX. The signature and QR link can be checked independently.", style = MaterialTheme.typography.bodySmall)
                 message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
