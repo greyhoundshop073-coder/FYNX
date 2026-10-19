@@ -257,10 +257,14 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             onEnd = {
                 if (endingCall) return@FynxActiveCallPanel
                 endingCall = true
-                val current = session!!; targetUserId?.let { realtimeClient.sendCallEnd(current.id, it, video) }
+                val current = session!!
                 val incoming = current.state == FynxCallState.RINGING
+                targetUserId?.let {
+                    if (incoming) realtimeClient.sendCallReject(current.id, it, video)
+                    else realtimeClient.sendCallEnd(current.id, it, video)
+                }
                 mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null
-                FynxCallsStore.updateStatus(context, current.id, if (incoming) "Declined" else "Ended", missed = incoming)
+                FynxCallsStore.updateStatus(context, current.id, if (incoming) "Declined" else "Ended", missed = false)
                 calls = FynxCallsStore.load(context); activeCall = null; session = null; pendingIncomingAccept = false; endingCall = false
             }
         )
