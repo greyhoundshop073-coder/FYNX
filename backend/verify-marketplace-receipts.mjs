@@ -6,7 +6,7 @@ const androidReceiptSource = fs.readFileSync(new URL('../app/src/main/java/com/f
 const checks = [
   ['receipt endpoint requires authentication', /app\.get\('\/api\/marketplace\/orders\/:id\/receipt',\s*auth/.test(source)],
   ['receipt endpoint checks order participation', source.includes('if (!isParticipant(row, req.user.sub))')],
-  ['receipt only issues after recorded payment confirmation', source.includes('!receiptStatusAllowed(row.status) || !row.payment_reference || !row.payment_verified_at')],
+  ['receipt only issues after recorded payment confirmation', source.includes('!receiptStatusAllowed(row.status) || !(row.verified_payment_reference || row.payment_reference) || !row.payment_verified_at')],
   ['payment evidence binds confirmed event to the stored Paystack reference', (source.match(/e\.metadata->>'reference'=o\.payment_reference/g) || []).length === 4 && (source.match(/e\.to_status='PAID'/g) || []).length === 4 && (source.match(/lower\(COALESCE\(e\.metadata->>'provider',''\)\)='paystack'/g) || []).length === 4],
   ['receipt accounting reconciles before issue', source.includes('if (!receiptAccountingReconciles(row))')],
   ['receipt signature uses HMAC-SHA256', source.includes("createHmac('sha256', secret)")],
@@ -17,7 +17,7 @@ const checks = [
   ['receipt avoids exposing shipping address and phone', !source.includes('shippingAddress: row.shipping_address') && !source.includes('phone: row.buyer_phone')],
   ['receipt avatar uses privacy-aware profile media endpoint', androidReceiptSource.includes('/api/social/profile-photo/')],
   ['profile photo route checks privacy and blocks', profileSource.includes('app.get(\'/api/social/profile-photo/:id\'') && profileSource.includes('photo_visibility') && profileSource.includes('FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2)')],
-  ['public verification also requires recorded payment confirmation', source.includes('!row.payment_verified_at || !receiptAccountingReconciles(row)')],
+  ['public verification also requires recorded payment confirmation', source.includes('!row.payment_verified_at || !receiptAccountingReconciles(row)') && source.includes('!(row.verified_payment_reference || row.payment_reference)')],
   ['signature binds historical item and financial fields', source.includes('row.product_snapshot || {}') && source.includes('row.payment_reference') && source.includes('row.created_at')],
   ['receipt verification does not trust client-provided amount', source.includes('Number(row.buyer_total ?? row.total_amount)')],
   ['group-paid child orders can prove payment from the verified checkout-group event', (source.match(/NULLIF\(e\.metadata->>\'checkoutGroupId\',\'\'\) IS NOT NULL/g) || []).length === 4],
