@@ -174,6 +174,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
         var settlementLoading by remember(order.id) { mutableStateOf(true) }
         var settlementRetryCount by remember(order.id) { mutableStateOf(0) }
         var settlementError by remember(order.id) { mutableStateOf<String?>(null) }
+        var deliveryEvidenceError by remember(order.id) { mutableStateOf<String?>(null) }
         var settlement by remember(order.id) { mutableStateOf<JSONObject?>(null) }
         var payoutQueued by remember(order.id) { mutableStateOf(false) }
         var retryQueued by remember(order.id) { mutableStateOf(false) }
@@ -181,6 +182,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
         LaunchedEffect(order.id, settlementRetryCount) {
             settlementLoading = true
             settlementError = null
+            deliveryEvidenceError = null
             settlement = null
             handoverPhotoMediaId = null
             FynxBackendClient.get(context, "/api/marketplace/settlement/order/${order.id}")
@@ -194,6 +196,7 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                         .lastOrNull { it.optString("type") == "PHOTO_REFERENCE" }
                         ?.optString("value")?.takeIf { it.toLongOrNull()?.let { id -> id > 0L } == true }
                 }
+                .onFailure { deliveryEvidenceError = it.message ?: "Delivery evidence could not load." }
             settlementLoading = false
         }
 
@@ -232,6 +235,10 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
                     if (!settlementLoading && settlementError != null) {
                         Text(settlementError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                         TextButton(enabled = !busy, onClick = { settlementRetryCount += 1 }) { Text("Retry settlement details") }
+                    }
+                    if (!settlementLoading && deliveryEvidenceError != null) {
+                        Text("Delivery evidence could not load: ${deliveryEvidenceError!!}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        TextButton(enabled = !busy, onClick = { settlementRetryCount += 1 }) { Text("Retry delivery evidence") }
                     }
                     settlement?.let { s ->
                         val accounting = s.optJSONObject("accounting")
