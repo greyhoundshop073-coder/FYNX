@@ -96,8 +96,8 @@ export function registerBusinessRoutes({ app, auth }) {
   app.get("/api/business/overview", auth, async (req, res) => {
     try {
       const profile = (await pool.query("SELECT id,business_name,business_username,category,description,location,phone,website,verified,active FROM business_profiles WHERE owner_id=$1", [req.user.sub])).rows[0] || null;
-      const listings = (await pool.query("SELECT COUNT(*)::int AS count FROM marketplace_listings WHERE seller_id=$1 AND COALESCE(active,TRUE)=TRUE", [req.user.sub]).catch(() => ({ rows: [{ count: 0 }] }))).rows[0]?.count || 0;
-      const campaigns = (await pool.query("SELECT COUNT(*)::int AS count, COALESCE(SUM(total_budget_kobo),0)::bigint AS budget_kobo, COALESCE(SUM(spent_kobo),0)::bigint AS spent_kobo FROM marketplace_ad_campaigns WHERE owner_id=$1", [req.user.sub]).catch(() => ({ rows: [{ count: 0, budget_kobo: 0, spent_kobo: 0 }] }))).rows[0] || { count: 0, budget_kobo: 0, spent_kobo: 0 };
+      const listings = (await pool.query("SELECT COUNT(*)::int AS count FROM marketplace_listings WHERE seller_id=$1 AND COALESCE(active,TRUE)=TRUE", [req.user.sub])).rows[0]?.count || 0;
+      const campaigns = (await pool.query("SELECT COUNT(*)::int AS count, COALESCE(SUM(total_budget_kobo),0)::bigint AS budget_kobo, COALESCE(SUM(spent_kobo),0)::bigint AS spent_kobo FROM marketplace_ad_campaigns WHERE owner_id=$1", [req.user.sub])).rows[0] || { count: 0, budget_kobo: 0, spent_kobo: 0 };
       return res.json({ overview: { profile, activeListings: Number(listings), campaigns: Number(campaigns.count || 0), budgetKobo: Number(campaigns.budget_kobo || 0), spentKobo: Number(campaigns.spent_kobo || 0) } });
     } catch (error) {
       console.error("[fynx-business] overview failed", error);

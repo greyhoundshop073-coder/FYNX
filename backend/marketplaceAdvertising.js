@@ -111,6 +111,17 @@ function positiveInt(value, max = Number.MAX_SAFE_INTEGER) {
   return Number.isSafeInteger(number) && number >= 0 && number <= max ? number : null;
 }
 
+function validCampaignSchedule(startsAt, endsAt) {
+  if (startsAt !== null && startsAt !== undefined && startsAt !== "") {
+    if (typeof startsAt !== "string" || !Number.isFinite(Date.parse(startsAt))) return false;
+  }
+  if (endsAt !== null && endsAt !== undefined && endsAt !== "") {
+    if (typeof endsAt !== "string" || !Number.isFinite(Date.parse(endsAt))) return false;
+  }
+  if (startsAt && endsAt && Date.parse(startsAt) > Date.parse(endsAt)) return false;
+  return true;
+}
+
 async function validateCreativeReference(client, ownerId, creativeType, creativeRef) {
   if (typeof creativeRef !== "string" || !/^[0-9]+$/.test(creativeRef)) return false;
   const referenceId = positiveInt(creativeRef);
@@ -171,6 +182,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     const daily = positiveInt(dailyBudgetKobo);
     const total = positiveInt(totalBudgetKobo);
     if (!parsedTargeting || daily === null || total === null || daily < 1 || total < 1 || daily > total) return res.status(400).json({ error: "invalid advertising budget or targeting" });
+    if (!validCampaignSchedule(startsAt, endsAt)) return res.status(400).json({ error: "invalid campaign schedule: provide valid dates and ensure the end is not before the start" });
     if (idempotencyKey && (typeof idempotencyKey !== "string" || idempotencyKey.length > 120)) return res.status(400).json({ error: "invalid idempotency key" });
     const client = await pool.connect();
     try {
@@ -287,8 +299,9 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       const data = await response.json().catch(() => ({}));
       const paid = response.ok && data?.status === true && data?.data?.status === "success" && Number(data.data.amount) === Number(campaign.total_budget_kobo) && String(data.data.currency).toUpperCase() === "NGN";
       if (!paid) return res.status(409).json({ error: "payment has not been verified" });
-      await pool.query("UPDATE marketplace_ad_campaigns SET payment_status='paid', updated_at=NOW() WHERE id=$1 AND owner_id=$2", [id, auth.userId]);
-      return res.json({ paid: true, campaignId: String(id) });
+      const paidCampaign = await pool.query("UPDATE marketplace_ad_campaigns SET payment_status='paid', updated_at=NOW() WHERE id=$1 AND owner_id=$2 RETURNING *", [id, auth.userId]);
+      if (!paidCampaign.rowCount) return res.status(404).json({ error: "campaign not found" });
+      return res.json({ paid: true, campaign: paidCampaign.rows[0] });
     } catch { return res.status(502).json({ error: "advertising payment verification failed" }); }
   });
 
