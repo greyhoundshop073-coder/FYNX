@@ -54,3 +54,4 @@ if failed:
     raise SystemExit("GATE RED: " + "; ".join(failed))
 print("GATE GREEN: active Chat/Group route, realtime, and layout contracts are present")
 require("group Gallery uses the Android photo picker for images and videos rather than a generic file picker", "PickMultipleVisualMedia(maxItems = 1)" in ACTIVE_GROUP and "PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)" in ACTIVE_GROUP and 'groupMediaPicker.launch("*/*")' not in ACTIVE_GROUP)
+require("group attachment actions use distinct colors for quick recognition", "tint = Color(0xFF1685F8)" in ACTIVE_GROUP and "tint = Color(0xFF8B6FF7)" in ACTIVE_GROUP and "tint = Color(0xFF00C99A)" in ACTIVE_GROUP and "tint = Color(0xFF00A8E8)" in ACTIVE_GROUP and "tint = Color(0xFFFFB938)" in ACTIVE_GROUP)
