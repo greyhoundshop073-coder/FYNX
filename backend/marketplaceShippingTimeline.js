@@ -5,16 +5,19 @@ export function registerMarketplaceShippingTimeline({ app, pool, auth, ensureSch
 
     try {
       await ensureSchema();
+      const order = await pool.query(`
+        SELECT id FROM marketplace_orders
+        WHERE id = $1 AND (buyer_id = $2 OR seller_id = $2)
+        LIMIT 1
+      `, [id, req.user.sub]);
+      if (!order.rows.length) return res.status(404).json({ error: 'order not found' });
+
       const result = await pool.query(`
         SELECT e.id, e.event_type, e.from_status, e.to_status, e.metadata, e.created_at
         FROM marketplace_order_events e
-        JOIN marketplace_orders o ON o.id = e.order_id
         WHERE e.order_id = $1
-          AND (o.buyer_id = $2 OR o.seller_id = $2)
         ORDER BY e.created_at ASC, e.id ASC
       `, [id, req.user.sub]);
-
-      if (!result.rows.length) return res.status(404).json({ error: 'order not found' });
       const deliveryEvidence = await pool.query(`
         SELECT de.evidence_type, de.value, de.created_at
         FROM marketplace_delivery_evidence de
