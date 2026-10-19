@@ -441,23 +441,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            MarketplaceReferenceSearchBar(
-                value = query,
-                onValueChange = { query = it.take(80) },
-                onCart = { showCart = true },
-                cartCount = cartQuantities.values.sum().coerceAtLeast(0),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
-            )
-            MarketplaceReferenceCategoryRow(
-                categories = categories,
-                selected = category,
-                onSelect = { category = it },
-                onNearby = { toggleNearby() },
-                nearbySelected = nearbyMode,
-                nearbyLabel = if (nearbyMode) "Near ${nearbyLabel.substringBefore(",").ifBlank { "me" }}" else "Near me",
-                nearbyLoading = nearbyLoading,
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
-            )
             if (query.isBlank() && recentSearches.isNotEmpty()) {
                 Row(
                     Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, bottom = 8.dp),
@@ -515,6 +498,27 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
+                    item(key = "marketplace-search-controls") {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        MarketplaceReferenceSearchBar(
+                                            value = query,
+                                            onValueChange = { query = it.take(80) },
+                                            onCart = { showCart = true },
+                                            cartCount = cartQuantities.values.sum().coerceAtLeast(0),
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                                        )
+                                        MarketplaceReferenceCategoryRow(
+                                            categories = categories,
+                                            selected = category,
+                                            onSelect = { category = it },
+                                            onNearby = { toggleNearby() },
+                                            nearbySelected = nearbyMode,
+                                            nearbyLabel = if (nearbyMode) "Near ${nearbyLabel.substringBefore(",").ifBlank { "me" }}" else "Near me",
+                                            nearbyLoading = nearbyLoading,
+                                            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
+                                        )
+                        }
+                    }
                     item(key = "marketplace-offline-hero") {
                         MarketplaceSmartDealsHero(
                             listings = listings,
@@ -555,23 +559,50 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         OutlinedButton(onClick = { showSell = true }, modifier = Modifier.fillMaxWidth()) { Text("Sell something") }
                     }
                 }
-                listings.isEmpty() -> Box(Modifier.fillMaxSize().padding(24.dp), Alignment.Center) {
-                    val filtered = query.isNotBlank() || category != "All" || nearbyMode
-                    if (filtered) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(52.dp))
-                            Spacer(Modifier.height(10.dp))
-                            Text("No matching products", style = MaterialTheme.typography.titleLarge)
-                            Text("Try another search or clear the current filters.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(8.dp))
-                            TextButton(onClick = { query = ""; category = "All"; if (nearbyMode) toggleNearby() }) { Text("Clear filters") }
+                listings.isEmpty() -> LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    item(key = "marketplace-search-controls") {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        MarketplaceReferenceSearchBar(
+                                            value = query,
+                                            onValueChange = { query = it.take(80) },
+                                            onCart = { showCart = true },
+                                            cartCount = cartQuantities.values.sum().coerceAtLeast(0),
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                                        )
+                                        MarketplaceReferenceCategoryRow(
+                                            categories = categories,
+                                            selected = category,
+                                            onSelect = { category = it },
+                                            onNearby = { toggleNearby() },
+                                            nearbySelected = nearbyMode,
+                                            nearbyLabel = if (nearbyMode) "Near ${nearbyLabel.substringBefore(",").ifBlank { "me" }}" else "Near me",
+                                            nearbyLoading = nearbyLoading,
+                                            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
+                                        )
                         }
-                    } else {
-                        MarketplaceReferenceEmptyState(
-                            title = "No products yet",
-                            message = "Be the first seller on FYNX",
-                            onSell = { showSell = true }
-                        )
+                    }
+                    item(key = "marketplace-empty-state") {
+                        val filtered = query.isNotBlank() || category != "All" || nearbyMode
+                        if (filtered) {
+                            Column(Modifier.fillMaxWidth().padding(vertical = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.Storefront, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(52.dp))
+                                Spacer(Modifier.height(10.dp))
+                                Text("No matching products", style = MaterialTheme.typography.titleLarge)
+                                Text("Try another search or clear the current filters.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.height(8.dp))
+                                TextButton(onClick = { query = ""; category = "All"; if (nearbyMode) toggleNearby() }) { Text("Clear filters") }
+                            }
+                        } else {
+                            MarketplaceReferenceEmptyState(
+                                title = "No products yet",
+                                message = "Be the first seller on FYNX",
+                                onSell = { showSell = true }
+                            )
+                        }
                     }
                 }
                 else -> if (showAllProducts || query.isNotBlank() || category != "All" || nearbyMode) {
@@ -583,6 +614,27 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
+                        if (visibleSellerListings.isNotEmpty()) {                        item(span = { GridItemSpan(maxLineSpan) }, key = "marketplace-search-controls") {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            MarketplaceReferenceSearchBar(
+                                                value = query,
+                                                onValueChange = { query = it.take(80) },
+                                                onCart = { showCart = true },
+                                                cartCount = cartQuantities.values.sum().coerceAtLeast(0),
+                                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                                            )
+                                            MarketplaceReferenceCategoryRow(
+                                                categories = categories,
+                                                selected = category,
+                                                onSelect = { category = it },
+                                                onNearby = { toggleNearby() },
+                                                nearbySelected = nearbyMode,
+                                                nearbyLabel = if (nearbyMode) "Near ${nearbyLabel.substringBefore(",").ifBlank { "me" }}" else "Near me",
+                                                nearbyLoading = nearbyLoading,
+                                                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
+                                            )
+                            }
+                        }
                         if (visibleSellerListings.isNotEmpty()) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -627,6 +679,27 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
+                    item(key = "marketplace-search-controls") {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        MarketplaceReferenceSearchBar(
+                                            value = query,
+                                            onValueChange = { query = it.take(80) },
+                                            onCart = { showCart = true },
+                                            cartCount = cartQuantities.values.sum().coerceAtLeast(0),
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                                        )
+                                        MarketplaceReferenceCategoryRow(
+                                            categories = categories,
+                                            selected = category,
+                                            onSelect = { category = it },
+                                            onNearby = { toggleNearby() },
+                                            nearbySelected = nearbyMode,
+                                            nearbyLabel = if (nearbyMode) "Near ${nearbyLabel.substringBefore(",").ifBlank { "me" }}" else "Near me",
+                                            nearbyLoading = nearbyLoading,
+                                            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
+                                        )
+                        }
+                    }
                     item(key = "marketplace-hero") {
                         MarketplaceSmartDealsHero(
                             listings = listings,
