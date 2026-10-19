@@ -1008,8 +1008,6 @@ private fun MarketplaceDetails(
             enabled = !savedProductBusy,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(if (productSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
             Text(if (savedProductBusy) "Updating saved products..." else if (productSaved) "Remove from Saved Products" else "Save product")
         }
         FynxMarketplaceBuyingAssistant(
