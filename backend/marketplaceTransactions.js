@@ -62,6 +62,136 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
     return { mode, bps, fixed, buyerShare, version, providerFeePayer };
   };
 
+
+  const receiptSigningSecret = () => String(process.env.FYNX_RECEIPT_SIGNING_SECRET || process.env.JWT_SECRET || '').trim();
+  const receiptPayload = (row) => JSON.stringify([
+    String(row.id), String(row.buyer_id), String(row.seller_id), String(row.listing_id),
+    String(row.currency || '').toUpperCase(), Number(row.quantity),
+    Number(row.unit_price).toFixed(2), Number(row.product_subtotal).toFixed(2),
+    Number(row.delivery_fee).toFixed(2), Number(row.marketplace_fee).toFixed(2),
+    Number(row.marketplace_fee_buyer).toFixed(2), Number(row.marketplace_fee_seller).toFixed(2),
+    Number(row.discount_amount).toFixed(2), Number(row.buyer_total ?? row.total_amount).toFixed(2),
+    Number(row.seller_net_amount).toFixed(2), String(row.payment_reference || ''),
+    new Date(row.created_at).toISOString(), row.product_snapshot || {}
+  ]);
+  const signReceipt = (row) => {
+    const secret = receiptSigningSecret();
+    if (!secret) return null;
+    return crypto.createHmac('sha256', secret).update(receiptPayload(row)).digest('hex');
+  };
+  const receiptSignatureMatches = (row, signature) => {
+    if (typeof signature !== 'string' || !/^[a-f0-9]{64}$/i.test(signature)) return false;
+    const expected = signReceipt(row);
+    if (!expected) return false;
+    const a = Buffer.from(expected, 'hex'); const b = Buffer.from(signature, 'hex');
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  };
+  const receiptStatusAllowed = (status) => ['PAID','SHIPPED','DELIVERED','INSPECTION','COMPLETED','DISPUTED','REFUNDED'].includes(String(status || '').toUpperCase());
+  const receiptAccountingReconciles = (row) => {
+    const cents = (value) => Math.round(Number(value || 0) * 100);
+    const subtotal = cents(row.product_subtotal);
+    const delivery = cents(row.delivery_fee);
+    const buyerFee = cents(row.marketplace_fee_buyer);
+    const sellerFee = cents(row.marketplace_fee_seller);
+    const fee = cents(row.marketplace_fee);
+    const discount = cents(row.discount_amount);
+    const buyerTotal = cents(row.buyer_total ?? row.total_amount);
+    const totalAmount = cents(row.total_amount);
+    const sellerNet = cents(row.seller_net_amount);
+    return [subtotal, delivery, buyerFee, sellerFee, fee, discount, buyerTotal, totalAmount, sellerNet].every(Number.isSafeInteger)
+      && subtotal === cents(row.unit_price) * Number(row.quantity)
+      && buyerTotal === subtotal + delivery + buyerFee - discount
+      && buyerTotal === totalAmount
+      && fee === buyerFee + sellerFee
+      && sellerNet + fee - discount === buyerTotal;
+  };
+  const receiptQuery = `
+    SELECT o.*,
+      buyer.username AS buyer_username,
+      buyer.display_name AS buyer_display_name,
+      (to_jsonb(buyer)->>'profile_photo_media_id') AS buyer_profile_photo_media_id,
+      seller.username AS seller_username,
+      seller.display_name AS seller_display_name,
+      (to_jsonb(seller)->>'profile_photo_media_id') AS seller_profile_photo_media_id
+    FROM marketplace_orders o
+    JOIN users buyer ON buyer.id=o.buyer_id
+    JOIN users seller ON seller.id=o.seller_id
+    WHERE o.id=$1
+  `;
+
+  app.get('/api/marketplace/orders/:id/receipt', auth, async (req, res) => {
+    const id = parseUuid(req.params.id);
+    if (!id) return res.status(400).json({ error: 'valid order ID is required' });
+    try {
+      await ensureMarketplaceTransactionSchema();
+      const row = (await pool.query(receiptQuery, [id])).rows[0];
+      if (!row) return res.status(404).json({ error: 'receipt unavailable' });
+      if (!isParticipant(row, req.user.sub)) return res.status(403).json({ error: 'receipt unavailable' });
+      if (!receiptStatusAllowed(row.status) || !row.payment_reference) {
+        return res.status(409).json({ error: 'a receipt is available only after verified payment' });
+      }
+      if (!receiptAccountingReconciles(row)) {
+        console.error('marketplace receipt accounting mismatch', { orderId: id });
+        return res.status(409).json({ error: 'receipt is temporarily unavailable while transaction totals are reconciled' });
+      }
+      const signature = signReceipt(row);
+      if (!signature) return res.status(503).json({ error: 'receipt signing is not configured' });
+      const receiptId = `FYNX-${String(row.id).replace(/-/g, '').toUpperCase()}`;
+      const sellerView = String(row.seller_id) === String(req.user.sub);
+      return res.json({
+        receipt: {
+          receiptId, orderId: String(row.id), issuedAt: new Date(row.created_at).toISOString(),
+          paymentStatus: row.status, paymentReference: row.payment_reference,
+          currency: String(row.currency).toUpperCase(),
+          buyer: sellerView
+            ? { displayName: row.buyer_display_name || row.buyer_username, username: row.buyer_username }
+            : { displayName: row.buyer_display_name || row.buyer_username, username: row.buyer_username, profilePhotoMediaId: row.buyer_profile_photo_media_id ? String(row.buyer_profile_photo_media_id) : null },
+          seller: { displayName: row.seller_display_name || row.seller_username, username: row.seller_username, profilePhotoMediaId: row.seller_profile_photo_media_id ? String(row.seller_profile_photo_media_id) : null },
+          product: {
+            title: row.product_snapshot?.title || 'FYNX marketplace item',
+            quantity: Number(row.quantity), unitPrice: Number(row.unit_price),
+            lineSubtotal: Number(row.product_subtotal), discount: Number(row.discount_amount)
+          },
+          subtotal: Number(row.product_subtotal), deliveryFee: Number(row.delivery_fee),
+          marketplaceFee: Number(row.marketplace_fee), marketplaceFeeBuyer: Number(row.marketplace_fee_buyer),
+          marketplaceFeeSeller: Number(row.marketplace_fee_seller), buyerTotal: Number(row.buyer_total ?? row.total_amount),
+          sellerNet: sellerView ? Number(row.seller_net_amount) : null,
+          fulfillmentMethod: row.fulfillment_method || row.product_snapshot?.fulfillmentMethod || null,
+          signatureAlgorithm: 'HMAC-SHA256', signature,
+          verificationPath: `/api/marketplace/receipts/${encodeURIComponent(receiptId)}/verify?signature=${signature}`
+        }
+      });
+    } catch (error) {
+      console.error('marketplace receipt', error);
+      return res.status(500).json({ error: 'receipt could not be prepared' });
+    }
+  });
+
+  // Public verification intentionally returns only minimal authenticity and payment data.
+  app.get('/api/marketplace/receipts/:receiptId/verify', async (req, res) => {
+    const rawId = typeof req.params?.receiptId === 'string' ? req.params.receiptId.trim() : '';
+    const id = rawId.startsWith('FYNX-') ? rawId.slice(5) : '';
+    if (!/^[A-F0-9]{32}$/i.test(id)) return res.status(400).json({ authentic: false, error: 'invalid receipt ID' });
+    try {
+      await ensureMarketplaceTransactionSchema();
+      const row = (await pool.query('SELECT * FROM marketplace_orders WHERE REPLACE(UPPER(id::text), \'-\', \'\')=$1 LIMIT 1', [id.toUpperCase()])).rows[0];
+      if (!row || !receiptStatusAllowed(row.status) || !row.payment_reference || !receiptAccountingReconciles(row)) {
+        return res.status(404).json({ authentic: false, error: 'receipt could not be verified' });
+      }
+      if (!receiptSignatureMatches(row, req.query?.signature)) {
+        return res.status(200).json({ authentic: false, receiptId: rawId, reason: 'SIGNATURE_MISMATCH' });
+      }
+      return res.json({
+        authentic: true, receiptId: rawId, paymentStatus: row.status,
+        currency: String(row.currency).toUpperCase(), amount: Number(row.buyer_total ?? row.total_amount),
+        issuedAt: new Date(row.created_at).toISOString()
+      });
+    } catch (error) {
+      console.error('marketplace receipt verification', error);
+      return res.status(500).json({ authentic: false, error: 'receipt verification unavailable' });
+    }
+  });
+
   app.post('/api/marketplace/orders', auth, async (req,res) => {
     const listingId=parsePositiveInt(req.body?.listingId), quantity=parsePositiveInt(req.body?.quantity), clientOrderId=parseUuid(req.body?.orderId);
     if (!listingId || !quantity) return res.status(400).json({error:'valid listingId and quantity are required'});
