@@ -15,7 +15,7 @@ REQUIRED = {
     "ChatsPanel.kt": ["FynxRemoteProfileAvatar(", "FynxProfileRemoteClient"],
     "NotificationPanel.kt": ["FynxRemoteProfileAvatar(", "FynxProfileRemoteClient"],
     "FynxHomeCommentsPanel.kt": ["FynxRemoteProfileAvatar(", "profilePhotoMediaId"],
-    "FynxStatusTimelinePanel.kt": ["FynxRemoteProfileAvatar(", "profilePhotoMediaId"],
+    "FynxStatusTimelinePanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = avatarOwnerUsername", "val avatarOwnerUsername = status?.ownerUsername"],
     "FynxMarketplacePanel.kt": ["FynxProfileRemoteClient", "photoId", "MarketplaceSellerCard", "FynxRemoteProfileAvatar(", "ownerUsername = l.sellerUsername", "detailSellerPhotoId"],
     "FynxMarketplaceReferenceProductComponents.kt": ["MarketplaceReferenceProductCard(", "FynxRemoteProfileAvatar(", "ownerUsername = listing.sellerUsername"],
     "FynxMarketplaceSellerStoreDialog.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = username"],
