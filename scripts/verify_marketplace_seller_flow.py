@@ -6,8 +6,11 @@ support = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerFlowSu
 marketplace = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text()
 checkout = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCheckout.kt").read_text()
 detail_components = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceDetailComponents.kt").read_text()
+seller_orders = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerOrders.kt").read_text()
 
 checks = [
+    ("seller settlement details can be retried after a failed request", "var settlementRetryCount by remember(order.id)" in seller_orders and "LaunchedEffect(order.id, settlementRetryCount)" in seller_orders and "Retry settlement details" in seller_orders),
+    ("seller settlement retry clears stale data and resets its error state", "settlementError = null" in seller_orders and "settlement = null" in seller_orders and "settlementError = it.message ?: \"Settlement details could not load.\"" in seller_orders),
     ("seller support keeps a bounded real media limit", "const val MAX_PRODUCT_MEDIA = 12" in support),
     ("seller support accepts image and video media", 'mime.startsWith("image/") || mime.startsWith("video/")' in support),
     ("seller support removes duplicate media", ".distinct()" in support),
