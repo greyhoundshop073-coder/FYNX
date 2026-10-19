@@ -300,7 +300,7 @@ private fun MarketplaceReceiptDialog(context: Context, receipt: JSONObject, onCl
                 Text("Quantity: " + product.optInt("quantity"))
                 Text("Subtotal: " + money("subtotal"))
                 Text("Delivery: " + money("deliveryFee"))
-                Text("FYNX fee: " + money("marketplaceFeeBuyer"))
+                Text((if (receipt.optString("receiptType") == "SELLER_SALE") "Seller-borne FYNX fee: " else "Buyer-paid FYNX fee: ") + currency + " " + String.format(Locale.US, "%,.2f", receipt.optDouble(if (receipt.optString("receiptType") == "SELLER_SALE") "marketplaceFeeSeller" else "marketplaceFeeBuyer", 0.0)))
                 Text((if (receipt.optString("receiptType") == "SELLER_SALE") "Seller net proceeds: " else "Total paid: ") + currency + " " + String.format(Locale.US, "%,.2f", if (receipt.optString("receiptType") == "SELLER_SALE") receipt.optDouble("sellerNet", 0.0) else receipt.optDouble("buyerTotal", 0.0)), style = MaterialTheme.typography.titleLarge)
                 Text("Payment status: " + receipt.optString("paymentStatus"))
                 Text("Receipt authenticity is verified by FYNX. The signature and QR link can be checked independently.", style = MaterialTheme.typography.bodySmall)
