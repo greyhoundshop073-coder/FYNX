@@ -142,6 +142,20 @@ object FynxMarketplaceClient {
         }
     }
 
+    suspend fun updateListing(context: Context, listingId: String, title: String, price: Double, quantity: Int): Result<Unit> {
+        val id = listingId.trim().toLongOrNull()?.takeIf { it > 0 }
+            ?: return Result.failure(IllegalArgumentException("Invalid listing id."))
+        val cleanTitle = title.trim()
+        if (cleanTitle.length < 2) return Result.failure(IllegalArgumentException("Product name must contain at least 2 characters."))
+        if (!price.isFinite() || price <= 0.0) return Result.failure(IllegalArgumentException("Enter a valid product price."))
+        if (quantity < 0) return Result.failure(IllegalArgumentException("Stock cannot be negative."))
+        val payload = JSONObject()
+            .put("title", cleanTitle.take(160))
+            .put("price", price)
+            .put("quantity", quantity)
+        return FynxBackendClient.postJson(context, "/api/marketplace/listings/$id/update", payload.toString()).map { }
+    }
+
     suspend fun deleteListing(context: Context, listingId: String): Result<Unit> = FynxBackendClient.delete(context, "/api/marketplace/listings/${encode(listingId)}").map { }
     fun safetyAssessment(listing: Listing): FynxMarketplaceSafetyAssessment = FynxMarketplaceSafety.analyze(listing.title, listing.description, listing.storeName, listing.location)
     fun mediaUrl(context: Context, mediaId: String): String = "${FynxBackendClient.baseUrl(context)}/api/media/${encode(mediaId)}"
