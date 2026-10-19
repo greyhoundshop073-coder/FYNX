@@ -113,9 +113,11 @@ export function registerMarketplaceShippingRoutes({ app, pool, auth }) {
       const baseFee = normalizeMoney(req.body?.baseFee);
       const additionalItemFee = normalizeMoney(req.body?.additionalItemFee);
       const feeCap = req.body?.feeCap == null || req.body?.feeCap === '' ? null : normalizeMoney(req.body?.feeCap);
+      const deliveryAvailable = typeof req.body?.deliveryAvailable === 'boolean' ? req.body.deliveryAvailable : Boolean(listing.delivery_available);
+      const pickupAvailable = typeof req.body?.pickupAvailable === 'boolean' ? req.body.pickupAvailable : Boolean(listing.pickup_available);
       if (baseFee == null || additionalItemFee == null || (req.body?.feeCap != null && req.body?.feeCap !== '' && feeCap == null)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'shipping fees must be valid non-negative amounts' }); }
       if (feeCap != null && feeCap < baseFee) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'shipping fee cap cannot be below the base delivery fee' }); }
-      if (!Boolean(listing.delivery_available) && (baseFee > 0 || additionalItemFee > 0 || feeCap != null)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery is disabled for this listing' }); }
+      if (!deliveryAvailable && !pickupAvailable) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'at least one fulfillment method must remain enabled' }); }
       const inputCoverage = Array.isArray(req.body?.coverage) ? req.body.coverage : [];
       const coverage = inputCoverage.map(normalizeCoverageRow);
       if (coverage.some((row) => !row)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'each coverage entry requires a country' }); }
@@ -123,11 +125,11 @@ export function registerMarketplaceShippingRoutes({ app, pool, auth }) {
       const seen = new Set();
       for (const row of coverage) { const key = `${row.country}|${row.state}|${row.city}`; if (!seen.has(key)) { seen.add(key); uniqueCoverage.push(row); } }
       if (uniqueCoverage.length > 100) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'too many delivery coverage entries' }); }
-      await client.query(`UPDATE marketplace_listings SET shipping_method=$2,shipping_note=$3,delivery_fee=$4,additional_item_shipping_fee=$5,shipping_fee_cap=$6,updated_at=NOW() WHERE id=$1`, [listingId, shippingMethod, note, baseFee, additionalItemFee, feeCap]);
+      await client.query(`UPDATE marketplace_listings SET shipping_method=$2,shipping_note=$3,delivery_fee=$4,additional_item_shipping_fee=$5,shipping_fee_cap=$6,delivery_available=$7,pickup_available=$8,updated_at=NOW() WHERE id=$1`, [listingId, shippingMethod, note, baseFee, additionalItemFee, feeCap, deliveryAvailable, pickupAvailable]);
       await client.query('DELETE FROM marketplace_shipping_coverage WHERE listing_id=$1', [listingId]);
       for (const row of uniqueCoverage) await client.query('INSERT INTO marketplace_shipping_coverage(listing_id,country,state,city) VALUES($1,$2,$3,$4)', [listingId, row.country, row.state, row.city]);
       await client.query('COMMIT');
-      return res.json({ ok: true, shipping: { method: shippingMethod, note, baseFee, additionalItemFee, feeCap, coverage: uniqueCoverage } });
+      return res.json({ ok: true, shipping: { method: shippingMethod, note, baseFee, additionalItemFee, feeCap, deliveryAvailable, pickupAvailable, coverage: uniqueCoverage } });
     } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('[marketplace-shipping-update]', error); return res.status(500).json({ error: 'shipping settings could not be saved' }); }
     finally { client.release(); }
   });
