@@ -316,7 +316,10 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         feedRequestInFlight = true; lastFeedRequestAt = now
         scope.launch {
             loading = true
-            val activeNetworkReady = networkReady ?: (FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE)
+            // Backend health is not the same as device connectivity. Keep attempting the
+            // real feed request when the backend probe is down, and use cached posts only
+            // when the phone itself is offline.
+            val activeNetworkReady = FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE
             if (!activeNetworkReady) {
                 val cachedPage = FynxRemoteSocialClient.cachedFeedPage(context)
                 if (posts.isEmpty() && cachedPage != null) {
