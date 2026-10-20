@@ -790,8 +790,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             sellerReputation = sellerReputations[sellerKey],
             onProfile = { sellerStoreUsername = listing.sellerUsername; selected = null },
             onContact = { contactSeller(listing.sellerUsername, listing.id) },
-                                isFavorite = listing.id in savedProductIds,
-                                onFavorite = { toggleSavedProductFromCard(listing.id) },
             onBuyNow = { selected = null; checkoutListing = listing },
             onAddToCart = { if (cart.none { it.id == listing.id }) { if (cart.size >= 20) error = "Your FYNX cart can contain at most 20 different products." else { cart = cart + listing; cartQuantities = cartQuantities + (listing.id to 1) } }; selected = null },
             onBuyTogether = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(listing.id, listing.title)) },
