@@ -131,7 +131,7 @@ require('timeline trusts backend visibility','FynxStatusClient.list(context)' in
 require('timeline keeps server audience semantics','val visibleStatuses = statuses.filter' in timeline and 'owner == username.removePrefix("@").trim().lowercase() || owner in followingUsernames' not in timeline)
 require('timeline filters expired statuses','filterNot(FynxStatus::isExpired)' in timeline)
 require('timeline latest-per-owner bubbles',('visibleStatuses.groupBy { it.ownerUsername }' in timeline or 'statuses.groupBy { it.ownerUsername }' in timeline) and 'maxByOrNull { it.createdAtMillis }' in timeline)
-require('timeline profile avatar uses the shared remote resolver','FynxRemoteProfileAvatar(' in timeline and 'ownerUsername = avatarOwnerUsername' in timeline and 'val avatarOwnerUsername = status?.ownerUsername' in timeline)
+require('timeline profile avatar uses the shared remote resolver','FynxRemoteProfileAvatar(' in timeline and 'ownerUsername = avatarOwnerUsername' in timeline and re.search(r'val avatarOwnerUsername = status\?\.ownerUsername(?:\?\.takeIf \{ it\.isNotBlank\(\) \})? \?: ownerUsername', timeline) is not None)
 require('timeline status viewer','FynxStatusStoryViewer(' in timeline and 'DialogProperties(usePlatformDefaultWidth = false' in timeline)
 require('status viewer image',contains_call(timeline, 'FynxRemoteMedia', 'image'))
 require('status viewer video',contains_call(timeline, 'FynxRemoteMedia', 'video'))
