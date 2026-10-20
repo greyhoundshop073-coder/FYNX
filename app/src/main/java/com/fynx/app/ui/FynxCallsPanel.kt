@@ -60,6 +60,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     var localVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var pendingIncomingAccept by remember { mutableStateOf(false) }
+    val mediaEngineForCleanup = remember { arrayOfNulls<FynxWebRtcCallEngine>(1) }
 
     lateinit var realtimeClient: FynxRealtimeClient
     val mediaEngine = remember {
@@ -78,7 +79,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                         PeerConnection.IceConnectionState.FAILED -> scope.launch {
                             val failed = session ?: return@launch
                             errorMessage = "The call connection failed. Please try again."
-                            mediaEngine.disconnect()
+                            mediaEngineForCleanup[0]?.disconnect()
                             mediaConnected = false
                             localVideoTrack = null
                             remoteVideoTrack = null
@@ -96,6 +97,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             )
         )
     }
+    mediaEngineForCleanup[0] = mediaEngine
 
     realtimeClient = remember {
         FynxRealtimeClient(
