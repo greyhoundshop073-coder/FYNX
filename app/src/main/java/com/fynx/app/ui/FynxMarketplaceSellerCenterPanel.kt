@@ -369,7 +369,10 @@ fun FynxMarketplaceSellerCenterPanel() {
             }
         }
 
-        if (accountMessage != null && activeSection == "Earnings & payouts") item { Text(accountMessage!!, color = MaterialTheme.colorScheme.error) }
+        if (accountMessage != null && activeSection == "Earnings & payouts") item {
+            val isAccountSuccess = accountMessage == "Payout account verified and connected."
+            Text(accountMessage!!, color = if (isAccountSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+        }
         if (error != null && activeSection == "Listings") item { Text(error!!, color = MaterialTheme.colorScheme.error) }
         if (activeSection == "Listings") {
         if (loading) {
