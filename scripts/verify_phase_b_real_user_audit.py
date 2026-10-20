@@ -36,6 +36,7 @@ critical_files = [
     "backend/notificationDevices.js",
     "backend/notificationPush.js",
     "backend/notificationBootstrap.js",
+    "backend/statusManagementRoutes.js",
 ]
 check("critical real-user surfaces are present", all(map(exists, critical_files)))
 
@@ -60,6 +61,7 @@ market_api = read("backend/marketplaceTransactions.js")
 notification_devices = read("backend/notificationDevices.js")
 notification_push = read("backend/notificationPush.js")
 notification_bootstrap = read("backend/notificationBootstrap.js")
+status_management = read("backend/statusManagementRoutes.js")
 status_routes = read("backend/statusInteractionRoutes.js")
 social_routes = read("backend/socialRoutes.js")
 home = read("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt")
@@ -90,6 +92,7 @@ check("FCM service handles token refresh and incoming data", "onNewToken" in fcm
 check("notification device storage is user-scoped", "user_id" in notification_devices and "REFERENCES users(id)" in notification_devices)
 check("notification sender keeps credentials server-side", "FIREBASE_SERVICE_ACCOUNT_JSON" in notification_push and "FIREBASE_PRIVATE_KEY" in notification_push and "firebase" in notification_push.lower())
 check("notification bootstrap is idempotent integration glue", "async function patchOnce" in notification_bootstrap and "changed = false" in notification_bootstrap and "patches" in notification_bootstrap and "source.includes(patch.replacement)" in notification_bootstrap and "Skip a patch once its complete replacement is already present" in notification_bootstrap)
+check("status archive route has valid media URL template syntax", "\\`" not in status_management and "mediaUrl:row.media_id == null ? null : `/api/media/${row.media_id}`" in status_management)
 
 client_sources = [p.read_text(encoding="utf-8") for p in (ROOT / "app/src/main/java/com/fynx/app/ui").glob("*.kt")]
 all_client = "\n".join(client_sources)
