@@ -89,7 +89,7 @@ check("FCM token registration is authenticated and account-scoped", "hasAccessTo
 check("FCM service handles token refresh and incoming data", "onNewToken" in fcm_service and "onMessageReceived" in fcm_service)
 check("notification device storage is user-scoped", "user_id" in notification_devices and "REFERENCES users(id)" in notification_devices)
 check("notification sender keeps credentials server-side", "FIREBASE_SERVICE_ACCOUNT_JSON" in notification_push and "FIREBASE_PRIVATE_KEY" in notification_push and "firebase" in notification_push.lower())
-check("notification bootstrap is idempotent integration glue", "async function patchOnce" in notification_bootstrap and "changed = false" in notification_bootstrap and "patches" in notification_bootstrap)
+check("notification bootstrap is idempotent integration glue", "async function patchOnce" in notification_bootstrap and "changed = false" in notification_bootstrap and "patches" in notification_bootstrap and "source.includes(patch.replacement)" in notification_bootstrap and "Skip a patch once its complete replacement is already present" in notification_bootstrap)
 
 client_sources = [p.read_text(encoding="utf-8") for p in (ROOT / "app/src/main/java/com/fynx/app/ui").glob("*.kt")]
 all_client = "\n".join(client_sources)
