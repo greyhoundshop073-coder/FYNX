@@ -40,15 +40,6 @@ object FynxRemoteSocialClient {
         if (safeOffset == 0 && remote.isFailure) readStaleCachedFeed(context)?.let { return Result.success(it) }
         return remote
     }
-    suspend fun searchPosts(context: Context, query: String, limit: Int = 30, offset: Int = 0): Result<FeedPage> {
-        val q = query.trim().take(80)
-        if (q.length < 2) return Result.failure(IllegalArgumentException("Search needs at least 2 characters."))
-        val safeLimit = limit.coerceIn(1, 50)
-        val safeOffset = offset.coerceAtLeast(0)
-        val path = "/api/social/search?q=${URLEncoder.encode(q, "UTF-8")}&limit=$safeLimit&offset=$safeOffset"
-        return FynxBackendClient.getBounded(context, path).mapCatching(::parseFeedPage)
-    }
-
     private fun parseFeedPage(raw: String): FeedPage {
         val root = JSONObject(raw)
         val array = root.optJSONArray("posts") ?: JSONArray()
