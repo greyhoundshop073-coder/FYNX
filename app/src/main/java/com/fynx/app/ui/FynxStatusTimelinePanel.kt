@@ -221,23 +221,57 @@ private fun StatusAvatar(
     status: FynxStatus? = null,
     modifier: Modifier = Modifier
 ) {
-    val avatarOwnerUsername = status?.ownerUsername?.takeIf { it.isNotBlank() } ?: ownerUsername
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val cachedPhotoId = remember(ownerUsername) {
+        if (status != null) {
+            FynxProfileRemoteClient.cachedProfilePhotoId(context, status.ownerUsername)
+        } else {
+            FynxProfileRemoteClient.cachedProfilePhotoId(context, ownerUsername)
+        }
+    }
+    var profilePhotoMediaId by remember(ownerUsername) { mutableStateOf(cachedPhotoId) }
+    var remoteProfileLoaded by remember(ownerUsername) { mutableStateOf(false) }
+    LaunchedEffect(ownerUsername) {
+        remoteProfileLoaded = false
+        if (status != null) {
+            FynxProfileRemoteClient.get(context, status.ownerUsername)
+                .onSuccess {
+                    profilePhotoMediaId = it.profilePhotoMediaId
+                    remoteProfileLoaded = true
+                }
+                .onFailure {
+                    remoteProfileLoaded = false
+                }
+        } else {
+            FynxProfileRemoteClient.get(context, ownerUsername)
+                .onSuccess {
+                    profilePhotoMediaId = it.profilePhotoMediaId
+                    remoteProfileLoaded = true
+                }
+                .onFailure {
+                    remoteProfileLoaded = false
+                }
+        }
+    }
+    val avatarId = if (remoteProfileLoaded) profilePhotoMediaId else cachedPhotoId
     Box(modifier.size(58.dp)) {
         Box(Modifier.fillMaxSize().border(2.dp, Color(0xFF22C55E), CircleShape).padding(3.dp)) {
-            FynxRemoteProfileAvatar(
-                mediaId = null,
-                contentDescription = ownerDisplayName,
-                modifier = Modifier.fillMaxSize().clip(CircleShape),
-                ownerUsername = avatarOwnerUsername
-            )
+            if (!avatarId.isNullOrBlank()) {
+                FynxRemoteProfileAvatar(avatarId, ownerDisplayName, Modifier.fillMaxSize().clip(CircleShape), ownerUsername = ownerUsername)
+            } else {
+                Box(Modifier.fillMaxSize().clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+                    Text(ownerDisplayName.take(1).uppercase(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+            }
         }
         if (showAdd) {
             Box(Modifier.size(22.dp).align(Alignment.BottomEnd).background(MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Add, contentDescription = "Add status", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Add, "Add Status", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(15.dp))
             }
         }
     }
 }
+
 @Composable
 private fun StatusArchiveDialog(
     statuses: List<FynxStatus>,
