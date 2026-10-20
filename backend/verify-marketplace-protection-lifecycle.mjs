@@ -16,6 +16,7 @@ const checks = [
   ['protected requests move escrow to DISPUTED', protection.includes("UPDATE marketplace_escrows SET status='DISPUTED'")],
   ['open protection cases are idempotent', protection.includes('idempotencyKey') && protection.includes('WHERE idempotency_key=$1') && protection.includes('idempotency_key TEXT NOT NULL UNIQUE')],
   ['evidence is stored against the order', transactions.includes('marketplace_order_evidence') && transactions.includes("app.post('/api/marketplace/orders/:id/evidence'")],
+  ['PHOTO evidence requires an authenticated owner-uploaded image media ID', transactions.includes("if(kind==='PHOTO')") && transactions.includes('message_media WHERE id=$1 AND owner_id=$2') && transactions.includes("startsWith('image/')")],
   ['seller alone can ship', completion.includes('only the seller can ship this order') && completion.includes("order.status !== 'PAID'")],
   ['buyer alone selects fulfillment', completion.includes('only the buyer can choose fulfillment')],
   ['delivery enters a protected inspection period', completion.includes("status='INSPECTION'") && completion.includes('inspection_deadline') && completion.includes('48 * 60 * 60 * 1000')],
