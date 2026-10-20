@@ -51,6 +51,12 @@ object FynxProfileRemoteClient {
         return FynxPreferencesStore.loadRemoteProfilePhotoId(context, normalized)
     }
 
+    fun hasCachedProfilePhotoEntry(context:Context,username:String):Boolean {
+        val normalized = username.trim().removePrefix("@").trim()
+        if (normalized.isBlank()) return false
+        return FynxPreferencesStore.hasRemoteProfilePhotoIdEntry(context, normalized)
+    }
+
     suspend fun followers(context:Context):Result<List<ConnectionUser>> = FynxBackendClient.get(context,"/api/social/me/followers").mapCatching { parseConnections(it) }
     suspend fun following(context:Context):Result<List<ConnectionUser>> = FynxBackendClient.get(context,"/api/social/me/following").mapCatching { parseConnections(it) }
     private fun parseConnections(raw:String):List<ConnectionUser>{val array=JSONObject(raw).optJSONArray("users")?:JSONArray();return buildList{for(i in 0 until array.length()){val u=array.getJSONObject(i);add(ConnectionUser(u.optString("id"),u.optString("username"),u.optString("displayName")))}}}
