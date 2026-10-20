@@ -188,7 +188,7 @@ fun FynxMarketplaceSellerCenterPanel() {
         }
         item {
             Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("Overview", "Shop profile", "Listings", "Orders & delivery", "Earnings & payouts").forEach { section ->
+                listOf("Overview", "Shop profile", "Listings", "Orders", "Delivery & drivers", "Earnings & payouts").forEach { section ->
                     FilterChip(selected = activeSection == section, onClick = { activeSection = section }, label = { Text(section, maxLines = 1) })
                 }
             }
@@ -205,8 +205,10 @@ fun FynxMarketplaceSellerCenterPanel() {
                             OutlinedButton(onClick = { activeSection = "Listings" }, modifier = Modifier.weight(1f)) { Text("Manage listings") }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(onClick = { activeSection = "Orders & delivery" }, modifier = Modifier.weight(1f)) { Text("Orders & delivery") }
-                            OutlinedButton(onClick = { activeSection = "Earnings & payouts" }, modifier = Modifier.weight(1f)) { Text("Earnings & payouts") }
+                            OutlinedButton(onClick = { activeSection = "Orders" }, modifier = Modifier.weight(1f)) { Text("Orders") }
+                            OutlinedButton(onClick = { activeSection = "Delivery & drivers" }, modifier = Modifier.weight(1f)) { Text("Delivery & drivers") }
+                        }
+                        OutlinedButton(onClick = { activeSection = "Earnings & payouts" }, modifier = Modifier.fillMaxWidth()) { Text("Earnings & payouts") }
                         }
                         OutlinedButton(onClick = { showDriverAssignments = true }, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp))
