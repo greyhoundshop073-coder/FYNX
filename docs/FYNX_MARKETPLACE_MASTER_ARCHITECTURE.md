@@ -526,3 +526,128 @@ Each R6 batch must be:
 If a build or verifier is RED, stop the sequence and fix the exact failure before continuing.
 
 The R6 batches are ordered deliberately: financial correctness first, payment reliability second, payout third, protection fourth, accounting fifth, fulfillment sixth, cross-surface integration seventh, UX eighth, and adversarial verification last.
+
+
+---
+
+# Marketplace Visual Blueprint and Push Register (2026-10-20)
+
+This section is the durable UI/UX implementation contract for Marketplace redesign work. It supplements the financial/backend architecture above. Do not replace the existing working Marketplace with a mock screen or a parallel data model. Migrate the real screens incrementally, reusing existing listing, seller, cart, order, payment, delivery, and receipt sources of truth.
+
+## A. Visual identity and semantic colour rules
+
+- **Primary action / navigation blue:** `#155EEF`. Use for selected navigation, primary buttons, links, selected filters, active controls, and key interactive icons.
+- **Secondary blue:** `#7FB0FF`. Use sparingly for secondary accents on existing dark Marketplace surfaces. Validate contrast in both light and dark themes before applying broadly.
+- **Success green:** `#16A34A`. Reserve for verified successful payments, confirmed/completed actions, completed delivery milestones, and positive outcomes. Do not use green as the general brand/navigation accent.
+- **Pending / needs attention amber:** `#F59E0B`. Use for payment pending, awaiting pickup, and user action required.
+- **Failure / danger red:** `#DC2626`. Use for failed payments, destructive actions, serious warnings, and errors.
+- **Surface and text:** Prefer clean white or light neutral surfaces where the existing app theme expects them, readable dark text, subtle neutral borders, and restrained elevation. Keep dark-theme support legible. Product photography should remain visually dominant; do not paint every card bright blue.
+- Colour is not the only status signal: pair colour with readable labels/icons, and preserve existing accessibility semantics.
+- Do not change payment outcome logic to make a colour look successful. Green is allowed only when the underlying state is actually successful/confirmed.
+
+## B. Screen hierarchy and what belongs where
+
+### 1. Marketplace Home / Discover
+Order content from global actions to discovery, then supporting recommendations:
+1. Compact header: Marketplace title/brand, account-appropriate location context, cart icon with count.
+2. Search field: searches products, seller/shop names, and categories; typing must use the existing real search flow.
+3. Nearby/location chip and horizontally scrolling category chips.
+4. One featured/deals area only when real eligible listings exist; do not show fake inventory or placeholder promotions as real offers.
+5. Recommended/nearby product grid using real listings. Cards prioritize product image, short title, price + currency, seller identity/avatar, seller location, and a restrained save/favorite action.
+6. Seller/shop discovery and top-seller/reputation content only when backed by real data. Avoid repeating the same listings in several sections without a clear reason.
+7. Clear shortcuts to Saved Products, Orders, and My Shop; these are Marketplace destinations and must not break the app's global navigation.
+8. Empty/loading/error states should be compact and actionable, with retry when appropriate. Preserve loaded feed data when a transient refresh fails.
+
+### 2. Search and category results
+- Keep the search query visible and editable; provide clear-query behavior.
+- Put category, nearby, and available filters near the top in a compact horizontal row or sheet.
+- Show result count/sort only when backed by the actual result set.
+- Use a consistent responsive product grid and preserve scroll/pagination state where possible.
+- Do not silently redirect a generic search to the Marketplace home or a single category.
+
+### 3. Product card
+- Image first, with an unobtrusive condition/availability badge where data exists.
+- Title (maximum two lines), clear currency + price, seller avatar/name, and seller location.
+- Seller rating/review count only when verified review data exists; never invent a rating.
+- Save/favorite action must reflect its real state.
+- Card opens the real product details. Seller and contact actions must have their own click targets so they do not accidentally trigger the card action.
+
+### 4. Product details
+Recommended order:
+1. Product image gallery/media.
+2. Product title, currency + price, stock/availability, and condition.
+3. Seller identity block: avatar, display name/shop name, location, reputation when available, and link to public shop.
+4. Clear buying actions: Add to Cart and Buy Now, with quantity/stock safeguards.
+5. Buyer protection and fulfillment options (delivery vs pickup), using truthful current policy/status.
+6. Full description/specifications, then reviews and related products.
+7. Share, save/watch, and buying assistant as secondary actions.
+- Keep seller identity consistent with the same profile/avatar used elsewhere in FYNX.
+- Never imply an order is paid or protected before backend verification confirms it.
+
+### 5. Public Seller Shop vs private My Shop
+These are different destinations and must not be confused:
+- **Public Seller Shop:** buyer-facing storefront with shop identity, location, seller profile/avatar, active products, reputation/reviews, and a clear way to contact the seller.
+- **My Shop / Seller Center:** private owner workspace. It should feel like owning and running a shop, not a long crowded settings form.
+- Shop identity belongs near the top of the owner dashboard: logo/avatar, shop name, location, short description, profile completeness, and Preview Public Shop / Edit Shop actions.
+- Owner dashboard overview should show compact, real summaries (active listings, orders needing action, earnings/payout status) only where API data supports them.
+- Put management tools into clear sections/destinations: Products, Orders, Delivery & Drivers, Earnings & Payouts, and Shop Profile/Settings. Use cards/rows with counts and status labels instead of placing every form expanded on one long page.
+- Keep existing capabilities working while reorganizing; do not drop payout account editing, listing edit/delete, seller order handling, driver assignment, settlement visibility, or shop profile saving.
+- Dangerous actions (delete listing, payout changes) need clear labels and confirmation where already supported/appropriate.
+
+### 6. Cart and checkout
+- Cart supports 1–20 items, multiple sellers, and one currency per checkout. Prevent mixed-currency checkout with an explicit explanation rather than silently converting.
+- Each cart row: thumbnail, title, seller, unit price, quantity controls, stock state, and remove action.
+- Group by seller when helpful, while maintaining one clear order summary.
+- Checkout summary separately shows item subtotal, delivery/pickup costs, FYNX fee, applicable payment fee treatment, discounts, and total. Use the authoritative server quote/fee calculation; client totals are for display only.
+- Primary payment action uses blue while pending/in progress; show green only after backend/provider verification confirms success. Amber is pending/action-needed; red is failure.
+- Payment retry must not create duplicate orders/charges. Preserve Paystack amount/currency/reference validation and the existing safe retry guidance.
+
+### 7. Orders, fulfillment, and driver handover
+- Orders list should group by clear order/payment/fulfillment status with readable labels, date/reference, product/seller, and next required action.
+- Order details: order reference, separate payment and fulfillment statuses, item/price summary, timeline, delivery or pickup method, seller/buyer context, receipt, help/dispute actions, and available confirmation action.
+- For Nigerian local handover, show agreed meeting point (e.g. bus stop/roadside), next-step owner, driver contact/identity details available to the order, and optional vehicle/plate/colour/photo evidence when supplied. Do not imply the driver should visit a buyer's home by default.
+- A driver may have a basic phone; the flow must not assume every driver has the FYNX app. Use supported contact/call handover paths where implemented.
+- Multi-seller checkout must retain separate child-order fulfillment, seller actions, and per-item status even when the buyer also receives one aggregate payment receipt.
+- Never let a client-only button manufacture delivery, receipt, inspection, dispute-resolution, or payout events.
+
+### 8. Receipts and disputes
+- Individual and multi-seller receipts must display actual backend-confirmed payment evidence, stable receipt/order/checkout references, itemized amounts, and separate payment vs fulfillment status.
+- Payout status must come from backend escrow/payout operation records; do not imply the seller was paid merely because the buyer paid.
+- Keep signed verification/QR and PDF/share/download behavior consistent with the existing receipt implementation and backend release.
+- Dispute options should be explicit: item not received, wrong item, damaged, not as described, or suspected scam where supported. Show evidence/help steps and explain that a dispute freezes the financial outcome pending authorized resolution.
+- Success green only for verified completed states; unresolved, pending, failed, and disputed states must remain semantically distinct.
+
+## C. Cross-app identity and connection rules
+
+- A seller avatar/profile must resolve to the same user identity across Marketplace cards, public shop, product detail, statuses/feed, and chat entry points.
+- Product share links should open the exact canonical listing/detail, not a duplicate product record.
+- Product-aware chat must preserve the listing context when opened from a product or shop.
+- Saved Products must show the actual saved state and lead back to the canonical listing.
+- Notifications should lead to the relevant order/listing/action when that destination is supported.
+- AI/buying assistant, social sharing, seller reputation, and analytics may enhance the canonical listing but must not duplicate inventory, price, seller, payment, or order truth.
+
+## D. Non-negotiable preservation rules
+
+- Keep working test login open; do not introduce OTP or a new login/backend dependency as part of visual work.
+- Do not regress Marketplace network access, listing images/media privacy, search, cart persistence, seller identity, payment verification, order lifecycle, signed receipts, seller payout state, driver custody, or disputes.
+- Do not touch another chat's assigned Home, Avatar/Profile, Chat/Groups, or driver-custody area except where a narrow shared contract is essential; coordinate and document any overlap.
+- Do not claim a feature is network-backed unless its real API path and failure states are confirmed.
+- No mock products, fake ratings, fake transaction success, or fabricated payout/delivery states in production UI.
+- Build on the canonical integration branch `integration/fynx-single-apk-20261013`. Work on isolated feature branches and PRs; do not silently send work to a different APK/build line.
+- A green CI result is not proof of a real device flow. APK identity must be tied to the exact commit/artifact; report runtime/device verification separately.
+
+## E. Push-by-push execution and acceptance checklist
+
+For each numbered Marketplace push:
+1. Read this blueprint and inspect current callers, source files, recent PRs, and CI before editing.
+2. State the exact screen/flow and the bounded scope of the push; check for overlapping work before touching shared files.
+3. Implement on a feature branch from the canonical integration line; preserve all working behavior and real API/data bindings.
+4. Run the relevant Android build, layout/parity checks, and backend tests if applicable. If red, inspect logs, fix the cause, and rerun before moving on.
+5. Verify the exact head commit and PR base; do not assume that a closed PR is merged or that another APK includes it.
+6. Confirm a downloadable APK artifact exists for the exact green commit before saying an APK is ready. Record device/runtime results separately.
+7. Update this document's push register with commit/PR, files changed, check results, artifact link if available, and remaining work.
+
+## F. Current visual redesign push register
+
+- **Push 24 — Blue accent foundation:** branch `feat/marketplace-blue-visual-system-20261020`; commit `81d792ad10cebba7c244802f60e004cc0782a349`; PR #278. Changed `FynxMarketplaceReferenceComponents.kt` accent tokens from violet to primary blue `#155EEF` and secondary blue `#7FB0FF`. At time of writing, Android Build and Chat Group Parity/Layout Safety workflows were queued/in progress; this push is **not yet verified green or merged**, and no APK is claimed.
+- **Next planned push:** inspect the current Marketplace home composition and callers; apply the written hierarchy to the real home without removing real discovery/search/cart/category/nearby/order/seller actions. Continue next with product cards/details, then My Shop dashboard organization, then cart/checkout/order/driver/receipt consistency. Do not mark a screen complete until real flows and tests are verified.
