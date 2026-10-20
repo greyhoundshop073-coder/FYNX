@@ -203,6 +203,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var listingRequestGeneration by remember { mutableIntStateOf(0) }
     val productsGridState = rememberLazyGridState()
     var orders by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceOrder>>(emptyList()) }
+    var ordersLoading by remember { mutableStateOf(false) }
+    var ordersError by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
     val recentSearchesKey = "marketplace_recent_searches_v1"
     var recentSearches by remember {
@@ -287,6 +289,17 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var sellerReputations by remember { mutableStateOf<Map<String, FynxMarketplaceClient.SellerReputation>>(emptyMap()) }
     var sellerPhotoIds by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
 
+    fun reloadOrders() {
+        scope.launch {
+            ordersLoading = true
+            ordersError = null
+            FynxRemoteSocialClient.orders(context)
+                .onSuccess { orders = it }
+                .onFailure { ordersError = it.message ?: "Orders could not load." }
+            ordersLoading = false
+        }
+    }
+
     fun reload() {
         scope.launch {
             val requestGeneration = ++listingRequestGeneration
@@ -330,7 +343,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             }
             // Listing visibility must not wait on the independent orders request.
             loading = false
-            scope.launch { FynxRemoteSocialClient.orders(context).onSuccess { orders = it } }
+            reloadOrders()
         }
     }
 
@@ -453,7 +466,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     Spacer(Modifier.width(5.dp))
                     Text("My Shop", maxLines = 1)
                 }
-                OutlinedButton(onClick = { showOrders = true }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
+                OutlinedButton(onClick = { showOrders = true; reloadOrders() }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
                     Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(17.dp))
                     Spacer(Modifier.width(5.dp))
                     Text("Orders", maxLines = 1)
@@ -542,7 +555,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             listings = listings,
                             onOpenListing = { selected = it },
                             onShopNow = { showAllProducts = true },
-                            onOrders = { showOrders = true },
+                            onOrders = { showOrders = true; reloadOrders() },
                             onRefresh = { reload() },
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -644,7 +657,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             listings = listings,
                             onOpenListing = { selected = it },
                             onShopNow = { showAllProducts = true },
-                            onOrders = { showOrders = true },
+                            onOrders = { showOrders = true; reloadOrders() },
                             onRefresh = { reload() },
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -823,7 +836,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         multiPayment = null
         reload()
     }, onClose = { multiPaymentListingIds = emptySet(); multiPayment = null }) }
-    if (showOrders) MarketplaceOrders(context, orders, onRefresh = { reload() }, onClose = { showOrders = false })
+    if (showOrders) MarketplaceOrders(context, orders, ordersLoading, ordersError, onRefresh = { reloadOrders() }, onClose = { showOrders = false })
 }
 
 internal data class FynxSavedMarketplaceCart(
@@ -1286,9 +1299,38 @@ private fun MarketplaceCartDialog(items: List<FynxRemoteSocialClient.Marketplace
 }
 
 @Composable
-private fun MarketplaceOrders(context: android.content.Context, orders: List<FynxRemoteSocialClient.MarketplaceOrder>, onRefresh: () -> Unit, onClose: () -> Unit) {
+private fun MarketplaceOrders(context: android.content.Context, orders: List<FynxRemoteSocialClient.MarketplaceOrder>, loading: Boolean, error: String?, onRefresh: () -> Unit, onClose: () -> Unit) {
     var selected by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }
-    AlertDialog(onDismissRequest = onClose, title = { Text("My orders") }, text = { if (orders.isEmpty()) Text("No orders yet.") else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) { items(orders, key = { it.id }) { order -> Card(onClick = { selected = order }, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(10.dp)) { Text(order.productTitle.ifBlank { "FYNX order" }, style = MaterialTheme.typography.titleMedium); Text("${order.currency} ${String.format(Locale.US, "%,.2f", order.totalAmount)} • ${order.status}", color = MaterialTheme.colorScheme.primary); order.trackingReference?.let { Text("Tracking: $it", style = MaterialTheme.typography.bodySmall) } } } } } }, confirmButton = { TextButton(onClick = onRefresh) { Text("Refresh") } }, dismissButton = { TextButton(onClick = onClose) { Text("Close") } })
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("My orders") },
+        text = {
+            when {
+                loading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    CircularProgressIndicator(Modifier.size(20.dp))
+                    Text("Loading your orders…")
+                }
+                error != null -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(error, color = MaterialTheme.colorScheme.error)
+                    Text("Check your connection and try again.", style = MaterialTheme.typography.bodySmall)
+                }
+                orders.isEmpty() -> Text("No orders yet.")
+                else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(orders, key = { it.id }) { order ->
+                        Card(onClick = { selected = order }, modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(10.dp)) {
+                                Text(order.productTitle.ifBlank { "FYNX order" }, style = MaterialTheme.typography.titleMedium)
+                                Text("${order.currency} ${String.format(Locale.US, "%,.2f", order.totalAmount)} • ${order.status}", color = MaterialTheme.colorScheme.primary)
+                                order.trackingReference?.let { Text("Tracking: $it", style = MaterialTheme.typography.bodySmall) }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onRefresh, enabled = !loading) { Text(if (loading) "Refreshing…" else if (error != null) "Try again" else "Refresh") } },
+        dismissButton = { TextButton(onClick = onClose) { Text("Close") } }
+    )
     selected?.let { order -> OrderActions(context, order, onChanged = { selected = null; onRefresh() }, onClose = { selected = null }) }
 }
 
