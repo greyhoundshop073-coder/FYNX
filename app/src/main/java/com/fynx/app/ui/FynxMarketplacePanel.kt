@@ -649,6 +649,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                 onProfile = { sellerStoreUsername = listing.sellerUsername },
                                 onContact = { contactSeller(listing.sellerUsername, listing.id) },
                                 isFavorite = listing.id in savedProductIds,
+                                isFavoriteBusy = listing.id in savedProductBusyIds,
                                 onFavorite = { toggleSavedProductFromCard(listing.id) }
                             )
                         }
@@ -708,6 +709,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                             onProfile = { sellerStoreUsername = listing.sellerUsername },
                                             onContact = { contactSeller(listing.sellerUsername, listing.id) },
                                 isFavorite = listing.id in savedProductIds,
+                                isFavoriteBusy = listing.id in savedProductBusyIds,
                                 onFavorite = { toggleSavedProductFromCard(listing.id) }
                                         )
                                     }
@@ -729,6 +731,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                         onProfile = { sellerStoreUsername = listing.sellerUsername },
                                         onContact = { contactSeller(listing.sellerUsername, listing.id) },
                                 isFavorite = listing.id in savedProductIds,
+                                isFavoriteBusy = listing.id in savedProductBusyIds,
                                 onFavorite = { toggleSavedProductFromCard(listing.id) }
                                     )
                                     }
@@ -759,6 +762,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                             onProfile = { sellerStoreUsername = listing.sellerUsername },
                                             onContact = { contactSeller(listing.sellerUsername, listing.id) },
                                 isFavorite = listing.id in savedProductIds,
+                                isFavoriteBusy = listing.id in savedProductBusyIds,
                                 onFavorite = { toggleSavedProductFromCard(listing.id) }
                                         )
                                     }
