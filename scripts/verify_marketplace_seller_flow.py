@@ -7,6 +7,7 @@ marketplace = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt
 checkout = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceCheckout.kt").read_text()
 detail_components = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceDetailComponents.kt").read_text()
 seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text()
+app_shell = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text()
 
 checks = [
     ("seller support keeps a bounded real media limit", "const val MAX_PRODUCT_MEDIA = 12" in support),
@@ -68,6 +69,7 @@ checks = [
     ("My Shop preserves listing edit, delete, and per-listing delivery/pickup settings", 'Icon(Icons.Default.Edit, "Edit listing")' in seller_center and 'Icon(Icons.Default.Delete, "Remove listing")' in seller_center and "FynxMarketplaceShippingSettingsCard(" in seller_center),
     ("My Shop keeps seller orders and driver deliveries in the Orders & delivery destination", 'if (activeSection == "Orders & delivery")' in seller_center and "FynxMarketplaceSellerOrders(context = context" in seller_center and "showDriverAssignments = true" in seller_center),
     ("My Shop preserves earnings, settlement history, and payout account management", 'if (activeSection == "Earnings & payouts")' in seller_center and 'Text("Earnings history"' in seller_center and 'Text("Payout account"' in seller_center and 'showPayoutAccount = true' in seller_center),
+    ("Marketplace Home exposes direct My Shop, Orders, and Saved Products shortcuts", all(f'Text("{label}"' in marketplace for label in ("My Shop", "Orders", "Saved products")) and "onOpenSavedProducts" in marketplace and 'onOpenSavedProducts = { selected = "Saved Products" }' in app_shell),
 ]
 
 failed = [name for name, ok in checks if not ok]
