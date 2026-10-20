@@ -715,7 +715,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
             "To-Do" -> TodoPanel()
             "Privacy" -> FynxPrivacySettingsPanel(onBack = { selected = "Profile" })
             "Saved Posts" -> FynxSavedPostsPanel(onOpenAuthorProfile = { profileUser = it })
-            "Saved Products" -> FynxSavedMarketplaceProductsPanel()
+            "Saved Products" -> FynxSavedMarketplaceProductsPanel(onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" })
             "Seller Center" -> FynxMarketplaceSellerCenterPanel()
             "AI" -> FynxAiAssistantPanel(onOpenDestination = { destination -> selected = destination }, initialMarketplaceListingId = marketplaceAiListingId)
             "AI Creation" -> { selected = "AI" }
