@@ -363,7 +363,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                         .statusBarsPadding()
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                         .height(52.dp * (1f - homeChromeProgress))
-                         .graphicsLayer { alpha = 1f - homeChromeProgress }
+                        .graphicsLayer { alpha = 1f - homeChromeProgress }
                         .fynxHeaderGlass(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
