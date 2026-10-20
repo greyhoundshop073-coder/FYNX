@@ -440,10 +440,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 onValueChange = { query = it.take(80) },
                 onCart = { showCart = true },
                 cartCount = cartQuantities.values.sum().coerceAtLeast(0),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)
             )
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 1.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -477,11 +477,11 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 nearbySelected = nearbyMode,
                 nearbyLabel = if (nearbyMode) "Near ${nearbyLabel.substringBefore(",").ifBlank { "me" }}" else "Near me",
                 nearbyLoading = nearbyLoading,
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 6.dp)
             )
             if (query.isBlank() && recentSearches.isNotEmpty()) {
                 Row(
-                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, bottom = 8.dp),
+                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Recent searches", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
@@ -492,7 +492,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     }) { Text("Clear") }
                 }
                 LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, bottom = 10.dp),
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, bottom = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(end = 16.dp)
                 ) {
