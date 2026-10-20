@@ -665,21 +665,23 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             }
                         }
                     }
-                    item(key = "marketplace-recommended-title") {
-                        MarketplaceReferenceSectionTitle("Recommended for you", action = "See all", onAction = { showAllProducts = true })
-                    }
-                    item(key = "marketplace-recommended-listings") {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 4.dp)) {
-                            items(listings.take(8), key = { "recommended-${it.id}" }) { listing ->
-                                Box(Modifier.width(208.dp)) {
-                                    MarketplaceReferenceProductCard(
-                                        listing = listing,
-                                        sellerRating = sellerReputations[listing.sellerUsername.removePrefix("@").trim().lowercase()],
-                                        sellerPhotoId = sellerPhotoIds[listing.sellerUsername.removePrefix("@").trim().lowercase()],
-                                        onOpen = { selected = listing },
-                                        onProfile = { sellerStoreUsername = listing.sellerUsername },
-                                        onContact = { contactSeller(listing.sellerUsername, listing.id) }
-                                    )
+                    if (listings.isNotEmpty()) {
+                        item(key = "marketplace-recommended-title") {
+                            MarketplaceReferenceSectionTitle("Recommended for you", action = "See all", onAction = { showAllProducts = true })
+                        }
+                        item(key = "marketplace-recommended-listings") {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 4.dp)) {
+                                items(listings.take(8), key = { "recommended-${it.id}" }) { listing ->
+                                    Box(Modifier.width(208.dp)) {
+                                        MarketplaceReferenceProductCard(
+                                            listing = listing,
+                                            sellerRating = sellerReputations[listing.sellerUsername.removePrefix("@").trim().lowercase()],
+                                            sellerPhotoId = sellerPhotoIds[listing.sellerUsername.removePrefix("@").trim().lowercase()],
+                                            onOpen = { selected = listing },
+                                            onProfile = { sellerStoreUsername = listing.sellerUsername },
+                                            onContact = { contactSeller(listing.sellerUsername, listing.id) }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -710,21 +712,23 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             showAllProducts = true
                         }
                     }
-                    item(key = "marketplace-new-title") {
-                        MarketplaceReferenceSectionTitle("More to explore", action = "See all", onAction = { showAllProducts = true })
-                    }
-                    item(key = "marketplace-new-listings") {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 4.dp)) {
-                            items(listings.drop(8).take(8), key = { "more-${it.id}" }) { listing ->
-                                Box(Modifier.width(208.dp)) {
-                                    MarketplaceReferenceProductCard(
-                                        listing = listing,
-                                        sellerRating = sellerReputations[listing.sellerUsername.removePrefix("@").trim().lowercase()],
-                                        sellerPhotoId = sellerPhotoIds[listing.sellerUsername.removePrefix("@").trim().lowercase()],
-                                        onOpen = { selected = listing },
-                                        onProfile = { sellerStoreUsername = listing.sellerUsername },
-                                        onContact = { contactSeller(listing.sellerUsername, listing.id) }
-                                    )
+                    if (listings.size > 8) {
+                        item(key = "marketplace-new-title") {
+                            MarketplaceReferenceSectionTitle("More to explore", action = "See all", onAction = { showAllProducts = true })
+                        }
+                        item(key = "marketplace-new-listings") {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 4.dp)) {
+                                items(listings.drop(8).take(8), key = { "more-${it.id}" }) { listing ->
+                                    Box(Modifier.width(208.dp)) {
+                                        MarketplaceReferenceProductCard(
+                                            listing = listing,
+                                            sellerRating = sellerReputations[listing.sellerUsername.removePrefix("@").trim().lowercase()],
+                                            sellerPhotoId = sellerPhotoIds[listing.sellerUsername.removePrefix("@").trim().lowercase()],
+                                            onOpen = { selected = listing },
+                                            onProfile = { sellerStoreUsername = listing.sellerUsername },
+                                            onContact = { contactSeller(listing.sellerUsername, listing.id) }
+                                        )
+                                    }
                                 }
                             }
                         }
