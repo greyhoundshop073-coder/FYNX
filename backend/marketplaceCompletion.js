@@ -311,35 +311,35 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       if (String(userId) === String(req.user.sub)) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'an administrator cannot approve their own driver account' }); }
       if (!active) {
         // Match the order-first lock order used by handover/delivery so revocation cannot race custody transfer.
-        await client.query(\`
+        await client.query(`
           SELECT o.id
           FROM marketplace_orders o
           JOIN marketplace_delivery_assignments a ON a.order_id=o.id
           WHERE a.driver_id=$1 AND o.status IN ('PAID','SHIPPED','INSPECTION')
           ORDER BY o.id
           FOR UPDATE OF o
-        \`, [userId]);
-        const custody = await client.query(\`
+        `, [userId]);
+        const custody = await client.query(`
           SELECT a.order_id
           FROM marketplace_delivery_assignments a
           JOIN marketplace_orders o ON o.id=a.order_id
           WHERE a.driver_id=$1 AND a.handover_at IS NOT NULL AND a.delivered_at IS NULL
             AND o.status IN ('PAID','SHIPPED','INSPECTION')
           LIMIT 1
-        \`, [userId]);
+        `, [userId]);
         if (custody.rowCount) {
           await client.query('ROLLBACK');
           return res.status(409).json({ error: 'driver has an order in active custody; resolve or complete that delivery before revoking approval', code: 'DRIVER_ACTIVE_CUSTODY' });
         }
       }
-      const result = await client.query(\`
+      const result = await client.query(`
         INSERT INTO marketplace_approved_drivers (user_id, approved_by, active, approved_at, updated_at)
         VALUES ($1,$2,$3,NOW(),NOW())
         ON CONFLICT (user_id) DO UPDATE SET active=EXCLUDED.active, approved_by=EXCLUDED.approved_by,
           approved_at=CASE WHEN EXCLUDED.active THEN NOW() ELSE marketplace_approved_drivers.approved_at END,
           updated_at=NOW()
         RETURNING user_id, active, approved_by, approved_at, updated_at
-      \`, [userId, req.user.sub, active]);
+      `, [userId, req.user.sub, active]);
       await client.query('COMMIT');
       return res.json({ driver: { userId: String(result.rows[0].user_id), active: result.rows[0].active, approvedBy: String(result.rows[0].approved_by), approvedAt: result.rows[0].approved_at, updatedAt: result.rows[0].updated_at } });
     } catch (error) {
