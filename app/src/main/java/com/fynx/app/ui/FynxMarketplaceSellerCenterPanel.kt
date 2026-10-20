@@ -371,7 +371,7 @@ fun FynxMarketplaceSellerCenterPanel() {
 
         if (accountMessage != null && activeSection == "Earnings & payouts") item {
             val isAccountSuccess = accountMessage == "Payout account verified and connected."
-            Text(accountMessage!!, color = if (isAccountSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+            Text(accountMessage!!, color = if (isAccountSuccess) androidx.compose.ui.graphics.Color(0xFF16A34A) else MaterialTheme.colorScheme.error)
         }
         if (error != null && activeSection == "Listings") item { Text(error!!, color = MaterialTheme.colorScheme.error) }
         if (activeSection == "Listings") {
