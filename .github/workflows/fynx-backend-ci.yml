@@ -45,6 +45,7 @@ jobs:
           node --check verify-marketplace-price-watch.mjs
           node --check profileRoutes.js
           node --check marketplaceTransactions.js
+          node --check verify-marketplace-receipts.mjs
           node --check marketplaceShopProfiles.js
           node --check verify-marketplace-shop-profile.mjs
           node --check marketplaceReputation.js
@@ -146,6 +147,8 @@ jobs:
         run: node verify-marketplace-price-watch.mjs
       - name: Run marketplace financial reconciliation guard
         run: node verify-marketplace-reconciliation.mjs
+      - name: Run marketplace receipt integrity verification
+        run: node verify-marketplace-receipts.mjs
       - name: Run Marketplace NGN/USD currency contract verification
         run: node verify-marketplace-currency-contract.mjs
       - name: Run marketplace protection admin guard
