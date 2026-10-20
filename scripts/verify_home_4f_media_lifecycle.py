@@ -131,7 +131,7 @@ if missing_viewer:
 
 required_media_recovery = [
     'var mediaLoading by remember(path)',
-    'val activeNetworkReady = networkReady ?: (FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE)',
+    'val activeNetworkReady = FynxNetworkQuality.current(context) != FynxNetworkQuality.Level.OFFLINE',
     'FynxRemoteSocialClient.cachedFeedPage(context)',
     'You\'re offline. Connect to a network to load your feed.',
     'var mediaFailed by remember(path)',
@@ -150,7 +150,9 @@ required_runtime_capture = [
     'def wait_for_home_feed_settled(timeout:float=30.0)->tuple[str,bool]:',
     'settled_xml,feed_settled=wait_for_home_feed_settled()',
     'if not feed_settled:',
-    'Home feed did not leave its loading state within 30 seconds',
+    'Home feed did not show a settled feed and confirmed server-connected header within 30 seconds',
+    'server_connected = (',
+    'feed_has_no_network_error = not any(find_control(latest, [marker]) for marker in (',
 ]
 missing_runtime_capture = [token for token in required_runtime_capture if token not in runtime_navigation]
 if missing_runtime_capture:

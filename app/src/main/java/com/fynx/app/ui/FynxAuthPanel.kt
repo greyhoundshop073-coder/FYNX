@@ -171,11 +171,14 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                             FynxAuthField(username, { username = it.replace(" ", "").removePrefix("@") }, "Username", "@")
                             Spacer(Modifier.height(10.dp))
                             if (localDebugLoginAvailable) {
-                                Text("Saved-device login for this debug APK", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
-                            } else {
-                                FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
-                                Spacer(Modifier.height(10.dp))
+                                Text(
+                                    "Saved-device login is available. Enter your password to connect this session to the FYNX server.",
+                                    color = Color.White.copy(alpha = .72f),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                             }
+                            FynxAuthField(password, { password = it }, "Password", keyboardType = KeyboardType.Password, password = true)
+                            Spacer(Modifier.height(10.dp))
                             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                             Spacer(Modifier.height(14.dp))
                             Button(onClick = {
@@ -183,17 +186,20 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                 val savedLocalUsername = localDebugAccountForLogin(context, requestedUsername)
                                 when {
                                     requestedUsername.isBlank() -> error = "Enter your username."
-                                    savedLocalUsername != null -> {
-                                        // Use the saved-device path immediately: no remote request or timeout.
-                                        FynxAuthStore.save(context, savedLocalUsername)
-                                        error = null
-                                        onAuthenticated(savedLocalUsername)
-                                    }
-                                    password.isBlank() -> error = "Enter your username and password."
+                                    password.isBlank() -> error = "Enter your password to connect to the FYNX server. A local-only session cannot load server-backed features."
                                     else -> {
+                                        // When a password is supplied, obtain a real server token so protected
+                                        // feed, status, chat and Marketplace APIs can authenticate this session.
                                         busy = true
                                         error = null
-                                        scope.launch { finish(FynxRemoteAuthClient.login(context, requestedUsername, password), allowOfflineEntry = true) }
+                                        scope.launch {
+                                            val connectedResult = if (savedLocalUsername != null && FynxAuthStore.hasAccount(context)) {
+                                                FynxRemoteAuthClient.connectSavedAccount(context, password)
+                                            } else {
+                                                FynxRemoteAuthClient.login(context, requestedUsername, password)
+                                            }
+                                            finish(connectedResult)
+                                        }
                                     }
                                 }
                             }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Signing in…" else "Sign In") }
