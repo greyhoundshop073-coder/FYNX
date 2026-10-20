@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingBag
@@ -191,7 +192,7 @@ private fun MarketplaceSmartDealsHero(
 }
 
 @Composable
-fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, initialListingId: String? = null) {
+fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, onOpenSavedProducts: () -> Unit = {}, initialListingId: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var listings by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
@@ -443,25 +444,25 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)
             )
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 1.dp),
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 1.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedButton(
-                    onClick = onOpenMyShop,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp)
-                ) {
-                    Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("My Shop")
+                OutlinedButton(onClick = onOpenMyShop, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
+                    Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("My Shop", maxLines = 1)
                 }
-                Text(
-                    "Manage your products, orders and earnings",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                OutlinedButton(onClick = { showOrders = true }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
+                    Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("Orders", maxLines = 1)
+                }
+                OutlinedButton(onClick = onOpenSavedProducts, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
+                    Icon(Icons.Default.BookmarkBorder, contentDescription = null, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("Saved products", maxLines = 1)
+                }
             }
             completedCheckoutId?.let { checkoutId ->
                 MarketplaceCheckoutReceiptAction(
