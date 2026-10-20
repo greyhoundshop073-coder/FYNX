@@ -1017,12 +1017,54 @@ private fun MarketplaceDetails(
             onBuyNow = onBuyNow,
             onShare = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title)) }
         )
+        // Put seller and fulfillment facts immediately after the price summary,
+        // before the long description, matching the product-detail hierarchy.
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("Seller:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(l.sellerDisplayName.ifBlank { l.sellerUsername }, fontWeight = FontWeight.SemiBold)
+                        if (l.location.isNotBlank()) {
+                            Text("Location: ${l.location}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    TextButton(onClick = onProfile) { Text("View shop") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (l.quantity > 0) "${l.quantity} available" else "Out of stock",
+                        color = if (l.quantity > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text("•", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(l.condition, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (l.deliveryAvailable || l.pickupAvailable) {
+                    Text(
+                        listOfNotNull(
+                            if (l.deliveryAvailable) "Delivery available${l.deliveryFee?.let { " • ${l.currency} ${String.format(Locale.US, "%,.2f", it)} fee" } ?: ""}" else null,
+                            if (l.pickupAvailable) "Pickup available" else null
+                        ).joinToString("  •  "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                TextButton(onClick = onContact) { Text("Contact seller") }
+            }
+        }
         MarketplaceReferenceDescriptionCard(listing = l)
-        Text("Seller: ${l.sellerDisplayName.ifBlank { l.sellerUsername }}")
-        Text("${l.quantity} available • ${l.condition}")
-        if (l.location.isNotBlank()) Text("Location: ${l.location}")
-        if (l.deliveryAvailable) Text("Delivery available${l.deliveryFee?.let { " • ${l.currency} ${String.format(Locale.US, "%,.2f", it)} fee" } ?: ""}")
-        if (l.pickupAvailable) Text("Pickup available")
         Text("🛡 FYNX protected payment", fontWeight = FontWeight.SemiBold)
         Text("Payment stays protected through the existing FYNX order lifecycle until the appropriate completion state.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         sellerReputation?.let { reputation ->
