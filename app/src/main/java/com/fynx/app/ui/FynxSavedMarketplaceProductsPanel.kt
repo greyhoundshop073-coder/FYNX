@@ -38,7 +38,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 @Composable
-fun FynxSavedMarketplaceProductsPanel() {
+fun FynxSavedMarketplaceProductsPanel(onOpenListing: (String) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var products by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
@@ -90,6 +90,7 @@ fun FynxSavedMarketplaceProductsPanel() {
                                 Text("${product.currency} ${"%,.2f".format(product.price)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                                 Text("Seller: @${product.sellerUsername.removePrefix("@")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(if (product.active && product.quantity > 0) "Available" else "Currently unavailable", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                TextButton(onClick = { onOpenListing(product.id) }, contentPadding = PaddingValues(0.dp)) { Text("View product") }
                             }
                             OutlinedButton(onClick = {
                                 if (product.id !in busyIds) {
