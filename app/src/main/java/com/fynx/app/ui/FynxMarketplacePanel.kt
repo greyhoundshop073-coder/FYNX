@@ -555,22 +555,12 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             }
                         }
                     }
-                    item(key = "marketplace-recommended-title") {
-                        MarketplaceReferenceSectionTitle("Recommended for you")
-                    }
-                    item(key = "marketplace-no-recommendations") {
-                        Text("Recommendations will appear here when real seller listings are available.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
                     item(key = "marketplace-explore-title") { MarketplaceReferenceSectionTitle("Explore categories") }
                     item(key = "marketplace-explore-categories") {
                         MarketplaceExploreCategoryTiles(categories.filter { it != "All" }, category) { itemCategory ->
                             category = itemCategory
                             showAllProducts = true
                         }
-                    }
-                    item(key = "marketplace-new-title") { MarketplaceReferenceSectionTitle("More to explore") }
-                    item(key = "marketplace-no-new-listings") {
-                        Text("More products will appear here as additional real listings become available.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     item(key = "marketplace-offline-sell") {
                         OutlinedButton(onClick = { showSell = true }, modifier = Modifier.fillMaxWidth()) { Text("Sell something") }
