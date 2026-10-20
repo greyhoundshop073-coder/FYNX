@@ -9,6 +9,12 @@ async function patchOnce(fileName, patches) {
   let source = await readFile(filePath, "utf8");
   let changed = false;
   for (const patch of patches) {
+    // Import patches intentionally retain their original marker in the replacement.
+    // Skip a patch once its complete replacement is already present, so repeated
+    // Railway starts never inject the same import twice.
+    if (source.includes(patch.replacement)) {
+      continue;
+    }
     if (source.includes(patch.marker)) {
       source = source.replace(patch.marker, patch.replacement);
       changed = true;
