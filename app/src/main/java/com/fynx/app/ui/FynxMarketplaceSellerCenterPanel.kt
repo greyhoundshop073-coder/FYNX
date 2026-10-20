@@ -521,7 +521,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     OutlinedTextField(bankCode, { bankCode = it.filter(Char::isDigit) }, label = { Text("Bank code") }, singleLine = true)
                     OutlinedTextField(accountNumber, { accountNumber = it.filter(Char::isDigit) }, label = { Text("Account number") }, singleLine = true)
                     OutlinedTextField(accountName, { accountName = it }, label = { Text("Account name") }, singleLine = true)
-                    accountMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    accountMessage?.let { Text(it, color = if (it == "Payout account verified and connected.") androidx.compose.ui.graphics.Color(0xFF16A34A) else MaterialTheme.colorScheme.error) }
                 }
             },
             confirmButton = {
