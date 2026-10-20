@@ -101,6 +101,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     var notificationPreferencesOnly by remember { mutableStateOf(false) }
     var profileVersion by remember { mutableIntStateOf(0) }
     var remoteMyPhotoId: String? by remember(authSession.username, profileVersion) { mutableStateOf(FynxProfileRemoteClient.cachedProfilePhotoId(context, authSession.username ?: "")) }
+    var remoteMyProfileLoaded by remember(authSession.username, profileVersion) {
+        mutableStateOf(FynxProfileRemoteClient.hasCachedProfilePhotoEntry(context, authSession.username ?: ""))
+    }
     var aiCaptionDraft by remember { mutableStateOf<String?>(null) }
     var homeCameraRequest by remember { mutableIntStateOf(0) }
     var navigationDirection by remember { mutableIntStateOf(1) }
@@ -281,8 +284,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
     }
     LaunchedEffect(authSession.state, authSession.username, profileVersion) {
         remoteMyPhotoId = FynxProfileRemoteClient.cachedProfilePhotoId(context, authSession.username ?: "")
+        remoteMyProfileLoaded = FynxProfileRemoteClient.hasCachedProfilePhotoEntry(context, authSession.username ?: "")
         if (authSession.state == AuthState.SIGNED_IN && !authSession.username.isNullOrBlank() && FynxBackendClient.hasAccessToken(context)) {
-            FynxProfileRemoteClient.get(context, authSession.username!!).onSuccess { remoteMyPhotoId = it.profilePhotoMediaId }
+            FynxProfileRemoteClient.get(context, authSession.username!!).onSuccess {
+                remoteMyPhotoId = it.profilePhotoMediaId
+                remoteMyProfileLoaded = true
+            }
         }
         adminRole = null
         if (!FYNX_PREVIEW_MODE && authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) {
@@ -369,7 +376,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null) {
                                 modifier = Modifier.size(44.dp).semantics(mergeDescendants = true) { contentDescription = "Open FYNX profile" }
                             ) {
                                 if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(remoteMyPhotoId, myProfile.displayName, Modifier.size(38.dp))
-                                else FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
+                                else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
+                                else FynxAvatar(myProfile.displayName, Modifier.size(38.dp))
                             }
                             Box(Modifier.align(Alignment.BottomEnd)) {
                                 IconButton(

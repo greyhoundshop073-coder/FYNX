@@ -82,6 +82,11 @@ object FynxPreferencesStore {
         context.getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_${accountNamespace(context)}", Context.MODE_PRIVATE)
             .getString(cacheKey(username), null)?.takeIf { it.isNotBlank() }
 
+    /** Distinguishes a profile authoritatively checked with no photo from one not yet cached. */
+    fun hasRemoteProfilePhotoIdEntry(context: Context, username: String): Boolean =
+        context.getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_${accountNamespace(context)}", Context.MODE_PRIVATE)
+            .contains(cacheKey(username))
+
     fun saveRemoteProfilePhotoId(context: Context, username: String, mediaId: String?) {
         val prefs = context.getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_${accountNamespace(context)}", Context.MODE_PRIVATE)
         prefs.edit().apply {

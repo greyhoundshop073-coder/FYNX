@@ -237,6 +237,12 @@ fun FynxRemoteProfileAvatar(
     } else {
         mediaId?.takeIf { it.isNotBlank() }
     }
+    // Hydrate username-only avatars through the shared resolver; duplicate requests are coalesced.
+    LaunchedEffect(normalizedOwner, resolvedMediaId) {
+        if (normalizedOwner != null && resolvedMediaId.isNullOrBlank()) {
+            FynxProfileRemoteClient.hydrateAvatarIfMissing(context, normalizedOwner)
+        }
+    }
     var hasActiveStatus by remember(ownerUsername) { mutableStateOf(false) }
     LaunchedEffect(ownerUsername) {
         val owner = ownerUsername?.removePrefix("@")?.trim()?.lowercase().orEmpty()

@@ -7,6 +7,20 @@ import org.json.JSONObject
 import java.net.URLEncoder
 
 object FynxProfileRemoteClient {
+    private val avatarHydrationsInFlight = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    suspend fun hydrateAvatarIfMissing(context: Context, username: String) {
+        val normalized = username.trim().removePrefix("@").trim()
+        val key = normalized.lowercase()
+        if (key.isBlank() || !FynxBackendClient.hasAccessToken(context) ||
+            hasCachedProfilePhotoEntry(context, normalized) || !avatarHydrationsInFlight.add(key)
+        ) return
+        try {
+            if (!hasCachedProfilePhotoEntry(context, normalized)) get(context, normalized)
+        } finally {
+            avatarHydrationsInFlight.remove(key)
+        }
+    }
     // Server-authoritative messaging permission follows the profile relationship state.
     data class Profile(val id:String,val username:String,val displayName:String,val bio:String,val country:String,val verified:Boolean,val profilePhotoMediaId:String?,val activityVisible:Boolean,val relationship:String,val pendingRequestId:String?=null,val viewerSentRequest:Boolean,val viewerReceivedRequest:Boolean,val followedByCurrentUser:Boolean,val mutualFriends:Int,val postCount:Int,val followerCount:Int?=null,val followingCount:Int?=null,val connectionsVisible:Boolean=false,val canMessage:Boolean=false)
     data class ProfilePost(val id:String,val text:String,val visibility:String,val mediaId:String?,val mediaType:String?,val mediaUrl:String?,val timestamp:Long,val likeCount:Int,val commentCount:Int)
@@ -35,6 +49,12 @@ object FynxProfileRemoteClient {
         val normalized = username.trim().removePrefix("@").trim()
         if (normalized.isBlank()) return null
         return FynxPreferencesStore.loadRemoteProfilePhotoId(context, normalized)
+    }
+
+    fun hasCachedProfilePhotoEntry(context:Context,username:String):Boolean {
+        val normalized = username.trim().removePrefix("@").trim()
+        if (normalized.isBlank()) return false
+        return FynxPreferencesStore.hasRemoteProfilePhotoIdEntry(context, normalized)
     }
 
     suspend fun followers(context:Context):Result<List<ConnectionUser>> = FynxBackendClient.get(context,"/api/social/me/followers").mapCatching { parseConnections(it) }
